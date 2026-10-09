@@ -69,10 +69,10 @@ export function CardFace({ card, size, number, timing, actionable }: Props) {
     <div className={stateClass} data-kind={card.kind}>
       <div className={classes.head}>
         <img className={classes.headArt} src={cardBack(card)} alt="" draggable={false} />
+        {factionIcon && <img className={classes.faction} src={factionIcon} alt={card.owner?.faction} />}
         <span className={classes.kindLabel}>{KIND_LABEL[card.kind]}</span>
         {card.vp !== undefined && <span className={classes.vp}>{card.vp} VP</span>}
         {card.count !== undefined && <span className={classes.vp}>×{card.count}</span>}
-        {factionIcon && <img className={classes.faction} src={factionIcon} alt={card.owner?.faction} />}
       </div>
       <div className={classes.body}>
         <div className={classes.name}>{card.name}</div>

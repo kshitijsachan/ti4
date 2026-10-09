@@ -23,7 +23,7 @@ export type CardAction = {
 };
 
 export type ActionOutcome = PressResult & {
-  /** Newest message id in the thread before the action, to pick out the bot's follow-ups. */
+  /** Newest message id (thread or actions channel) before the action, to pick out the bot's replies. */
   baseline?: string;
 };
 
@@ -143,7 +143,7 @@ function waitForNonce(connection: PlayConnection, nonce: string | null): Promise
 }
 
 /** Runs a card action against the bot: a press, an opener-then-press chain, or a show command. */
-export function useRunCardAction(threadId: string | undefined) {
+export function useRunCardAction(threadId: string | undefined, actionsId?: string) {
   const connection = usePlayConnection();
   const press = usePressButton();
 
@@ -151,7 +151,10 @@ export function useRunCardAction(threadId: string | undefined) {
     const step = action.step;
     const channelId = step.type === "show" ? threadId : step.type === "press" ? step.button.channelId : step.opener.channelId;
     if (!channelId) return { error: "Your cards thread is not open yet." };
-    const baseline = newestId(connection, channelId);
+    const ids = [newestId(connection, channelId), actionsId && newestId(connection, actionsId)].filter(
+      (id): id is string => !!id,
+    );
+    const baseline = ids.reduce<string | undefined>((a, b) => (!a || BigInt(b) > BigInt(a) ? b : a), undefined);
 
     if (step.type === "press") {
       const result = await press(step.button.channelId, step.button.messageId, step.button.customId);

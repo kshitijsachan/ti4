@@ -197,20 +197,55 @@ export function findNewButton(
   return undefined;
 }
 
-/** Bot messages with buttons posted in a channel after `afterId` (the bot's follow-up questions). */
-export function followUps(
+const HAND_NOISE =
+  /^(__Action Cards__|__Scored Secret Objectives|#+ __Promissory notes|Click a button below to play an action card|Use these buttons to (score|discard)|You may use these buttons to do various things)|someone refreshed your/;
+
+/** Hand listings and menus the bot reposts after every change: the tray already shows them. */
+function isHandNoise(message: Message): boolean {
+  return HAND_NOISE.test(message.content ?? "");
+}
+
+function newBotMessages(
   channel: ChannelMessages | undefined,
-  afterId: string | undefined,
+  afterId: string,
+  keep: (message: Message) => boolean,
 ): Message[] {
-  if (!channel || !afterId) return [];
+  if (!channel) return [];
   const out: Message[] = [];
   for (let i = channel.ids.length - 1; i >= 0; i--) {
     const id = channel.ids[i];
     if (BigInt(id) <= BigInt(afterId)) break;
     const message = channel.byId[id];
-    if (message?.author?.bot && buttonsOf(message).length > 0) out.unshift(message);
+    if (message?.author?.bot && keep(message)) out.push(message);
   }
   return out;
+}
+
+/**
+ * What the bot said back after an action: its new posts in the cards thread
+ * (minus the hand listings it reposts), plus posts in the actions channel
+ * that name me. Snowflakes are time-ordered across channels, so one baseline
+ * serves both.
+ */
+export function botReplies(
+  thread: ChannelMessages | undefined,
+  actions: ChannelMessages | undefined,
+  afterId: string | undefined,
+  meId: string | undefined,
+): Message[] {
+  if (!afterId) return [];
+  const mine = (m: Message) => !!meId && ((m.content ?? "").includes(`<@${meId}>`) || m.prompted_user_id === meId);
+  return [
+    ...newBotMessages(thread, afterId, (m) => !isHandNoise(m)),
+    ...newBotMessages(actions, afterId, mine),
+  ].sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+}
+
+const REFUSAL = /denied|cannot|can't|not able|unable|not allowed|no such|does not think|please retry|something went wrong/i;
+
+/** True when a bot reply reads as a refusal. */
+export function isRefusal(message: Message): boolean {
+  return REFUSAL.test(message.content ?? "");
 }
 
 export function messageButtons(message: Message): Component[] {

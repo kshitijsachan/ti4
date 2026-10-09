@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Markdown, usePlay } from "@/discord";
+import { Markdown, useChannelMessages } from "@/discord";
 import { usePressButton } from "@/play/usePressButton";
 import { getFactionImage } from "@/entities/lookup/factions";
 import type { PlayerData } from "@/entities/data/types";
 import { CardFace } from "./CardFace";
 import type { HandCard, Timing } from "./model";
 import type { CardAction, ActionOutcome } from "./useHandActions";
-import { followUps, messageButtons } from "./botThread";
+import { botReplies, isRefusal, messageButtons } from "./botThread";
 import classes from "./HandTray.module.css";
 
 type Props = {
@@ -18,15 +18,19 @@ type Props = {
   players: PlayerData[];
   myColor?: string;
   threadId?: string;
+  actionsId?: string;
+  meId?: string;
   run: (action: CardAction, target?: string) => Promise<ActionOutcome>;
   onClose: () => void;
+  /** The card has left the hand (played, discarded...). */
+  gone?: boolean;
 };
 
-type Status = { kind: "busy" | "ok" | "error"; text: string } | null;
+type Sent = { action: CardAction; baseline?: string; error?: string; busy: boolean };
 
 const DONE_TEXT: Record<string, string> = {
-  play: "Played. The bot is resolving it — answer any prompt it shows.",
-  score: "Scored. The bot announces it to the table.",
+  play: "Played.",
+  score: "Scored.",
   discard: "Discarded.",
   show: "Shown.",
   sync: "Asked the bot to refresh your hand.",
@@ -40,18 +44,21 @@ function timingLine(card: HandCard, timing: Timing, hasPlay: boolean): string {
   if (card.kind === "relic" || card.kind === "fragment")
     return "The bot offers relic actions on your turn when they apply.";
   if (timing === "now") return "Its timing window is open right now.";
-  if (card.kind === "so") return `Score it during the ${card.window?.toLowerCase() ?? "matching phase"} once you meet it.`;
-  if (timing === "later") return "Not its moment yet — play it when the window comes up.";
+  if (card.kind === "so")
+    return `Score it in the ${card.window?.toLowerCase() ?? "matching phase"} once you meet it.`;
+  if (timing === "later") return "Not its moment yet — play it when its window comes up.";
   return "A reaction: play it when that happens.";
 }
 
 /** The focused view of one card: big face, its timing, and what the bot lets you do with it. */
-export function CardPopup({ card, number, timing, actions, players, myColor, threadId, run, onClose }: Props) {
-  const [status, setStatus] = useState<Status>(null);
+export function CardPopup(props: Props) {
+  const { card, number, timing, actions, players, myColor, threadId, actionsId, meId, run, onClose, gone } = props;
+  const [sent, setSent] = useState<Sent | null>(null);
   const [picking, setPicking] = useState<CardAction | null>(null);
-  const [baseline, setBaseline] = useState<string | undefined>();
-  const thread = usePlay((s) => (threadId ? s.messages[threadId] : undefined));
-  const asks = followUps(thread, baseline);
+  const thread = useChannelMessages(threadId);
+  const actionsChannel = useChannelMessages(actionsId);
+  const replies = botReplies(thread, actionsChannel, sent?.baseline, meId);
+  const refused = replies.some(isRefusal);
   const press = usePressButton();
 
   useEffect(() => {
@@ -61,26 +68,24 @@ export function CardPopup({ card, number, timing, actions, players, myColor, thr
   }, [onClose]);
 
   const perform = async (action: CardAction, target?: string) => {
-    if (action.id === "show" && target === undefined && !picking) {
+    if (action.id === "show" && target === undefined) {
       setPicking(action);
       return;
     }
     setPicking(null);
-    setStatus({ kind: "busy", text: `${action.label.replace("…", "")}…` });
+    setSent({ action, busy: true });
     const result = await run(action, target);
-    setBaseline(result.baseline);
-    if (result.error) setStatus({ kind: "error", text: result.error });
-    else setStatus({ kind: "ok", text: DONE_TEXT[action.id] ?? "Done." });
+    setSent({ action, baseline: result.baseline, error: result.error, busy: false });
   };
 
   const others = players.filter((p) => p.color !== myColor);
   const hasPlay = actions.some((a) => a.id === "play" || a.id === "score");
-  const busy = status?.kind === "busy";
+  const status = statusOf(sent, refused, replies.length);
 
   return createPortal(
     <div className={classes.backdrop} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={classes.popup} role="dialog" aria-label={card.name}>
-        <div className={classes.popupCard}>
+        <div className={`${classes.popupCard} ${gone ? classes.popupCardGone : ""}`}>
           <CardFace card={card} size="large" number={number} timing={timing} actionable={hasPlay} />
         </div>
         <div className={classes.popupSide}>
@@ -93,8 +98,8 @@ export function CardPopup({ card, number, timing, actions, players, myColor, thr
               {card.window}
             </div>
           )}
-          <p className={`${classes.popupTiming} ${timing === "now" && hasPlay ? classes.popupTimingNow : ""}`}>
-            {timingLine(card, timing, hasPlay)}
+          <p className={`${classes.popupTiming} ${timing === "now" && hasPlay && !gone ? classes.popupTimingNow : ""}`}>
+            {gone ? "This card has left your hand." : timingLine(card, timing, hasPlay)}
           </p>
 
           {actions.length > 0 && (
@@ -102,8 +107,8 @@ export function CardPopup({ card, number, timing, actions, players, myColor, thr
               {actions.map((action) => (
                 <button
                   key={action.id}
-                  className={`${classes.action} ${classes[`tone_${action.tone}`]}`}
-                  disabled={busy}
+                  className={`${classes.action} ${classes[`tone_${action.tone === "go" && timing !== "now" ? "neutral" : action.tone}`]}`}
+                  disabled={sent?.busy}
                   title={action.hint}
                   onClick={() => void perform(action)}
                 >
@@ -128,27 +133,27 @@ export function CardPopup({ card, number, timing, actions, players, myColor, thr
             </div>
           )}
 
-          {status && (
-            <div className={`${classes.status} ${classes[`status_${status.kind}`]}`}>{status.text}</div>
-          )}
+          {status && <div className={`${classes.status} ${classes[`status_${status.kind}`]}`}>{status.text}</div>}
 
-          {asks.length > 0 && (
+          {replies.length > 0 && (
             <div className={classes.asks}>
-              <div className={classes.pickerLabel}>The bot asks</div>
-              {asks.map((message) => (
+              <div className={classes.pickerLabel}>The bot</div>
+              {replies.map((message) => (
                 <div key={message.id} className={classes.ask}>
                   {message.content && <Markdown content={message.content} className={classes.askText} />}
-                  <div className={classes.pickerRow}>
-                    {messageButtons(message).map((b) => (
-                      <button
-                        key={b.custom_id}
-                        className={classes.seat}
-                        onClick={() => void press(message.channel_id, message.id, b.custom_id!)}
-                      >
-                        {b.label || b.custom_id}
-                      </button>
-                    ))}
-                  </div>
+                  {messageButtons(message).length > 0 && (
+                    <div className={classes.pickerRow}>
+                      {messageButtons(message).map((b) => (
+                        <button
+                          key={b.custom_id}
+                          className={classes.seat}
+                          onClick={() => void press(message.channel_id, message.id, b.custom_id!)}
+                        >
+                          {b.label || b.custom_id}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -158,4 +163,13 @@ export function CardPopup({ card, number, timing, actions, players, myColor, thr
     </div>,
     document.body,
   );
+}
+
+function statusOf(sent: Sent | null, refused: boolean, replyCount: number) {
+  if (!sent) return null;
+  if (sent.busy) return { kind: "busy", text: `${sent.action.label.replace("…", "")}…` };
+  if (sent.error) return { kind: "error", text: sent.error };
+  if (refused) return { kind: "error", text: "The bot did not allow it — see its reply below." };
+  if (replyCount === 0) return { kind: "busy", text: "Sent. Waiting for the bot…" };
+  return { kind: "ok", text: DONE_TEXT[sent.action.id] ?? "Done." };
 }

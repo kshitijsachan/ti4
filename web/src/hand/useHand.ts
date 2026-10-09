@@ -9,6 +9,7 @@ import { getToken } from "@/play/session";
 import type { PlayerDataResponse } from "@/entities/data/types";
 import { buildHand, type CardGroup, type HandResponse } from "./model";
 import { assignNumbers, indexThread, type ThreadIndex } from "./botThread";
+import { useCardData } from "./cardData";
 
 const POLL_MS = 45_000;
 
@@ -30,6 +31,9 @@ export type HandState = {
   numbers: Map<string, number>;
   index: ThreadIndex;
   threadId?: string;
+  /** The game's `<game>-actions` channel, where the bot announces plays. */
+  actionsId?: string;
+  meId?: string;
   myColor?: string;
   gameState?: PlayerDataResponse["gameState"];
   players: PlayerDataResponse["playerData"];
@@ -50,6 +54,10 @@ export function useHand(gameName: string, token?: string): HandState {
   const meId = usePlay((s) => s.me?.id);
   const threadId = usePlay((s) => {
     for (const id in s.channels) if (isHandThread(s.channels[id].name, gameName)) return id;
+    return undefined;
+  });
+  const actionsId = usePlay((s) => {
+    for (const id in s.channels) if (s.channels[id].name === `${gameName}-actions`) return id;
     return undefined;
   });
   const thread = useChannelMessages(threadId);
@@ -88,7 +96,12 @@ export function useHand(gameName: string, token?: string): HandState {
     return () => window.clearTimeout(timer);
   }, [signature, newestId, gameName, queryClient]);
 
-  const groups = useMemo(() => buildHand(hand.data, me, players), [hand.data, me, players]);
+  const cardDataReady = useCardData();
+  const groups = useMemo(
+    () => buildHand(hand.data, me, players),
+    // cardDataReady: rebuild once the supplementary card text has loaded.
+    [hand.data, me, players, cardDataReady],
+  );
   const index = useMemo(() => indexThread(thread), [thread]);
   const numbers = useMemo(() => {
     const out = new Map<string, number>();
@@ -111,6 +124,8 @@ export function useHand(gameName: string, token?: string): HandState {
     numbers,
     index,
     threadId,
+    actionsId,
+    meId,
     myColor: me?.color,
     gameState: web.data?.gameState,
     players,

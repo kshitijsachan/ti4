@@ -23,6 +23,46 @@ const SHORT: Record<CardGroup["id"], string> = {
 };
 
 const CLOSE_DELAY_MS = 280;
+const CARD_W = 112;
+const CARD_STEP = CARD_W + 8;
+const GROUP_GAP = 53;
+const SHELF_MAX = 1280;
+const SHELF_CHROME = 36 + 24;
+
+function useViewportWidth() {
+  const [width, setWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return width;
+}
+
+/**
+ * Width each fan may take: every fan lies flat when the shelf has room;
+ * otherwise small fans keep their room and the big ones overlap to share the rest.
+ */
+function fanBudgets(groups: CardGroup[], viewport: number): Map<string, number> {
+  const shown = groups.filter((g) => g.cards.length > 0 || g.id !== "relic");
+  const available =
+    Math.min(SHELF_MAX, viewport - 24) - SHELF_CHROME - Math.max(0, shown.length - 1) * GROUP_GAP;
+  const need = (g: CardGroup) => Math.max(1, g.cards.length) * CARD_STEP;
+  const total = shown.reduce((sum, g) => sum + need(g), 0);
+  const out = new Map<string, number>();
+  if (total <= available) {
+    for (const g of shown) out.set(g.id, need(g));
+    return out;
+  }
+  const big = shown.filter((g) => g.cards.length >= 3);
+  const fixed = shown.filter((g) => g.cards.length < 3).reduce((sum, g) => sum + need(g), 0);
+  const bigCards = big.reduce((sum, g) => sum + g.cards.length, 0);
+  for (const g of shown) {
+    if (g.cards.length < 3) out.set(g.id, need(g));
+    else out.set(g.id, Math.max(CARD_W, ((available - fixed) * g.cards.length) / bigCards));
+  }
+  return out;
+}
 
 function isPlayableNow(card: HandCard, hand: HandState) {
   const actions = actionsFor(card, hand);
@@ -37,10 +77,10 @@ function isPlayableNow(card: HandCard, hand: HandState) {
  */
 export function HandTray({ gameName, token, defaultOpen = false, className }: Props) {
   const hand = useHand(gameName, token);
-  const run = useRunCardAction(hand.threadId);
+  const run = useRunCardAction(hand.threadId, hand.actionsId);
   const [pinned, setPinned] = useState(defaultOpen);
   const [hovered, setHovered] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<HandCard | null>(null);
   const closeTimer = useRef<number | undefined>(undefined);
   const open = pinned || hovered;
 
@@ -56,9 +96,12 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
 
   const closePopup = useCallback(() => setSelected(null), []);
   const allCards = hand.groups.flatMap((g) => g.cards);
-  const selectedCard = allCards.find((c) => c.key === selected);
+  // The popup outlives the card (played, discarded, scored) so the player sees the outcome.
+  const liveCard = selected && allCards.find((c) => c.key === selected.key && c.scored === selected.scored);
+  const selectedCard = liveCard ?? selected;
   const playableCount = allCards.filter((c) => isPlayableNow(c, hand)).length;
   const total = allCards.length;
+  const budgets = fanBudgets(hand.groups, useViewportWidth());
 
   return (
     <div
@@ -69,7 +112,13 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
       <div className={classes.shelf} aria-hidden={!open}>
         <div className={classes.groups}>
           {hand.groups.map((group) => (
-            <GroupFan key={group.id} group={group} hand={hand} onPick={setSelected} />
+            <GroupFan
+              key={group.id}
+              group={group}
+              hand={hand}
+              budget={budgets.get(group.id) ?? 520}
+              onPick={setSelected}
+            />
           ))}
         </div>
         {hand.unnumbered > 0 && hand.index.refresh && (
@@ -103,10 +152,13 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
           card={selectedCard}
           number={hand.numbers.get(selectedCard.key)}
           timing={timingOf(selectedCard, hand.gameState, hand.myColor)}
-          actions={actionsFor(selectedCard, hand)}
+          actions={liveCard ? actionsFor(selectedCard, hand) : []}
+          gone={!liveCard}
           players={hand.players}
           myColor={hand.myColor}
           threadId={hand.threadId}
+          actionsId={hand.actionsId}
+          meId={hand.meId}
           run={run}
           onClose={closePopup}
         />
@@ -129,7 +181,14 @@ function BarCount({ group }: { group: CardGroup }) {
   );
 }
 
-function GroupFan({ group, hand, onPick }: { group: CardGroup; hand: HandState; onPick: (key: string) => void }) {
+type GroupFanProps = {
+  group: CardGroup;
+  hand: HandState;
+  budget: number;
+  onPick: (card: HandCard) => void;
+};
+
+function GroupFan({ group, hand, budget, onPick }: GroupFanProps) {
   if (group.cards.length === 0 && group.id === "relic") return null;
   return (
     <section className={`${classes.group} ${classes[`group_${group.id}`]}`}>
@@ -140,7 +199,7 @@ function GroupFan({ group, hand, onPick }: { group: CardGroup; hand: HandState; 
       {group.cards.length === 0 ? (
         <div className={classes.emptyFan}>None</div>
       ) : (
-        <div className={classes.fan} style={{ ["--n" as string]: group.cards.length }}>
+        <div className={classes.fan} style={{ ["--n" as string]: group.cards.length, ["--budget" as string]: `${budget}px` }}>
           {group.cards.map((card, i) => {
             const actions = actionsFor(card, hand);
             const actionable = actions.some((a) => a.id === "play" || a.id === "score");
@@ -151,7 +210,7 @@ function GroupFan({ group, hand, onPick }: { group: CardGroup; hand: HandState; 
                 key={card.key}
                 className={classes.slot}
                 style={{ ["--i" as string]: i }}
-                onClick={() => onPick(card.key)}
+                onClick={() => onPick(card)}
                 title={card.name}
               >
                 <CardFace

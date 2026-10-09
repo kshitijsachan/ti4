@@ -1,14 +1,7 @@
-import { getActionCard } from "@/entities/lookup/actionCards";
-import { getSecretObjectiveData } from "@/entities/lookup/secretObjectives";
-import { getRelicData } from "@/entities/lookup/relics";
-import { promissoryNotes } from "@/entities/data/promissoryNotes";
 import { explorations } from "@/entities/data/explorations";
 import { indexBy } from "@/entities/lookup/indexBy";
-import type {
-  GameState,
-  PlayerData,
-  PromissoryNote,
-} from "@/entities/data/types";
+import type { GameState, PlayerData, PromissoryNote } from "@/entities/data/types";
+import { actionCardData, promissoryData, relicData, secretData } from "./cardData";
 
 export type HandResponse = {
   actionCards: string[];
@@ -59,10 +52,6 @@ export type CardGroup = {
   cards: HandCard[];
 };
 
-const pnMap = indexBy(
-  promissoryNotes.filter((note) => !note.homebrewReplacesID),
-  (note) => note.alias,
-);
 const explorationMap = indexBy(explorations, (card) => card.id);
 
 const FRAGMENT_TYPES: Record<string, string> = {
@@ -85,8 +74,8 @@ function splitWindow(text: string): { window?: string; body: string } {
 function resolvePromissoryNote(
   alias: string,
   players: PlayerData[],
-): { note: PromissoryNote; owner?: CardOwner } | undefined {
-  const direct = pnMap.get(alias);
+): { note: Partial<PromissoryNote>; owner?: CardOwner } | undefined {
+  const direct = promissoryData(alias);
   if (direct) {
     const ownerPlayer = players.find((p) => p.faction === direct.faction);
     return { note: direct, owner: ownerPlayer && toOwner(ownerPlayer) };
@@ -94,7 +83,7 @@ function resolvePromissoryNote(
   const cut = alias.indexOf("_");
   if (cut < 0) return undefined;
   const color = alias.slice(0, cut);
-  const template = pnMap.get(`<color>_${alias.slice(cut + 1)}`);
+  const template = promissoryData(`<color>_${alias.slice(cut + 1)}`);
   if (!template) return undefined;
   const ownerPlayer = players.find((p) => p.color === color);
   return { note: template, owner: ownerPlayer ? toOwner(ownerPlayer) : undefined };
@@ -113,8 +102,8 @@ function capitalize(value: string) {
 }
 
 function actionCard(alias: string): HandCard {
-  const data = getActionCard(alias);
-  if (!data)
+  const data = actionCardData(alias);
+  if (!data?.name)
     return { key: alias, kind: "ac", alias, name: alias, typeLabel: "Action card", text: "" };
   return {
     key: alias,
@@ -122,14 +111,14 @@ function actionCard(alias: string): HandCard {
     alias,
     name: data.name,
     typeLabel: "Action card",
-    window: data.window.replace(/:$/, ""),
-    text: data.text,
+    window: data.window?.replace(/:$/, ""),
+    text: data.text ?? "",
     flavor: data.flavorText,
   };
 }
 
 function secretObjective(alias: string, scored: boolean): HandCard {
-  const data = getSecretObjectiveData(alias);
+  const data = secretData(alias);
   const phase = data?.phase ? capitalize(data.phase.toLowerCase()) : undefined;
   return {
     key: alias,
@@ -153,13 +142,13 @@ function promissoryNote(
   if (!resolved)
     return { key: alias, kind: "pn", alias, name: alias, typeLabel: "Promissory note", text: "", inPlayArea };
   const { note, owner } = resolved;
-  const text = colorize(note.text, owner);
+  const text = colorize(note.text ?? "", owner);
   const { window, body } = splitWindow(text);
   return {
     key: alias,
     kind: "pn",
     alias,
-    name: colorize(note.name, owner),
+    name: colorize(note.name ?? alias, owner),
     typeLabel: "Promissory note",
     window,
     text: body,
@@ -169,7 +158,7 @@ function promissoryNote(
 }
 
 function relic(alias: string, exhausted: boolean): HandCard {
-  const data = getRelicData(alias);
+  const data = relicData(alias);
   const { window, body } = splitWindow(data?.text ?? "");
   return {
     key: alias,
