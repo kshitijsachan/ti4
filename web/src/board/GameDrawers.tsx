@@ -111,11 +111,17 @@ export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, t
       position="right"
       size={shown === "raw" ? 560 : 460}
       title={shown ? TITLES[shown] : ""}
+      withCloseButton={shown !== "log"}
       withOverlay={false}
       zIndex={2450}
       lockScroll={false}
       trapFocus={false}
-      classNames={{ inner: classes.inner, content: classes.content, body: classes.body, header: classes.header }}
+      classNames={{
+        inner: classes.inner,
+        content: classes.content,
+        body: classes.body,
+        header: shown === "log" ? classes.hiddenHeader : classes.header,
+      }}
     >
       {body()}
     </Drawer>

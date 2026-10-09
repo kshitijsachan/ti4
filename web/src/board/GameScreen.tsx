@@ -11,12 +11,15 @@ import { getPrimaryColorCSS } from "@/entities/lookup/colors";
 import { MapLoadingState } from "@/domains/map/components/MapLoadingState";
 import { BoardTable } from "./BoardTable";
 import { GameDrawers } from "./GameDrawers";
-import { DecisionSlot, HandSlot, hasHandTray } from "./Mounts";
+import { DecisionSlot, HandSlot, hasGameLog, hasHandTray, LogSlot } from "./Mounts";
 import { ObjectivesModal } from "./ObjectivesModal";
 import { PlayerRail } from "./PlayerRail";
 import { TopBar, type DrawerName } from "./TopBar";
 import { useExternalFocus } from "./useExternalFocus";
 import classes from "./GameScreen.module.css";
+
+/** Fired by the decisions module (its OPEN_TRADE_EVENT). */
+const OPEN_TRADE_EVENT = "ti4:decisions:open-trade";
 
 /** Trades waiting on me, refreshed whenever my hand thread moves. */
 function useIncomingTrades(gameName: string, handId: string | undefined, signal: string | undefined) {
@@ -84,6 +87,13 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
     setDrawer(name);
   });
 
+  // "Counter" on a trade offer in the decision popup opens the trade drawer.
+  useEffect(() => {
+    const openTrade = () => setDrawer("trade");
+    window.addEventListener(OPEN_TRADE_EVENT, openTrade);
+    return () => window.removeEventListener(OPEN_TRADE_EVENT, openTrade);
+  }, []);
+
   const players = data?.playerData ?? [];
   const active = players.find((p) => p.active);
   const mine = players.find((p) => me && p.discordId === me.id);
@@ -115,6 +125,11 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
       {!takeover && <PlayerRail myUserId={me?.id} />}
       <main className={classes.stage}>
         {stage}
+        {!takeover && hasGameLog && (
+          <div className={classes.ticker}>
+            <LogSlot gameName={gameName} variant="ticker" max={2} onOpen={() => setDrawer("log")} />
+          </div>
+        )}
         <DecisionSlot gameName={gameName} turn={turn} />
       </main>
       {!takeover && <HandSlot gameName={gameName} />}

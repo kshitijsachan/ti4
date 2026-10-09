@@ -171,6 +171,10 @@
 }
 
 @media (max-width: 480px) {
+  .mark {
+    display: none;
+  }
+
   .turn {
     max-width: 44vw;
     overflow: hidden;

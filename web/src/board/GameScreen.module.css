@@ -21,3 +21,22 @@
   --map-viewport-top: 0px;
   --map-viewport-height: 100%;
 }
+
+/* What just happened, in a corner of the table. */
+.ticker {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  z-index: var(--z-zoom-controls);
+  max-width: min(520px, calc(100% - 220px));
+  padding: 4px 10px;
+  border: 1px solid var(--panel-hairline);
+  border-radius: 6px;
+  background: var(--panel-field-strip);
+}
+
+@media (max-width: 640px) {
+  .ticker {
+    display: none;
+  }
+}

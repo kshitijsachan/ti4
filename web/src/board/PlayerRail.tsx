@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Modal } from "@mantine/core";
 import { useGameData } from "@/state/useGameContext";
 import { filterPlayersWithAssignedFaction } from "@/entities/game/playerUtils";
@@ -16,17 +16,28 @@ type Props = { myUserId?: string };
 export function PlayerRail({ myUserId }: Props) {
   const data = useGameData();
   const [openColor, setOpenColor] = useState<string | null>(null);
-  if (!data) return null;
+  const railRef = useRef<HTMLDivElement>(null);
+  const players = filterPlayersWithAssignedFaction(data?.playerData ?? []);
+  const myIndex = players.findIndex((p) => !!myUserId && p.discordId === myUserId);
 
-  const players = filterPlayersWithAssignedFaction(data.playerData);
+  // On a phone the seats are a swipe strip: start it at your own seat.
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail || myIndex < 0 || rail.scrollWidth <= rail.clientWidth) return;
+    const seat = rail.children[myIndex] as HTMLElement | undefined;
+    if (seat) rail.scrollLeft = seat.offsetLeft - rail.offsetLeft - 12;
+  }, [myIndex]);
+
+  if (!data) return null;
   if (!players.length) return null;
   const opened = players.find((p) => p.color === openColor);
 
   return (
     <>
       <div
+        ref={railRef}
         className={classes.rail}
-        style={{ "--seats": players.length } as React.CSSProperties}
+        style={{ "--seats": players.length } as CSSProperties}
         role="list"
         aria-label="Players"
       >

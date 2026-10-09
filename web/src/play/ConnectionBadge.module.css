@@ -33,3 +33,13 @@
   color: var(--mantine-color-gray-2);
   white-space: nowrap;
 }
+
+@media (max-width: 640px) {
+  .badge {
+    padding: 0 8px;
+  }
+
+  .name {
+    display: none;
+  }
+}

@@ -1,28 +1,45 @@
 import { useEffect } from "react";
 import { decisionFocusStore, logFocusStore, type FocusStore } from "./modules";
-import { positionOf, useBoardFocus } from "./focus";
+import { useBoardFocus } from "./focus";
 
-function follow(store: FocusStore | undefined) {
-  if (!store?.subscribe || !store.getState) return () => {};
-  let last = positionOf(store.getState());
-  return store.subscribe((state) => {
-    const next = positionOf(state);
-    if (!next || next === last) {
-      last = next;
-      return;
-    }
-    last = next;
-    useBoardFocus.getState().focus(next);
+type DecisionFocus = { position?: string | null; key?: number };
+type LogFocus = {
+  focus?: { position?: string; at?: number } | null;
+  clear?: () => void;
+};
+
+/** The open decision's system stays lit while the decision is open. */
+function followDecisions(store: FocusStore | undefined) {
+  if (!store) return () => {};
+  let lastKey = (store.getState() as DecisionFocus).key;
+  return store.subscribe((raw) => {
+    const state = raw as DecisionFocus;
+    if (state.key === lastKey) return;
+    lastKey = state.key;
+    const board = useBoardFocus.getState();
+    if (state.position) board.focus(state.position, true);
+    else if (board.persist) board.focus(null);
+  });
+}
+
+/** A system clicked in the log flashes once, then the request is cleared. */
+function followLog(store: FocusStore | undefined) {
+  if (!store) return () => {};
+  return store.subscribe((raw) => {
+    const state = raw as LogFocus;
+    if (!state.focus?.position) return;
+    useBoardFocus.getState().focus(state.focus.position, false);
+    state.clear?.();
   });
 }
 
 /**
  * When a decision popup or a log entry is about a system, the table pans to
- * it and lights it up.
+ * it (if it's off screen) and lights it up.
  */
 export function useExternalFocus() {
   useEffect(() => {
-    const stops = [follow(decisionFocusStore), follow(logFocusStore)];
+    const stops = [followDecisions(decisionFocusStore), followLog(logFocusStore)];
     return () => stops.forEach((stop) => stop());
   }, []);
 }

@@ -24,7 +24,7 @@ function DecisionFallback({ gameName, turn }: DecisionProps) {
 }
 
 export function DecisionSlot({ gameName, turn }: DecisionProps) {
-  if (DecisionHostModule) return <DecisionHostModule gameName={gameName} />;
+  if (DecisionHostModule) return <DecisionHostModule gameName={gameName} placement="contained" />;
   return <DecisionFallback gameName={gameName} turn={turn} />;
 }
 
@@ -42,8 +42,9 @@ export const hasHandTray = !!HandTrayModule;
 export const hasDecisionHost = !!DecisionHostModule;
 export const hasGameLog = !!GameLogModule;
 
-export function LogSlot({ gameName, variant }: GameLogProps) {
-  if (GameLogModule) return <GameLogModule gameName={gameName} variant={variant} />;
+export function LogSlot(props: GameLogProps) {
+  const { gameName, variant } = props;
+  if (GameLogModule) return <GameLogModule {...props} />;
   if (variant === "ticker") return null;
   return <ActionLog gameName={gameName} composer={false} className={classes.fill} />;
 }

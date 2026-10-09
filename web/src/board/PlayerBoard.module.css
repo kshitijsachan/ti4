@@ -128,17 +128,26 @@
   color: var(--mantine-color-gray-5);
 }
 
-.line {
+/* The seat's holdings flow in small groups that wrap: two lines on a wide seat, more on a narrow one. */
+.facts {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 5px 10px;
   min-width: 0;
-  height: 18px;
-  overflow: hidden;
 }
 
-.grow {
-  flex: 1;
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+  min-width: 0;
+}
+
+.nameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sc {
@@ -188,12 +197,13 @@
 }
 
 .speaker {
-  height: 16px;
+  height: 18px;
   flex-shrink: 0;
 }
 
 .status {
   flex-shrink: 0;
+  margin-left: 2px;
   font-size: 10px;
   font-weight: var(--weight-rail);
   letter-spacing: var(--track-label);
@@ -265,7 +275,6 @@
 }
 
 .techs {
-  display: inline-flex;
   gap: 3px;
 }
 
@@ -300,9 +309,8 @@
 }
 
 .leaders {
-  display: inline-flex;
   gap: 2px;
-  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .leader {

@@ -44,21 +44,30 @@ function boardGeometry(contentSize: ContentSize, unscaledWidth: number, zoom: nu
   };
 }
 
-/** Centres a system and lights it for a few seconds. */
-function revealTile(container: HTMLElement, position: string) {
+const VIEWPORT_MARGIN = 60;
+
+/** Brings a system on screen (only if it isn't already) and lights it; returns the undo. */
+function revealTile(container: HTMLElement, position: string, persist: boolean) {
   const tile = document.getElementById(`tile-${position}`);
   const visual = tile?.querySelector<HTMLElement>('[data-map-tile-visual="true"]');
   if (!tile || !visual || !container.contains(tile)) return () => {};
 
   const viewport = container.getBoundingClientRect();
   const target = visual.getBoundingClientRect();
-  container.scrollTo({
-    left: container.scrollLeft + target.left + target.width / 2 - (viewport.left + viewport.width / 2),
-    top: container.scrollTop + target.top + target.height / 2 - (viewport.top + viewport.height / 2),
-    behavior: "smooth",
-  });
+  const visible =
+    target.left >= viewport.left + VIEWPORT_MARGIN &&
+    target.right <= viewport.right - VIEWPORT_MARGIN &&
+    target.top >= viewport.top + VIEWPORT_MARGIN &&
+    target.bottom <= viewport.bottom - VIEWPORT_MARGIN;
+  if (!visible) {
+    container.scrollTo({
+      left: container.scrollLeft + target.left + target.width / 2 - (viewport.left + viewport.width / 2),
+      top: container.scrollTop + target.top + target.height / 2 - (viewport.top + viewport.height / 2),
+      behavior: "smooth",
+    });
+  }
   tile.classList.add(FOCUS_CLASS);
-  const timer = window.setTimeout(() => tile.classList.remove(FOCUS_CLASS), FOCUS_MS);
+  const timer = persist ? undefined : window.setTimeout(() => tile.classList.remove(FOCUS_CLASS), FOCUS_MS);
   return () => {
     window.clearTimeout(timer);
     tile.classList.remove(FOCUS_CLASS);
@@ -67,19 +76,20 @@ function revealTile(container: HTMLElement, position: string) {
 
 function useFocusReveal(containerRef: RefObject<HTMLDivElement | null>) {
   const position = useBoardFocus((s) => s.position);
+  const persist = useBoardFocus((s) => s.persist);
   const key = useBoardFocus((s) => s.key);
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !position) return;
     let cleanup = () => {};
     const frame = window.requestAnimationFrame(() => {
-      cleanup = revealTile(container, position);
+      cleanup = revealTile(container, position, persist);
     });
     return () => {
       window.cancelAnimationFrame(frame);
       cleanup();
     };
-  }, [containerRef, position, key]);
+  }, [containerRef, position, persist, key]);
 }
 
 /**

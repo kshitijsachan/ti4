@@ -33,11 +33,18 @@ function pick<T>(mods: Record<string, Exports>, name: string): T | undefined {
   return undefined;
 }
 
-export type DecisionHostProps = { gameName: string };
+export type DecisionHostProps = {
+  gameName: string;
+  placement?: "fixed" | "contained";
+  className?: string;
+};
 export type HandTrayProps = { gameName: string };
 export type GameLogProps = {
   gameName: string;
   variant: "ticker" | "full";
+  className?: string;
+  max?: number;
+  onOpen?: () => void;
 };
 
 /** A zustand hook: callable for a slice, with getState/subscribe on it. */

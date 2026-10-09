@@ -75,3 +75,8 @@
 .back:hover {
   color: var(--mantine-color-gray-0);
 }
+
+/* The log names itself; the top bar's Log button (or Esc) closes it. */
+.hiddenHeader {
+  display: none;
+}

@@ -80,8 +80,9 @@ export function PlayerBoard({ player: p, vpsToWin, isMe, onOpen }: Props) {
         <div className={classes.who}>
           <div className={classes.factionName}>{p.factionName}</div>
           <div className={classes.name}>
-            {p.name}
+            <span className={classes.nameText}>{p.name}</span>
             {isMe && <span className={classes.you}>you</span>}
+            {status && <span className={cx(classes.status, p.active && classes.statusActive)}>{status}</span>}
           </div>
         </div>
         <div className={classes.vp} title={`${p.vp} of ${vpsToWin} victory points`}>
@@ -90,64 +91,58 @@ export function PlayerBoard({ player: p, vpsToWin, isMe, onOpen }: Props) {
         </div>
       </div>
 
-      <div className={classes.line}>
-        {p.strategyCards.map((card) => (
-          <StrategyChip key={card.initiative} card={card} />
-        ))}
-        {p.speaker && (
-          <img
-            src={cdnImage("/tokens/token_speaker.png")}
-            alt="Speaker"
-            title="Speaker"
-            className={classes.speaker}
-          />
+      <div className={classes.facts}>
+        {(p.strategyCards.length > 0 || p.speaker) && (
+          <span className={classes.group}>
+            {p.strategyCards.map((card) => (
+              <StrategyChip key={card.initiative} card={card} />
+            ))}
+            {p.speaker && (
+              <img
+                src={cdnImage("/tokens/token_speaker.png")}
+                alt="Speaker"
+                title="Speaker"
+                className={classes.speaker}
+              />
+            )}
+          </span>
         )}
-        <span className={classes.grow} />
-        {status && <span className={cx(classes.status, p.active && classes.statusActive)}>{status}</span>}
-      </div>
-
-      <div className={classes.line}>
-        <Stat icon="/tg.png" value={p.tg} label={`${p.tg} trade goods`} />
-        <Stat
-          icon="/comms.png"
-          value={`${p.commodities}/${p.commoditiesMax}`}
-          label={`${p.commodities} of ${p.commoditiesMax} commodities`}
-        />
-        <span className={classes.cc} title={`Command tokens: ${p.tactic} tactic, ${p.fleet} fleet, ${p.strategy} strategy`}>
+        <span className={classes.group}>
+          <Stat icon="/tg.png" value={p.tg} label={`${p.tg} trade goods`} />
+          <Stat
+            icon="/comms.png"
+            value={`${p.commodities}/${p.commoditiesMax}`}
+            label={`${p.commodities} of ${p.commoditiesMax} commodities`}
+          />
+        </span>
+        <span
+          className={cx(classes.group, classes.cc)}
+          title={`Command tokens: ${p.tactic} tactic, ${p.fleet} fleet, ${p.strategy} strategy`}
+        >
           <span className={classes.ccLabel}>CC</span>
           <span className={classes.num}>
             {p.tactic}/{p.fleet}/{p.strategy}
           </span>
         </span>
-      </div>
-
-      <div className={classes.line}>
-        <span className={classes.stat} title={`${p.planets} planets`}>
-          <span className={classes.planetDot} />
-          <span className={classes.num}>{p.planets}</span>
-        </span>
-        <span
-          className={classes.stat}
-          title={`Resources: ${p.resources} ready of ${p.resourcesTotal}`}
-        >
-          <span className={cx(classes.econ, classes.res)}>R</span>
-          <span className={classes.num}>
-            {p.resources}/{p.resourcesTotal}
+        <span className={classes.group}>
+          <span className={classes.stat} title={`${p.planets} planets`}>
+            <span className={classes.planetDot} />
+            <span className={classes.num}>{p.planets}</span>
+          </span>
+          <span className={classes.stat} title={`Resources: ${p.resources} ready of ${p.resourcesTotal}`}>
+            <span className={cx(classes.econ, classes.res)}>R</span>
+            <span className={classes.num}>
+              {p.resources}/{p.resourcesTotal}
+            </span>
+          </span>
+          <span className={classes.stat} title={`Influence: ${p.influence} ready of ${p.influenceTotal}`}>
+            <span className={cx(classes.econ, classes.inf)}>I</span>
+            <span className={classes.num}>
+              {p.influence}/{p.influenceTotal}
+            </span>
           </span>
         </span>
-        <span
-          className={classes.stat}
-          title={`Influence: ${p.influence} ready of ${p.influenceTotal}`}
-        >
-          <span className={cx(classes.econ, classes.inf)}>I</span>
-          <span className={classes.num}>
-            {p.influence}/{p.influenceTotal}
-          </span>
-        </span>
-      </div>
-
-      <div className={classes.line}>
-        <span className={classes.techs}>
+        <span className={cx(classes.group, classes.techs)}>
           {TECH_ORDER.map((color) => (
             <span
               key={color}
@@ -158,21 +153,22 @@ export function PlayerBoard({ player: p, vpsToWin, isMe, onOpen }: Props) {
             </span>
           ))}
         </span>
-        {p.relics > 0 && <Stat icon="/relicicon.webp" value={p.relics} label={`${p.relics} relics`} />}
-        {p.fragments > 0 && (
-          <Stat
-            icon={cdnImage("/player_area/pa_fragment_crf.png")}
-            value={p.fragments}
-            label={`${p.fragments} relic fragments`}
-          />
+        {(p.relics > 0 || p.fragments > 0) && (
+          <span className={classes.group}>
+            {p.relics > 0 && <Stat icon="/relicicon.webp" value={p.relics} label={`${p.relics} relics`} />}
+            {p.fragments > 0 && (
+              <Stat
+                icon={cdnImage("/player_area/pa_fragment_crf.png")}
+                value={p.fragments}
+                label={`${p.fragments} relic fragments`}
+              />
+            )}
+          </span>
         )}
-        <span className={classes.grow} />
-        <span className={classes.leaders}>
+        <span className={cx(classes.group, classes.leaders)}>
           {leaders.map(({ type, state }) => (
             <Tooltip key={type} label={`${type}: ${LEADER_LABEL[state]}`} withArrow openDelay={300}>
-              <span className={cx(classes.leader, classes[`leader_${state}`])}>
-                {type[0].toUpperCase()}
-              </span>
+              <span className={cx(classes.leader, classes[`leader_${state}`])}>{type[0].toUpperCase()}</span>
             </Tooltip>
           ))}
         </span>
