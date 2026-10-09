@@ -168,6 +168,9 @@ export function useRunCardAction(threadId: string | undefined, actionsId?: strin
       const next = await waitForButton(connection, channelId, baseline, step.match);
       if (!next) return { error: "The bot did not offer that option right now.", baseline };
       const result = await press(next.channelId, next.messageId, next.customId);
+      // The picker the opener produced has served its purpose; an ephemeral one would linger.
+      const picker = connection.store.getState().messages[next.channelId]?.byId[next.messageId];
+      if (picker?.ephemeral) connection.dismiss(next.channelId, next.messageId);
       return { ...result, baseline };
     }
     const sub = target ? "show" : "show_to_all";
