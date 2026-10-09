@@ -21,7 +21,7 @@ export function GameLogTicker({ gameName, max = 3, onOpen, className }: Props) {
   const { events } = useGameEvents(gameName);
   const rewinds = useRewindIndex(gameName, events);
   const latest = useMemo(
-    () => events.filter((e) => e.importance >= 2 && rewinds.rows.get(e.id)?.status !== "undone").slice(-Math.max(1, Math.min(3, max))).reverse(),
+    () => events.filter((e) => e.importance >= 2 && !["undone", "replay"].includes(rewinds.rows.get(e.id)?.status ?? "")).slice(-Math.max(1, Math.min(3, max))).reverse(),
     [events, max, rewinds],
   );
 

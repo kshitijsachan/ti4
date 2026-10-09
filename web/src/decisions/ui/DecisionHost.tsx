@@ -49,7 +49,33 @@ function useHandAliases(gameName: string, enabled: boolean) {
 const BURST_MS = 3000;
 
 function inBursts(newestFirst: Decision[]): Decision[] {
-  return bursts(newestFirst).reverse().flatMap(foldSteps);
+  return foldCombat(bursts(newestFirst).reverse().flatMap(foldSteps));
+}
+
+/** A combat thread posts several prompts at once (assign hits, roll dice, AFB): one popup per combat. */
+function foldCombat(list: Decision[]): Decision[] {
+  const out: Decision[] = [];
+  for (const d of list) {
+    if (d.kind !== "combat") {
+      out.push(d);
+      continue;
+    }
+    const lead = out.findIndex((x) => x.kind === "combat" && x.prompt.channelId === d.prompt.channelId);
+    if (lead < 0) {
+      out.push({ ...d, steps: [] });
+      continue;
+    }
+    out[lead] = { ...out[lead], steps: [...(out[lead].steps ?? []), d] };
+  }
+  return out.map((d) => (d.kind === "combat" ? combatTitle(d) : d));
+}
+
+const HIT_ID = /^(autoAssign\w*Hits|getDamageButtons_\w*deleteThis|getDamageButtons_\w+_afb)/;
+
+function combatTitle(d: Decision): Decision {
+  const all = [d, ...(d.steps ?? [])];
+  const hits = all.some((x) => x.choices.some((c) => HIT_ID.test(baseId(c.customId))));
+  return { ...d, title: d.title.replace(/— .*$/, hits ? "— assign hits" : "— roll dice") };
 }
 
 /** My strategy card's own prompt absorbs the prompts the bot posted with it (choose speaker, draw agendas, …). */
@@ -99,7 +125,10 @@ export function DecisionHost({ gameName, placement = "fixed", className }: Decis
   const decisions = useMemo<Decision[]>(() => {
     if (!game) return [];
     const all = prompts.map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }));
-    const ordered = inBursts(all);
+    /* "Decide now whether to follow X" is moot once X has been played. */
+    const played = new Set((web?.strategyCards ?? []).filter((sc) => sc.played).map((sc) => sc.initiative));
+    const live = all.filter((d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)));
+    const ordered = inBursts(live);
     return [...ordered.filter((d) => !d.optional), ...ordered.filter((d) => d.optional)];
   }, [prompts, game, users, channels, messages, web, mePlayer]);
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));

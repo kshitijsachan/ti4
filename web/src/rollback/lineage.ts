@@ -76,7 +76,9 @@ export type RowRewind =
   /** Part of history, but its exact save was deleted by an earlier roll-back (later undone). */
   | { status: "lost" }
   /** Undone by a later rewind / undo. */
-  | { status: "undone"; by?: Rewind };
+  | { status: "undone"; by?: Rewind }
+  /** A prompt the bot re-posted while rolling back (its saved buttons), not a new game event. */
+  | { status: "replay"; by: Rewind };
 
 export type RewindIndex = {
   rows: Map<string, RowRewind>;
@@ -84,7 +86,11 @@ export type RewindIndex = {
   latest?: UndoPoint;
 };
 
-type EventLike = { id: string; time: string };
+type EventLike = { id: string; time: string; text?: string };
+
+/** The bot re-posts the undone step's prompt within this long of a roll-back. */
+export const REPLAY_MS = 2_500;
+const ANNOUNCEMENT = /\b(rewound the game|undid)\b/;
 
 /** Classify every event: undone, rewindable (and to which save), current, or too old. */
 export function buildRewindIndex(events: readonly EventLike[], points: readonly UndoPoint[], rewinds: readonly Rewind[]): RewindIndex {
@@ -104,6 +110,11 @@ export function buildRewindIndex(events: readonly EventLike[], points: readonly 
     if (Number.isNaN(t)) continue;
     if (!isLive(t, intervals)) {
       rows.set(e.id, { status: "undone", by: sortedRewinds.find((r) => r.at >= t) });
+      continue;
+    }
+    const replayOf = sortedRewinds.find((r) => t >= r.at && t <= r.at + REPLAY_MS);
+    if (replayOf && !ANNOUNCEMENT.test(e.text ?? "")) {
+      rows.set(e.id, { status: "replay", by: replayOf });
       continue;
     }
     if (!oldest || t < oldest.savedAt - ATTACH_MS) {

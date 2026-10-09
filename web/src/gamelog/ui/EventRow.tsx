@@ -33,6 +33,7 @@ export function EventRow({ event, showRound, compact }: Props) {
   const clickable = hasDetails || !!event.systemPosition;
   const rewind = useRewindRow(event.id);
   const undone = rewind?.status === "undone";
+  const replay = rewind?.status === "replay";
   const askRewind = rewind?.ask
     ? (e: SyntheticEvent) => {
         e.stopPropagation();
@@ -50,7 +51,7 @@ export function EventRow({ event, showRound, compact }: Props) {
       className={[classes.row, compact ? classes.compact : "", focused ? classes.focused : ""].join(" ")}
       data-importance={event.importance}
       data-cat={cat}
-      data-undone={undone || undefined}
+      data-undone={undone || replay || undefined}
       data-rewind={rewind?.status}
     >
       <div
@@ -77,6 +78,11 @@ export function EventRow({ event, showRound, compact }: Props) {
         {undone && !compact && (
           <span className={classes.undoneTag} title={rewind.by?.byName ? `Undone by ${rewind.by.byName}` : "Undone by a rewind / undo"}>
             undone
+          </span>
+        )}
+        {replay && !compact && (
+          <span className={classes.undoneTag} title="The bot re-posted this prompt while rolling back">
+            re-posted
           </span>
         )}
         {askRewind && !compact && (

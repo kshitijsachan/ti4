@@ -92,3 +92,14 @@ void test("events whose save a roll-back deleted are 'lost', not mapped to a nei
   assert.equal(idx.rows.get("e3")?.status, "lost");
   assert.equal(idx.rows.get("e4")?.status, "current");
 });
+
+void test("prompts the bot re-posts during a roll-back are 'replay', its announcement is not", () => {
+  const points = [pt(3, 10_100, true), pt(2, 2_000), pt(1, 1_000)];
+  const events = [
+    { id: "re", time: new Date(10_020).toISOString(), text: "Solo played 6 · Warfare" },
+    { id: "an", time: new Date(10_060).toISOString(), text: "Solo rewound the game to just after x" },
+  ];
+  const idx = buildRewindIndex(events, points, [rw(10_000, 2_000, 2)]);
+  assert.equal(idx.rows.get("re")?.status, "replay");
+  assert.equal(idx.rows.get("an")?.status, "current");
+});
