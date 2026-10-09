@@ -56,8 +56,8 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|^sc_(?!no_follow)|^score|_score|^po_scoring|^get_so_)/i;
-const BLOCKED_LABEL = /^(undo|un-|retrieve|reassign|reset|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
+  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|queueAWhen|queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|^sc_(?!no_follow)|^score|_score|^po_scoring|^get_so_)/i;
+const BLOCKED_LABEL = /^(undo|un-|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
   // Milty draft (only offered when the draft says it is this seat's pick; see milty()).
@@ -83,7 +83,10 @@ const RULES: Rule[] = [
   { id: /_strategicAction_\d+$/, score: 86, why: "play strategy card" },
   { id: /_passForRound$/, score: 85, why: "pass" },
   { id: /_passingAbilities$/, score: 84, why: "pass" },
-  // Agenda: abstain.
+  // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
+  { id: /^resolvePreassignment_Abstain On Agenda$/, score: 79, why: "agenda: pre-abstain" },
+  { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, why: "agenda: pre-pass on shenanigans" },
+  { id: /^declineToQueueA(When|nAfter)$/, score: 72, why: "agenda: no whens / afters" },
   { id: /resolveAgendaVote_0$/, score: 78, why: "agenda: abstain" },
   { label: /^(?!pre-).*\babstain\b/i, score: 77, why: "agenda: abstain" },
   // Combat: auto-assign hits, roll dice.
@@ -107,6 +110,9 @@ const RULES: Rule[] = [
     why: "decline / move on",
   },
 ];
+
+/** Confirmations that offer a way to take the choice back: their lone button is not a question for us. */
+const TAKE_BACK_TEXT = /change your mind|if this was an accident|can change (that|your decision)|to undo|remove the preset|be asked (again|to decide)/i;
 
 const BUSY_WRONG = /these buttons are for someone else/i;
 const MIN_DELAY = 1500;
@@ -363,7 +369,7 @@ class SeatPilot {
       const control = rule.last ? hits[hits.length - 1] : hits[0];
       return { msg: m, control, score: rule.score, why: rule.why };
     }
-    if (!ctx.strong || answered) return null;
+    if (!ctx.strong || answered || TAKE_BACK_TEXT.test(content)) return null;
     // A prompt certainly waiting on us that no rule covers: its first control (not one we just chose in a
     // similar prompt here, e.g. a second "choose a technology").
     const fresh = controls.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= REPOST_MS);
