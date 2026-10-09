@@ -13,6 +13,7 @@ import { ReconnectButton } from "@/domains/map/components/renderer/ReconnectButt
 import { getMapLayoutConfig } from "@/domains/map/components/mapLayout";
 import { useMapKeyboardShortcuts } from "@/domains/map/components/hooks/useMapKeyboardShortcuts";
 import { useScrollToReplayHighlight } from "@/hooks/useScrollToReplayHighlight";
+import { HEX_PATH, TILE_HEIGHT, TILE_WIDTH } from "@/entities/geometry/tilePositioning";
 import { useBoardFocus } from "./focus";
 import classes from "./BoardTable.module.css";
 
@@ -45,6 +46,19 @@ function boardGeometry(contentSize: ContentSize, unscaledWidth: number, zoom: nu
 }
 
 const VIEWPORT_MARGIN = 60;
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** A lit hex outline laid over a tile (the map's tiles are upstream components, so it is added to the DOM). */
+function focusRing() {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${TILE_WIDTH} ${TILE_HEIGHT}`);
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add(classes.focusRing);
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", HEX_PATH);
+  svg.appendChild(path);
+  return svg;
+}
 
 /** Brings a system on screen (only if it isn't already) and lights it; returns the undo. */
 function revealTile(container: HTMLElement, position: string, persist: boolean) {
@@ -66,11 +80,17 @@ function revealTile(container: HTMLElement, position: string, persist: boolean) 
       behavior: "smooth",
     });
   }
+  const ring = focusRing();
+  visual.parentElement?.appendChild(ring);
   tile.classList.add(FOCUS_CLASS);
-  const timer = persist ? undefined : window.setTimeout(() => tile.classList.remove(FOCUS_CLASS), FOCUS_MS);
+  const clear = () => {
+    tile.classList.remove(FOCUS_CLASS);
+    ring.remove();
+  };
+  const timer = persist ? undefined : window.setTimeout(clear, FOCUS_MS);
   return () => {
     window.clearTimeout(timer);
-    tile.classList.remove(FOCUS_CLASS);
+    clear();
   };
 }
 

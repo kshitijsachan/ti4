@@ -176,7 +176,7 @@ export function ChoiceButtons(props: Props) {
   const undo = ranked.filter((r) => r.rank === "undo").map((r) => r.c);
   const main = [...primary, ...secondary];
   const many = main.filter((c) => c.kind === "button").length > gridAbove;
-  const lead = !many && primary.length === 1 && main.length > 1 ? primary[0] : null;
+  const lead = !many && primary.length === 1 && main.length > 2 ? primary[0] : null;
 
   return (
     <div className={classes.root}>

@@ -422,3 +422,138 @@
     display: none;
   }
 }
+
+/* Spending */
+
+.planetGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.planetTile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 46px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--play-border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--play-ink-bright);
+}
+
+.planetTile:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(226, 232, 240, 0.45);
+}
+
+.planetName {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.planetValues {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.res,
+.inf {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.res {
+  background: rgba(var(--play-yellow), 0.22);
+  color: #fde68a;
+  border: 1px solid rgba(var(--play-yellow), 0.55);
+}
+
+.inf {
+  background: rgba(var(--play-blue), 0.22);
+  color: #bfdbfe;
+  border: 1px solid rgba(var(--play-blue), 0.55);
+}
+
+.faint {
+  opacity: 0.35;
+}
+
+.tileSpinnerSmall {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+}
+
+/* Command tokens */
+
+.pools {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.pool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--play-hairline-strong);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.poolValue {
+  font-family: var(--font-data);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--play-ink-bright);
+}
+
+.poolLabel {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--play-ink-muted);
+}
+
+.poolPlus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--play-green), 0.45);
+  background: rgba(var(--play-green), 0.14);
+  color: var(--play-ink-bright);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.poolPlus:hover:not(:disabled) {
+  background: rgba(var(--play-green), 0.24);
+}
+
+.poolPlus:disabled {
+  opacity: 0.5;
+}
+
+.payRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+}

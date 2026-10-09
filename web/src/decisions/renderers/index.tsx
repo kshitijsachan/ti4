@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Decision } from "../model/classify";
 import { AgendaBody } from "./Agenda";
 import { CombatBody } from "./Combat";
+import { GainTokensBody, SpendBody } from "./Economy";
 import { GenericBody, TacticalBody } from "./Generic";
 import { ReactionBody } from "./Reaction";
 import { ScFollowBody, ScPickBody } from "./Strategy";
@@ -26,6 +27,10 @@ export function renderBody(d: Decision, props: RendererProps): ReactNode {
       return <CombatBody {...props} />;
     case "transaction":
       return <TradeBody {...props} />;
+    case "spend":
+      return <SpendBody {...props} />;
+    case "gainTokens":
+      return <GainTokensBody {...props} />;
     case "reaction":
       return <ReactionBody {...props} />;
     default:

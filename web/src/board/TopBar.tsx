@@ -2,7 +2,6 @@ import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Indicator, Tooltip, UnstyledButton } from "@mantine/core";
 import {
-  IconCards,
   IconListDetails,
   IconMessageCircle,
   IconTarget,
@@ -14,7 +13,7 @@ import type { TurnState } from "@/play/turn";
 import { SettingsMenu } from "./SettingsMenu";
 import classes from "./TopBar.module.css";
 
-export type DrawerName = "log" | "talk" | "trade" | "raw" | "hand";
+export type DrawerName = "log" | "talk" | "trade" | "raw";
 
 type DrawerButtonProps = {
   icon: ReactNode;
@@ -63,7 +62,6 @@ type Props = {
   onObjectives?: () => void;
   talkUnread: number;
   incomingTrades: number;
-  showHandButton: boolean;
 };
 
 /** The table's header: where we are in the game, whose move it is, and the few things you can open. */
@@ -79,7 +77,6 @@ export function TopBar({
   onObjectives,
   talkUnread,
   incomingTrades,
-  showHandButton,
 }: Props) {
   const toggle = (name: DrawerName) => onDrawer(drawer === name ? null : name);
   let turnText = "";
@@ -120,14 +117,6 @@ export function TopBar({
             label={objectivesLabel ?? "Objectives"}
             active={false}
             onClick={onObjectives}
-          />
-        )}
-        {showHandButton && (
-          <BarButton
-            icon={<IconCards size={18} />}
-            label="Hand"
-            active={drawer === "hand"}
-            onClick={() => toggle("hand")}
           />
         )}
         <BarButton

@@ -4,6 +4,7 @@ import { IconChevronLeft, IconChevronRight, IconEyeOff, IconMinus, IconAlertTria
 import { useQuery } from "@tanstack/react-query";
 import cx from "clsx";
 import { usePlay, usePlayConnection } from "@/discord";
+import { snowflakeTime } from "@/discord/shared/snowflake";
 import { usePlayerData } from "@/api/usePlayerData";
 import { getToken } from "@/play/session";
 import { findGame } from "../detect/games";
@@ -44,6 +45,22 @@ function useHandAliases(gameName: string, enabled: boolean) {
   return query.data?.actionCards;
 }
 
+/** The bot often answers one press with a few prompts at once (pay, then gain tokens): keep those in posting order. */
+const BURST_MS = 3000;
+
+function inBursts(newestFirst: Decision[]): Decision[] {
+  const bursts: Decision[][] = [];
+  for (const d of [...newestFirst].reverse()) {
+    const last = bursts[bursts.length - 1];
+    const prev = last?.[last.length - 1];
+    const close =
+      prev && prev.prompt.channelId === d.prompt.channelId && snowflakeTime(d.id) - snowflakeTime(prev.id) <= BURST_MS;
+    if (close) last.push(d);
+    else bursts.push([d]);
+  }
+  return bursts.reverse().flat();
+}
+
 /** Position of the system a choice is about ("ringTile_301"), for the map highlight while hovering. */
 function choicePosition(c: Choice | null) {
   return c ? (baseId(c.customId).match(/^ringTile_(\w+)/)?.[1] ?? null) : null;
@@ -68,7 +85,9 @@ export function DecisionHost({ gameName, placement = "fixed", className }: Decis
 
   const decisions = useMemo<Decision[]>(() => {
     if (!game) return [];
-    return prompts.map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }));
+    const all = prompts.map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }));
+    const ordered = inBursts(all);
+    return [...ordered.filter((d) => !d.optional), ...ordered.filter((d) => d.optional)];
   }, [prompts, game, users, channels, messages, web, mePlayer]);
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };

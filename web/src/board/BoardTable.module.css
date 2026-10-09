@@ -18,22 +18,38 @@
   z-index: var(--z-zoom-controls);
 }
 
-/* Set on a map tile (by id) while something asks the table to look at it. */
-:global(.board-focus-tile) [data-map-tile-visual="true"] {
-  animation: boardFocusPulse 1.2s ease-in-out 3;
-  filter: drop-shadow(0 0 10px var(--mantine-color-yellow-4))
-    drop-shadow(0 0 3px var(--mantine-color-yellow-2));
+/* Set on a map tile (by id) while something asks the table to look at it: lifts it over its neighbours. */
+:global(.board-focus-tile) {
+  z-index: var(--z-tactical-activation);
+}
+
+.focusRing {
+  position: absolute;
+  inset: 0;
+  width: 345px;
+  height: 299px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: var(--z-tactical-activation);
+  filter: drop-shadow(0 0 10px var(--mantine-color-yellow-4));
+  animation: boardFocusPulse 1.1s ease-in-out 4;
+}
+
+.focusRing path {
+  fill: none;
+  stroke: var(--mantine-color-yellow-3);
+  stroke-width: 7;
+  stroke-linejoin: round;
 }
 
 @keyframes boardFocusPulse {
   50% {
-    filter: drop-shadow(0 0 18px var(--mantine-color-yellow-4))
-      drop-shadow(0 0 5px var(--mantine-color-yellow-2));
+    opacity: 0.45;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :global(.board-focus-tile) [data-map-tile-visual="true"] {
+  .focusRing {
     animation: none;
   }
 }

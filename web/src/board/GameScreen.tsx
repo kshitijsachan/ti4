@@ -11,15 +11,13 @@ import { getPrimaryColorCSS } from "@/entities/lookup/colors";
 import { MapLoadingState } from "@/domains/map/components/MapLoadingState";
 import { BoardTable } from "./BoardTable";
 import { GameDrawers } from "./GameDrawers";
-import { DecisionSlot, HandSlot, hasGameLog, hasHandTray, LogSlot } from "./Mounts";
+import { DecisionSlot, HandSlot, LogSlot } from "./Mounts";
+import { OPEN_TRADE_EVENT } from "@/decisions";
 import { ObjectivesModal } from "./ObjectivesModal";
 import { PlayerRail } from "./PlayerRail";
 import { TopBar, type DrawerName } from "./TopBar";
 import { useExternalFocus } from "./useExternalFocus";
 import classes from "./GameScreen.module.css";
-
-/** Fired by the decisions module (its OPEN_TRADE_EVENT). */
-const OPEN_TRADE_EVENT = "ti4:decisions:open-trade";
 
 /** Trades waiting on me, refreshed whenever my hand thread moves. */
 function useIncomingTrades(gameName: string, handId: string | undefined, signal: string | undefined) {
@@ -120,17 +118,16 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
         onObjectives={data && !takeover ? () => setObjectivesOpen(true) : undefined}
         talkUnread={talkUnread}
         incomingTrades={incomingTrades}
-        showHandButton={!hasHandTray}
       />
       {!takeover && <PlayerRail myUserId={me?.id} />}
       <main className={classes.stage}>
         {stage}
-        {!takeover && hasGameLog && (
+        {!takeover && (
           <div className={classes.ticker}>
             <LogSlot gameName={gameName} variant="ticker" max={2} onOpen={() => setDrawer("log")} />
           </div>
         )}
-        <DecisionSlot gameName={gameName} turn={turn} />
+        <DecisionSlot gameName={gameName} />
       </main>
       {!takeover && <HandSlot gameName={gameName} />}
       <GameDrawers

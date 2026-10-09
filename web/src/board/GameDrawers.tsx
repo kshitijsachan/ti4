@@ -6,7 +6,7 @@ import { TradePanel } from "@/trade";
 import { getToken } from "@/play/session";
 import { usePressButton } from "@/play/usePressButton";
 import type { GameChannels } from "@/play/games";
-import { HandFallbackPanel, LogSlot } from "./Mounts";
+import { LogSlot } from "./Mounts";
 import type { DrawerName } from "./TopBar";
 import classes from "./GameDrawers.module.css";
 
@@ -47,7 +47,6 @@ const TITLES: Record<DrawerName, string> = {
   talk: "Table talk",
   trade: "Trade",
   raw: "Raw bot channels",
-  hand: "Your hand",
 };
 
 type Props = {
@@ -75,7 +74,7 @@ export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, t
     if (!game) return <Empty>{status === "open" ? "You are not seated in this game." : "Connecting…"}</Empty>;
     switch (shown) {
       case "log":
-        return <LogSlot gameName={game.name} variant="full" />;
+        return <LogSlot gameName={game.name} variant="full" defaultView="phases" />;
       case "talk":
         return game.tableTalk ? (
           <ChannelView
@@ -95,8 +94,6 @@ export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, t
         ) : (
           <Empty>Trading opens once you have a seat in a started game.</Empty>
         );
-      case "hand":
-        return <HandFallbackPanel gameName={game.name} />;
       case "raw":
         return <RawChannels game={game} channelId={rawChannel} onChannel={onRawChannel} />;
       default:

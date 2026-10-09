@@ -1,4 +1,4 @@
-import { hasGameLog, LogSlot } from "./Mounts";
+import { LogSlot } from "./Mounts";
 import classes from "./SetupScreen.module.css";
 
 type Props = { gameName: string; waitingOn?: string };
@@ -16,8 +16,8 @@ export function SetupScreen({ gameName, waitingOn }: Props) {
             : "Factions, seats and the map are chosen first. "}
           Anything you need to decide will pop up here, and the table appears as soon as the map exists.
         </p>
-        <div className={hasGameLog ? classes.ticker : classes.log}>
-          <LogSlot gameName={gameName} variant={hasGameLog ? "ticker" : "full"} />
+        <div className={classes.ticker}>
+          <LogSlot gameName={gameName} variant="ticker" max={3} />
         </div>
       </div>
     </div>

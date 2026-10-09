@@ -8,6 +8,8 @@ import { baseId, choicesOf, cleanLabel, type Choice } from "./controls";
 import { cleanText, firstLine, namesFrom } from "./text";
 
 export type DecisionKind =
+  | "spend"
+  | "gainTokens"
   | "scPick"
   | "scFollow"
   | "turn"
@@ -58,6 +60,8 @@ export type Decision = {
   trade?: TradeInfo;
   /** System the prompt is about, for the map highlight. */
   position?: string;
+  /** Can be answered ahead of time but nothing waits on it yet (pre-declining a card): listed last. */
+  optional?: boolean;
 };
 
 export type ClassifyContext = {
@@ -79,6 +83,8 @@ const ID = {
   sabotage: /^(no_sabotage|sabotage_)/,
   scoring: /^(po_scoring|po_no_scoring|so_no_scoring|get_so_score_buttons|scoreAnObjective|score_imperial|so_score)/,
   status: /^(redistributeCCButtons|pass_on_abilities)/,
+  spend: /^(spend_|reduceTG_|reduceComm_)/,
+  gainTokens: /^increase_(tactic|fleet|strategy)_cc/,
 };
 
 function has(choices: Choice[], re: RegExp) {
@@ -156,11 +162,19 @@ function tradeOf(text: string): TradeInfo {
   return { from, sides };
 }
 
-function genericTitle(text: string, choices: Choice[]) {
-  const line = firstLine(text, 70);
-  if (line && line.length <= 70) return line;
-  const first = choices.find((c) => c.rank === "primary" || c.rank === "secondary");
-  return first ? `${first.label}?` : "The game needs an answer";
+/**
+ * A title from the bot's first sentence ("Tess, please choose the planets to exhaust." → "Please choose the
+ * planets to exhaust"), with that sentence then dropped from the body. Long openings get a neutral title.
+ */
+function genericTitle(text: string): { title: string; rest: string } {
+  const first = firstLine(text, 400);
+  const sentence = first.split(/(?<=[.!?])\s/)[0] ?? "";
+  const bare = sentence.replace(/^[\w' -]{1,32},\s+/, "").replace(/[.:]$/, "").trim();
+  if (!bare || bare.length > 72) return { title: "The game needs your answer", rest: text };
+  const title = bare.charAt(0).toUpperCase() + bare.slice(1);
+  const idx = text.indexOf(sentence.slice(-Math.min(sentence.length, 24)));
+  const rest = idx >= 0 ? text.slice(idx + Math.min(sentence.length, 24)).replace(/^[\s*_]+/, "") : text;
+  return { title, rest: rest.trim() };
 }
 
 function phaseEyebrow(ctx: ClassifyContext, fallback: string) {
@@ -179,13 +193,14 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     .map((e) => [e.title, e.description].filter(Boolean).join("\n"))
     .join("\n\n");
   const text = cleanText([m.content, embedText].filter(Boolean).join("\n\n"), names);
+  const generic = genericTitle(text);
   const base: Decision = {
     id: m.id,
     prompt,
     kind: "generic",
     eyebrow: phaseEyebrow(ctx, "Decision"),
-    title: genericTitle(text, choices),
-    text,
+    title: generic.title,
+    text: generic.rest,
     choices,
   };
 
@@ -220,6 +235,15 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       title: card ? `Sabotage ${card}?` : "Sabotage?",
     };
   }
+  if (has(choices, ID.gainTokens)) {
+    return { ...base, kind: "gainTokens", title: "Gain command tokens", text };
+  }
+  if (has(choices, ID.spend)) {
+    const inf = has(choices, /_inf(_|$)/);
+    const res = has(choices, /_res(_|$)|_tech|_build/);
+    const what = inf && !res ? "influence" : res && !inf ? "resources" : "resources or influence";
+    return { ...base, kind: "spend", title: `Pay with ${what}`, text };
+  }
   if (has(choices, ID.whensAfters)) {
     const agenda = currentAgenda(ctx);
     const after = has(choices, /after/i) && !has(choices, /when/i);
@@ -246,10 +270,21 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     const sc = scOfFollow(m, choices);
     const name = sc ? scName(ctx, sc) : undefined;
     const pre = has(choices, /^preDeclineSC_/);
+    if (pre) {
+      return {
+        ...base,
+        kind: "scFollow",
+        eyebrow: "Plan ahead · optional",
+        title: name ? `Decide now: follow ${name}?` : "Decide now whether to follow?",
+        text: `${name ?? "This card"} has not been played yet. Decide now and the game will not wait on you when it is.`,
+        sc,
+        optional: true,
+      };
+    }
     return {
       ...base,
       kind: "scFollow",
-      eyebrow: pre ? "Plan ahead" : phaseEyebrow(ctx, "Action phase"),
+      eyebrow: phaseEyebrow(ctx, "Action phase"),
       title: name ? `Follow ${name}?` : "Follow the strategy card?",
       sc,
     };
