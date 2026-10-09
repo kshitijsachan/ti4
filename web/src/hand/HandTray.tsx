@@ -50,6 +50,11 @@ function fanBudgets(groups: CardGroup[], viewport: number): Map<string, number> 
   const need = (g: CardGroup) => Math.max(1, g.cards.length) * CARD_STEP;
   const total = shown.reduce((sum, g) => sum + need(g), 0);
   const out = new Map<string, number>();
+  // Phones: each fan gets about a screen of its own and the shelf scrolls sideways.
+  if (viewport < 720) {
+    for (const g of shown) out.set(g.id, Math.min(need(g), Math.max(CARD_W, viewport - 80)));
+    return out;
+  }
   if (total <= available) {
     for (const g of shown) out.set(g.id, need(g));
     return out;
@@ -93,6 +98,12 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
     closeTimer.current = window.setTimeout(() => setHovered(false), CLOSE_DELAY_MS);
   };
   useEffect(() => () => window.clearTimeout(closeTimer.current), []);
+  useEffect(() => {
+    if (!pinned || selected) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPinned(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pinned, selected]);
 
   const closePopup = useCallback(() => setSelected(null), []);
   const allCards = hand.groups.flatMap((g) => g.cards);
@@ -122,7 +133,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
           ))}
         </div>
         {hand.unnumbered > 0 && hand.index.refresh && (
-          <div className={classes.syncNote}>Some cards are still being dealt — the bot has not listed them yet.</div>
+          <div className={classes.syncNote}>Some cards are not listed by the bot yet — open one and press Sync with bot.</div>
         )}
       </div>
 

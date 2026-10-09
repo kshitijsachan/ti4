@@ -209,9 +209,13 @@ export function buildHand(
   const scored = Object.keys(me?.secretsScored ?? {}).map((a) => secretObjective(a, true));
   const playArea = new Set(me?.promissoryNotesInPlayArea ?? []);
   const handPns = (hand?.promissoryNotes ?? []).filter((a) => !playArea.has(a));
+  // Notes from other players first (those are the ones you can play), then those in play, then your own.
+  const mine = (card: HandCard) => !!me && card.owner?.color === me.color;
+  const held = handPns.map((a) => promissoryNote(a, players, false));
   const pns = [
-    ...handPns.map((a) => promissoryNote(a, players, false)),
+    ...held.filter((c) => !mine(c)),
     ...[...playArea].map((a) => promissoryNote(a, players, true)),
+    ...held.filter(mine),
   ];
   const exhaustedRelics = new Set(me?.exhaustedRelics ?? []);
   const relics = [

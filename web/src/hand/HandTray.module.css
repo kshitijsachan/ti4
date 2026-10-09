@@ -382,8 +382,9 @@
   font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.25;
   letter-spacing: 0.02em;
+  flex: 0 0 auto;
   color: var(--hand-ink);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -396,6 +397,7 @@
 }
 
 .window {
+  flex: 0 0 auto;
   font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
