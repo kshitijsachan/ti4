@@ -27,6 +27,11 @@ type Choice = {
 type Ctx = {
   /** Addressed to this seat: ephemeral for it, mentions it, its faction's buttons, its threads, replies to it. */
   direct: boolean;
+  /**
+   * Certainly waiting on this seat: only it can see the message, the buttons carry its faction, or the bot posted
+   * it in answer to this seat's own press. Only these get the "first option" fallback.
+   */
+  strong: boolean;
   faction?: string;
 };
 
@@ -49,7 +54,7 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets)/i;
+  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue)/i;
 const BLOCKED_LABEL = /^(undo|un-|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -110,6 +115,8 @@ const WINDOW = 30;
 const MAX_FAILS = 2;
 /** After this many failures in a row the seat rests for a minute. */
 const MAX_STREAK = 8;
+/** A control on a re-posted prompt with the same text is not pressed again within this time. */
+const REPOST_MS = 60000;
 
 export class Autopilot {
   private pilots = new Map<string, SeatPilot>();
@@ -160,6 +167,10 @@ export class Autopilot {
     return run;
   }
 
+  forgetDrafts() {
+    for (const [game, hit] of this.drafts) if (hit.data?.status !== "finished") this.drafts.delete(game);
+  }
+
   /** The bot's draft state for a game (cached briefly): whose pick it is, and each player's faction. */
   async draft(game: string, maxAgeMs = 1500): Promise<Json | null> {
     const hit = this.drafts.get(game);
@@ -192,6 +203,8 @@ class SeatPilot {
   private waiting: { nonce: string; resolve: (err?: string) => void } | null = null;
   private lastPressed: string | null = null;
   private factions = new Map<string, string>();
+  /** When we last pressed a control by `${channel}:${custom id}:${content}`: the bot often re-posts a prompt. */
+  private recent = new Map<string, number>();
 
   constructor(
     private mgr: Autopilot,
@@ -304,7 +317,7 @@ class SeatPilot {
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
     const press = m._presses?.[me];
     if (press && Date.parse(press.at) < this.started && press.controls === signature(controls)) return null;
-    controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`));
+    controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`) && !this.pressedRecently(m, c));
 
     const faction = await this.faction(game, m);
     const content = String(m.content ?? "");
@@ -326,14 +339,10 @@ class SeatPilot {
 
     const myThread = ch.type === 12 && (s.thread_members[ch.id] ?? []).includes(me);
     const factionThread = !!faction && ch.type === 11 && String(ch.name).toLowerCase().includes(faction);
+    const strong = m._ephemeral_for === me || ffccMine || (m._prompted_for === me && !mentionsOther);
     const ctx: Ctx = {
-      direct:
-        m._ephemeral_for === me ||
-        (mentionsMe && !/is up to draft/.test(content)) ||
-        ffccMine ||
-        myThread ||
-        factionThread ||
-        (m._prompted_for === me && !mentionsOther),
+      strong,
+      direct: strong || (mentionsMe && !/is up to draft/.test(content)) || myThread || factionThread,
       faction,
     };
 
@@ -347,9 +356,19 @@ class SeatPilot {
       const control = rule.last ? hits[hits.length - 1] : hits[0];
       return { msg: m, control, score: rule.score, why: rule.why };
     }
-    if (!ctx.direct) return null;
-    // A prompt addressed to us that no rule covers: its first control.
+    if (!ctx.strong) return null;
+    // A prompt certainly waiting on us that no rule covers: its first control.
     return { msg: m, control: controls[0], score: controls.length === 1 ? 25 : 10, why: controls.length === 1 ? "only option" : "first option" };
+  }
+
+  private repostKey(m: StoredMessage, c: Control) {
+    return `${m.channel_id}:${c.custom_id}:${String(m.content ?? "").slice(0, 200)}`;
+  }
+
+  /** The same control on a re-posted copy of a prompt we answered within the last minute. */
+  private pressedRecently(m: StoredMessage, c: Control) {
+    const at = this.recent.get(this.repostKey(m, c));
+    return at !== undefined && Date.now() - at < REPOST_MS;
   }
 
   /** Milty draft: when it is our pick, the first option of a category we have not drafted yet. */
@@ -441,6 +460,7 @@ class SeatPilot {
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
     this.pressed.add(key);
+    this.recent.set(this.repostKey(msg, control), Date.now());
     this.lastPressed = msg.id;
     const nonce = `autopilot-${++this.nonce}`;
     const done = new Promise<string | undefined>((resolve) => {
@@ -459,6 +479,7 @@ class SeatPilot {
         : { op: "click", nonce, channel_id: msg.channel_id, message_id: msg.id, custom_id: control.custom_id };
     this.conn.send(op);
     const err = await done;
+    this.mgr.forgetDrafts();
     this.waiting = null;
     const ch = this.store.channel(msg.channel_id);
     log.info(`autopilot ${this.name}: pressed "${control.label || control.custom_id}" in #${ch?.name ?? msg.channel_id} (${choice.why})${err ? ` -> failed: ${err}` : ""}`);
