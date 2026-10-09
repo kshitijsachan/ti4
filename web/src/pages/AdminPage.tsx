@@ -228,23 +228,25 @@ export default function AdminPage() {
       <QuickSoloGame
         token={soloToken}
         beforeOpen={() => soloToken && setToken(soloToken, true)}
-      />
-      {humans.length > 1 && (
-        <label className={classes.check}>
-          Play the quick solo game as
-          <select
-            className={classes.select}
-            value={soloToken ?? ""}
-            onChange={(e) => setSoloSeat(e.currentTarget.value)}
-          >
-            {humans.map((p) => (
-              <option key={p.token} value={p.token}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      >
+        {humans.length > 1 && (
+          <>
+            Play as
+            <select
+              className={classes.select}
+              value={soloToken ?? ""}
+              onChange={(e) => setSoloSeat(e.currentTarget.value)}
+              aria-label="Seat that plays the quick solo game"
+            >
+              {humans.map((p) => (
+                <option key={p.token} value={p.token}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+      </QuickSoloGame>
 
       <section className={classes.panel}>
         <div className={classes.label}>Solo test</div>

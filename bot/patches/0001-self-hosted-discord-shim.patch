@@ -39,7 +39,7 @@ index b3bb870..267549f 100644
          BotLogger.info("INITIALIZING LISTENERS");
          ListenerManager.registerListeners(jda);
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java
-index a54a239..716905c 100644
+index a54a239..1731da8 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java
 @@ -61,7 +61,7 @@ public class CreateGameButtonHandler {
@@ -51,6 +51,36 @@ index a54a239..716905c 100644
              MessageHelper.sendMessageToChannel(
                      event.getMessageChannel(), member.getUser().getAsMention() + """
                       You need to have completed at least one game (or be currently in a game) to create new games via this button. \
+@@ -566,6 +566,7 @@ public class CreateGameButtonHandler {
+     private static boolean userCanJoinGame(ButtonInteractionEvent event, Member member) {
+         if (member == null) return false;
+         if (!member.getUser().isBot()
++                && !ti4.selfhost.SelfHosted.isEnabled() // no per-player game limits on a private server
+                 && !CommandHelper.hasRole(event, JdaService.developerRoles)
+                 && !CommandHelper.hasRole(event, JdaService.bothelperRoles)) {
+             ManagedPlayer managedPlayer = GameManager.getManagedPlayer(member.getId());
+@@ -616,6 +617,7 @@ public class CreateGameButtonHandler {
+     }
+ 
+     private static boolean isLikelyDoublePressedButton(List<Member> members, ButtonInteractionEvent event) {
++        if (ti4.selfhost.SelfHosted.isEnabled()) return false; // the web client launches each game once
+         String lastGameName = CreateGameService.getLastPbdGameName();
+         if (lastGameName == null) return false;
+ 
+diff --git a/src/main/java/ti4/game/persistence/GameUndoService.java b/src/main/java/ti4/game/persistence/GameUndoService.java
+index d91d9d5..50e3842 100644
+--- a/src/main/java/ti4/game/persistence/GameUndoService.java
++++ b/src/main/java/ti4/game/persistence/GameUndoService.java
+@@ -108,6 +108,9 @@ class GameUndoService {
+                 replaceGameFileWithUndo(gameName, latestUndoIndex, currentGameFile.toPath());
+                 return null;
+             }
++            if (ti4.selfhost.SelfHosted.isEnabled())
++                ti4.spring.api.selfhost.UndoJournal.recordUndo(gameName, latestUndoIndex, undoIndex,
++                        gameToUndo.getLastModifiedDate(), loadedGame.getLastModifiedDate());
+             GameWebStatePipeline.queue(loadedGame);
+ 
+             generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
 diff --git a/src/main/java/ti4/helpers/TransactionHelper.java b/src/main/java/ti4/helpers/TransactionHelper.java
 index 22ecac6..4adb45d 100644
 --- a/src/main/java/ti4/helpers/TransactionHelper.java
@@ -135,6 +165,19 @@ index 0000000..e03efb2
 +        return url;
 +    }
 +}
+diff --git a/src/main/java/ti4/service/game/CreateGameService.java b/src/main/java/ti4/service/game/CreateGameService.java
+index 5b8e62a..91f9ae3 100644
+--- a/src/main/java/ti4/service/game/CreateGameService.java
++++ b/src/main/java/ti4/service/game/CreateGameService.java
+@@ -746,6 +746,8 @@ public class CreateGameService {
+     }
+ 
+     public static boolean isLockedFromCreatingGames(GenericInteractionCreateEvent event) {
++        // Self-hosted: friends' table, solo testing creates games back to back.
++        if (ti4.selfhost.SelfHosted.isEnabled()) return false;
+         if (CommandHelper.hasRole(event, JdaService.bothelperRoles)) {
+             return false;
+         }
 diff --git a/src/main/java/ti4/spring/api/auth/RestDiscordClient.java b/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
 index 8501858..8990781 100644
 --- a/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
@@ -2092,5 +2135,557 @@ index 0000000..9a7bd68
 +        } catch (ReflectiveOperationException e) {
 +            return null;
 +        }
++    }
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/UndoController.java b/src/main/java/ti4/spring/api/selfhost/UndoController.java
+new file mode 100644
+index 0000000..145811a
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/UndoController.java
+@@ -0,0 +1,71 @@
++package ti4.spring.api.selfhost;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.CacheControl;
++import org.springframework.http.ResponseEntity;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.web.bind.annotation.ExceptionHandler;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.RequestBody;
++import org.springframework.web.bind.annotation.RequestMapping;
++import org.springframework.web.bind.annotation.RestController;
++import ti4.spring.api.selfhost.UndoModels.RewindRequest;
++import ti4.spring.api.selfhost.UndoModels.RewindResponse;
++import ti4.spring.api.selfhost.UndoModels.UndoPointsResponse;
++import ti4.spring.api.selfhost.UndoModels.UndoRequest;
++import ti4.spring.context.RequestContext;
++import ti4.spring.context.SetupRequestContext;
++
++/**
++ * Undo / rewind for the self-hosted web client. Auth: {@code Authorization: Bearer <seat token>}; the caller must
++ * be a player in the game.
++ * <ul>
++ *   <li>{@code GET  /api/game/{gameName}/undo-points} — saved states, newest first, plus the roll-back journal</li>
++ *   <li>{@code POST /api/game/{gameName}/rewind {index}} — restore save {@code index}; announced, and undoable</li>
++ *   <li>{@code POST /api/game/{gameName}/undo {force?}} — one step back, like the UNDO button</li>
++ * </ul>
++ * The mutations do their own locking and saving ({@code @SetupRequestContext(false)}): the request-context save
++ * would otherwise write the stale pre-undo game back over the restored one.
++ */
++@RestController
++@RequiredArgsConstructor
++@RequestMapping("/api/game/{gameName}")
++public class UndoController {
++
++    private final UndoService undoService;
++
++    @GetMapping("/undo-points")
++    @SetupRequestContext(false)
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public ResponseEntity<UndoPointsResponse> points(@PathVariable String gameName) {
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(undoService.list(gameName));
++    }
++
++    @PostMapping("/rewind")
++    @SetupRequestContext(false)
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public RewindResponse rewind(@PathVariable String gameName, @RequestBody RewindRequest request) {
++        if (request == null || request.index() == null) throw new UndoService.UndoException(400, "index is required");
++        return undoService.rewind(gameName, RequestContext.getUserId(), request.index());
++    }
++
++    @PostMapping("/undo")
++    @SetupRequestContext(false)
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public RewindResponse undo(@PathVariable String gameName, @RequestBody(required = false) UndoRequest request) {
++        boolean force = request != null && Boolean.TRUE.equals(request.force());
++        return undoService.undo(gameName, RequestContext.getUserId(), force);
++    }
++
++    @ExceptionHandler(UndoService.UndoException.class)
++    public ResponseEntity<Map<String, Object>> undoError(UndoService.UndoException e) {
++        Map<String, Object> body = new LinkedHashMap<>();
++        body.put("error", e.getMessage());
++        if (e.needsForce) body.put("needsForce", true);
++        return ResponseEntity.status(e.status).body(body);
++    }
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/UndoJournal.java b/src/main/java/ti4/spring/api/selfhost/UndoJournal.java
+new file mode 100644
+index 0000000..b73caea
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/UndoJournal.java
+@@ -0,0 +1,126 @@
++package ti4.spring.api.selfhost;
++
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardOpenOption;
++import java.util.ArrayList;
++import java.util.List;
++import ti4.helpers.Storage;
++import ti4.logging.BotLogger;
++
++/**
++ * Self-hosted: a small append-only journal of every roll-back of a game (the UNDO button, {@code /game undo} and the
++ * web rewind / undo endpoints all go through {@code GameUndoService.undo}, which calls {@link #recordUndo}).
++ *
++ * <p>The bot never deletes the Discord messages of undone actions, so the web game log uses this journal to work out
++ * which messages belong to the live history: at time {@code at} the game went back to the state saved at
++ * {@code toSavedAt}. Stored as tab-separated lines in {@code <undo dir>/selfhost-rewinds.tsv} (outside the
++ * {@code <game>_N.txt} pattern the undo code lists and prunes).
++ */
++public final class UndoJournal {
++
++    public record Entry(
++            long at,
++            int fromIndex,
++            int toIndex,
++            long fromSavedAt,
++            long toSavedAt,
++            String kind,
++            String byUserId,
++            String byName,
++            String label) {}
++
++    private record Context(String kind, String byUserId, String byName, String label) {}
++
++    private static final ThreadLocal<Context> context = new ThreadLocal<>();
++    private static final Object fileLock = new Object();
++    private static final int MAX_ENTRIES = 500;
++
++    private UndoJournal() {}
++
++    /** Attribute roll-backs made on this thread while {@code task} runs (the web endpoints know who and why). */
++    public static <T> T withContext(
++            String kind, String byUserId, String byName, String label, java.util.function.Supplier<T> task) {
++        context.set(new Context(kind, byUserId, byName, label));
++        try {
++            return task.get();
++        } finally {
++            context.remove();
++        }
++    }
++
++    /** Called by {@code GameUndoService} after it restored save {@code toIndex} (replacing {@code fromIndex}). */
++    public static void recordUndo(String gameName, int fromIndex, int toIndex, long fromSavedAt, long toSavedAt) {
++        try {
++            Context c = context.get();
++            String line = String.join(
++                    "\t",
++                    Long.toString(System.currentTimeMillis()),
++                    Integer.toString(fromIndex),
++                    Integer.toString(toIndex),
++                    Long.toString(fromSavedAt),
++                    Long.toString(toSavedAt),
++                    clean(c == null ? "undo" : c.kind()),
++                    clean(c == null ? "" : c.byUserId()),
++                    clean(c == null ? "" : c.byName()),
++                    clean(c == null ? "" : c.label()));
++            synchronized (fileLock) {
++                Path file = file(gameName);
++                Files.writeString(
++                        file,
++                        line + "\n",
++                        StandardCharsets.UTF_8,
++                        StandardOpenOption.CREATE,
++                        StandardOpenOption.APPEND);
++                List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
++                if (lines.size() > MAX_ENTRIES * 2) {
++                    Files.write(file, lines.subList(lines.size() - MAX_ENTRIES, lines.size()), StandardCharsets.UTF_8);
++                }
++            }
++        } catch (Exception e) {
++            BotLogger.error("Could not record undo for " + gameName, e);
++        }
++    }
++
++    public static List<Entry> read(String gameName) {
++        List<Entry> out = new ArrayList<>();
++        try {
++            Path file = file(gameName);
++            if (!Files.exists(file)) return out;
++            List<String> lines;
++            synchronized (fileLock) {
++                lines = Files.readAllLines(file, StandardCharsets.UTF_8);
++            }
++            for (String line : lines) {
++                String[] p = line.split("\t", -1);
++                if (p.length < 9) continue;
++                try {
++                    out.add(new Entry(
++                            Long.parseLong(p[0]),
++                            Integer.parseInt(p[1]),
++                            Integer.parseInt(p[2]),
++                            Long.parseLong(p[3]),
++                            Long.parseLong(p[4]),
++                            p[5],
++                            p[6],
++                            p[7],
++                            p[8]));
++                } catch (NumberFormatException ignored) {
++                    // skip a damaged line
++                }
++            }
++        } catch (Exception e) {
++            BotLogger.error("Could not read undo journal for " + gameName, e);
++        }
++        return out;
++    }
++
++    private static Path file(String gameName) {
++        return Storage.getGameUndoDirectory(gameName).resolve("selfhost-rewinds.tsv");
++    }
++
++    private static String clean(String s) {
++        return s == null ? "" : s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ');
++    }
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/UndoModels.java b/src/main/java/ti4/spring/api/selfhost/UndoModels.java
+new file mode 100644
+index 0000000..43d9ad7
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/UndoModels.java
+@@ -0,0 +1,47 @@
++package ti4.spring.api.selfhost;
++
++import java.util.List;
++
++/** JSON shapes for {@link UndoController}. */
++public final class UndoModels {
++
++    private UndoModels() {}
++
++    /**
++     * One saved state of the game. {@code index} restores it via rewind. {@code savedAt} is the game's own save time
++     * (epoch ms, {@code last_modified_date} in the file); {@code label} is a readable version of {@code command}, the
++     * bot's {@code latest_command} (the action that produced this state).
++     */
++    public record UndoPoint(
++            int index,
++            long savedAt,
++            long fileTime,
++            String command,
++            String actor,
++            String label,
++            int round,
++            String phase,
++            boolean current) {}
++
++    /** A roll-back from the bot's own undo code (any path). See {@link UndoJournal}. */
++    public record Rewind(
++            long at,
++            int fromIndex,
++            int toIndex,
++            long fromSavedAt,
++            long toSavedAt,
++            String kind,
++            String byUserId,
++            String byName,
++            String label) {}
++
++    public record UndoPointsResponse(
++            String gameName, int latestIndex, boolean canUndo, List<UndoPoint> points, List<Rewind> rewinds) {}
++
++    public record RewindRequest(Integer index) {}
++
++    public record UndoRequest(Boolean force) {}
++
++    /** Result of a rewind / undo: the save now in effect and the label of what was undone. */
++    public record RewindResponse(boolean ok, int restoredIndex, String restoredLabel, String undoneLabel, int latestIndex) {}
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/UndoService.java b/src/main/java/ti4/spring/api/selfhost/UndoService.java
+new file mode 100644
+index 0000000..ecacaf3
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/UndoService.java
+@@ -0,0 +1,284 @@
++package ti4.spring.api.selfhost;
++
++import java.io.BufferedReader;
++import java.io.File;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++import org.springframework.stereotype.Service;
++import ti4.executors.ExecutionLockManager;
++import ti4.executors.ExecutionLockType;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.game.persistence.GameManager;
++import ti4.game.persistence.ManagedGame;
++import ti4.helpers.Constants;
++import ti4.helpers.Storage;
++import ti4.logging.BotLogger;
++import ti4.message.MessageHelper;
++import ti4.service.game.GameUndoNameService;
++import ti4.spring.api.selfhost.UndoModels.Rewind;
++import ti4.spring.api.selfhost.UndoModels.RewindResponse;
++import ti4.spring.api.selfhost.UndoModels.UndoPoint;
++import ti4.spring.api.selfhost.UndoModels.UndoPointsResponse;
++
++/**
++ * Undo / rewind for the self-hosted web client, on top of the bot's own undo files ({@code <game>_N.txt}, one per
++ * save) and its own undo code path ({@link GameManager#undo}): same file locks, the same undo-log thread entry, the same
++ * re-posted buttons and cards-info refresh. Additionally: a rewind is announced in the actions channel and is itself
++ * undoable (the pre-rewind state is kept as the save just below the rewound one).
++ */
++@Service
++public class UndoService {
++
++    public static class UndoException extends RuntimeException {
++        final int status;
++        final boolean needsForce;
++
++        UndoException(int status, String message) {
++            this(status, message, false);
++        }
++
++        UndoException(int status, String message, boolean needsForce) {
++            super(message);
++            this.status = status;
++            this.needsForce = needsForce;
++        }
++    }
++
++    public static final String REWIND_MARK = "⏪";
++
++    private record CachedPoint(long fileTime, long size, UndoPoint point) {}
++
++    private final Map<String, CachedPoint> cache = new ConcurrentHashMap<>();
++
++    public UndoPointsResponse list(String gameName) {
++        List<Integer> numbers = GameUndoNameService.getSortedUndoNumbers(gameName);
++        int latest = numbers.isEmpty() ? -1 : numbers.getLast();
++        List<UndoPoint> points = new ArrayList<>();
++        for (int i = numbers.size() - 1; i >= 0; i--) {
++            int index = numbers.get(i);
++            UndoPoint p = readPoint(gameName, index, index == latest);
++            if (p != null) points.add(p);
++        }
++        List<Rewind> rewinds = UndoJournal.read(gameName).stream()
++                .map(e -> new Rewind(e.at(), e.fromIndex(), e.toIndex(), e.fromSavedAt(), e.toSavedAt(), e.kind(),
++                        e.byUserId(), e.byName(), e.label()))
++                .toList();
++        boolean canUndo = latest > 1 && numbers.contains(latest - 1);
++        return new UndoPointsResponse(gameName, latest, canUndo, points, rewinds);
++    }
++
++    /** Rewind to the state saved as {@code index} (the state just after that save's action). */
++    public RewindResponse rewind(String gameName, String userId, int index) {
++        return locked(gameName, () -> {
++            Game game = loadGame(gameName);
++            Player me = requirePlayer(game, userId);
++            if (game.isFowMode()) throw new UndoException(403, "Rewind is not available in fog-of-war games.");
++
++            List<Integer> numbers = GameUndoNameService.getSortedUndoNumbers(gameName);
++            if (numbers.isEmpty()) throw new UndoException(409, "This game has no saved states.");
++            int latest = numbers.getLast();
++            if (index == latest) throw new UndoException(409, "That is already the current state.");
++            if (!numbers.contains(index) || index <= 0 || index > latest)
++                throw new UndoException(404, "Save " + index + " no longer exists (only the last ~100 are kept).");
++
++            UndoPoint target = readPoint(gameName, index, false);
++            UndoPoint undone = readPoint(gameName, latest, true);
++            String targetLabel = target == null ? "save " + index : target.label();
++            String who = displayName(me);
++
++            Path gameFile = Storage.getGameFile(gameName + Constants.TXT).toPath();
++            byte[] beforeRewind;
++            try {
++                beforeRewind = Files.readAllBytes(gameFile);
++            } catch (Exception e) {
++                throw new UndoException(500, "Could not read the current game file.");
++            }
++
++            Game restored = UndoJournal.withContext(
++                    "rewind", userId, who, targetLabel, () -> GameManager.undo(game, index));
++            if (restored == null) throw new UndoException(500, "The bot failed to roll back to save " + index + ".");
++
++            // Keep the pre-rewind state as the next save, then save the rewound state on top of it: one undo step
++            // (the UNDO button, /game undo or POST /undo) then brings back everything the rewind threw away.
++            try {
++                Files.write(Storage.getGameUndo(gameName, gameName + "_" + (index + 1) + Constants.TXT), beforeRewind);
++            } catch (Exception e) {
++                BotLogger.error("Could not keep the pre-rewind state of " + gameName, e);
++            }
++            String reason = REWIND_MARK + " " + who + " rewound the game to: " + targetLabel;
++            GameManager.save(restored, reason);
++            MessageHelper.sendMessageToChannel(
++                    restored.getActionsChannel(),
++                    REWIND_MARK + " " + me.getRepresentationNoPing() + " rewound the game to just after: **"
++                            + targetLabel + "** (save " + index + "). Everything after it was undone. Undo once to"
++                            + " bring it back.");
++            int newLatest = GameUndoNameService.getLatestUndoNumber(gameName);
++            return new RewindResponse(true, index, targetLabel, undone == null ? "" : undone.label(), newLatest);
++        });
++    }
++
++    /** One step back, like the UNDO button: restores the save before the latest one. */
++    public RewindResponse undo(String gameName, String userId, boolean force) {
++        return locked(gameName, () -> {
++            Game game = loadGame(gameName);
++            Player me = requirePlayer(game, userId);
++            if (game.isFowMode()) throw new UndoException(403, "Undo from the web is not available in fog-of-war games.");
++
++            List<Integer> numbers = GameUndoNameService.getSortedUndoNumbers(gameName);
++            int latest = numbers.isEmpty() ? -1 : numbers.getLast();
++            if (latest <= 1 || !numbers.contains(latest - 1)) throw new UndoException(409, "There is nothing to undo.");
++            UndoPoint undone = readPoint(gameName, latest, true);
++            UndoPoint previous = readPoint(gameName, latest - 1, false);
++            String undoneLabel = undone == null ? "the last action" : undone.label();
++            boolean lastWasRewind = undone != null && undone.command().startsWith(REWIND_MARK);
++
++            // Same rule as the UNDO button: only the player who pressed the latest button may undo it.
++            if (!force && !lastWasRewind && !game.getSavedButtons().isEmpty()) {
++                String colorOrFaction = game.getSavedButtons().getFirst().split(";")[0];
++                Player p = game.getPlayerFromColorOrFaction(colorOrFaction);
++                if (p != null && p != me && !"null".equals(colorOrFaction)) {
++                    throw new UndoException(
++                            409,
++                            "The latest button was pressed by " + displayName(p) + ", not you: " + undoneLabel + ".",
++                            true);
++                }
++            }
++
++            String who = displayName(me);
++            Game restored = UndoJournal.withContext("undo", userId, who, undoneLabel, () -> GameManager.undo(game));
++            if (restored == null) throw new UndoException(500, "The bot failed to undo.");
++            MessageHelper.sendMessageToChannel(
++                    restored.getActionsChannel(),
++                    REWIND_MARK + " " + me.getRepresentationNoPing() + " undid: **" + undoneLabel + "**.");
++            return new RewindResponse(
++                    true,
++                    latest - 1,
++                    previous == null ? "" : previous.label(),
++                    undoneLabel,
++                    GameUndoNameService.getLatestUndoNumber(gameName));
++        });
++    }
++
++    private static <T> T locked(String gameName, java.util.function.Supplier<T> task) {
++        ExecutionLockManager.lock(gameName, ExecutionLockType.WRITE);
++        try {
++            return task.get();
++        } finally {
++            ExecutionLockManager.unlock(gameName, ExecutionLockType.WRITE);
++        }
++    }
++
++    private static Game loadGame(String gameName) {
++        ManagedGame managed = GameManager.getManagedGame(gameName);
++        Game game = managed == null ? null : managed.getGame();
++        if (game == null) throw new UndoException(404, "Unknown game " + gameName + ".");
++        return game;
++    }
++
++    private static Player requirePlayer(Game game, String userId) {
++        Player p = game.getPlayer(userId);
++        if (p == null) throw new UndoException(403, "You are not a player in this game.");
++        return p;
++    }
++
++    private static String displayName(Player p) {
++        String n = p.getUserName();
++        return n == null || n.isBlank() ? p.getColor() : n;
++    }
++
++    private UndoPoint readPoint(String gameName, int index, boolean current) {
++        Path path = Storage.getGameUndo(gameName, gameName + "_" + index + Constants.TXT);
++        File f = path.toFile();
++        if (!f.exists()) return null;
++        String key = path.toString();
++        CachedPoint hit = cache.get(key);
++        if (hit != null && hit.fileTime() == f.lastModified() && hit.size() == f.length()) {
++            UndoPoint p = hit.point();
++            return p.current() == current ? p : withCurrent(p, current);
++        }
++        String command = "";
++        long savedAt = 0;
++        int round = 0;
++        String phase = "";
++        try (BufferedReader r = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
++            String line;
++            int found = 0;
++            while ((line = r.readLine()) != null && found < 4) {
++                if (line.startsWith("latest_command ") && command.isEmpty()) {
++                    command = line.substring("latest_command ".length());
++                    found++;
++                } else if (line.startsWith("last_modified_date ") && savedAt == 0) {
++                    savedAt = parseLong(line.substring("last_modified_date ".length()));
++                    found++;
++                } else if (line.startsWith("round ") && round == 0) {
++                    round = (int) parseLong(line.substring("round ".length()));
++                    found++;
++                } else if (line.startsWith("phase_of_game ") && phase.isEmpty()) {
++                    phase = line.substring("phase_of_game ".length()).trim();
++                    found++;
++                }
++            }
++        } catch (Exception e) {
++            BotLogger.error("Could not read undo file " + path, e);
++            return null;
++        }
++        if (savedAt == 0) savedAt = f.lastModified();
++        String[] label = describe(command);
++        UndoPoint p = new UndoPoint(index, savedAt, f.lastModified(), command, label[0], label[1], round, phase, current);
++        cache.put(key, new CachedPoint(f.lastModified(), f.length(), p));
++        if (cache.size() > 5000) cache.clear();
++        return p;
++    }
++
++    private static UndoPoint withCurrent(UndoPoint p, boolean current) {
++        return new UndoPoint(p.index(), p.savedAt(), p.fileTime(), p.command(), p.actor(), p.label(), p.round(),
++                p.phase(), current);
++    }
++
++    private static long parseLong(String s) {
++        try {
++            return Long.parseLong(s.trim());
++        } catch (NumberFormatException e) {
++            return 0;
++        }
++    }
++
++    private static final Pattern PRESSED = Pattern.compile("^(.+?) pressed button: (.*?)(?: \\(([^()]*)\\))?$");
++    private static final Pattern USED = Pattern.compile("^(.+?) used: /?(.*)$");
++    private static final Pattern USED_KIND = Pattern.compile("^(.+?) used (string selection|modal): (.*)$");
++    private static final Pattern CALLED = Pattern.compile("^(.+?) called /api/game/[^/]+/(.*)$");
++
++    /** {actor, readable label} for a {@code latest_command}. */
++    static String[] describe(String command) {
++        if (command == null || command.isBlank()) return new String[] {"", "Unknown action"};
++        if (command.startsWith(REWIND_MARK)) return new String[] {"", command};
++        Matcher m = PRESSED.matcher(command);
++        if (m.matches()) {
++            String what = m.group(2).trim();
++            if (what.equals("[CLASSIFIED]")) return new String[] {m.group(1), m.group(1) + " took a hidden action"};
++            return new String[] {m.group(1), m.group(1) + " pressed “" + what + "”"};
++        }
++        m = USED_KIND.matcher(command);
++        if (m.matches()) {
++            String verb = m.group(2).equals("modal") ? " filled in a form" : " chose an option";
++            return new String[] {m.group(1), m.group(1) + verb};
++        }
++        m = USED.matcher(command);
++        if (m.matches()) return new String[] {m.group(1), m.group(1) + " used /" + m.group(2)};
++        m = CALLED.matcher(command);
++        if (m.matches()) {
++            String path = m.group(2);
++            String what = path.startsWith("trade/") ? "proposed a trade" : "used the web (" + path + ")";
++            return new String[] {m.group(1), m.group(1) + " " + what};
++        }
++        return new String[] {"", command};
 +    }
 +}

@@ -51,6 +51,14 @@ info / modal buttons are never pressed. Decisions are logged as `autopilot <name
 (<why>)`. With `ANTHROPIC_API_KEY` set, prompts no rule covers are put to Claude (`AUTOPILOT_MODEL`, default
 `claude-sonnet-5-5`), falling back to the heuristics on any error.
 
+**One-click solo game** (`solo.ts`): `POST /app/solo-game {token, bots: 2..7 (default 3), expansion?: te | newPoK |
+oldPoK}` creates fresh autopilot seats (`Bot Alpha`, …, `Bot Alpha 2`, …) and then, as the human (a virtual client of
+their seat), runs `/game create_game_button` in #lobby, presses Launch Game, the expansion button (`chooseExp_te`),
+Start Milty Setup and the Milty settings' Start Draft (`jmfA_main_startMilty`, defaults). It answers `{game, url}`
+once the game exists; `GET /app/solo-game/status?game=` reports `state` (`setting_up` → `drafting`, or `error`) and
+`step`. The "Quick solo game" panel on /play and /admin calls it and opens `/game/<game>` once drafting. The bot's
+10-minute creation lock, "same players as the last game" refusal and per-player game limits are off when self-hosted.
+
 The web client keeps the seat token per tab (sessionStorage, localStorage as the default for new tabs), so a host
 can open several seats side by side; the admin page's "Open as" links open a seat in a new tab.
 

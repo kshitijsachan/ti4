@@ -146,3 +146,12 @@
   font-size: var(--text-meta);
   color: var(--mantine-color-red-5);
 }
+
+.extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: var(--text-meta);
+  color: var(--mantine-color-gray-4);
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconMinus, IconPlayerPlay, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
@@ -31,12 +31,15 @@ export function QuickSoloGame({
   token,
   beforeOpen,
   className,
+  children,
 }: {
   /** The human seat that plays. */
   token: string | null;
   /** Runs just before navigating to the game (e.g. to make this tab play as `token`). */
   beforeOpen?: () => void;
   className?: string;
+  /** Extra controls under the main row (e.g. which seat plays). */
+  children?: ReactNode;
 }) {
   const navigate = useNavigate();
   const [bots, setBots] = useState(3);
@@ -44,12 +47,12 @@ export function QuickSoloGame({
   const [status, setStatus] = useState<SoloStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true;
+    return () => {
       alive.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const open = (game: string) => {
     beforeOpen?.();
@@ -140,6 +143,7 @@ export function QuickSoloGame({
           {busy ? "Setting up…" : "Play solo"}
         </button>
       </div>
+      {children && <div className={classes.extra}>{children}</div>}
       {busy && status && (
         <div className={classes.progress} role="status">
           <span className={classes.pulse} />
