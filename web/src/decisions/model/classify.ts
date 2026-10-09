@@ -200,7 +200,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     kind: "generic",
     eyebrow: phaseEyebrow(ctx, "Decision"),
     title: generic.title,
-    text: generic.rest,
+    text,
     choices,
   };
 
@@ -315,7 +315,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
   if (has(choices, ID.status)) {
     return { ...base, kind: "status", eyebrow: phaseEyebrow(ctx, "Status phase"), title: "Status phase — tidy up" };
   }
-  return base;
+  return { ...base, text: generic.rest };
 }
 
 function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean) {

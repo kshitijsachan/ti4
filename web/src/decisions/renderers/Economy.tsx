@@ -115,7 +115,7 @@ const POOLS = [
 
 /** Gaining command tokens: the three pools with a "+1" under each, Done. */
 export function GainTokensBody({ d, data, onPress, pendingKey }: RendererProps) {
-  const fromText = d.text.match(/(\d+)\/(\d+)\/(\d+)/);
+  const fromText = [...d.text.matchAll(/(\d+)\/(\d+)\/(\d+)/g)].pop();
   const values = fromText
     ? [Number(fromText[1]), Number(fromText[2]), Number(fromText[3])]
     : [data.me?.tacticalCC, data.me?.fleetCC, data.me?.strategicCC];

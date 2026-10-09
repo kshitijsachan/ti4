@@ -30,12 +30,45 @@ def view(msg, user_id):
     return out
 
 
+def custom_ids(components):
+    for c in components or []:
+        if c.get("custom_id"):
+            yield c["custom_id"]
+        yield from custom_ids(c.get("components"))
+        if c.get("accessory"):
+            yield from custom_ids([c["accessory"]])
+
+
+def latest(s, game, uid, pattern, player):
+    """Newest message of the game (visible to the player) with a control whose custom id matches the regex."""
+    import re
+
+    rx = re.compile(pattern)
+    best = None
+    for cid, msgs in s["messages"].items():
+        name = s["channels"].get(cid, {}).get("name", "")
+        if not (name.startswith(f"{game}-") or f"-{game}-" in name):
+            continue
+        if "cards info" in name.lower() and not name.endswith(f"-{player}"):
+            continue
+        for m in msgs:
+            if m.get("_ephemeral_for") not in (None, uid):
+                continue
+            if any(rx.search(i) for i in custom_ids(m.get("components"))) and (not best or int(m["id"]) > int(best)):
+                best = m["id"]
+    if not best:
+        sys.exit(f"no message matching {pattern}")
+    return best
+
+
 def main():
     fid, game, player, message_id = sys.argv[1:5]
     flags = set(sys.argv[5:])
     s = json.load(open(STATE))
     user = next(u for u in s["users"].values() if (u.get("global_name") or u["username"]) == player)
     uid = user["id"]
+    if message_id.startswith("latest:"):
+        message_id = latest(s, game, uid, message_id[len("latest:"):], player)
     channel_id = next(cid for cid, msgs in s["messages"].items() if any(m["id"] == message_id for m in msgs))
     game_channels = [c for c in s["channels"].values() if c["name"].startswith(f"{game}-") or f"-{game}-" in c["name"]]
     if s["channels"][channel_id] not in game_channels:
