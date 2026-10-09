@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Decision } from "../model/classify";
-import { AgendaBody } from "./Agenda";
+import { AgendaBody, AgendaPeekBody } from "./Agenda";
 import { CombatBody } from "./Combat";
 import { GainTokensBody, SpendBody } from "./Economy";
 import { GenericBody, TacticalBody } from "./Generic";
@@ -23,6 +23,8 @@ export function renderBody(d: Decision, props: RendererProps): ReactNode {
       return <TurnBody {...props} />;
     case "tactical":
       return <TacticalBody {...props} />;
+    case "agendaPeek":
+      return <AgendaPeekBody {...props} />;
     case "agenda":
       return <AgendaBody {...props} />;
     case "combat":

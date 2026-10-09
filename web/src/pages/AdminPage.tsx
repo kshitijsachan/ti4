@@ -4,8 +4,9 @@ import { CopyButton, Tooltip, UnstyledButton } from "@mantine/core";
 import { IconCheck, IconCopy, IconExternalLink } from "@tabler/icons-react";
 import cx from "clsx";
 import { SiteFrame } from "@/play/SiteFrame";
-import { inviteLink, seatTabLink } from "@/play/session";
+import { getToken, inviteLink, seatTabLink, setToken } from "@/play/session";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { QuickSoloGame } from "./QuickSoloGame";
 import classes from "./AdminPage.module.css";
 
 type Seat = {
@@ -124,6 +125,7 @@ export default function AdminPage() {
   const [names, setNames] = useState("");
   const [autopilot, setAutopilot] = useState(false);
   const [bots, setBots] = useState(2);
+  const [soloSeat, setSoloSeat] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const refresh = () =>
     void queryClient.invalidateQueries({ queryKey: ["admin-players", key] });
@@ -154,6 +156,12 @@ export default function AdminPage() {
   const freeBotNames = BOT_NAMES.filter((n) => !taken.has(n)).slice(0, bots);
 
   const pending = splitNames(names);
+  const humans = players.data?.filter((p) => !p.autopilot) ?? [];
+  const soloToken =
+    soloSeat ??
+    humans.find((p) => p.token === getToken())?.token ??
+    humans[0]?.token ??
+    null;
 
   if (!key) {
     return (
@@ -216,6 +224,27 @@ export default function AdminPage() {
           <p className={classes.error}>{create.error.message}</p>
         )}
       </form>
+
+      <QuickSoloGame
+        token={soloToken}
+        beforeOpen={() => soloToken && setToken(soloToken, true)}
+      />
+      {humans.length > 1 && (
+        <label className={classes.check}>
+          Play the quick solo game as
+          <select
+            className={classes.select}
+            value={soloToken ?? ""}
+            onChange={(e) => setSoloSeat(e.currentTarget.value)}
+          >
+            {humans.map((p) => (
+              <option key={p.token} value={p.token}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <section className={classes.panel}>
         <div className={classes.label}>Solo test</div>

@@ -9,6 +9,7 @@ import { Rest } from "./rest.js";
 import { Clients } from "./clients.js";
 import { Lobby } from "./lobby.js";
 import { Autopilot } from "./autopilot.js";
+import { SoloGames } from "./solo.js";
 import { defaultAvatarPng, discordError, sendJson } from "./http.js";
 import { log } from "./log.js";
 
@@ -45,6 +46,8 @@ for (const list of Object.values(store.state.messages)) for (const m of list) hu
 const lobby = new Lobby(hub, clients);
 // Seats flagged `autopilot` are played by the shim itself (solo testing).
 lobby.autopilot = new Autopilot(hub, clients, BOT_API);
+// One-click solo test games (autopilot opponents, set up as the human).
+lobby.solo = new SoloGames(hub, clients, lobby, BOT_API);
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",

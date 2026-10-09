@@ -78,3 +78,26 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
     </div>
   );
 }
+
+/** Politics / agenda-deck peek: the card, and whether it goes on top or to the bottom of the deck. */
+export function AgendaPeekBody({ d, onPress, pendingKey }: RendererProps) {
+  const choices = d.choices.map((c) => {
+    const id = baseId(c.customId);
+    if (id.startsWith("topAgenda_")) return { ...c, label: "Top of the deck", style: 1 };
+    if (id.startsWith("bottomAgenda_")) return { ...c, label: "Bottom of the deck", style: 2 };
+    return c;
+  });
+  return (
+    <div className={classes.stack}>
+      {d.agenda ? <AgendaCard agenda={d.agenda} /> : <Prose text={d.text} clamp={6} />}
+      <p className={classes.hint}>Cards put on top are revealed first in the next agenda phase.</p>
+      <ChoiceButtons
+        choices={choices}
+        onPress={onPress}
+        pendingKey={pendingKey}
+        channelId={d.prompt.channelId}
+        rankOf={(c) => (c.rank === "secondary" ? "primary" : c.rank)}
+      />
+    </div>
+  );
+}

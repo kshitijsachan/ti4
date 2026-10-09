@@ -8,6 +8,7 @@ import { baseId, choicesOf, cleanLabel, type Choice } from "./controls";
 import { cleanText, firstLine, namesFrom } from "./text";
 
 export type DecisionKind =
+  | "agendaPeek"
   | "scPrimary"
   | "spend"
   | "gainTokens"
@@ -110,6 +111,33 @@ function scOfFollow(m: Message, choices: Choice[]): number | undefined {
   return emoji ? Number(emoji) : undefined;
 }
 
+/** The agenda named by a message's own embed (agenda deck peeks), with its card data. */
+function embeddedAgenda(m: Message): AgendaInfo | undefined {
+  const embed = m.embeds?.find((e) => /<:Agenda:\d+>/.test(e.title ?? ""));
+  if (!embed?.title) return undefined;
+  return agendaInfo(embed.title, embed.description);
+}
+
+function agendaInfo(title: string, description?: string): AgendaInfo {
+  const name = cleanLabel(title).replace(/[_*]/g, "").trim();
+  const known =
+    agendas.find((a) => a.name.toLowerCase() === name.toLowerCase() && (a.source === "base" || a.source === "pok")) ??
+    agendas.find((a) => a.name.toLowerCase() === name.toLowerCase());
+  const lines = (description ?? "").split("\n").map((l) => l.replace(/[_*]/g, "").trim()).filter(Boolean);
+  const head = lines[0]?.match(/^(\w+):\s*(.+)$/);
+  const body = head ? lines.slice(1) : lines;
+  const forLine = body.find((l) => /^for:/i.test(l));
+  const againstLine = body.find((l) => /^against:/i.test(l));
+  const printed = forLine || againstLine ? { text1: forLine, text2: againstLine } : body.length ? { text1: body.join(" ") } : {};
+  return {
+    name,
+    type: head?.[1] ?? known?.type,
+    target: head?.[2] ?? known?.target,
+    text1: printed.text1 ?? known?.text1,
+    text2: printed.text1 ? printed.text2 : known?.text2,
+  };
+}
+
 /** The agenda currently on the table: the newest "an agenda has been revealed" embed in the action log. */
 export function currentAgenda(ctx: ClassifyContext): AgendaInfo | undefined {
   const data = ctx.state.messages[ctx.game.actions.id];
@@ -118,16 +146,7 @@ export function currentAgenda(ctx: ClassifyContext): AgendaInfo | undefined {
     const m = data.byId[data.ids[i]];
     const embed = m?.embeds?.find((e) => /<:Agenda:\d+>/.test(e.title ?? ""));
     if (!embed?.title) continue;
-    const name = cleanLabel(embed.title).replace(/[_*]/g, "").trim();
-    const known = agendas.find((a) => a.name.toLowerCase() === name.toLowerCase());
-    const head = embed.description?.match(/\*\*(\w+):\*\*\s*\*([^*]+)\*/);
-    return {
-      name,
-      type: known?.type ?? head?.[1],
-      target: known?.target ?? head?.[2],
-      text1: known?.text1,
-      text2: known?.text2,
-    };
+    return agendaInfo(embed.title, embed.description);
   }
   return undefined;
 }
@@ -174,9 +193,11 @@ function genericTitle(text: string): { title: string; rest: string } {
   const sentence = first.split(/(?<=[.!?])\s/)[0] ?? "";
   let bare = sentence.replace(/^[\w' -]{1,32},\s+/, "").replace(/[.:]$/, "").trim();
   if (bare.length > 72) {
-    const ask = bare.match(/\b(choose|select|pick|decide|use (?:the |these )?buttons? to|please)\b[^.!?]{3,60}/i)?.[0];
+    const ask =
+      bare.match(/\b(choose|select|pick|decide)\b[^.!?,]{3,60}/i)?.[0] ??
+      bare.match(/\buse (?:the |these |this )?buttons? to\b[^.!?,]{3,60}/i)?.[0];
     if (!ask) return { title: "The game needs your answer", rest: text };
-    bare = ask.replace(/^please,?\s*/i, "").replace(/^use (the |these )?buttons? to\s*/i, "");
+    bare = ask.replace(/^use (the |these |this )?buttons? to\s*/i, "");
     const title = bare.charAt(0).toUpperCase() + bare.slice(1);
     return { title, rest: text };
   }
@@ -214,6 +235,16 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     choices,
   };
 
+  if (has(choices, /^(topAgenda_|bottomAgenda_)/)) {
+    const agenda = embeddedAgenda(m);
+    return {
+      ...base,
+      kind: "agendaPeek",
+      eyebrow: "Agenda deck · only you see this",
+      title: agenda ? `${agenda.name}: top or bottom?` : "Top or bottom of the agenda deck?",
+      agenda,
+    };
+  }
   if (has(choices, ID.scPick)) {
     return { ...base, kind: "scPick", eyebrow: phaseEyebrow(ctx, "Strategy phase"), title: "Pick a strategy card" };
   }

@@ -4,11 +4,13 @@ import { readBody, sendJson, discordError } from "./http.js";
 import type { Hub } from "./hub.js";
 import type { Clients } from "./clients.js";
 import type { Autopilot } from "./autopilot.js";
+import type { Expansion, SoloGames } from "./solo.js";
 import type { Json } from "./store.js";
 
 /** Site-level endpoints that have no Discord equivalent: player links and table setup. */
 export class Lobby {
   autopilot?: Autopilot;
+  solo?: SoloGames;
 
   constructor(private hub: Hub, private clients: Clients) {
     this.ensureLobbyChannel();
@@ -107,6 +109,28 @@ export class Lobby {
       if (!this.isAdmin(query, body)) return discordError(res, 403, 0, "bad key");
       if (!this.autopilot?.setEnabled(String(body.user_id ?? ""), body.enabled === true)) return discordError(res, 404, 0, "no such player");
       return sendJson(res, 200, { user_id: body.user_id, autopilot: body.enabled === true });
+    }
+
+    /** One-click solo test game: {token (the human's seat), bots: 2..7, expansion?: te | newPoK | oldPoK}. */
+    if (method === "POST" && path === "/solo-game") {
+      const userId = this.clients.userForToken(String(body.token ?? query.get("token") ?? ""));
+      if (!userId || !this.solo) return discordError(res, 401, 0, "unknown link");
+      const seat = Object.values(this.store.state.seats).find((x) => x.user_id === userId);
+      if (seat?.autopilot) return discordError(res, 400, 0, "that seat is played by the autopilot");
+      const bots = Math.min(7, Math.max(2, Math.round(Number(body.bots ?? 3)) || 3));
+      const expansion: Expansion = ["te", "newPoK", "oldPoK"].includes(body.expansion) ? body.expansion : "te";
+      try {
+        const job = await this.solo.start(userId, bots, expansion);
+        return sendJson(res, 200, { game: job.game, url: `/game/${job.game}`, status: job });
+      } catch (e) {
+        return discordError(res, 502, 0, (e as Error).message);
+      }
+    }
+
+    if (method === "GET" && path === "/solo-game/status") {
+      const job = this.solo?.status(String(query.get("game") ?? ""));
+      if (!job) return discordError(res, 404, 0, "no solo game setup known for that game");
+      return sendJson(res, 200, job);
     }
 
     return discordError(res, 404, 0, "not found");

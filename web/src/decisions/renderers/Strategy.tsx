@@ -188,7 +188,6 @@ export function ScPrimaryBody({ d, data, onPress, pendingKey, pressOn }: Rendere
       </div>
       {(d.steps ?? []).map((step, i) => (
         <Section key={step.id} label={`Step ${i + 1} · ${step.title}`}>
-          {step.kind === "generic" && step.text && <Prose text={step.text} clamp={2} muted />}
           <ChoiceButtons
             choices={step.choices}
             onPress={pressOn(step)}

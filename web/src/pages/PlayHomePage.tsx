@@ -5,7 +5,7 @@ import { IconArrowRight, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
 import { SiteFrame } from "@/play/SiteFrame";
 import { ConnectionBadge } from "@/play/ConnectionBadge";
-import { clearToken } from "@/play/session";
+import { clearToken, getToken } from "@/play/session";
 import {
   ChannelView,
   displayName,
@@ -19,6 +19,7 @@ import { usePlayerData } from "@/api/usePlayerData";
 import { CircularFactionIcon } from "@/shared/ui/CircularFactionIcon";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type { PlayerDataResponse } from "@/entities/data/types";
+import { QuickSoloGame } from "./QuickSoloGame";
 import classes from "./PlayHomePage.module.css";
 
 const PHASE_LABELS: Record<string, string> = {
@@ -204,6 +205,7 @@ function Home() {
       <h1 className={classes.heading}>
         {games.length ? "Welcome back" : "Welcome"}, {displayName(me)}
       </h1>
+      <QuickSoloGame token={getToken()} />
       <section className={classes.section}>
         <div className={classes.label}>
           Your games <span className={classes.count}>{games.length}</span>

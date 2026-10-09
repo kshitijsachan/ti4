@@ -3,7 +3,7 @@ import { usePlay, usePlayConnection, type Message, type PlayState } from "@/disc
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { readStored, writeStored } from "@/discord/client/lastRead";
 import { controlSignature } from "@/discord/client/store";
-import { buttonSignature, choicesOf, forwardChoices, idFaction, isDraftPrompt, needsAnswer } from "../model/controls";
+import { buttonSignature, choicesOf, forwardChoices, idFaction, isDraftPrompt, isHandMenu, needsAnswer } from "../model/controls";
 import { findGame, type GameChannels } from "./games";
 
 /** Why a prompt is considered mine. */
@@ -151,7 +151,7 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     if ((m.mention_roles ?? []).some((r) => myRoles.has(r))) rolePingAt = at;
     const roleFollowUp = !ping && !pingsOther && at - rolePingAt <= FOLLOW_UP_MS;
     const forOther = pingsOther || (!ping && at - otherPingAt <= FOLLOW_UP_MS) || otherFaction(m);
-    if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m)) return;
+    if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || isHandMenu(m)) return;
     const answered = answeredState(state, m, ping);
     if (m.prompted_user_id === me.id && ping && (m.mention_roles ?? []).some((r) => myRoles.has(r))) {
       const stale = index < ids.length - ROLE_WINDOW;

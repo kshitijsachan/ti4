@@ -7,7 +7,7 @@ const EMOJI_WORDS: Record<string, string> = {
   influence: "influence",
   resources: "resources",
   NoSabo: "",
-  SpeakerToken: "(speaker)",
+  SpeakerToken: "",
 };
 
 type Names = {
