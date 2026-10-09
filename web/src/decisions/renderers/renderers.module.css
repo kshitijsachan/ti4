@@ -39,16 +39,20 @@
 /* Strategy card pick */
 
 .pickLayout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 252px;
-  gap: 20px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .scGrid {
   display: grid;
-  grid-template-columns: repeat(4, 112px);
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scGrid img {
+  width: 100%;
+  height: auto;
 }
 
 .scTile {
@@ -113,14 +117,12 @@
 .scDetail {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 10px;
 }
 
 .scDetailMeta {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 2px;
 }
 
@@ -165,8 +167,8 @@
 
 .followLayout {
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 
@@ -174,7 +176,7 @@
 
 .actionGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 8px;
 }
 
@@ -182,8 +184,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 64px;
-  padding: 10px 14px;
+  min-height: 58px;
+  padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--dec-tile-edge);
   background: var(--dec-tile-fill);
@@ -327,10 +329,9 @@
 /* Combat */
 
 .combatBoard {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .combatSide {
@@ -353,6 +354,7 @@
 
 .versus {
   align-self: center;
+  line-height: 1;
   font-family: var(--font-display);
   font-size: 12px;
   letter-spacing: 0.12em;
@@ -404,22 +406,8 @@
 }
 
 @media (max-width: 720px) {
-  .pickLayout,
-  .followLayout {
+  .ledger {
     grid-template-columns: 1fr;
-  }
-
-  .scGrid {
-    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  }
-
-  .ledger,
-  .combatBoard {
-    grid-template-columns: 1fr;
-  }
-
-  .versus {
-    display: none;
   }
 }
 

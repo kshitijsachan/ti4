@@ -99,6 +99,8 @@ def main():
         "roles": list(s["roles"].values()),
         "messages": messages,
     }
+    if "--own" in flags:
+        fixture["ownCall"] = True
     if "--web" in flags:
         with urllib.request.urlopen(f"{SHIM}/bot/api/public/game/{game}/web-data") as r:
             fixture["web"] = json.load(r)

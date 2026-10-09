@@ -59,6 +59,8 @@ type Fixture = {
   messages: Record<string, Message[]>;
   web?: PlayerDataResponse;
   hand?: string[];
+  /** The prompt is my own table-wide call (my strategy card). */
+  ownCall?: boolean;
 };
 
 const fixtureFiles = import.meta.glob<Fixture>("./fixtures/*.json", { eager: true, import: "default" });
@@ -150,7 +152,7 @@ function FixtureView({ f, client }: { f: Fixture; client: QueryClient }) {
     const me = f.web?.playerData.find((p) => p.discordId === f.meId);
     const where = channels[f.channelId]?.name ?? "";
     return classify(
-      { message, channelId: f.channelId, where, reason: "mention" },
+      { message, channelId: f.channelId, where, reason: f.ownCall ? "own" : "mention", ownCall: f.ownCall },
       { state: { users, channels, messages }, game, web: f.web, me },
     );
   }, [f]);

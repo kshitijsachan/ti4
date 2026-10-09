@@ -65,7 +65,7 @@ export function ScPickBody({ d, data, onPress, pendingKey }: RendererProps) {
                 onDoubleClick={() => t.choice && onPress(t.choice)}
                 disabled={!t.choice && !mine && !owner}
               >
-                <ScArt initiative={t.initiative} web={data.web} width={112} />
+                <ScArt initiative={t.initiative} web={data.web} width={90} />
                 {t.tradeGoods > 0 && <span className={classes.tgBadge}>+{t.tradeGoods} TG</span>}
                 {!t.choice && (
                   <span className={classes.takenBadge}>{mine ? "Yours" : owner ? owner.userName : "Taken"}</span>
@@ -77,15 +77,34 @@ export function ScPickBody({ d, data, onPress, pendingKey }: RendererProps) {
         </div>
         {current && (
           <div className={classes.scDetail}>
-            <ScArt initiative={current.initiative} web={data.web} width={236} />
             <div className={classes.scDetailMeta}>
-              <span className={classes.scName}>{def?.name ?? `Card ${current.initiative}`}</span>
+              <span className={classes.scName}>
+                <span className={classes.num}>{current.initiative}</span> {def?.name ?? "Strategy card"}
+              </span>
               {current.tradeGoods > 0 && (
                 <span className={classes.tgLine}>
                   Comes with <b>{current.tradeGoods}</b> trade good{current.tradeGoods === 1 ? "" : "s"}
                 </span>
               )}
             </div>
+            {def && def.primaryTexts.length > 0 && (
+              <Section label="Primary">
+                {def.primaryTexts.map((t) => (
+                  <p key={t} className={classes.cardText}>
+                    {t}
+                  </p>
+                ))}
+              </Section>
+            )}
+            {def && def.secondaryTexts.length > 0 && (
+              <Section label="Secondary">
+                {def.secondaryTexts.map((t) => (
+                  <p key={t} className={classes.cardText}>
+                    {t}
+                  </p>
+                ))}
+              </Section>
+            )}
             {current.choice ? (
               <UnstyledButton
                 className={classes.bigConfirm}
@@ -120,7 +139,7 @@ export function ScFollowBody({ d, data, onPress, pendingKey }: RendererProps) {
   return (
     <div className={classes.stack}>
       <div className={classes.followLayout}>
-        {d.sc && <ScArt initiative={d.sc} web={data.web} width={168} />}
+        {d.sc && <ScArt initiative={d.sc} web={data.web} width={118} />}
         <div className={classes.stack}>
           {def && def.secondaryTexts.length > 0 && (
             <Section label="Secondary ability">
@@ -172,7 +191,7 @@ export function ScPrimaryBody({ d, data, onPress, pendingKey, pressOn }: Rendere
   return (
     <div className={classes.stack}>
       <div className={classes.followLayout}>
-        {d.sc && <ScArt initiative={d.sc} web={data.web} width={168} />}
+        {d.sc && <ScArt initiative={d.sc} web={data.web} width={118} />}
         <div className={classes.stack}>
           {def && def.primaryTexts.length > 0 && (
             <Section label="Primary ability">
