@@ -29,6 +29,36 @@ export class Gateway {
     return this.ready;
   }
 
+  /**
+   * Slash commands the bot has registered since it last identified. A freshly started bot identifies, then
+   * registers its commands 10-30 s later; until then "/game" would fail with "Unknown command".
+   */
+  private commandsRegistered = false;
+  private lastBotReady = false;
+  private statusListeners: ((ready: boolean) => void)[] = [];
+
+  /** The bot is connected and has registered its slash commands: players can act. */
+  get botReady() {
+    return this.ready && this.commandsRegistered;
+  }
+
+  onStatusChange(fn: (ready: boolean) => void) {
+    this.statusListeners.push(fn);
+  }
+
+  markCommandsRegistered() {
+    this.commandsRegistered = true;
+    this.notifyStatus();
+  }
+
+  private notifyStatus() {
+    const now = this.botReady;
+    if (now === this.lastBotReady) return;
+    this.lastBotReady = now;
+    log.info(now ? "bot ready (connected, commands registered)" : "bot not ready");
+    for (const fn of this.statusListeners) fn(now);
+  }
+
   attach(ws: WebSocket) {
     if (this.ws) {
       try {
@@ -37,6 +67,7 @@ export class Gateway {
     }
     this.ws = ws;
     this.ready = false;
+    this.notifyStatus();
     this.send({ op: 10, d: { heartbeat_interval: this.heartbeatMs } });
     ws.on("message", (raw) => this.onMessage(ws, raw.toString()));
     ws.on("close", (code) => {
@@ -44,6 +75,7 @@ export class Gateway {
         this.ws = null;
         this.ready = false;
         log.warn(`bot gateway closed (${code})`);
+        this.notifyStatus();
       }
     });
   }
@@ -120,7 +152,9 @@ export class Gateway {
     this.send({ op: 0, t: "READY", s: ++this.seq, d: ready }, ws);
     this.send({ op: 0, t: "GUILD_CREATE", s: ++this.seq, d: this.guildCreate() }, ws);
     this.ready = true;
+    this.commandsRegistered = false;
     log.info("bot identified; guild sent");
+    this.notifyStatus();
   }
 
   private resume(ws: WebSocket, d: Json) {
@@ -132,6 +166,9 @@ export class Gateway {
     // Continue numbering after the bot's last seen sequence (it may be from before a shim restart).
     if (typeof d.seq === "number" && d.seq > this.seq) this.seq = d.seq;
     this.ready = true;
+    // A resumed bot is the same process: it registered its commands before the shim restarted.
+    if (Object.keys(this.store.state.commands).length) this.commandsRegistered = true;
+    this.notifyStatus();
     log.info(`bot resumed session (${this.backlog.length} queued events)`);
     for (const e of this.backlog.splice(0)) this.send({ op: 0, t: e.t, s: ++this.seq, d: e.d }, ws);
     this.send({ op: 0, t: "RESUMED", s: ++this.seq, d: {} }, ws);

@@ -14,7 +14,7 @@ One Ubuntu VM with 8 GB of RAM runs everything in Docker: postgres, the bot and 
 
 ```sh
 sudo apt-get update && sudo apt-get install -y git
-sudo git clone https://github.com/kshitijsachan/ti4.git /opt/ti4
+sudo git clone --branch claude/ecstatic-franklin-lutbck https://github.com/kshitijsachan/ti4.git /opt/ti4
 sudo /opt/ti4/deploy/deploy.sh                        # http://<server-ip>:8090
 # or, with a domain pointed at the server (automatic HTTPS):
 sudo DOMAIN=ti4.example.com /opt/ti4/deploy/deploy.sh

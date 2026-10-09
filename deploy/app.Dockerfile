@@ -1,12 +1,14 @@
 # syntax=docker/dockerfile:1.7
 # TI4 Online site: the shim (fake Discord + site API) serving the built web client. Build context: repo root.
 #   docker build -f deploy/app.Dockerfile -t ti4-app .
-# Multi-arch (amd64/arm64). Behind a TLS-intercepting proxy, see deploy/local-proxy-build.sh.
+# Multi-arch (amd64/arm64): the build stages run on the build host's platform (their output is plain
+# JS/HTML, and the shim has no native modules), so only the small runtime stage is per-arch.
+# Behind a TLS-intercepting proxy, see deploy/local-proxy-build.sh.
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 
 # ---- web client (Vite) ----
-FROM ${NODE_IMAGE} AS web
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json web/.npmrc ./
 RUN --mount=type=cache,target=/root/.npm --mount=type=secret,id=build_ca,required=false \
@@ -16,7 +18,7 @@ COPY web/ ./
 RUN npm run build
 
 # ---- shim (TypeScript -> JS) ----
-FROM ${NODE_IMAGE} AS shim
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS shim
 WORKDIR /src/shim
 COPY shim/package.json shim/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm --mount=type=secret,id=build_ca,required=false \

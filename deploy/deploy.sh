@@ -16,7 +16,7 @@ die() { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || die "run as root (sudo $0)"
 
 REPO_URL=${REPO_URL:-https://github.com/kshitijsachan/ti4.git}
-BRANCH=${BRANCH:-main}
+BRANCH=${BRANCH:-claude/ecstatic-franklin-lutbck}  # switch to main once merged
 DOMAIN=${DOMAIN:-}
 
 # ---- 1. Docker ----

@@ -15,6 +15,11 @@ export class Clients implements Listener {
 
   constructor(private hub: Hub) {
     hub.listeners.push(this);
+    // Tell every browser when the bot becomes usable (or goes away), with the commands it registered.
+    hub.gateway.onStatusChange((ready) => {
+      const frame = { t: "bot_status", bot_online: ready, commands: Object.values(this.store.state.commands) };
+      for (const c of this.clients) this.send(c, frame);
+    });
   }
 
   private get store() {
@@ -64,7 +69,7 @@ export class Clients implements Listener {
         .filter((c) => this.store.canView(userId, c.id))
         .map((c) => this.channelView(c)),
       commands: Object.values(s.commands),
-      bot_online: this.hub.gateway.isReady,
+      bot_online: this.hub.gateway.botReady,
     };
   }
 
@@ -224,7 +229,15 @@ export class Clients implements Listener {
     return p.toString();
   }
 
-  private dispatchInteraction(c: Client, nonce: string | undefined, type: number, channelId: string, data: Json, message?: StoredMessage) {
+  private dispatchInteraction(
+    c: Client,
+    nonce: string | undefined,
+    type: number,
+    channelId: string,
+    data: Json,
+    message?: StoredMessage,
+    retryOf?: string,
+  ) {
     if (!this.store.canView(c.userId, channelId)) {
       return this.send(c, { t: "interaction_done", nonce, error: "You cannot use that channel." });
     }
@@ -238,6 +251,14 @@ export class Clients implements Listener {
       message_id: message?.id,
       command_name: type === 2 ? data.name : undefined,
     });
+    if (type === 3 && message) {
+      const retries = (this.store.interactions.get(retryOf ?? "")?.retries ?? 0) + (retryOf ? 1 : 0);
+      inter.retries = retries;
+      inter.replay = () => {
+        const fresh = this.store.findMessage(channelId, message.id);
+        if (fresh && this.clients.has(c)) this.dispatchInteraction(c, undefined, type, channelId, data, fresh, inter.id);
+      };
+    }
     const payload: Json = { ...this.basePayload(c, channelId), id: inter.id, token: inter.token, type, data };
     if (message) payload.message = stripPrivate(message);
     const timer = setTimeout(() => {
@@ -282,6 +303,9 @@ export class Clients implements Listener {
   }
 
   private command(c: Client, msg: Json) {
+    if (!this.hub.gateway.botReady) {
+      return this.send(c, { t: "interaction_done", nonce: msg.nonce, error: "The game server is still starting up. Try again in a moment." });
+    }
     const cmd = Object.values(this.store.state.commands).find((x) => x.name === msg.name && (x.type ?? 1) === 1);
     if (!cmd) return this.send(c, { t: "interaction_done", nonce: msg.nonce, error: `Unknown command /${msg.name}` });
     const options: Json[] = msg.options ?? [];
@@ -366,6 +390,7 @@ function view(msg: StoredMessage): Json {
     out = { ...out, embeds: JSON.parse(JSON.stringify(msg.embeds).replace(DISCORD_EMOJI_CDN, "/emojis/$1")) };
   }
   if (msg._ephemeral_for) out.ephemeral = true;
+  if (msg._prompted_for) out.prompted_user_id = msg._prompted_for;
   return out;
 }
 

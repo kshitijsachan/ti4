@@ -161,7 +161,7 @@ export function PlaySidebar({
         ]),
     {
       value: "talk",
-      label: "Table talk",
+      label: "Talk",
       icon: <IconMessage size={14} />,
       ids: [game?.tableTalk?.id],
     },

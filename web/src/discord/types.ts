@@ -168,6 +168,8 @@ export type Message = {
   referenced_message?: Message | null;
   interaction_metadata?: { id: Snowflake; type: number; user?: User };
   ephemeral?: boolean;
+  /** Shim extension: the player whose button press this bot post answers. */
+  prompted_user_id?: Snowflake;
 };
 
 export const MessageFlags = {
@@ -254,7 +256,9 @@ export type ServerFrame =
   | { t: "interaction_done"; nonce?: string; error?: string }
   | { t: "autocomplete"; nonce?: string; choices: CommandOptionChoice[] }
   | { t: "error"; nonce?: string; error: string }
-  | { t: "pong"; nonce?: string };
+  | { t: "pong"; nonce?: string }
+  /** The bot became usable (connected and its slash commands registered) or went away. */
+  | { t: "bot_status"; bot_online: boolean; commands?: Command[] };
 
 /** Submitted modal component, in Discord's MODAL_SUBMIT shape. `id` is the component's numeric id (JDA requires it). */
 export type ModalSubmitComponent =

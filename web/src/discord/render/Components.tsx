@@ -15,6 +15,9 @@ export type MessageTarget = {
   attachments: Attachment[];
 };
 
+/** Upstream's drag-to-move map ("Move on Map", BETA) is not part of this site; the bot's buttons do the same. */
+const UNSUPPORTED_LINK = /asyncti4\.com\/game\/[^/?#]+\/newui\?[^#]*targetPositionId=/i;
+
 export const MessageTargetContext = createContext<MessageTarget | null>(null);
 
 export function useMessageTarget(): MessageTarget {
@@ -37,6 +40,7 @@ export function DiscordButton({ c }: { c: Component }) {
   const conn = usePlayConnection();
   const pending = usePendingKey(`${target.messageId}:${c.custom_id ?? ""}`);
   if (c.style === 6) return null;
+  if (c.style === 5 && c.url && UNSUPPORTED_LINK.test(c.url)) return null;
   const body = (
     <>
       {pending ? <Loader size={12} color="currentColor" className={classes.spinner} /> : <ComponentEmoji emoji={c.emoji} />}

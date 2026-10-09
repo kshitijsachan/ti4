@@ -18,7 +18,7 @@ export function ConnectionBadge() {
   const botOnline = usePlay((s) => s.botOnline);
   const healthy = status === "open" && botOnline;
   const botDown = status === "open" && !botOnline;
-  const label = botDown ? "Connected · the bot is offline" : LABELS[status];
+  const label = botDown ? "Connected · the game server is starting up or offline" : LABELS[status];
 
   return (
     <Tooltip label={label} position="bottom">

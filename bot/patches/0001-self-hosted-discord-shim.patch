@@ -152,10 +152,10 @@ index 8501858..8990781 100644
  
 diff --git a/src/main/java/ti4/spring/api/selfhost/ArtController.java b/src/main/java/ti4/spring/api/selfhost/ArtController.java
 new file mode 100644
-index 0000000..6c9866f
+index 0000000..abfae77
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/ArtController.java
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,71 @@
 +package ti4.spring.api.selfhost;
 +
 +import jakarta.servlet.http.HttpServletRequest;
@@ -206,14 +206,18 @@ index 0000000..6c9866f
 +        if (file == null) return ResponseEntity.notFound().build();
 +        String name = file.getFileName().toString();
 +        String ext = name.contains(".") ? name.substring(name.lastIndexOf('.')).toLowerCase() : "";
++        // Images only: never expose config or data files that live under resources.
++        if (!TYPES.containsKey(ext)) return ResponseEntity.notFound().build();
 +        return ResponseEntity.ok()
-+                .contentType(TYPES.getOrDefault(ext, MediaType.APPLICATION_OCTET_STREAM))
++                .contentType(TYPES.get(ext))
 +                .cacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic())
 +                .body(new FileSystemResource(file));
 +    }
 +
 +    private static Path resolve(Path requested) {
-+        if (Files.isRegularFile(requested)) return requested;
++        String requestedName = requested.getFileName().toString().toLowerCase();
++        boolean isImage = EXTENSIONS.stream().anyMatch(requestedName::endsWith);
++        if (isImage && Files.isRegularFile(requested)) return requested;
 +        String name = requested.getFileName().toString();
 +        String stem = name.contains(".") ? name.substring(0, name.lastIndexOf('.')) : name;
 +        for (String ext : EXTENSIONS) {

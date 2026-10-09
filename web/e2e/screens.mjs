@@ -48,11 +48,11 @@ await shot("admin", `/admin?key=${state.admin_token}`, "text=Players");
 await shot("play", `/play?t=${token}`, "text=Your games");
 console.log("token stripped:", !page.url().includes("t="));
 await shot("game", `/game/${game}`, "[role=tablist]", 4000);
-for (const tab of ["Hand", "Trade", "Threads", "Table talk"]) {
+for (const tab of ["Hand", "Trade", "Threads", "Talk"]) {
   await page.getByRole("tab", { name: tab }).click();
   await page.waitForTimeout(1200);
   await page.screenshot({
-    path: `${out}/game-${tab.replace(" ", "-").toLowerCase()}.png`,
+    path: `${out}/game-${tab.toLowerCase()}.png`,
   });
 }
 const draftTab = page.getByRole("tab", { name: "Draft" });

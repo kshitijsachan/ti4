@@ -14,6 +14,9 @@ import { usePlayerData } from "@/api/usePlayerData";
 import { ActionLog, usePlay } from "@/discord";
 import { findGame } from "@/play/games";
 import { PlaySidebar } from "@/play/PlaySidebar";
+import { AttentionTray } from "@/play/AttentionTray";
+import { useAttention } from "@/play/attention";
+import { useTurn, useTurnAlerts } from "@/play/turn";
 import classes from "./GamePage.module.css";
 
 const NARROW = 900;
@@ -50,20 +53,54 @@ function SetupView({ gameName }: { gameName: string }) {
 
 type DraftStatus = "none" | "drafting" | "finished";
 
-/** Whether the game has a setup draft running; the draft takes the board's place while it does. */
+type DraftSummary = {
+  status: DraftStatus;
+  /** Who is on the clock while drafting. */
+  picking?: { userId: string; name: string };
+};
+
+/**
+ * Whether the game has a setup draft running (the draft takes the board's
+ * place while it does) and who is picking. Refetched whenever the action log
+ * moves until the draft is over, so every seat flips to the draft at once.
+ */
 function useDraftStatus(gameName: string, hasBoard: boolean) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: ["draftStatus", gameName],
-    queryFn: async (): Promise<DraftStatus> => {
+    queryFn: async (): Promise<DraftSummary> => {
       const res = await fetch(`/bot/api/public/game/${gameName}/draft`);
-      if (!res.ok) return "none";
-      const body = (await res.json()) as { status?: DraftStatus };
-      return body.status ?? "none";
+      if (!res.ok) return { status: "none" };
+      const body = (await res.json()) as {
+        status?: DraftStatus;
+        players?: { userId: string; name: string; current: boolean }[];
+      };
+      const current = body.players?.find((p) => p.current);
+      return {
+        status: body.status ?? "none",
+        picking:
+          body.status === "drafting" && current
+            ? { userId: current.userId, name: current.name }
+            : undefined,
+      };
     },
     refetchInterval: (query) =>
-      query.state.data === "drafting" || !hasBoard ? 5000 : 60000,
+      query.state.data?.status === "drafting" || !hasBoard ? 5000 : 60000,
     retry: false,
   });
+  const actionsId = usePlay((s) => findGame(s.channels, gameName)?.actions.id);
+  const lastAction = usePlay((s) =>
+    actionsId
+      ? (s.messages[actionsId]?.ids.at(-1) ??
+        s.channels[actionsId]?.last_message_id)
+      : undefined,
+  );
+  const finished = query.data?.status === "finished";
+  useEffect(() => {
+    if (!lastAction || finished) return;
+    void queryClient.invalidateQueries({ queryKey: ["draftStatus", gameName] });
+  }, [lastAction, finished, gameName, queryClient]);
+  return query.data ?? { status: "none" as const };
 }
 
 function Draft({ gameName }: { gameName: string }) {
@@ -105,7 +142,27 @@ export default function GamePage() {
   });
   const hasBoard = board.data === true;
   const boardKnown = board.isError || board.data !== undefined;
-  const draft = useDraftStatus(mapid, hasBoard).data ?? "none";
+  const draftSummary = useDraftStatus(mapid, hasBoard);
+  const draft = draftSummary.status;
+  const me = usePlay((s) => s.me);
+  const turn = useTurn(
+    mapid,
+    me?.id,
+    draftSummary.picking && {
+      mine: draftSummary.picking.userId === me?.id,
+      picking: draftSummary.picking.name,
+    },
+  );
+  const attention = useAttention(mapid);
+  useTurnAlerts(
+    mapid,
+    turn,
+    attention.map((a) => a.message.id),
+    () =>
+      turn.mine
+        ? `${turn.phase ?? "Your move"}: the table is waiting on you.`
+        : `${attention.length} prompt(s) waiting for your answer.`,
+  );
 
   const draftTab: GameViewTab = {
     value: "x-draft",
@@ -136,6 +193,7 @@ export default function GamePage() {
     <div className={classes.shell}>
       <div className={classes.board}>
         <GameMapPage mapOverride={mapOverride} extraTabs={extraTabs} />
+        <AttentionTray items={attention} turn={turn} />
       </div>
       <PlaySidebar
         gameName={mapid}

@@ -32,6 +32,8 @@ export type StoredMessage = Json & {
   channel_id: string;
   /** Set for ephemeral messages: only this user may see it. Never returned to the bot's history reads. */
   _ephemeral_for?: string;
+  /** The player whose button press this bot post answers (see Hub.attributePrompt); browsers get `prompted_user_id`. */
+  _prompted_for?: string;
 };
 
 export type Interaction = {
@@ -51,6 +53,10 @@ export type Interaction = {
   modal?: Json;
   created: number;
   acked: boolean;
+  /** Presses the same component again as the same player (component interactions only). */
+  replay?: () => void;
+  /** How many times the shim re-sent this press because the bot was busy with the game. */
+  retries?: number;
 };
 
 export type State = {

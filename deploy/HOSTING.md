@@ -78,7 +78,7 @@ You do: create the account (email, payment method, possibly ID verification).
 4. On the server (copy-paste):
    ```sh
    apt-get update && apt-get install -y git
-   git clone https://github.com/kshitijsachan/ti4.git /opt/ti4
+   git clone --branch claude/ecstatic-franklin-lutbck https://github.com/kshitijsachan/ti4.git /opt/ti4
    /opt/ti4/deploy/deploy.sh
    ```
    If the repo is private, use `git clone https://<github-user>:<personal-access-token>@github.com/kshitijsachan/ti4.git /opt/ti4`
@@ -112,7 +112,7 @@ region.
 4. `ssh ubuntu@<PUBLIC_IP>`, then:
    ```sh
    sudo apt-get update && sudo apt-get install -y git
-   sudo git clone https://github.com/kshitijsachan/ti4.git /opt/ti4
+   sudo git clone --branch claude/ecstatic-franklin-lutbck https://github.com/kshitijsachan/ti4.git /opt/ti4
    sudo BOT_MEMORY=6g /opt/ti4/deploy/deploy.sh
    ```
    deploy.sh also opens the ports in Oracle's Ubuntu iptables rules. `BOT_MEMORY=6g` uses the spare RAM.
@@ -129,7 +129,7 @@ billed. Stay at 2 OCPU/12 GB.
 Needs: a PC that stays on (Linux, or Windows/macOS with Docker Desktop) with 8 GB+ RAM. No router changes.
 
 1. Install Docker (Linux: `curl -fsSL https://get.docker.com | sudo sh`; else Docker Desktop).
-2. `git clone https://github.com/kshitijsachan/ti4.git && cd ti4/deploy && cp .env.example .env`
+2. `git clone --branch claude/ecstatic-franklin-lutbck https://github.com/kshitijsachan/ti4.git && cd ti4/deploy && cp .env.example .env`
 3. Pick one:
    - **Quick test, no account**: `docker compose --profile quicktunnel up -d --build`, then
      `docker compose logs cloudflared-quick | grep trycloudflare` shows `https://<random>.trycloudflare.com`.

@@ -21,7 +21,6 @@ import { MapView } from "@/domains/game-shell/components/layouts/MapView";
 import { MapLoadingState } from "@/domains/map/components/MapLoadingState";
 import { MapViewportLoader } from "@/shared/ui/primitives/MapViewportLoader";
 import { isMobileDevice } from "@/utils/isTouchDevice";
-import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { usePageThemeClass } from "@/hooks/usePageThemeClass";
 import { PlayerDataErrorAlert } from "@/shared/ui/PlayerDataErrorAlert";
 import { filterPlayersWithAssignedFaction } from "@/entities/game/playerUtils";
@@ -89,12 +88,7 @@ function GameMapContent({
     );
   };
 
-  const activePlayerName = data?.playerData?.find((p) => p.active)?.userName;
-  useDocumentTitle(
-    activePlayerName
-      ? `⏳ ${activePlayerName} · ${gameId} · TI4 Online`
-      : `${gameId} · TI4 Online`,
-  );
+  // The tab title (whose turn, prompts waiting) is owned by the game screen: see useTurnAlerts.
 
   const extraValues = new Set(extraTabs.map((t) => t.value));
   const shownTab =

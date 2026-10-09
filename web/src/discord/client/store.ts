@@ -65,6 +65,8 @@ export type PlayState = {
   interacted: Record<Snowflake, Snowflake>;
   /** Prompts I hid from the "needs you" tray (message ids, persisted per browser). */
   dismissedPrompts: Record<Snowflake, true>;
+  /** Messages I pressed something on → when (ms), persisted per browser, newest few hundred. */
+  pressed: Record<Snowflake, number>;
 };
 
 export const EMPTY_CHANNEL: ChannelMessages = {
@@ -103,6 +105,7 @@ export function createPlayStore(storageKey: string) {
     replyTo: {},
     interacted: readStored(`interacted.${storageKey}`),
     dismissedPrompts: readStored(`dismissed.${storageKey}`),
+    pressed: readStored(`pressed.${storageKey}`),
   }));
 
   const set = store.setState;
@@ -153,12 +156,26 @@ export function createPlayStore(storageKey: string) {
     if (ch && compareSnowflakes(m.id, ch.last_message_id ?? "0") > 0) {
       set({ channels: { ...channels, [ch.id]: { ...ch, last_message_id: m.id } } });
     }
-    if (!isNew) return;
+    if (!isNew) return notePromptEdit(m);
     if (get().viewing[m.channel_id]) return markRead(m.channel_id);
     if (m.author.id === get().me?.id) return;
     const s = get();
     set({ unread: { ...s.unread, [m.channel_id]: (s.unread[m.channel_id] ?? 0) + 1 } });
     if (mentionsMe(m)) set({ mentions: { ...s.mentions, [m.channel_id]: (s.mentions[m.channel_id] ?? 0) + 1 } });
+  };
+
+  /**
+   * The bot often answers a press by editing the pressed message into the next step. An edit that arrives
+   * after my press makes it a live prompt again, whatever the two clocks say.
+   */
+  const notePromptEdit = (m: Message) => {
+    const at = get().pressed[m.id];
+    if (at === undefined || !m.edited_timestamp) return;
+    const edited = Date.parse(m.edited_timestamp);
+    if (edited > at) return;
+    const pressed = { ...get().pressed, [m.id]: edited - 1 };
+    set({ pressed });
+    writeStored(`pressed.${storageKey}`, pressed);
   };
 
   const settle = (nonce: string | undefined, error: string | null = null) => {
@@ -213,6 +230,9 @@ export function createPlayStore(storageKey: string) {
     markRead,
     /** Remember that I acted on a message, so prompts at or before it count as answered. */
     noteInteraction(channelId: Snowflake, messageId: Snowflake) {
+      const pressed = withId(get().pressed, messageId, Date.now());
+      set({ pressed });
+      writeStored(`pressed.${storageKey}`, pressed);
       const cur = get().interacted[channelId];
       if (cur && compareSnowflakes(cur, messageId) >= 0) return;
       const interacted = { ...get().interacted, [channelId]: messageId };
@@ -220,9 +240,7 @@ export function createPlayStore(storageKey: string) {
       writeStored(`interacted.${storageKey}`, interacted);
     },
     dismissPrompt(messageId: Snowflake) {
-      const ids = Object.keys(get().dismissedPrompts).sort(compareSnowflakes).slice(-300);
-      const dismissedPrompts: Record<Snowflake, true> = { [messageId]: true };
-      for (const id of ids) dismissedPrompts[id] = true;
+      const dismissedPrompts = withId(get().dismissedPrompts, messageId, true as const);
       set({ dismissedPrompts });
       writeStored(`dismissed.${storageKey}`, dismissedPrompts);
     },
@@ -270,6 +288,9 @@ export function createPlayStore(storageKey: string) {
         case "channels":
           set({ channels: byId(frame.channels) });
           return;
+        case "bot_status":
+          set(frame.commands ? { botOnline: frame.bot_online, commands: frame.commands } : { botOnline: frame.bot_online });
+          return;
         case "user_upsert":
           set({ users: { ...get().users, [frame.user.id]: frame.user } });
           return;
@@ -296,6 +317,14 @@ export function createPlayStore(storageKey: string) {
 }
 
 export type PlayActions = ReturnType<typeof createPlayStore>;
+
+/** Sets an entry of a persisted id map, keeping only the newest few hundred ids. */
+function withId<V>(map: Record<Snowflake, V>, id: Snowflake, value: V): Record<Snowflake, V> {
+  const out: Record<Snowflake, V> = {};
+  for (const k of Object.keys(map).sort(compareSnowflakes).slice(-300)) out[k] = map[k];
+  out[id] = value;
+  return out;
+}
 
 function byId<T extends { id: Snowflake }>(list: T[]): Record<Snowflake, T> {
   const out: Record<Snowflake, T> = {};

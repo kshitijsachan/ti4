@@ -17,13 +17,24 @@ export class Lobby {
    * cannot see it; the shim mirrors its contents into the shim log.
    */
   ensureBotLogChannel(): Json {
+    for (const [name, topic] of [
+      ["slash-command-log", "Slash commands players ran"],
+      ["button-log", "Buttons players pressed"],
+    ]) {
+      this.ensureHiddenChannel(name, topic);
+    }
+    return this.ensureHiddenChannel("bot-log", "Bot errors and logs");
+  }
+
+  /** A channel only the bot sees (the bot logs to `bot-log`, `slash-command-log` and `button-log`). */
+  private ensureHiddenChannel(name: string, topic: string): Json {
     const s = this.store.state;
-    let ch = Object.values(s.channels).find((c) => c.name === "bot-log" && c.type === 0);
+    let ch = Object.values(s.channels).find((c) => c.name === name && c.type === 0);
     if (!ch) {
       ch = this.store.createChannel({
         type: 0,
-        name: "bot-log",
-        topic: "Bot errors and logs",
+        name,
+        topic,
         permission_overwrites: [{ id: s.guild_id, type: 0, allow: "0", deny: "1024" }],
       });
       this.hub.channelCreate(ch);

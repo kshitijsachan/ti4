@@ -108,7 +108,7 @@ const server = createServer({ shouldUpgradeCallback: (req: import("node:http").I
       if (file && serveFile(res, file, "public, max-age=604800")) return;
       return proxyToBot(req, res, "/api/public/selfhost/art/" + path.slice(5));
     }
-    if (path === "/healthz") return sendJson(res, 200, { ok: true, bot: gateway.isReady });
+    if (path === "/healthz") return sendJson(res, 200, { ok: true, bot: gateway.botReady });
     // Static web client with SPA fallback.
     const rel = normalize(decodeURIComponent(path)).replace(/^(\.\.[\/\\])+/, "");
     if (rel !== "/" && serveFile(res, join(WEB_DIST, rel), rel.startsWith("/assets/") ? undefined : "no-cache")) return;

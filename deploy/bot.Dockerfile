@@ -2,6 +2,8 @@
 # AsyncTI4 bot (rules engine) for TI4 Online. Build context: the repo root.
 #   docker build -f deploy/bot.Dockerfile -t ti4-bot .
 # Multi-arch: every base image here has linux/amd64 and linux/arm64 variants (Oracle Ampere works).
+# The fetch/compile stages run on the build host's platform (the jar and art are arch-independent; the
+# webp native lib inside the jar ships x86_64 and aarch64), so cross-building for arm64 only emulates the runtime stage.
 #
 # Build-time only (never ends up in the image): if you build behind a TLS-intercepting proxy, pass
 #   --build-arg HTTPS_PROXY=... --secret id=build_ca,src=/path/to/proxy-ca.crt
@@ -12,7 +14,7 @@ ARG JRE_IMAGE=eclipse-temurin:26-jre
 
 # ---- 1. upstream source at the pinned commit + our patches ----
 # Art/data (src/main/resources, ~900MB) ships beside the jar in /opt/resources, not inside it.
-FROM ${MAVEN_IMAGE} AS src
+FROM --platform=$BUILDPLATFORM ${MAVEN_IMAGE} AS src
 WORKDIR /build
 COPY bot/UPSTREAM_COMMIT bot/fetch-upstream.sh bot/
 COPY bot/patches bot/patches
@@ -25,7 +27,7 @@ RUN --mount=type=secret,id=build_ca,required=false \
  && cp -r /build/resources/config /build/resources/logback.xml /build/upstream/src/main/resources/
 
 # ---- 2. compile ----
-FROM ${MAVEN_IMAGE} AS build
+FROM --platform=$BUILDPLATFORM ${MAVEN_IMAGE} AS build
 WORKDIR /opt/app
 COPY --chmod=755 deploy/mvn-build.sh /usr/local/bin/mvn-build
 COPY --from=src /build/upstream/pom.xml ./
@@ -49,7 +51,7 @@ COPY --chmod=755 deploy/bot-healthcheck.sh /app/healthcheck.sh
 ENV DB_PATH=/opt/STORAGE \
     RESOURCE_PATH=/opt/resources \
     SHIM_STATE_FILE=/shim-data/state.json \
-    JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=20.0 -XX:+UseStringDeduplication -XX:+ExitOnOutOfMemoryError"
+    JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=20.0 -XX:+UseStringDeduplication -XX:+ExitOnOutOfMemoryError --enable-native-access=ALL-UNNAMED"
 WORKDIR /app
 USER tibot
 EXPOSE 8081

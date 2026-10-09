@@ -41,7 +41,8 @@ export function useGameSocket(
 
   useEffect(() => {
     const brokerURL = config.api.websocketUrl;
-    const client = new Client({ brokerURL, reconnectDelay: 0 });
+    // Keep retrying: the bot (behind /bot/ws) restarts, and a stale board would misreport whose turn it is.
+    const client = new Client({ brokerURL, reconnectDelay: 3000 });
 
     client.beforeConnect = () => {
       setReadyState(SocketReadyState.CONNECTING);

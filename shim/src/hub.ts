@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { snowflake } from "./ids.js";
 import { imageSize, type UploadedFile } from "./http.js";
 import type { Gateway } from "./gateway.js";
-import type { Json, Store, StoredMessage } from "./store.js";
+import type { Interaction, Json, Store, StoredMessage } from "./store.js";
 import { log } from "./log.js";
 
 /** Anything that wants to hear about state changes (the browser client server). */
@@ -85,6 +85,11 @@ export class Hub {
     if (!ch) return;
     const parent = ch.parent_id ? this.store.channel(ch.parent_id) : undefined;
     const isLog = (c?: Json) => !!c && typeof c.name === "string" && c.name.startsWith("bot-log");
+    if (ch.name === "slash-command-log" || ch.name === "button-log") {
+      const list = this.store.messages(ch.id);
+      if (list.length > 1000) list.splice(0, list.length - 1000);
+      return;
+    }
     if (!isLog(ch) && !isLog(parent)) return;
     const text = String(msg.content ?? "");
     if (isLog(parent) || /ERROR|WARNING|CRITICAL|Exception/.test(text)) log.warn(`[bot-log${isLog(parent) ? "/" + ch.name : ""}] ${text.slice(0, 6000)}`);
@@ -204,7 +209,56 @@ export class Hub {
     }
   }
 
+  /**
+   * The bot answers most button presses with plain channel posts rather than interaction replies, so a
+   * browser cannot tell whose prompt "choose a system to activate" is. The bot works through one game's
+   * presses in order, so a post belongs to the newest press made in this channel (or its parent / threads)
+   * in the last few seconds.
+   */
+  /** The newest press in this channel (or its parent / threads) within the last few seconds. */
+  private recentPress(msg: StoredMessage): Interaction | undefined {
+    const ch = this.store.channel(msg.channel_id);
+    const related = new Set([msg.channel_id, ch?.parent_id].filter(Boolean));
+    const now = Date.now();
+    let newest: Interaction | undefined;
+    for (const inter of this.store.interactions.values()) {
+      if (inter.type === 4 || now - inter.created > PROMPT_WINDOW_MS) continue;
+      const ich = this.store.channel(inter.channel_id);
+      if (!related.has(inter.channel_id) && !related.has(ich?.parent_id) && ich?.parent_id !== msg.channel_id) continue;
+      if (!newest || inter.created >= newest.created) newest = inter;
+    }
+    return newest;
+  }
+
+  private attributePrompt(msg: StoredMessage) {
+    if (msg._ephemeral_for || msg.interaction_metadata || !this.store.state.users[msg.author?.id]?.bot) return;
+    const press = this.recentPress(msg);
+    if (press) msg._prompted_for = press.user_id;
+  }
+
+  /**
+   * "The bot hasn't finished processing the last task for <game>" means the bot refused a press because it
+   * was still busy with that game; the press did nothing. Rather than post that to the whole table and make
+   * the player press again, re-send the press shortly (a few times), and only then tell that player alone.
+   * Returns true when the message was handled here and must not be posted.
+   */
+  private retryBusyPress(msg: StoredMessage): boolean {
+    if (!BUSY.test(msg.content ?? "") || !this.store.state.users[msg.author?.id]?.bot) return false;
+    const press = this.recentPress(msg);
+    if (!press) return false;
+    if (press.replay && (press.retries ?? 0) < BUSY_RETRIES) {
+      log.info(`bot busy; re-sending ${press.user_id}'s press in ${BUSY_RETRY_MS}ms`);
+      setTimeout(press.replay, BUSY_RETRY_MS * ((press.retries ?? 0) + 1));
+      return true;
+    }
+    msg._ephemeral_for = press.user_id;
+    msg.flags = (msg.flags ?? 0) | 64;
+    return false;
+  }
+
   postMessage(msg: StoredMessage) {
+    if (this.retryBusyPress(msg)) return;
+    this.attributePrompt(msg);
     this.autoJoinMentioned(msg);
     this.store.insertMessage(msg);
     this.mirrorBotLog(msg);
@@ -372,6 +426,12 @@ export function textDisplays(comps: Json[], out: string[] = []): string[] {
 }
 
 /** Removes our private bookkeeping fields before a message leaves the shim. */
+/** How long after a press the bot's posts in that channel count as answers to it. */
+const PROMPT_WINDOW_MS = 8000;
+const BUSY = /^The bot hasn't finished processing the last task for \S+\. Please wait\.$/;
+const BUSY_RETRIES = 4;
+const BUSY_RETRY_MS = 1200;
+
 export function stripPrivate(msg: StoredMessage): Json {
   const out: Json = {};
   for (const [k, v] of Object.entries(msg)) if (!k.startsWith("_")) out[k] = v;

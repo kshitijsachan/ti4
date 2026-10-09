@@ -16,4 +16,5 @@ export { Toasts } from "./channels/Toasts";
 export { ModalHost } from "./modal/ModalHost";
 export { Markdown } from "./render/Markdown";
 export { MessageList } from "./render/MessageList";
+export { MessageBody } from "./render/Message";
 export type * from "./types";

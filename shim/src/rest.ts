@@ -124,6 +124,7 @@ export class Rest {
       });
       this.store.scheduleSave();
       sendJson(res, 200, out);
+      if (out.length) this.hub.gateway.markCommandsRegistered();
     };
     const listCommands = (guildId: string | null) => ({ res }: Ctx) =>
       sendJson(res, 200, Object.values(s().commands).filter((c) => (c.guild_id ?? null) === guildId));

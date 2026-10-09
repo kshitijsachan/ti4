@@ -99,6 +99,7 @@ function NewGame({ lobbyId }: { lobbyId: string }) {
   const [picked, setPicked] = useState<string[]>(() => (me ? [me.id] : []));
   const [nonce, setNonce] = useState<string | null>(null);
   const busy = usePlay((s) => !!nonce && !!s.pending[nonce]);
+  const botReady = usePlay((s) => s.status === "open" && s.botOnline);
   const error = usePlay((s) => (nonce ? s.results[nonce] : null));
 
   const people = Object.values(users)
@@ -165,11 +166,16 @@ function NewGame({ lobbyId }: { lobbyId: string }) {
         <button
           type="button"
           className={classes.primary}
-          disabled={!picked.length || busy}
+          disabled={!picked.length || busy || !botReady}
           onClick={create}
+          title={botReady ? undefined : "The game server is starting up"}
         >
           <IconPlus size={14} />
-          {busy ? "Creating…" : "Create game"}
+          {!botReady
+            ? "Game server starting…"
+            : busy
+              ? "Creating…"
+              : "Create game"}
         </button>
       </div>
       {error && <p className={classes.error}>{error}</p>}
