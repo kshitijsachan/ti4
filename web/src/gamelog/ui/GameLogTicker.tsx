@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconHistory } from "@tabler/icons-react";
 import { useGameEvents } from "../useGameEvents";
+import { useRewindIndex } from "@/rollback";
 import { EventRow } from "./EventRow";
 import classes from "./GameLogTicker.module.css";
 
@@ -18,7 +19,11 @@ const FRESH_MS = 6000;
 /** The latest few notable events, newest first, for the top bar. New ones are briefly lit. */
 export function GameLogTicker({ gameName, max = 3, onOpen, className }: Props) {
   const { events } = useGameEvents(gameName);
-  const latest = useMemo(() => events.filter((e) => e.importance >= 2).slice(-Math.max(1, Math.min(3, max))).reverse(), [events, max]);
+  const rewinds = useRewindIndex(gameName, events);
+  const latest = useMemo(
+    () => events.filter((e) => e.importance >= 2 && rewinds.rows.get(e.id)?.status !== "undone").slice(-Math.max(1, Math.min(3, max))).reverse(),
+    [events, max, rewinds],
+  );
 
   const baseline = useRef<string | null>(null);
   const [fresh, setFresh] = useState<Record<string, true>>({});

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconChevronUp, IconArrowBackUp, IconExternalLink } from "@tabler/icons-react";
 import cx from "clsx";
@@ -19,6 +19,8 @@ type Props = {
   onHover?: (c: Choice | null) => void;
   /** More than this many main choices are laid out as a compact grid. */
   gridAbove?: number;
+  /** Rendered after the main choices, above "More options" / Undo (a Done button). */
+  trailing?: ReactNode;
 };
 
 const STYLE_CLASS: Record<number, string> = {
@@ -185,6 +187,7 @@ export function ChoiceButtons(props: Props) {
           {main.map((c) => renderChoice(c, props, { compact: many, emphasis: c === lead }))}
         </div>
       )}
+      {props.trailing}
       {(more.length > 0 || undo.length > 0) && (
         <div className={classes.footer}>
           {more.length > 0 && (

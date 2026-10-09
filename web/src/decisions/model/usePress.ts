@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePlayConnection } from "@/discord";
 import { usePressButton, type PressResult } from "@/play/usePressButton";
 import type { Decision } from "./classify";
@@ -62,6 +62,14 @@ export function useDecisionPress() {
   };
 
   const release = () => setState({ held: null, pendingKey: null, error: null });
+
+  /* Never leave the popup stuck on a spinner if a press's promise is lost (socket swap, hot reload). */
+  const stuck = state.pendingKey;
+  useEffect(() => {
+    if (!stuck) return;
+    const timer = setTimeout(() => setState((s) => (s.pendingKey === stuck ? { held: null, pendingKey: null, error: null } : s)), TIMEOUT_MS + 5000);
+    return () => clearTimeout(timer);
+  }, [stuck]);
 
   return { ...state, press, release };
 }

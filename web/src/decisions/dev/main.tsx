@@ -15,6 +15,7 @@ import {
   PlayProvider,
   Toasts,
   usePlay,
+  usePlayConnection,
   type Channel,
   type Message,
   type Role,
@@ -95,6 +96,8 @@ function PendingDebug({ gameName }: { gameName: string }) {
 
 function LiveGame({ gameName }: { gameName: string }) {
   usePlayerDataSocket(gameName);
+  const conn = usePlayConnection();
+  (window as unknown as { __play: unknown }).__play = conn.store;
   const channels = usePlay((s) => s.channels);
   const status = usePlay((s) => s.status);
   const me = usePlay((s) => s.me);

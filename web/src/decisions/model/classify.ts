@@ -235,6 +235,19 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     choices,
   };
 
+  if (has(choices, /^sandbagPref_/)) {
+    return {
+      ...base,
+      kind: "generic",
+      eyebrow: "Preference · optional",
+      title: "Let the bot auto-pass secret scoring?",
+      text: "When you cannot score any secret objective in the status phase, the bot can pass for you so nobody waits. You are only asked once.",
+      optional: true,
+    };
+  }
+  if (has(choices, /^(playerPref|setAutoPass|answerSurvey)/)) {
+    return { ...base, text: generic.rest, eyebrow: "Preference · optional", optional: true };
+  }
   if (has(choices, /^(topAgenda_|bottomAgenda_)/)) {
     const agenda = embeddedAgenda(m);
     return {

@@ -93,16 +93,23 @@ export function SpendBody({ d, data, onPress, pendingKey }: RendererProps) {
           </div>
         </Section>
       )}
-      {done && (
-        <ChoiceButton
-          choice={{ ...done, style: 3, label: /exhausting/i.test(done.label) ? "Done paying" : done.label }}
-          onPress={onPress}
-          pending={pendingKey === done.key}
-          busy={!!pendingKey}
-          emphasis
-        />
-      )}
-      <ChoiceButtons choices={others} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} />
+      <ChoiceButtons
+        choices={others}
+        onPress={onPress}
+        pendingKey={pendingKey}
+        channelId={d.prompt.channelId}
+        trailing={
+          done && (
+            <ChoiceButton
+              choice={{ ...done, style: 3, label: /exhausting/i.test(done.label) ? "Done paying" : done.label }}
+              onPress={onPress}
+              pending={pendingKey === done.key}
+              busy={!!pendingKey}
+              emphasis
+            />
+          )
+        }
+      />
     </div>
   );
 }
@@ -147,16 +154,23 @@ export function GainTokensBody({ d, data, onPress, pendingKey }: RendererProps) 
         })}
       </div>
       {note && <Prose text={note} clamp={3} muted />}
-      {done && (
-        <ChoiceButton
-          choice={{ ...done, style: 3, label: "Done" }}
-          onPress={onPress}
-          pending={pendingKey === done.key}
-          busy={!!pendingKey}
-          emphasis
-        />
-      )}
-      <ChoiceButtons choices={rest} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} />
+      <ChoiceButtons
+        choices={rest}
+        onPress={onPress}
+        pendingKey={pendingKey}
+        channelId={d.prompt.channelId}
+        trailing={
+          done && (
+            <ChoiceButton
+              choice={{ ...done, style: 3, label: "Done" }}
+              onPress={onPress}
+              pending={pendingKey === done.key}
+              busy={!!pendingKey}
+              emphasis
+            />
+          )
+        }
+      />
     </div>
   );
 }

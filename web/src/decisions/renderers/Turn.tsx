@@ -56,7 +56,7 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
     };
   }
   if (id.startsWith("doAnotherAction")) {
-    return { choice: c, title: "Do another action", sub: "You may take one more action", icon: <IconRepeat size={22} stroke={1.6} />, tone: "go" };
+    return { choice: c, title: "Do another action", sub: "Only if a card or ability gives you one", icon: <IconRepeat size={22} stroke={1.6} />, tone: "go" };
   }
   return null;
 }
@@ -68,7 +68,7 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
   const rest = d.choices.filter((c) => !used.has(c.key));
   const note = d.text
     .split("\n")
-    .filter((l) => !/use buttons to do your turn|it is now your turn/i.test(l))
+    .filter((l) => !/use (the )?buttons to (do your turn|end turn)|it is now your turn/i.test(l))
     .join("\n")
     .trim();
   return (

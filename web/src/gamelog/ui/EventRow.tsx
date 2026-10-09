@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { IconMapPin } from "@tabler/icons-react";
+import { useState, type SyntheticEvent } from "react";
+import { IconMapPin, IconPlayerTrackPrev } from "@tabler/icons-react";
+import { useRewindRow } from "@/rollback";
 import type { GameEvent } from "../types";
 import { categoryOf, kindIcon } from "../categories";
 import { useLogFocus } from "../useLogFocus";
+import { actorLabel, segText } from "../parse/markup";
 import { ActorName, Segments } from "./Segments";
 import classes from "./EventRow.module.css";
 
@@ -29,6 +31,14 @@ export function EventRow({ event, showRound, compact }: Props) {
   const cat = categoryOf(event.kind).id;
   const hasDetails = !compact && !!event.details?.length;
   const clickable = hasDetails || !!event.systemPosition;
+  const rewind = useRewindRow(event.id);
+  const undone = rewind?.status === "undone";
+  const askRewind = rewind?.ask
+    ? (e: SyntheticEvent) => {
+        e.stopPropagation();
+        rewind.ask!(`${event.actor ? `${actorLabel(event.actor)} ` : ""}${segText(event.summary)}`.trim());
+      }
+    : undefined;
 
   const onClick = () => {
     if (event.systemPosition) focusSystem(event.systemPosition, event.id);
@@ -40,6 +50,8 @@ export function EventRow({ event, showRound, compact }: Props) {
       className={[classes.row, compact ? classes.compact : "", focused ? classes.focused : ""].join(" ")}
       data-importance={event.importance}
       data-cat={cat}
+      data-undone={undone || undefined}
+      data-rewind={rewind?.status}
     >
       <div
         className={classes.main}
@@ -62,6 +74,23 @@ export function EventRow({ event, showRound, compact }: Props) {
             {event.systemPosition}
           </span>
         )}
+        {undone && !compact && (
+          <span className={classes.undoneTag} title={rewind.by?.byName ? `Undone by ${rewind.by.byName}` : "Undone by a rewind / undo"}>
+            undone
+          </span>
+        )}
+        {askRewind && !compact && (
+          <button
+            type="button"
+            className={classes.rewind}
+            onClick={askRewind}
+            onKeyDown={(e) => e.stopPropagation()}
+            title="Rewind the game to just after this"
+            aria-label="Rewind the game to just after this"
+          >
+            <IconPlayerTrackPrev size={12} stroke={2} aria-hidden />
+          </button>
+        )}
       </div>
       {open && hasDetails && (
         <div className={classes.details}>
@@ -70,6 +99,12 @@ export function EventRow({ event, showRound, compact }: Props) {
               <Segments segs={line} />
             </div>
           ))}
+          {askRewind && (
+            <button type="button" className={classes.rewindText} onClick={askRewind}>
+              <IconPlayerTrackPrev size={12} stroke={2} aria-hidden />
+              Rewind to here
+            </button>
+          )}
         </div>
       )}
     </div>

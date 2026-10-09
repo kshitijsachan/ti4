@@ -3,7 +3,7 @@ import { usePlay, usePlayConnection, type Message, type PlayState } from "@/disc
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { readStored, writeStored } from "@/discord/client/lastRead";
 import { controlSignature } from "@/discord/client/store";
-import { buttonSignature, choicesOf, forwardChoices, idFaction, isDraftPrompt, isHandMenu, needsAnswer } from "../model/controls";
+import { baseId, buttonSignature, choicesOf, forwardChoices, idFaction, isDraftPrompt, isHandMenu, needsAnswer } from "../model/controls";
 import { findGame, type GameChannels } from "./games";
 
 /** Why a prompt is considered mine. */
@@ -63,6 +63,7 @@ const FOLLOW_UP_MS = 5000;
 /** How soon after my press an edit of that message counts as the bot's answer to it. */
 const EDIT_ANSWER_MS = 15000;
 /** Combat-thread buttons: rolling dice, assigning hits, retreating. */
+const FOLLOW_ID = /^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/;
 const COMBAT_ID = /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign)/;
 
 function whereLabel(game: GameChannels, id: string, state: PlayState) {
@@ -152,8 +153,10 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     const roleFollowUp = !ping && !pingsOther && at - rolePingAt <= FOLLOW_UP_MS;
     const forOther = pingsOther || (!ping && at - otherPingAt <= FOLLOW_UP_MS) || otherFaction(m);
     if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || isHandMenu(m)) return;
-    const answered = answeredState(state, m, ping);
+    let answered = answeredState(state, m, ping);
     if (m.prompted_user_id === me.id && ping && (m.mention_roles ?? []).some((r) => myRoles.has(r))) {
+      /* Only the card's own buttons are mine; the follow buttons are the other players'. */
+      if (!forwardChoices(m).some((c) => !FOLLOW_ID.test(baseId(c.customId)))) answered = true;
       const stale = index < ids.length - ROLE_WINDOW;
       items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale });
       return;

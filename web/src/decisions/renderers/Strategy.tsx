@@ -125,6 +125,9 @@ export function ScPickBody({ d, data, onPress, pendingKey }: RendererProps) {
   );
 }
 
+/** Buttons on a played card that only its holder uses (scoring with Imperial, ...). */
+const HOLDER_ONLY = /^(score_imperial|scoreAnObjective|requestAllFollow|primaryOf)/;
+const FOLLOW_ACTION = /^(sc_follow_|sc_(?!no_)\w+_follow|leadershipGenerateCCButtons)/;
 const FOLLOW_NO = /^(sc_no_follow|preDeclineSC_.*_no|notFollowing)/i;
 
 function isDecline(c: Choice) {
@@ -175,7 +178,8 @@ export function ScFollowBody({ d, data, onPress, pendingKey }: RendererProps) {
         channelId={d.prompt.channelId}
         rankOf={(c) => {
           if (c.rank === "undo" || c.rank === "more") return c.rank;
-          return isDecline(c) ? "secondary" : "primary";
+          if (HOLDER_ONLY.test(baseId(c.customId))) return "more";
+          return isDecline(c) || !FOLLOW_ACTION.test(baseId(c.customId)) ? "secondary" : "primary";
         }}
       />
     </div>

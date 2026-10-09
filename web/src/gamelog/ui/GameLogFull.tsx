@@ -5,6 +5,7 @@ import { CATEGORIES, categoryOf, groupDigest, type CategoryId } from "../categor
 import { PHASE_LABEL } from "../parse/timeline";
 import { actorLabel } from "../parse/markup";
 import { actorKey, useGameEvents } from "../useGameEvents";
+import { RewindProvider } from "@/rollback";
 import { EventRow } from "./EventRow";
 import { ActorName, EmojiImg } from "./Segments";
 import classes from "./GameLogFull.module.css";
@@ -112,14 +113,16 @@ export function GameLogFull({ gameName, className, defaultView = "phases" }: Pro
         </div>
       </header>
 
-      <div className={classes.body}>
-        {!events.length && <div className={classes.empty}>{loading ? "Reading the game's history…" : "Nothing has happened yet."}</div>}
-        {!!events.length && !blocks.length && <div className={classes.empty}>No events match.</div>}
-        {view === "phases" && <ByPhase blocks={blocks} latestKey={latestKey} isOpen={isOpen} toggle={toggle} />}
-        {view === "timeline" && <Timeline blocks={blocks} />}
-        {view === "players" && <ByPlayer events={filtered} players={players} isOpen={isOpen} toggle={toggle} />}
-        {loading && !!events.length && <div className={classes.loadingMore}>Loading older history…</div>}
-      </div>
+      <RewindProvider gameName={gameName} events={events}>
+        <div className={classes.body}>
+          {!events.length && <div className={classes.empty}>{loading ? "Reading the game's history…" : "Nothing has happened yet."}</div>}
+          {!!events.length && !blocks.length && <div className={classes.empty}>No events match.</div>}
+          {view === "phases" && <ByPhase blocks={blocks} latestKey={latestKey} isOpen={isOpen} toggle={toggle} />}
+          {view === "timeline" && <Timeline blocks={blocks} />}
+          {view === "players" && <ByPlayer events={filtered} players={players} isOpen={isOpen} toggle={toggle} />}
+          {loading && !!events.length && <div className={classes.loadingMore}>Loading older history…</div>}
+        </div>
+      </RewindProvider>
     </section>
   );
 }

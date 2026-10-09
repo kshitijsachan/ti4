@@ -69,12 +69,18 @@ export class SoloGames {
     const p = new Player(this.clients, userId);
     try {
       await this.waitForBot(job);
-      const names = this.botNames(botCount);
-      this.note(job, `Adding ${names.join(", ")}`);
-      job.bots = names.map((n) => {
-        const seat = this.lobby.createSeat(n, true);
-        return { name: n, user_id: seat.user_id };
-      });
+      // Reuse existing autopilot seats (the bot's per-player limits are patched off when self-hosted), so test
+      // games don't pile up new bot players; create only the shortfall.
+      const reused = this.existingBots().slice(0, botCount);
+      const names = this.botNames(botCount - reused.length);
+      if (names.length) this.note(job, `Adding ${names.join(", ")}`);
+      job.bots = [
+        ...reused,
+        ...names.map((n) => {
+          const seat = this.lobby.createSeat(n, true);
+          return { name: n, user_id: seat.user_id };
+        }),
+      ];
       // Let the bot learn about the new members before they are named in a command.
       await sleep(1500);
 
@@ -176,6 +182,15 @@ export class SoloGames {
     if (this.hub.gateway.botReady) return;
     this.note(job, "Waiting for the game server");
     await this.waitFor(job, "the game server to come online", 120 * SECOND, () => this.hub.gateway.botReady || undefined);
+  }
+
+  /** Autopilot seats named `Bot …`, oldest first. */
+  private existingBots(): { name: string; user_id: string }[] {
+    const s = this.store.state;
+    return Object.values(s.seats)
+      .filter((seat) => seat.autopilot && String(s.users[seat.user_id]?.global_name ?? "").startsWith("Bot "))
+      .map((seat) => ({ name: String(s.users[seat.user_id].global_name), user_id: seat.user_id }))
+      .sort((a, b) => (BigInt(a.user_id) < BigInt(b.user_id) ? -1 : 1));
   }
 
   /** `Bot Alpha`, …, then `Bot Alpha 2`, …: the first unused names. */
