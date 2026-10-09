@@ -2,9 +2,10 @@
 .undoButton {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 34px;
   height: 34px;
-  padding: 0 10px;
+  padding: 0;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -28,16 +29,6 @@
   opacity: 0.45;
 }
 
-.undoText {
-  white-space: nowrap;
-}
-
-@media (max-width: 1300px) {
-  .undoText {
-    display: none;
-  }
-}
-
 .pop {
   padding: 12px;
   background: var(--play-ground);
@@ -45,10 +36,10 @@
 }
 
 .popTitle {
-  margin-bottom: 8px;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--play-ink-bright);
+  line-height: 1.45;
+  color: var(--play-ink);
+  overflow-wrap: anywhere;
 }
 
 /* Dialog */
@@ -79,42 +70,13 @@
 }
 
 .warning {
-  margin: 0 0 12px;
-  color: rgb(var(--play-yellow));
-}
-
-.saveLine {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  background: var(--play-socket);
-  border: 1px solid var(--play-hairline);
-  font-size: 12px;
-}
-
-.saveIdx,
-.saveMeta {
-  font-family: var(--font-data);
-  font-size: 11px;
-  color: var(--play-ink-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.saveLabel {
-  flex: 1 1 160px;
-  min-width: 0;
-  color: var(--play-ink);
-  overflow-wrap: anywhere;
-}
-
-.hint {
-  margin: 10px 0 0;
-  font-size: 12px;
+  margin: 0;
   color: var(--play-ink-muted);
 }
+
+
+
+
 
 .error {
   margin: 10px 0 0;
@@ -133,7 +95,7 @@
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .secondary,

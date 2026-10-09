@@ -144,26 +144,14 @@
   margin-top: 0;
 }
 
-/* Rewind (web/src/rollback): undone rows are greyed, live rows get a hover "rewind to here" control. */
+/* Rewind (web/src/rollback): undone rows are greyed; "rewind to here" shows only on hover / focus. */
 .row[data-undone] .main {
-  opacity: 0.42;
+  opacity: 0.4;
 }
 
 .row[data-undone] .text {
   text-decoration: line-through;
   text-decoration-color: var(--play-ink-muted);
-}
-
-.undoneTag {
-  flex: none;
-  margin-top: 1px;
-  padding: 0 5px;
-  border-radius: 3px;
-  font-family: var(--font-data);
-  font-size: 10px;
-  line-height: 17px;
-  color: var(--play-ink-muted);
-  border: 1px dashed var(--play-hairline-strong);
 }
 
 .rewind {
@@ -175,7 +163,7 @@
   height: 18px;
   margin-top: 1px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 3px;
   background: transparent;
   color: var(--play-ink-muted);
@@ -191,33 +179,6 @@
 
 .rewind:hover,
 .rewind:focus-visible {
-  color: #fca5a5;
-  border-color: rgba(var(--play-red), 0.45);
-  background: rgba(var(--play-red), 0.1);
-  opacity: 1;
-}
-
-@media (hover: none) {
-  .rewind {
-    opacity: 0.6;
-  }
-}
-
-.rewindText {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 6px;
-  padding: 2px 8px;
-  border: 1px solid rgba(var(--play-red), 0.4);
-  border-radius: 4px;
-  background: transparent;
-  color: #fca5a5;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.rewindText:hover {
-  background: rgba(var(--play-red), 0.1);
+  color: var(--play-ink-bright);
+  background: var(--play-hover-strong);
 }

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Modal } from "@mantine/core";
 import { IconPlayerTrackPrev } from "@tabler/icons-react";
-import { formatSaveTime } from "./format";
 import type { UndoPoint } from "./types";
 import classes from "./Rollback.module.css";
 
@@ -45,24 +44,14 @@ export function RewindDialog({ request, onCancel, onConfirm }: Props) {
     }
   };
 
-  const p = request?.point;
-  return (
-    <Modal opened={!!request} onClose={close} centered size={440} title="Rewind the game?" classNames={{ content: `ti4play ${classes.dialog}`, title: classes.dialogTitle }}>
-      {request && p && (
+    return (
+    <Modal opened={!!request} onClose={close} centered size={400} title="Rewind the game?" classNames={{ content: `ti4play ${classes.dialog}`, title: classes.dialogTitle }}>
+      {request && (
         <div className={classes.dialogBody}>
           <p className={classes.question}>
             Rewind the game to just after: <b>{request.eventLabel}</b>?
           </p>
-          <p className={classes.warning}>
-            Everything after this will be undone for everyone
-            {request.undoCount > 0 ? ` (${request.undoCount} saved ${request.undoCount === 1 ? "action" : "actions"})` : ""}.
-          </p>
-          <div className={classes.saveLine}>
-            <span className={classes.saveIdx}>save {p.index}</span>
-            <span className={classes.saveLabel}>{p.label}</span>
-            <span className={classes.saveMeta}>{formatSaveTime(p)}</span>
-          </div>
-          <p className={classes.hint}>The old messages stay in the log, greyed out. You can undo the rewind straight afterwards.</p>
+          <p className={classes.warning}>Everything after this will be undone for everyone.</p>
           {error && (
             <p className={classes.error} role="alert">
               {error}

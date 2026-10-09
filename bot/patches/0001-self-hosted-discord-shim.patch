@@ -2446,7 +2446,7 @@ index 0000000..0ff478c
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoService.java b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 new file mode 100644
-index 0000000..deff29c
+index 0000000..75e9203
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 @@ -0,0 +1,287 @@
@@ -2717,8 +2717,8 @@ index 0000000..deff29c
 +        if (command.startsWith(REWIND_MARK)) return new String[] {"", command};
 +        Matcher m = PRESSED.matcher(command);
 +        if (m.matches()) {
-+            String what = m.group(2).trim();
-+            if (what.equals("[CLASSIFIED]")) return new String[] {m.group(1), m.group(1) + " took a hidden action"};
++            String what = m.group(2).trim().replaceAll("\\s*\\[[^\\]]*\\]$", "");
++            if (m.group(2).trim().equals("[CLASSIFIED]")) return new String[] {m.group(1), m.group(1) + " took a hidden action"};
 +            return new String[] {m.group(1), m.group(1) + " pressed “" + what + "”"};
 +        }
 +        m = USED_KIND.matcher(command);

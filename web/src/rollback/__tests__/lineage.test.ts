@@ -61,12 +61,12 @@ void test("events map to the first save at/after them, with slack for late messa
 });
 
 void test("buildRewindIndex classifies rows", () => {
-  const points = [pt(4, 12_000, true), pt(3, 9_000), pt(2, 2_000), pt(1, 1_000)];
+  const points = [pt(4, 13_000, true), pt(3, 9_000), pt(2, 2_000), pt(1, 1_000)];
   const events = [
     { id: "a", time: new Date(900).toISOString() },
     { id: "b", time: new Date(1_950).toISOString() },
     { id: "c", time: new Date(5_000).toISOString() },
-    { id: "d", time: new Date(11_990).toISOString() },
+    { id: "d", time: new Date(12_990).toISOString() },
   ];
   const idx = buildRewindIndex(events, points, [rw(10_000, 2_000, 2)]);
   assert.deepEqual(idx.rows.get("a"), { status: "live", point: points[3] });

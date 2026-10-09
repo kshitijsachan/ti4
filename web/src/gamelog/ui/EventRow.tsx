@@ -52,6 +52,7 @@ export function EventRow({ event, showRound, compact }: Props) {
       data-importance={event.importance}
       data-cat={cat}
       data-undone={undone || replay || undefined}
+      title={undone ? "Undone" : replay ? "Re-posted by the bot while rolling back" : undefined}
       data-rewind={rewind?.status}
     >
       <div
@@ -75,24 +76,14 @@ export function EventRow({ event, showRound, compact }: Props) {
             {event.systemPosition}
           </span>
         )}
-        {undone && !compact && (
-          <span className={classes.undoneTag} title={rewind.by?.byName ? `Undone by ${rewind.by.byName}` : "Undone by a rewind / undo"}>
-            undone
-          </span>
-        )}
-        {replay && !compact && (
-          <span className={classes.undoneTag} title="The bot re-posted this prompt while rolling back">
-            re-posted
-          </span>
-        )}
         {askRewind && !compact && (
           <button
             type="button"
             className={classes.rewind}
             onClick={askRewind}
             onKeyDown={(e) => e.stopPropagation()}
-            title="Rewind the game to just after this"
-            aria-label="Rewind the game to just after this"
+            title="Rewind to here"
+            aria-label="Rewind to here"
           >
             <IconPlayerTrackPrev size={12} stroke={2} aria-hidden />
           </button>
@@ -105,12 +96,6 @@ export function EventRow({ event, showRound, compact }: Props) {
               <Segments segs={line} />
             </div>
           ))}
-          {askRewind && (
-            <button type="button" className={classes.rewindText} onClick={askRewind}>
-              <IconPlayerTrackPrev size={12} stroke={2} aria-hidden />
-              Rewind to here
-            </button>
-          )}
         </div>
       )}
     </div>

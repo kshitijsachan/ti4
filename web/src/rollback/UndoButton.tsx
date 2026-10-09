@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Popover, Tooltip } from "@mantine/core";
 import { IconArrowBackUp, IconHistory } from "@tabler/icons-react";
 import { UndoApiError } from "./api";
-import { formatSaveTime } from "./format";
 import { useUndoPoints, useUndoStore } from "./useUndoPoints";
 import classes from "./Rollback.module.css";
 
@@ -62,22 +61,11 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
             data-disabled={!canUndo || undefined}
           >
             <IconArrowBackUp size={16} stroke={1.75} aria-hidden />
-            <span className={classes.undoText}>Undo</span>
           </button>
         </Tooltip>
       </Popover.Target>
       <Popover.Dropdown className={`ti4play ${classes.pop}`}>
-        {canUndo && latest ? (
-          <>
-            <div className={classes.popTitle}>Undo the last action?</div>
-            <div className={classes.saveLine}>
-              <span className={classes.saveLabel}>{latest.label}</span>
-              <span className={classes.saveMeta}>{formatSaveTime(latest)}</span>
-            </div>
-          </>
-        ) : (
-          <div className={classes.popTitle}>{error ? `Undo unavailable: ${error}` : "Nothing to undo yet."}</div>
-        )}
+        <div className={classes.popTitle}>{canUndo && latest ? `Undo: ${latest.label}?` : error ? `Undo unavailable: ${error}` : "Nothing to undo yet."}</div>
         {status.kind === "error" && (
           <p className={classes.error} role="alert">
             {status.message}

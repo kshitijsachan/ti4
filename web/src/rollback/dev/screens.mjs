@@ -2,6 +2,7 @@
 // Usage: node src/rollback/dev/screens.mjs <step> [match]   (base http://127.0.0.1:5193, game pbd8 as Solo)
 //   look            screenshot the harness (timeline + top bar) and list rows with their rewind state
 //   rewind <text>   rewind to the newest live row whose text contains <text> (hover icon → dialog → confirm)
+//   dialog <text>   same, but cancel the dialog (screenshots only)
 //   undo            press the top-bar Undo (and "Undo anyway" if asked)
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -18,7 +19,7 @@ const tag = process.env.TAG ?? step;
 mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" }).catch(() => chromium.launch());
-const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const problems = [];
 page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
 page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
@@ -39,7 +40,7 @@ if (step === "look") {
   await page.screenshot({ path: `${out}/${tag}.png` });
 }
 
-if (step === "rewind") {
+if (step === "rewind" || step === "dialog") {
   const target = rows.filter({ hasText: match }).and(page.locator("[data-rewind=live]")).last();
   if (!(await target.count())) throw new Error(`no live row matching ${match}`);
   await target.scrollIntoViewIfNeeded();
@@ -51,6 +52,12 @@ if (step === "rewind") {
   await page.waitForTimeout(500);
   console.log("dialog:", (await dialog.innerText()).replace(/\s+/g, " "));
   await page.screenshot({ path: `${out}/${tag}-dialog.png` });
+  if (step === "dialog") {
+    await dialog.locator("button", { hasText: "Cancel" }).click();
+    console.log(problems.length ? problems.join("\n") : "no problems");
+    await browser.close();
+    process.exit(0);
+  }
   await dialog.locator("button", { hasText: "Rewind" }).last().click();
   await dialog.waitFor({ state: "detached", timeout: 30000 });
   await page.waitForTimeout(4000);
@@ -59,7 +66,7 @@ if (step === "rewind") {
 }
 
 if (step === "undo") {
-  const btn = page.locator("button[aria-label^='Undo']").first();
+  const btn = page.locator("button[aria-label^='Undo'], button[aria-label^='Nothing']").first();
   await btn.hover();
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${out}/${tag}-tooltip.png` });
