@@ -20,7 +20,7 @@ sudo /opt/ti4/deploy/deploy.sh                        # http://<server-ip>:8090
 sudo DOMAIN=ti4.example.com /opt/ti4/deploy/deploy.sh
 ```
 
-The script installs Docker, builds the images (~15 min the first time) and starts the stack.
+The script installs Docker, builds the images (~20-40 min the first time) and starts the stack.
 It then prints the **admin link**. Open it to create players and copy their links. Re-run it to update.
 
 - Where to host it, with costs and step-by-step instructions: [deploy/HOSTING.md](deploy/HOSTING.md).

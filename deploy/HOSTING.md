@@ -9,7 +9,7 @@ What the stack needs (one machine runs everything via `deploy/docker-compose.yml
 | shim + web | ~150–400 MB | capped at 768 MB |
 | **total** | **~4 GB in use, 8 GB box recommended** | 4 GB works with `BOT_MEMORY=2500m` + swap (deploy.sh adds 4 GB swap on small boxes) |
 | disk | ~5 GB images + game data | 20 GB+ disk is plenty |
-| build | 2–3 GB peak (Vite, Maven), 10–20 min on 2–4 vCPU | |
+| build | ~3 GB peak (Vite), 20–40 min the first time on 2–4 vCPU | |
 
 All images are multi-arch (amd64 and arm64), so ARM servers (Oracle Ampere, Hetzner CAX) work.
 
@@ -83,7 +83,7 @@ You do: create the account (email, payment method, possibly ID verification).
    ```
    If the repo is private, use `git clone https://<github-user>:<personal-access-token>@github.com/kshitijsachan/ti4.git /opt/ti4`
    (fine-grained token with read-only Contents access to this repo).
-5. When it finishes (~15 min the first time), it prints the **admin link** (`http://<SERVER_IP>:8090/admin?key=...`).
+5. When it finishes (~20-40 min the first time; the web build alone is ~20 min on 2-4 vCPUs), it prints the **admin link** (`http://<SERVER_IP>:8090/admin?key=...`).
    Open it, create players, send each friend their link. The bot needs a few more minutes on first start
    before games can be created (`docker compose -f /opt/ti4/deploy/docker-compose.yml logs -f bot`).
 
