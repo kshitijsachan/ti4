@@ -3,7 +3,7 @@ import { cdnImage } from "@/entities/data/cdnImage";
 import { getTileById } from "@/entities/lookup/systems";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
-import { Prose, ResourceStrip, Section } from "../ui/parts";
+import { Prose } from "../ui/parts";
 import { getColorAlias } from "@/entities/lookup/colors";
 import type { DecisionData, RendererProps } from "./types";
 import classes from "./renderers.module.css";
@@ -12,7 +12,7 @@ import classes from "./renderers.module.css";
 export function GenericBody({ d, onPress, pendingKey, onHoverChoice }: RendererProps) {
   return (
     <div className={classes.stack}>
-      <Prose text={d.text} clamp={7} />
+      <Prose text={d.text} clamp={3} />
       <ChoiceButtons
         choices={d.choices}
         onPress={onPress}
@@ -98,7 +98,7 @@ function UnitMoveRows({ choices, data, onPress, pendingKey }: { choices: Choice[
               choice={{
                 ...c,
                 label: `${/_reverse$/.test(c.customId ?? "") ? "−" : "+"}${baseId(c.customId).match(UNIT_MOVE)?.[2] ?? ""}${/damaged/i.test(c.label) ? " damaged" : ""}`,
-                style: /_reverse$/.test(c.customId ?? "") ? 4 : 2,
+                style: /_reverse$/.test(c.customId ?? "") ? 104 : 2,
               }}
               onPress={onPress}
               pending={pendingKey === c.key}
@@ -110,6 +110,12 @@ function UnitMoveRows({ choices, data, onPress, pendingKey }: { choices: Choice[
       ))}
     </div>
   );
+}
+
+/** "moved 1 Carrier\nmoved 1 Fighter" → "1 Carrier, 1 Fighter". */
+function movedSummary(text: string) {
+  const parts = [...text.matchAll(/moved (\d+ [A-Za-z ]+?)(?=\n|$|>)/g)].map((m) => m[1].trim());
+  return parts.length ? parts.join(", ") : "nothing yet";
 }
 
 /** A step of a tactical action: the system / unit choices the bot offers, with my fleet numbers. */
@@ -129,28 +135,16 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   if (movingFrom) text = moved ? "" : "Pick a system to move ships out of, choose the ships, then press Done moving.";
   return (
     <div className={classes.stack}>
-      <ResourceStrip me={data.me} show={["tactic", "fleet", "strategy"]} />
       {active && d.position && !choosingSystem && (
         <div className={classes.destination}>
-          <img src={cdnImage(`/tiles/${active.imagePath}`)} alt="" className={classes.hexLarge} />
-          <span className={classes.systemText}>
-            <span className={classes.sectionCaps}>Active system</span>
-            <span className={classes.systemName}>{active.name ?? "System"}</span>
-            <span className={classes.systemPos}>{d.position}</span>
-          </span>
+          <img src={cdnImage(`/tiles/${active.imagePath}`)} alt="" className={classes.hexSmall} />
+          <span className={classes.systemName}>{active.name ?? "System"}</span>
+          <span className={classes.systemPos}>{d.position}</span>
         </div>
       )}
-      {moved && (
-        <Section label="Moving in so far">
-          <Prose text={moved} clamp={8} />
-        </Section>
-      )}
+      {moved && <p className={classes.hint}>Moving in: {movedSummary(moved)}</p>}
       {text && <Prose text={text} clamp={4} muted={choosingSystem} />}
-      {unitMoves.length > 0 && (
-        <Section label="Ships and forces to move">
-          <UnitMoveRows choices={unitMoves} data={data} onPress={onPress} pendingKey={pendingKey} />
-        </Section>
-      )}
+      {unitMoves.length > 0 && <UnitMoveRows choices={unitMoves} data={data} onPress={onPress} pendingKey={pendingKey} />}
       {systems.length > 0 && (
         <div className={classes.systemGrid}>
           {systems.map((c) => (

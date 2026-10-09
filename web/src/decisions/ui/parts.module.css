@@ -28,8 +28,15 @@
 
 .textLink {
   align-self: flex-start;
-  color: var(--play-accent-ink);
+  color: var(--play-ink-muted);
   font-size: 12px;
+  text-decoration: underline;
+  text-decoration-color: rgba(148, 163, 184, 0.3);
+  text-underline-offset: 3px;
+}
+
+.textLink:hover {
+  color: var(--play-ink);
 }
 
 .section {
@@ -159,4 +166,30 @@
 .none {
   font-size: 12px;
   color: var(--play-ink-muted);
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detailsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.unitsSmall {
+  gap: 2px 8px;
+}
+
+.unitsSmall .unitImg {
+  height: 22px;
+  max-width: 40px;
+}
+
+.unitsSmall .unitCount {
+  font-size: 12px;
 }

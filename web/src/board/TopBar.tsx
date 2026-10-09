@@ -1,49 +1,66 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Indicator, Tooltip, UnstyledButton } from "@mantine/core";
-import {
-  IconListDetails,
-  IconMessageCircle,
-  IconTarget,
-  IconTransfer,
-} from "@tabler/icons-react";
+import { Tooltip, UnstyledButton } from "@mantine/core";
+import { IconListDetails, IconMessageCircle, IconTarget, IconTransfer } from "@tabler/icons-react";
 import cx from "clsx";
-import { ConnectionBadge } from "@/play/ConnectionBadge";
+import { usePlay } from "@/discord";
+import { UndoButton } from "@/rollback";
 import type { TurnState } from "@/play/turn";
 import { SettingsMenu } from "./SettingsMenu";
 import classes from "./TopBar.module.css";
 
 export type DrawerName = "log" | "talk" | "trade" | "raw";
 
-type DrawerButtonProps = {
+type BarButtonProps = {
   icon: ReactNode;
   label: string;
+  /** Tooltip; defaults to the label. */
+  tip?: string;
   active: boolean;
-  badge?: number;
+  /** Something here needs you: a small dot, no number. */
+  attention?: boolean;
   onClick: () => void;
 };
 
-function BarButton({ icon, label, active, badge, onClick }: DrawerButtonProps) {
+function BarButton({ icon, label, tip, active, attention, onClick }: BarButtonProps) {
   return (
-    <Tooltip label={label} position="bottom" openDelay={400}>
+    <Tooltip label={tip ?? label} position="bottom" openDelay={300}>
       <UnstyledButton
         className={cx(classes.button, active && classes.buttonActive)}
         onClick={onClick}
         aria-pressed={active}
-        aria-label={label}
+        aria-label={tip ?? label}
       >
-        <Indicator
-          disabled={!badge}
-          label={badge}
-          size={15}
-          offset={2}
-          color="red"
-          classNames={{ indicator: classes.badge }}
-        >
+        <span className={classes.iconWrap}>
           {icon}
-        </Indicator>
+          {attention && <span className={classes.dot} />}
+        </span>
         <span className={classes.buttonLabel}>{label}</span>
       </UnstyledButton>
+    </Tooltip>
+  );
+}
+
+const LINK_LABELS = {
+  idle: "Not connected",
+  connecting: "Connecting…",
+  open: "Connected",
+  reconnecting: "Reconnecting…",
+  closed: "Offline",
+} as const;
+
+/** Only speaks up when the live link (or the game server behind it) is down. */
+function LinkWarning() {
+  const status = usePlay((s) => s.status);
+  const botOnline = usePlay((s) => s.botOnline);
+  if (status === "open" && botOnline) return null;
+  const label = status === "open" ? "Game server is starting up or offline" : LINK_LABELS[status];
+  return (
+    <Tooltip label={label} position="bottom">
+      <span className={classes.link} role="status" aria-label={label}>
+        <span className={classes.linkDot} />
+        <span className={classes.linkText}>{status === "open" ? "Server offline" : LINK_LABELS[status]}</span>
+      </span>
     </Tooltip>
   );
 }
@@ -54,9 +71,10 @@ type Props = {
   turn: TurnState;
   /** Seat colour of whoever the table is waiting on. */
   activeColor?: string;
-  /** e.g. "You passed", shown under the turn when it isn't mine. */
+  /** e.g. "You passed", shown after the turn when it isn't mine. */
   myNote?: string;
-  objectivesLabel?: string;
+  /** Revealed public objectives, for the tooltip. */
+  objectives?: number;
   drawer: DrawerName | null;
   onDrawer: (name: DrawerName | null) => void;
   onObjectives?: () => void;
@@ -64,14 +82,14 @@ type Props = {
   incomingTrades: number;
 };
 
-/** The table's header: where we are in the game, whose move it is, and the few things you can open. */
+/** The table's header, one quiet line: which game, where we are in it, whose move it is, and a few icons. */
 export function TopBar({
   gameName,
   round,
   turn,
   activeColor,
   myNote,
-  objectivesLabel,
+  objectives,
   drawer,
   onDrawer,
   onObjectives,
@@ -82,6 +100,7 @@ export function TopBar({
   let turnText = "";
   if (turn.mine) turnText = "Your turn";
   else if (turn.waitingOn) turnText = `${turn.waitingOn}'s turn`;
+  const where = [round ? `Round ${round}` : null, turn.phase].filter(Boolean).join(" · ");
 
   return (
     <header className={classes.bar}>
@@ -93,54 +112,57 @@ export function TopBar({
       </div>
 
       <div className={classes.center}>
-        <div className={classes.phase}>
-          {round ? <span className={classes.round}>Round {round}</span> : null}
-          {turn.phase && <span className={classes.phaseName}>{turn.phase}</span>}
-        </div>
+        {where && <span className={classes.where}>{where}</span>}
         {turnText && (
-          <div
+          <span
             className={cx(classes.turn, turn.mine && classes.turnMine)}
             style={activeColor ? ({ "--turn": activeColor } as CSSProperties) : undefined}
             role="status"
           >
             <span className={classes.turnDot} />
-            {turnText}
-          </div>
+            <span className={classes.turnText}>{turnText}</span>
+          </span>
         )}
         {!turn.mine && myNote && <span className={classes.note}>{myNote}</span>}
       </div>
 
       <div className={classes.right}>
+        <LinkWarning />
         {onObjectives && (
           <BarButton
-            icon={<IconTarget size={18} />}
-            label={objectivesLabel ?? "Objectives"}
+            icon={<IconTarget size={18} stroke={1.6} />}
+            label="Objectives"
+            tip={objectives ? `Objectives · ${objectives} revealed` : "Objectives"}
             active={false}
             onClick={onObjectives}
           />
         )}
         <BarButton
-          icon={<IconListDetails size={18} />}
+          icon={<IconListDetails size={18} stroke={1.6} />}
           label="Log"
+          tip="Game log"
           active={drawer === "log"}
           onClick={() => toggle("log")}
         />
         <BarButton
-          icon={<IconMessageCircle size={18} />}
-          label="Table talk"
+          icon={<IconMessageCircle size={18} stroke={1.6} />}
+          label="Chat"
+          tip={talkUnread && drawer !== "talk" ? `Table talk · ${talkUnread} unread` : "Table talk"}
           active={drawer === "talk"}
-          badge={drawer === "talk" ? 0 : talkUnread}
+          attention={drawer !== "talk" && talkUnread > 0}
           onClick={() => toggle("talk")}
         />
         <BarButton
-          icon={<IconTransfer size={18} />}
+          icon={<IconTransfer size={18} stroke={1.6} />}
           label="Trade"
+          tip={incomingTrades ? `Trade · ${incomingTrades} offer${incomingTrades > 1 ? "s" : ""} for you` : "Trade"}
           active={drawer === "trade"}
-          badge={incomingTrades}
+          attention={incomingTrades > 0}
           onClick={() => toggle("trade")}
         />
+        <span className={classes.sep} />
+        <UndoButton gameName={gameName} onOpenHistory={() => onDrawer("log")} className={classes.undo} />
         <SettingsMenu onRawChannels={() => onDrawer("raw")} />
-        <ConnectionBadge />
       </div>
     </header>
   );

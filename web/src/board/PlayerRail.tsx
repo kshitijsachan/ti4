@@ -1,26 +1,29 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Modal } from "@mantine/core";
+import { HoverCard, Modal, UnstyledButton } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { useGameData } from "@/state/useGameContext";
 import { filterPlayersWithAssignedFaction } from "@/entities/game/playerUtils";
 import PlayerCard from "@/domains/player/components/composition/PlayerCard";
-import { PlayerBoard } from "./PlayerBoard";
+import { PlayerSeat, PlayerStats } from "./PlayerBoard";
 import { summarizePlayer } from "./playerSummary";
 import classes from "./PlayerRail.module.css";
 
 type Props = { myUserId?: string };
 
 /**
- * Every seat at the table in one row: no scrolling, no tabs. A seat opens the
- * player's full area in a popup.
+ * Every seat at the table in one slim, non-scrolling row: faction, score, strategy cards and whose turn it is.
+ * Hovering a seat (tapping, on touch screens) shows its full readout; clicking opens the player's whole area.
  */
 export function PlayerRail({ myUserId }: Props) {
   const data = useGameData();
   const [openColor, setOpenColor] = useState<string | null>(null);
+  const [peekColor, setPeekColor] = useState<string | null>(null);
+  const touch = useMediaQuery("(hover: none)") ?? false;
   const railRef = useRef<HTMLDivElement>(null);
   const players = filterPlayersWithAssignedFaction(data?.playerData ?? []);
   const myIndex = players.findIndex((p) => !!myUserId && p.discordId === myUserId);
 
-  // On a phone the seats are a swipe strip: start it at your own seat.
+  // When the seats overflow (many players on a phone), start the strip at your own seat.
   useEffect(() => {
     const rail = railRef.current;
     if (!rail || myIndex < 0 || rail.scrollWidth <= rail.clientWidth) return;
@@ -28,9 +31,9 @@ export function PlayerRail({ myUserId }: Props) {
     if (seat) rail.scrollLeft = seat.offsetLeft - rail.offsetLeft - 12;
   }, [myIndex]);
 
-  if (!data) return null;
-  if (!players.length) return null;
+  if (!data || !players.length) return null;
   const opened = players.find((p) => p.color === openColor);
+  const vpsToWin = data.vpsToWin || 10;
 
   return (
     <>
@@ -41,16 +44,58 @@ export function PlayerRail({ myUserId }: Props) {
         role="list"
         aria-label="Players"
       >
-        {players.map((player) => (
-          <div role="listitem" key={player.color} className={classes.seat}>
-            <PlayerBoard
-              player={summarizePlayer(player, data.strategyCardIdMap)}
-              vpsToWin={data.vpsToWin || 10}
-              isMe={!!myUserId && player.discordId === myUserId}
-              onOpen={() => setOpenColor(player.color)}
-            />
-          </div>
-        ))}
+        {players.map((player) => {
+          const summary = summarizePlayer(player, data.strategyCardIdMap);
+          const isMe = !!myUserId && player.discordId === myUserId;
+          const open = () => {
+            setPeekColor(null);
+            setOpenColor(player.color);
+          };
+          return (
+            <div role="listitem" key={player.color} className={classes.seat}>
+              <HoverCard
+                position="bottom"
+                openDelay={touch ? 0 : 250}
+                closeDelay={80}
+                shadow="md"
+                withinPortal
+                zIndex={3200}
+                {...(touch && {
+                  opened: peekColor === player.color,
+                  onChange: (o: boolean) => !o && setPeekColor(null),
+                })}
+              >
+                <HoverCard.Target>
+                  <UnstyledButton
+                    className={classes.seatButton}
+                    onClick={() =>
+                      touch ? setPeekColor((c) => (c === player.color ? null : player.color)) : open()
+                    }
+                    aria-label={`${summary.name} (${summary.factionName}), ${summary.vp} victory points`}
+                  >
+                    <PlayerSeat player={summary} vpsToWin={vpsToWin} isMe={isMe} />
+                  </UnstyledButton>
+                </HoverCard.Target>
+                <HoverCard.Dropdown className={classes.card}>
+                  <PlayerStats
+                    player={summary}
+                    vpsToWin={vpsToWin}
+                    isMe={isMe}
+                    hint={
+                      touch ? (
+                        <UnstyledButton className={classes.more} onClick={open}>
+                          Open player area
+                        </UnstyledButton>
+                      ) : (
+                        "Click the seat for the full player area"
+                      )
+                    }
+                  />
+                </HoverCard.Dropdown>
+              </HoverCard>
+            </div>
+          );
+        })}
       </div>
       <Modal
         opened={!!opened}

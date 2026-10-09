@@ -1,9 +1,8 @@
 import cx from "clsx";
-import { cdnImage } from "@/entities/data/cdnImage";
 import type { AgendaInfo } from "../model/classify";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
-import { Prose, Section, Stat } from "../ui/parts";
+import { Prose } from "../ui/parts";
 import type { RendererProps } from "./types";
 import classes from "./renderers.module.css";
 
@@ -24,7 +23,6 @@ export function AgendaCard({ agenda, compact }: { agenda: AgendaInfo; compact?: 
   const law = /law/i.test(agenda.type ?? "");
   return (
     <div className={cx(classes.agendaCard, compact && classes.agendaCompact)}>
-      <img src={cdnImage("/player_area/cardback_agenda.png")} alt="" className={classes.agendaBack} />
       <div className={classes.agendaBody}>
         <div className={classes.agendaHead}>
           <span className={classes.agendaName}>{agenda.name}</span>
@@ -60,14 +58,13 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
   return (
     <div className={classes.stack}>
       {d.agenda && <AgendaCard agenda={d.agenda} />}
-      <Section label="Your votes">
-        <div className={classes.statRow}>
-          {start !== undefined && <Stat label="votes available" value={start} />}
-          {cast !== undefined && cast > 0 && <Stat label="cast" value={cast} />}
-          {start === undefined && data.me && <Stat label="influence ready" value={data.me.influence} />}
-        </div>
-      </Section>
-      <Prose text={d.text} clamp={3} muted />
+      <p className={classes.hint}>
+        {start !== undefined
+          ? `You have ${start} vote${start === 1 ? "" : "s"}${cast ? ` (${cast} cast)` : ""}.`
+          : data.me
+            ? `${data.me.influence} influence ready.`
+            : ""}
+      </p>
       <ChoiceButtons
         choices={d.choices}
         onPress={onPress}
@@ -91,7 +88,6 @@ export function AgendaPeekBody({ d, onPress, pendingKey }: RendererProps) {
   return (
     <div className={classes.stack}>
       {d.agenda ? <AgendaCard agenda={d.agenda} /> : <Prose text={d.text} clamp={6} />}
-      <p className={classes.hint}>Cards put on top are revealed first in the next agenda phase.</p>
       <ChoiceButtons
         choices={choices}
         onPress={onPress}

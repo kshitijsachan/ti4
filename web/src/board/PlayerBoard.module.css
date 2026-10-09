@@ -1,78 +1,57 @@
-.board {
+/* ---------- a seat at rest: one quiet line ---------- */
+
+.seat {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  padding: 7px 9px 7px 11px;
-  border: 1px solid var(--panel-hairline-strong);
-  border-radius: 6px;
-  background: var(--panel-field-flat);
-  color: var(--mantine-color-gray-2);
-  container-type: inline-size;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    opacity 0.15s ease;
-}
-
-/* The seat colour runs down the left edge, like a player mat. */
-.board::before {
-  content: "";
-  position: absolute;
-  left: -1px;
-  top: -1px;
-  bottom: -1px;
-  width: 4px;
-  border-radius: 6px 0 0 6px;
-  background: var(--player);
-}
-
-.board:hover {
-  border-color: var(--panel-bracket);
-  background: var(--panel-field-strip);
-}
-
-.board:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-5);
-  outline-offset: 1px;
-}
-
-.active {
-  border-color: var(--player);
-  background: var(--panel-field-strip);
-  box-shadow:
-    0 0 0 1px var(--player),
-    0 0 16px -4px var(--player);
-}
-
-.passed {
-  opacity: 0.62;
-}
-
-.head {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  height: 40px;
+  padding: 0 10px 0 6px;
+  border-radius: 6px;
+  color: var(--mantine-color-gray-2);
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
 }
 
-.faction {
-  width: 30px;
-  height: 30px;
+/* Whose turn: the seat is lit, with its colour underneath like a placard. */
+.active {
+  background: color-mix(in srgb, var(--player) 14%, transparent);
+}
+
+.active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--player);
+}
+
+.passed {
+  opacity: 0.5;
+}
+
+.icon,
+.iconBlank {
   flex-shrink: 0;
+  width: 26px;
+  height: 26px;
   object-fit: contain;
 }
 
 .who {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   line-height: var(--lh-tight);
 }
 
-.factionName {
+.faction {
   overflow: hidden;
-  font-family: var(--font-text);
   font-size: 13px;
   font-weight: var(--weight-title);
   color: var(--mantine-color-gray-0);
@@ -80,153 +59,194 @@
   text-overflow: ellipsis;
 }
 
-.name {
+.sub {
   display: flex;
   align-items: center;
   gap: 5px;
-  overflow: hidden;
+  min-width: 0;
   font-size: 11px;
   color: var(--mantine-color-gray-5);
+}
+
+.subText {
+  overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.you {
-  padding: 0 4px;
-  border-radius: 3px;
-  background: var(--socket-bg);
-  border: 1px solid var(--panel-hairline-strong);
-  font-size: 9px;
-  font-weight: var(--weight-rail);
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--mantine-color-gray-3);
+.colorDot {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--player);
+}
+
+.scs {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.scTile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--sc);
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: var(--weight-title);
+  color: #fff;
+}
+
+/* A played card is turned face down: it stays in front of its owner, greyed. */
+.scPlayed {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--panel-hairline-strong);
+  color: var(--mantine-color-gray-5);
 }
 
 .vp {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
   flex-shrink: 0;
-  min-width: 34px;
-  line-height: var(--lh-flush);
+  margin-left: auto;
+  padding-left: 2px;
 }
 
 .vpNum {
   font-family: var(--font-data);
   font-size: 18px;
   font-weight: var(--weight-title);
-  color: var(--mantine-color-gray-0);
   font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-gray-0);
 }
 
 .vpLabel {
-  margin-top: 2px;
   font-size: 9px;
   font-weight: var(--weight-rail);
   letter-spacing: var(--track-rail);
   color: var(--mantine-color-gray-5);
 }
 
-/* The seat's holdings flow in small groups that wrap: two lines on a wide seat, more on a narrow one. */
-.facts {
+/* Narrow seats (many players, phones) keep the icon, cards and score. */
+@container seat (max-width: 150px) {
+  .who {
+    display: none;
+  }
+
+  .seat {
+    gap: 5px;
+    padding: 0 6px 0 4px;
+  }
+
+  .icon,
+  .iconBlank {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* ---------- hover card: the seat's full readout ---------- */
+
+.stats {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+  color: var(--mantine-color-gray-2);
+}
+
+.statsHead {
+  display: flex;
   align-items: center;
-  gap: 5px 10px;
+  gap: 10px;
+}
+
+.statsIcon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.statsWho {
+  flex: 1;
   min-width: 0;
+  line-height: var(--lh-tight);
 }
 
-.group {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 18px;
-  min-width: 0;
-}
-
-.nameText {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sc {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  height: 18px;
-  padding: 0 6px 0 0;
-  border: 1px solid var(--sc);
-  border-radius: 3px;
-  overflow: hidden;
-  font-size: 10px;
-  font-weight: var(--weight-rail);
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--mantine-color-gray-1);
-}
-
-.scNum {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: stretch;
-  min-width: 16px;
-  background: var(--sc);
-  font-family: var(--font-data);
-  font-size: 11px;
-  color: #fff;
-}
-
-.scName {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* A played card is turned face down: it stays in front of its owner, greyed. */
-.scPlayed {
-  border-color: var(--panel-hairline-strong);
-  color: var(--mantine-color-gray-6);
-}
-
-.scPlayed .scNum {
-  background: var(--panel-hairline-strong);
-  color: var(--mantine-color-gray-5);
-}
-
-.speaker {
-  height: 18px;
-  flex-shrink: 0;
-}
-
-.status {
-  flex-shrink: 0;
-  margin-left: 2px;
-  font-size: 10px;
-  font-weight: var(--weight-rail);
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--mantine-color-gray-5);
-}
-
-.statusActive {
+.statsFaction {
+  font-size: 14px;
+  font-weight: var(--weight-title);
   color: var(--mantine-color-gray-0);
 }
 
-.stat,
-.cc {
-  display: inline-flex;
+.statsName {
+  display: flex;
   align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--mantine-color-gray-5);
+  white-space: nowrap;
+}
+
+.statsStatus {
+  color: var(--mantine-color-gray-3);
+}
+
+.statsVp {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.statsVpOf {
+  font-size: 10px;
+  color: var(--mantine-color-gray-5);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-hairline);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.rowLabel {
+  font-size: 10px;
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--mantine-color-gray-6);
+}
+
+.rowValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
   font-size: 12px;
 }
 
-.statIcon {
-  width: 15px;
-  height: 15px;
+.rowIcon {
+  width: 14px;
+  height: 14px;
   object-fit: contain;
 }
 
@@ -234,15 +254,41 @@
   font-family: var(--font-data);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-gray-0);
+}
+
+.unit {
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--mantine-color-gray-5);
+}
+
+.scFull {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 6px;
+}
+
+.scName {
+  font-size: 12px;
   color: var(--mantine-color-gray-1);
 }
 
-.ccLabel,
-.econ {
-  font-size: 9px;
-  font-weight: var(--weight-rail);
-  letter-spacing: var(--track-label);
+.scNamePlayed {
   color: var(--mantine-color-gray-5);
+}
+
+.speaker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--mantine-color-gray-4);
+}
+
+.speakerImg {
+  height: 14px;
 }
 
 .econ {
@@ -251,7 +297,10 @@
   justify-content: center;
   width: 14px;
   height: 14px;
+  margin-left: 6px;
   border-radius: 50%;
+  font-size: 9px;
+  font-weight: var(--weight-rail);
   color: #111;
 }
 
@@ -263,28 +312,17 @@
   background: var(--mantine-color-blue-4);
 }
 
-.planetDot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, var(--mantine-color-teal-3), var(--mantine-color-teal-8));
-}
-
 .dim {
-  opacity: 0.4;
-}
-
-.techs {
-  gap: 3px;
+  opacity: 0.35;
 }
 
 .tech {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 3px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 4px;
   font-family: var(--font-data);
   font-size: 11px;
   font-weight: var(--weight-title);
@@ -308,62 +346,35 @@
   color: #1a1a1a;
 }
 
-.leaders {
-  gap: 2px;
-  margin-left: auto;
-}
-
 .leader {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  font-size: 9px;
-  font-weight: var(--weight-rail);
+  gap: 4px;
+  margin-right: 6px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: var(--weight-title);
+}
+
+.leaderState {
+  font-family: var(--font-text);
+  font-weight: normal;
+  color: var(--mantine-color-gray-5);
 }
 
 .leader_ready {
-  background: var(--mantine-color-gray-3);
-  color: #111;
+  color: var(--mantine-color-gray-0);
 }
 
-.leader_exhausted {
-  background: var(--mantine-color-gray-7);
-  color: var(--mantine-color-gray-4);
-}
-
-.leader_locked {
-  border: 1px solid var(--mantine-color-gray-6);
+.leader_exhausted,
+.leader_locked,
+.leader_gone {
   color: var(--mantine-color-gray-6);
 }
 
-.leader_gone {
-  border: 1px dashed var(--mantine-color-gray-7);
-  color: var(--mantine-color-gray-7);
-  text-decoration: line-through;
-}
-
-.me .name {
-  color: var(--mantine-color-gray-3);
-}
-
-/* Narrow seats (many players, small screens) drop the card names and fine print. */
-@container (max-width: 190px) {
-  .scName {
-    display: none;
-  }
-
-  .scNum {
-    min-width: 18px;
-  }
-
-  .sc {
-    padding: 0;
-  }
-
-  .ccLabel {
-    display: none;
-  }
+.hint {
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-hairline);
+  font-size: 11px;
+  color: var(--mantine-color-gray-5);
 }

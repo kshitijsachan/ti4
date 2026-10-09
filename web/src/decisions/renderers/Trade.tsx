@@ -1,7 +1,7 @@
 import { useDecisionRequests } from "../model/focus";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
-import { PlayerTag, Prose, ResourceStrip } from "../ui/parts";
+import { Prose } from "../ui/parts";
 import { playerByName, type RendererProps } from "./types";
 import classes from "./renderers.module.css";
 
@@ -26,30 +26,16 @@ export function TradeBody({ d, data, onPress, pendingKey }: RendererProps) {
   };
   return (
     <div className={classes.stack}>
-      <div className={classes.ledger}>
-        <div className={classes.ledgerSide}>
-          <div className={classes.ledgerHead}>
-            <PlayerTag player={from} fallback={trade?.from} /> <span className={classes.dim}>gives you</span>
-          </div>
-          <ul className={classes.items}>
-            {(theirs?.items.length ? theirs.items : ["Nothing"]).map((it) => (
-              <li key={it}>{it}</li>
-            ))}
-          </ul>
-        </div>
-        <div className={classes.ledgerSide}>
-          <div className={classes.ledgerHead}>
-            <PlayerTag player={data.me} fallback="You" /> <span className={classes.dim}>give</span>
-          </div>
-          <ul className={classes.items}>
-            {(mine?.items.length ? mine.items : ["Nothing"]).map((it) => (
-              <li key={it}>{it}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
-      {!trade?.sides.length && <Prose text={d.text} clamp={6} />}
-      <ResourceStrip me={data.me} show={["tg", "comm"]} />
+      <ul className={classes.ledgerLines}>
+        <li>
+          <span className={classes.dim}>{from?.userName ?? trade?.from ?? "They"} give:</span>{" "}
+          {theirs?.items.length ? theirs.items.join(", ") : "nothing"}
+        </li>
+        <li>
+          <span className={classes.dim}>You give:</span> {mine?.items.length ? mine.items.join(", ") : "nothing"}
+        </li>
+      </ul>
+      {!trade?.sides.length && <Prose text={d.text} clamp={3} />}
       <ChoiceButtons
         choices={choices}
         onPress={press}

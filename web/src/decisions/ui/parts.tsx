@@ -9,7 +9,7 @@ import { getColorAlias } from "@/entities/lookup/colors";
 import classes from "./parts.module.css";
 
 /** Cleaned bot prose; long prose is clamped behind "Show all". */
-export function Prose({ text, clamp = 5, muted }: { text: string; clamp?: number; muted?: boolean }) {
+export function Prose({ text, clamp = 2, muted }: { text: string; clamp?: number; muted?: boolean }) {
   const [open, setOpen] = useState(false);
   if (!text) return null;
   const lines = text.split("\n").length;
@@ -24,6 +24,19 @@ export function Prose({ text, clamp = 5, muted }: { text: string; clamp?: number
           {open ? "Show less" : "Show all"}
         </UnstyledButton>
       )}
+    </div>
+  );
+}
+
+/** Secondary information, folded away by default so the popup stays calm. */
+export function Details({ children, label = "Details" }: { children: ReactNode; label?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={classes.details}>
+      <UnstyledButton className={classes.textLink} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        {open ? "Hide details" : label}
+      </UnstyledButton>
+      {open && <div className={classes.detailsBody}>{children}</div>}
     </div>
   );
 }
@@ -146,14 +159,19 @@ const UNIT_NAMES: Record<string, string> = {
 };
 
 /** Unit art with counts, e.g. the ships on one side of a combat. */
-export function UnitRow({ units, color, empty = "No units" }: { units: EntityData[]; color?: string; empty?: string }) {
+export function UnitRow({ units, color, empty = "No units", small }: {
+  units: EntityData[];
+  color?: string;
+  empty?: string;
+  small?: boolean;
+}) {
   const list = units
     .filter((u) => u.entityType === "unit" && u.count > 0)
     .sort((a, b) => UNIT_ORDER.indexOf(a.entityId) - UNIT_ORDER.indexOf(b.entityId));
   if (!list.length) return <span className={classes.none}>{empty}</span>;
   const alias = getColorAlias(color);
   return (
-    <div className={classes.units}>
+    <div className={cx(classes.units, small && classes.unitsSmall)}>
       {list.map((u) => (
         <span key={u.entityId} className={classes.unit} title={`${u.count} × ${UNIT_NAMES[u.entityId] ?? u.entityId}`}>
           <img src={cdnImage(`/units/${alias}_${u.entityId}.png`)} alt={UNIT_NAMES[u.entityId] ?? u.entityId} className={classes.unitImg} />

@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Loader, UnstyledButton } from "@mantine/core";
 import cx from "clsx";
 import { baseId, type Choice } from "../model/controls";
-import { ChoiceButtons } from "../ui/ChoiceButtons";
-import { Prose, ResourceStrip, ScArt, Section, scDefinition } from "../ui/parts";
+import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
+import { Details, ScArt, scDefinition } from "../ui/parts";
 import { playerByFaction, type RendererProps } from "./types";
 import classes from "./renderers.module.css";
 
@@ -14,112 +14,97 @@ function pickNumber(c: Choice) {
   return n ? Number(n) : undefined;
 }
 
-type Tile = { initiative: number; choice?: Choice; tradeGoods: number; takenBy?: string };
+type Tile = { initiative: number; choice: Choice; tradeGoods: number };
 
-/** Pick a strategy card: every card on the table, the free ones pickable, with their trade goods. */
+function CardTexts({ initiative, web, which }: {
+  initiative: number;
+  web: RendererProps["data"]["web"];
+  which: ("primary" | "secondary")[];
+}) {
+  const def = scDefinition(initiative, web);
+  if (!def) return null;
+  return (
+    <>
+      {which.includes("primary") &&
+        def.primaryTexts.map((t) => (
+          <p key={`p${t}`} className={classes.cardText}>
+            {t}
+          </p>
+        ))}
+      {which.includes("secondary") && def.secondaryTexts.length > 0 && (
+        <p className={classes.cardText}>
+          <b>Others may: </b>
+          {def.secondaryTexts.join(" ")}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Pick a strategy card: the free cards as small art tiles; the chosen one named, with its trade goods. */
 export function ScPickBody({ d, data, onPress, pendingKey }: RendererProps) {
-  const picks = new Map<number, Choice>();
+  const tiles: Tile[] = [];
   for (const c of d.choices) {
     const n = pickNumber(c);
-    if (n !== undefined) picks.set(n, c);
+    if (n === undefined) continue;
+    const onTable = data.web?.strategyCards.find((s) => s.initiative === n);
+    tiles.push({
+      initiative: n,
+      choice: c,
+      tradeGoods: onTable?.tradeGoods ?? Number(c.label.match(/(\d+) Trade Good/i)?.[1] ?? 0),
+    });
   }
-  const fromWeb = data.web?.strategyCards ?? [];
-  const tiles: Tile[] = fromWeb.length
-    ? fromWeb.map((sc) => ({
-        initiative: sc.initiative,
-        choice: picks.get(sc.initiative),
-        tradeGoods: sc.tradeGoods,
-        takenBy: sc.pickedByFaction ?? undefined,
-      }))
-    : [...picks.entries()].map(([initiative, choice]) => ({
-        initiative,
-        choice,
-        tradeGoods: Number(choice.label.match(/(\d+) Trade Good/i)?.[1] ?? 0),
-      }));
   tiles.sort((a, b) => a.initiative - b.initiative);
-  const firstFree = tiles.find((t) => t.choice)?.initiative;
-  const [selected, setSelected] = useState<number | undefined>(firstFree);
-  const current = tiles.find((t) => t.initiative === selected) ?? tiles.find((t) => t.choice);
-  const rest = d.choices.filter((c) => pickNumber(c) === undefined);
+  const [selected, setSelected] = useState<number | undefined>(undefined);
+  const current = tiles.find((t) => t.initiative === selected);
   const def = current ? scDefinition(current.initiative, data.web) : undefined;
-  const myScs = data.me?.scs ?? [];
-
+  const rest = d.choices.filter((c) => pickNumber(c) === undefined);
+  const taken = (data.web?.strategyCards ?? []).filter((s) => s.pickedByFaction);
   return (
     <div className={classes.stack}>
-      <div className={classes.pickLayout}>
-        <div className={classes.scGrid} role="listbox" aria-label="Strategy cards">
-          {tiles.map((t) => {
-            const owner = t.takenBy ? playerByFaction(data, t.takenBy) : undefined;
-            const mine = myScs.includes(t.initiative);
-            return (
-              <UnstyledButton
-                key={t.initiative}
-                role="option"
-                aria-selected={t.initiative === current?.initiative}
-                className={cx(
-                  classes.scTile,
-                  t.initiative === current?.initiative && classes.scTileSelected,
-                  !t.choice && classes.scTileTaken,
-                )}
-                onClick={() => setSelected(t.initiative)}
-                onDoubleClick={() => t.choice && onPress(t.choice)}
-                disabled={!t.choice && !mine && !owner}
-              >
-                <ScArt initiative={t.initiative} web={data.web} width={90} />
-                {t.tradeGoods > 0 && <span className={classes.tgBadge}>+{t.tradeGoods} TG</span>}
-                {!t.choice && (
-                  <span className={classes.takenBadge}>{mine ? "Yours" : owner ? owner.userName : "Taken"}</span>
-                )}
-                {pendingKey && pendingKey === t.choice?.key && <Loader size={18} className={classes.tileSpinner} />}
-              </UnstyledButton>
-            );
-          })}
-        </div>
-        {current && (
-          <div className={classes.scDetail}>
-            <div className={classes.scDetailMeta}>
-              <span className={classes.scName}>
-                <span className={classes.num}>{current.initiative}</span> {def?.name ?? "Strategy card"}
-              </span>
-              {current.tradeGoods > 0 && (
-                <span className={classes.tgLine}>
-                  Comes with <b>{current.tradeGoods}</b> trade good{current.tradeGoods === 1 ? "" : "s"}
-                </span>
-              )}
-            </div>
-            {def && def.primaryTexts.length > 0 && (
-              <Section label="Primary">
-                {def.primaryTexts.map((t) => (
-                  <p key={t} className={classes.cardText}>
-                    {t}
-                  </p>
-                ))}
-              </Section>
-            )}
-            {def && def.secondaryTexts.length > 0 && (
-              <Section label="Secondary">
-                {def.secondaryTexts.map((t) => (
-                  <p key={t} className={classes.cardText}>
-                    {t}
-                  </p>
-                ))}
-              </Section>
-            )}
-            {current.choice ? (
-              <UnstyledButton
-                className={classes.bigConfirm}
-                disabled={!!pendingKey}
-                onClick={() => current.choice && onPress(current.choice)}
-              >
-                {pendingKey === current.choice.key ? <Loader size={16} color="currentColor" /> : null}
-                Take {def?.name ?? "this card"}
-              </UnstyledButton>
-            ) : (
-              <span className={classes.takenNote}>Already taken</span>
-            )}
-          </div>
-        )}
+      <div className={classes.scGrid} role="listbox" aria-label="Strategy cards">
+        {tiles.map((t) => (
+          <UnstyledButton
+            key={t.initiative}
+            role="option"
+            aria-selected={t.initiative === selected}
+            className={cx(classes.scTile, t.initiative === selected && classes.scTileSelected)}
+            onClick={() => setSelected(t.initiative)}
+            onDoubleClick={() => onPress(t.choice)}
+          >
+            <ScArt initiative={t.initiative} web={data.web} width={80} />
+            {t.tradeGoods > 0 && <span className={classes.tgBadge}>+{t.tradeGoods}</span>}
+            {pendingKey === t.choice.key && <Loader size={18} className={classes.tileSpinner} />}
+          </UnstyledButton>
+        ))}
       </div>
+      {current ? (
+        <>
+          <p className={classes.cardText}>
+            <b>{def?.name}</b>
+            {current.tradeGoods > 0 &&
+              ` · comes with ${current.tradeGoods} trade good${current.tradeGoods === 1 ? "" : "s"}`}
+          </p>
+          <ChoiceButton
+            choice={{ ...current.choice, label: `Take ${def?.name ?? "this card"}`, style: 3 }}
+            onPress={onPress}
+            pending={pendingKey === current.choice.key}
+            busy={!!pendingKey}
+            emphasis
+          />
+          <Details label="What it does">
+            <CardTexts initiative={current.initiative} web={data.web} which={["primary", "secondary"]} />
+          </Details>
+        </>
+      ) : (
+        <p className={classes.hint}>
+          Tap a card to see it.
+          {taken.length > 0 &&
+            ` Taken: ${taken
+              .map((s) => `${s.name} (${playerByFaction(data, s.pickedByFaction ?? undefined)?.userName ?? s.pickedByFaction})`)
+              .join(", ")}.`}
+        </p>
+      )}
       <ChoiceButtons choices={rest} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} />
     </div>
   );
@@ -134,83 +119,67 @@ function isDecline(c: Choice) {
   return FOLLOW_NO.test(baseId(c.customId)) || /not following|don'?t follow|decline/i.test(c.label);
 }
 
-/** Follow a strategy card: the card, its secondary, what following costs me. */
+/** "Spend 1 token from your strategy pool to draw 2 action cards." → "Draw 2 action cards." */
+function benefit(secondary?: string) {
+  if (!secondary) return "";
+  const s = secondary.replace(/^spend 1 token from your strategy pool (and )?(to )?/i, "");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Follow a strategy card: what following gives and costs, in two short lines; Follow / Don't follow. */
 export function ScFollowBody({ d, data, onPress, pendingKey }: RendererProps) {
   const def = d.sc ? scDefinition(d.sc, data.web) : undefined;
   const strategy = data.me?.strategicCC;
-  const freeFollow = d.sc === 1 || d.choices.some((c) => /without spending|for free|no token/i.test(c.label));
+  const leadership = d.sc === 1;
+  const who = d.text.match(/played by ([^.\n]+)/)?.[1]?.replace(/\*/g, "").trim();
+  const cost = leadership
+    ? "Costs influence, not a strategy token."
+    : `Costs 1 strategy token${strategy !== undefined ? ` — you have ${strategy}` : ""}.`;
+  const choices = d.choices.map((c) => {
+    if (d.optional) return c;
+    if (FOLLOW_ACTION.test(baseId(c.customId))) return { ...c, label: "Follow", style: 3 };
+    if (isDecline(c)) return { ...c, label: "Don't follow", style: 2 };
+    return c;
+  });
   return (
     <div className={classes.stack}>
-      <div className={classes.followLayout}>
-        {d.sc && <ScArt initiative={d.sc} web={data.web} width={118} />}
-        <div className={classes.stack}>
-          {def && def.secondaryTexts.length > 0 && (
-            <Section label="Secondary ability">
-              {def.secondaryTexts.map((t) => (
-                <p key={t} className={classes.cardText}>
-                  {t}
-                </p>
-              ))}
-            </Section>
-          )}
-          <Section label="Cost">
-            <p className={classes.cardText}>
-              {freeFollow
-                ? "Leadership's secondary costs influence, not a strategy token."
-                : "1 command token from your strategy pool."}
-              {strategy !== undefined && !freeFollow && (
-                <>
-                  {" "}
-                  You have{" "}
-                  <b className={cx(classes.num, strategy === 0 && classes.warn)}>{strategy}</b>.
-                </>
-              )}
-            </p>
-          </Section>
-          <ResourceStrip me={data.me} show={d.sc === 1 ? ["strategy", "influence", "tg"] : ["strategy", "tg", "comm"]} />
-        </div>
-      </div>
-      <Prose text={d.text} clamp={3} muted />
+      <p className={classes.cardText}>
+        {d.optional ? d.text : `${who ? `${who} played ${def?.name ?? "it"}. ` : ""}${benefit(def?.secondaryTexts[0])}`}
+      </p>
+      {!d.optional && <p className={cx(classes.hint, strategy === 0 && !leadership && classes.warn)}>{cost}</p>}
       <ChoiceButtons
-        choices={d.choices}
+        choices={choices}
         onPress={onPress}
         pendingKey={pendingKey}
         channelId={d.prompt.channelId}
         rankOf={(c) => {
           if (c.rank === "undo" || c.rank === "more") return c.rank;
-          if (HOLDER_ONLY.test(baseId(c.customId))) return "more";
-          return isDecline(c) || !FOLLOW_ACTION.test(baseId(c.customId)) ? "secondary" : "primary";
+          const id = baseId(c.customId);
+          if (HOLDER_ONLY.test(id)) return "more";
+          if (FOLLOW_ACTION.test(id) || isDecline(c) || d.optional) return "primary";
+          return "more";
         }}
       />
+      {d.sc && (
+        <Details label="Show the card">
+          <ScArt initiative={d.sc} web={data.web} width={150} />
+        </Details>
+      )}
     </div>
   );
 }
 
 const FOLLOW_ID = /^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/;
 
-/** My own strategy card, just played: its primary ability and the buttons that resolve it. */
+/** My own strategy card, just played: the steps that resolve it, one line each. */
 export function ScPrimaryBody({ d, data, onPress, pendingKey, pressOn }: RendererProps) {
-  const def = d.sc ? scDefinition(d.sc, data.web) : undefined;
-  const own = d.choices.filter((c) => !FOLLOW_ID.test(baseId(c.customId)) && c.rank !== "undo" && c.rank !== "more");
   return (
     <div className={classes.stack}>
-      <div className={classes.followLayout}>
-        {d.sc && <ScArt initiative={d.sc} web={data.web} width={118} />}
-        <div className={classes.stack}>
-          {def && def.primaryTexts.length > 0 && (
-            <Section label="Primary ability">
-              {def.primaryTexts.map((t) => (
-                <p key={t} className={classes.cardText}>
-                  {t}
-                </p>
-              ))}
-            </Section>
-          )}
-          <p className={classes.hint}>The other players are now choosing whether to follow.</p>
-        </div>
-      </div>
       {(d.steps ?? []).map((step, i) => (
-        <Section key={step.id} label={`Step ${i + 1} · ${step.title}`}>
+        <div key={step.id} className={classes.step}>
+          <span className={classes.stepLabel}>
+            {i + 1}. {step.title}
+          </span>
           <ChoiceButtons
             choices={step.choices}
             onPress={pressOn(step)}
@@ -218,9 +187,8 @@ export function ScPrimaryBody({ d, data, onPress, pendingKey, pressOn }: Rendere
             channelId={step.prompt.channelId}
             rankOf={(c) => (c.rank === "undo" ? "more" : c.rank)}
           />
-        </Section>
+        </div>
       ))}
-      {d.steps?.length && own.length ? <div className={classes.stepRule} /> : null}
       <ChoiceButtons
         choices={d.choices}
         onPress={onPress}
@@ -232,6 +200,11 @@ export function ScPrimaryBody({ d, data, onPress, pendingKey, pressOn }: Rendere
           return "primary";
         }}
       />
+      {d.sc && (
+        <Details label="What it does">
+          <CardTexts initiative={d.sc} web={data.web} which={["primary"]} />
+        </Details>
+      )}
     </div>
   );
 }

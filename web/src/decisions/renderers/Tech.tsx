@@ -4,7 +4,6 @@ import cx from "clsx";
 import { techs } from "@/entities/data/tech";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
-import { ResourceStrip, Section } from "../ui/parts";
 import type { RendererProps } from "./types";
 import classes from "./renderers.module.css";
 
@@ -38,8 +37,9 @@ export function TechBody({ d, data, onPress, pendingKey }: RendererProps) {
   const current = offered.find((o) => o.c.key === selected);
   return (
     <div className={classes.stack}>
-      <ResourceStrip me={data.me} show={["resources", "tg", "strategy"]} />
-      <p className={classes.hint}>Techs whose prerequisites you meet. Pick one to read it.</p>
+      <p className={classes.hint}>
+        {data.me ? `${data.me.resources} resources ready, ${data.me.tg} TG. ` : ""}Pick one to read it.
+      </p>
       <div className={classes.techList} role="listbox" aria-label="Technologies">
         {offered.map(({ c, tech }) => (
           <UnstyledButton
@@ -62,7 +62,7 @@ export function TechBody({ d, data, onPress, pendingKey }: RendererProps) {
         ))}
       </div>
       {current && (
-        <Section label={current.tech?.types[0]?.toLowerCase() ?? "technology"}>
+        <>
           <p className={classes.cardText} style={{ whiteSpace: "pre-line" }}>
             {current.tech?.text ?? current.c.label}
           </p>
@@ -70,7 +70,7 @@ export function TechBody({ d, data, onPress, pendingKey }: RendererProps) {
             {pendingKey === current.c.key ? <Loader size={16} color="currentColor" /> : null}
             Research {current.tech?.name ?? current.c.label}
           </UnstyledButton>
-        </Section>
+        </>
       )}
       <ChoiceButtons
         choices={rest}

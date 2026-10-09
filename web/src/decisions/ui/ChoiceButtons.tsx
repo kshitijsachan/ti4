@@ -23,11 +23,16 @@ type Props = {
   trailing?: ReactNode;
 };
 
+/**
+ * The bot colours buttons freely; here only "go" (green) keeps its colour so the popup stays quiet.
+ * Renderers pass style 104 for a deliberately red choice (taking a unit back).
+ */
 const STYLE_CLASS: Record<number, string> = {
-  1: classes.blue,
+  1: classes.neutral,
   2: classes.neutral,
   3: classes.green,
-  4: classes.red,
+  4: classes.neutral,
+  104: classes.red,
 };
 
 export function ChoiceButton({

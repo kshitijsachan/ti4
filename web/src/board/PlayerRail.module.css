@@ -1,43 +1,62 @@
+/* The seats: a slim strip under the header, same surface, one hairline below. */
 .rail {
   display: grid;
-  grid-template-columns: repeat(var(--seats), minmax(0, 300px));
+  grid-template-columns: repeat(var(--seats), minmax(0, 228px));
   justify-content: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 4px;
+  height: 48px;
+  padding: 4px 12px;
   background: var(--header-bg);
-  border-bottom: 1px solid var(--panel-separator);
+  border-bottom: 1px solid var(--panel-hairline);
 }
 
 .seat {
   display: flex;
   min-width: 0;
+  container: seat / inline-size;
 }
 
-.seat > * {
+.seatButton {
   flex: 1;
+  min-width: 0;
+  border-radius: 6px;
 }
 
-/* Below a comfortable single row the seats wrap onto a second one. */
-@media (max-width: 1199px) {
-  .rail {
-    grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
-  }
+.seatButton > * {
+  width: 100%;
 }
 
-/* Phones: one swipeable strip of mats. */
+.seatButton:hover > * {
+  background: var(--socket-bg);
+}
+
+.seatButton:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-5);
+  outline-offset: -2px;
+}
+
+.card {
+  padding: 12px 14px;
+  border: var(--details-card-border);
+  background: var(--details-card-bg);
+}
+
+.more {
+  font-size: 12px;
+  font-weight: var(--weight-title);
+  color: var(--mantine-color-blue-4);
+}
+
+/* Phones: seats shrink to icon, cards and score; with many players the strip scrolls sideways. */
 @media (max-width: 640px) {
   .rail {
-    display: flex;
-    gap: 8px;
-    padding: 6px 12px;
+    grid-template-columns: repeat(var(--seats), minmax(68px, 1fr));
+    justify-content: start;
+    gap: 2px;
+    height: 44px;
+    padding: 4px 6px;
     overflow-x: auto;
-    scroll-snap-type: x mandatory;
     scrollbar-width: none;
-  }
-
-  .seat {
-    flex: 0 0 min(250px, 78vw);
-    scroll-snap-align: start;
   }
 }
 

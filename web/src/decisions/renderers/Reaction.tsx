@@ -1,7 +1,7 @@
 import { actionCards } from "@/entities/data/actionCards";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
-import { Prose, Section } from "../ui/parts";
+import { Details, Prose } from "../ui/parts";
 import { AgendaCard } from "./Agenda";
 import type { RendererProps } from "./types";
 import classes from "./renderers.module.css";
@@ -33,13 +33,14 @@ export function ReactionBody({ d, data, onPress, pendingKey }: RendererProps) {
   return (
     <div className={classes.stack}>
       {d.agenda && <AgendaCard agenda={d.agenda} compact />}
-      <Prose text={d.text} clamp={6} />
+      <Prose text={d.text} clamp={2} />
+      <ChoiceButtons choices={d.choices} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} rankOf={rankOf} />
       {data.hand && (
-        <Section label={cards.length ? "Cards you could play" : "Your hand"}>
+        <Details label={cards.length ? `You could play ${cards.length === 1 ? cards[0].name : `${cards.length} cards`}` : "Your cards"}>
           {cards.length ? (
             <ul className={classes.cardChips}>
               {cards.map((c) => (
-                <li key={c.alias} title={c.text}>
+                <li key={c.alias}>
                   <b>{c.name}</b> <span className={classes.dim}>{c.text}</span>
                 </li>
               ))}
@@ -47,9 +48,8 @@ export function ReactionBody({ d, data, onPress, pendingKey }: RendererProps) {
           ) : (
             <span className={classes.dim}>Nothing in your hand fits this window.</span>
           )}
-        </Section>
+        </Details>
       )}
-      <ChoiceButtons choices={d.choices} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} rankOf={rankOf} />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
-import { Prose, ResourceStrip, Section } from "../ui/parts";
+import { Prose } from "../ui/parts";
 import type { RendererProps } from "./types";
 import classes from "./renderers.module.css";
 
@@ -15,6 +15,13 @@ const PAY = /^(reduceTG_|reduceComm_)/;
 function planetOf(c: Choice) {
   const m = c.label.match(/^(.*?)\s*\((\d+)\/(\d+)\)\s*$/);
   return m ? { name: m[1], res: Number(m[2]), inf: Number(m[3]) } : { name: c.label, res: undefined, inf: undefined };
+}
+
+/** "Spend 2 Trade Goods" → "2 TG". */
+function payLabel(c: Choice) {
+  const [, kind, n] = baseId(c.customId).match(/^reduce(TG|Comm)_(\d+)/) ?? [];
+  if (!kind) return c.label;
+  return kind === "TG" ? `${n} TG` : `${n} commodit${n === "1" ? "y" : "ies"}`;
 }
 
 /** What the payment is for, from the `_inf` / `_res` suffix the bot puts on its spend buttons. */
@@ -33,20 +40,16 @@ export function SpendBody({ d, data, onPress, pendingKey }: RendererProps) {
   const rest = d.choices.filter((c) => !PLANET.test(baseId(c.customId)) && c !== done);
   const pay = rest.filter((c) => PAY.test(baseId(c.customId)));
   const others = rest.filter((c) => !pay.includes(c));
-  const summary = /used the following|exhausted the following|spent/i.test(d.text) ? d.text : "";
+  const total = d.text.match(/total spend of ([^.\n]+)/i)?.[1];
+  const ready = what === "resources" ? data.me?.resources : data.me?.influence;
   return (
     <div className={classes.stack}>
-      <ResourceStrip me={data.me} show={["tg", "comm", what === "resources" ? "resources" : "influence"]} />
-      {summary ? (
-        <Section label="Spent so far">
-          <Prose text={summary} clamp={6} muted />
-        </Section>
-      ) : (
-        <Prose text={d.text.replace(/^.*please choose the planets you wish to exhaust\.?/i, "").trim()} clamp={3} muted />
-      )}
+      <p className={classes.hint}>
+        {total ? `Spent so far: ${total}.` : "Nothing spent yet."}
+        {ready !== undefined && ` ${ready} ${what === "resources" ? "resources" : "influence"} ready, ${data.me?.tg ?? 0} TG.`}
+      </p>
       {planets.length > 0 && (
-        <Section label="Exhaust planets">
-          <div className={classes.planetGrid}>
+        <div className={classes.planetGrid}>
             {planets.map((c) => {
               const p = planetOf(c);
               return (
@@ -74,24 +77,21 @@ export function SpendBody({ d, data, onPress, pendingKey }: RendererProps) {
                 </UnstyledButton>
               );
             })}
-          </div>
-        </Section>
+        </div>
       )}
       {pay.length > 0 && (
-        <Section label="Or spend">
-          <div className={classes.payRow}>
+        <div className={classes.payRow}>
             {pay.map((c) => (
               <ChoiceButton
                 key={c.key}
-                choice={{ ...c, style: 2 }}
+                choice={{ ...c, style: 2, label: payLabel(c) }}
                 onPress={onPress}
                 pending={pendingKey === c.key}
                 busy={!!pendingKey}
                 compact
               />
             ))}
-          </div>
-        </Section>
+        </div>
       )}
       <ChoiceButtons
         choices={others}
@@ -153,7 +153,7 @@ export function GainTokensBody({ d, data, onPress, pendingKey }: RendererProps) 
           );
         })}
       </div>
-      {note && <Prose text={note} clamp={3} muted />}
+      {note && <Prose text={note} clamp={1} muted />}
       <ChoiceButtons
         choices={rest}
         onPress={onPress}
