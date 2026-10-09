@@ -496,6 +496,7 @@
 }
 
 .large .stamp {
+  top: 68%;
   font-size: 20px;
   padding: 4px 18px;
 }

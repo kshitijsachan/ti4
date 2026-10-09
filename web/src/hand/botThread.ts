@@ -48,11 +48,23 @@ function buttonsOf(message: Message): Component[] {
   return out;
 }
 
+const OWNER_COLOR = /\*\*([A-Za-z]+)\*\*[^`\n]*`\(\s*\d+\)`/;
+
+/**
+ * Card name → numbers in a bot hand listing. Promissory lines also name the
+ * owning colour (`_Ceasefire_ … **Vapourwave** \`(56)\``), so two players'
+ * notes of the same name are told apart under `name|color` keys.
+ */
 function numbersIn(text: string): Map<string, number[]> {
   const map = new Map<string, number[]>();
-  for (const match of text.matchAll(NUMBERED)) {
-    const name = match[1].trim().toLowerCase();
-    map.set(name, [...(map.get(name) ?? []), Number(match[2])]);
+  const add = (key: string, n: number) => map.set(key, [...(map.get(key) ?? []), n]);
+  for (const line of text.split("\n")) {
+    for (const match of line.matchAll(NUMBERED)) {
+      const name = match[1].trim().toLowerCase();
+      add(name, Number(match[2]));
+      const color = OWNER_COLOR.exec(line)?.[1];
+      if (color) add(`${name}|${color.toLowerCase()}`, Number(match[2]));
+    }
   }
   return map;
 }
@@ -164,7 +176,9 @@ export function assignNumbers(
   const used = new Set<number>();
   const out = new Map<string, number>();
   for (const card of cards) {
-    const candidates = numbers.get(card.name.toLowerCase()) ?? [];
+    const name = card.name.toLowerCase();
+    const owned = card.owner && numbers.get(`${name}|${card.owner.color.toLowerCase()}`);
+    const candidates = owned || (numbers.get(name) ?? []);
     const free = candidates.find((n) => !used.has(n));
     if (free === undefined) continue;
     used.add(free);
