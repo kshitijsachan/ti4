@@ -37,6 +37,23 @@ There are no accounts. Each player is a fake Discord user with a secret seat tok
 `/play?t=<token>` (the web app stores it in localStorage). The host uses `/admin?key=<admin_token>`
 (printed by the shim at startup) to create players and copy their links.
 
+## Autopilot seats (solo testing)
+
+A seat flagged `autopilot` (`seats[token].autopilot`, set from the admin page or `POST /app/admin/players
+{names, autopilot: true}` / `POST /app/admin/autopilot {user_id, enabled}`) is played by the shim (`autopilot.ts`).
+Each one is a virtual browser client (`Clients.attachVirtual`): same frames, same `click` / `select` ops, so the
+bot sees ordinary interactions. Its policy is a heuristic table over button custom ids / labels: first legal Milty
+pick, preferred strategy cards, play the strategy card then pass, decline every reaction window (not following,
+no sabotage, no whens / afters, pre-abstain), no objective scoring, roll combat dice once per round and auto-assign
+hits, reject trades, break agenda ties as speaker, and press the first sensible button of prompts that are
+certainly its own (ephemeral, its faction's `FFCC_` buttons, replies to its own press). Undo / take-back / admin /
+info / modal buttons are never pressed. Decisions are logged as `autopilot <name>: pressed "<label>" in #channel
+(<why>)`. With `ANTHROPIC_API_KEY` set, prompts no rule covers are put to Claude (`AUTOPILOT_MODEL`, default
+`claude-sonnet-5-5`), falling back to the heuristics on any error.
+
+The web client keeps the seat token per tab (sessionStorage, localStorage as the default for new tabs), so a host
+can open several seats side by side; the admin page's "Open as" links open a seat in a new tab.
+
 ## Browser protocol (`/app/ws?token=...`)
 
 Server → client frames `{t, ...}`:

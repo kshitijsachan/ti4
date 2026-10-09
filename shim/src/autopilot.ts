@@ -135,6 +135,7 @@ export class Autopilot {
   /** One autopilot press at a time across the table: the bot handles each game's presses in order anyway. */
   private chain: Promise<unknown> = Promise.resolve();
   private drafts = new Map<string, { at: number; data: Json | null }>();
+  private webFactions = new Map<string, { at: number; map: Map<string, string> }>();
 
   constructor(
     readonly hub: Hub,
@@ -183,6 +184,25 @@ export class Autopilot {
     for (const [game, hit] of this.drafts) if (hit.data?.status !== "finished") this.drafts.delete(game);
   }
 
+  /** Each seat's faction in a game, from the bot's web data (cached; refetched at most every 20s while unknown). */
+  async factionOf(game: string, userId: string): Promise<string | undefined> {
+    const hit = this.webFactions.get(game);
+    if (hit?.map.has(userId)) return hit.map.get(userId);
+    if (hit && Date.now() - hit.at < 20000) return undefined;
+    const map = new Map<string, string>();
+    try {
+      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`);
+      if (res.ok) {
+        const data = (await res.json()) as Json;
+        for (const p of data.playerData ?? []) if (p.discordId && p.faction && p.faction !== "null") map.set(String(p.discordId), String(p.faction));
+      }
+    } catch {
+      /* bot API down: fall back to the draft state */
+    }
+    this.webFactions.set(game, { at: Date.now(), map });
+    return map.get(userId);
+  }
+
   /** The bot's draft state for a game (cached briefly): whose pick it is, and each player's faction. */
   async draft(game: string, maxAgeMs = 1500): Promise<Json | null> {
     const hit = this.drafts.get(game);
@@ -221,6 +241,8 @@ class SeatPilot {
   private answered = new Map<string, { sig: string; at: number }>();
   /** Per channel, when the bot last nudged us there ("the queue is currently waiting on you"). */
   private nudges = new Map<string, number>();
+  /** Prompts we reported as having nothing safe to press. */
+  private skipped = new Set<string>();
 
   constructor(
     private mgr: Autopilot,
@@ -368,13 +390,17 @@ class SeatPilot {
     const ffcc = (c: Control) => family(/^FFCC_([^_]+)_/.exec(c.custom_id)?.[1]);
     const ffccMine = !!faction && controls.some((c) => ffcc(c) === faction);
     // Other factions' buttons, and the controls we never press.
-    controls = controls.filter((c) => {
-      const f = ffcc(c);
-      if (f && f !== faction) return false;
-      const bare = c.custom_id.replace(/^FFCC_[^_]+_/, "");
-      return !BLOCKED_ID.test(bare) && !BLOCKED_LABEL.test(c.label.trim());
-    });
-    if (!controls.length) return null;
+    const ours = controls.filter((c) => !ffcc(c) || ffcc(c) === faction);
+    controls = ours.filter((c) => !BLOCKED_ID.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && !BLOCKED_LABEL.test(c.label.trim()));
+    if (!controls.length) {
+      // Say so (once) when a prompt that is certainly ours offers nothing we may press: a likely stall.
+      if ((ffccMine || m._ephemeral_for === me) && !this.skipped.has(m.id) && Date.now() - Date.parse(m.timestamp) < 600000) {
+        this.skipped.add(m.id);
+        const labels = ours.map((c) => c.label || c.custom_id).filter((l) => !/^undo$/i.test(l));
+        if (labels.length) log.info(`autopilot ${this.name}: leaving "${content.slice(0, 80).replace(/\s+/g, " ")}" in #${ch.name} to a person (only ${labels.slice(0, 6).join(" / ")})`);
+      }
+      return null;
+    }
     // My own strategy card: its primary is not planned; the copies in its thread are for followers.
     if (/played by/.test(content) && mentionsMe) return null;
     if (/^These buttons will work inside the thread/.test(content)) return null;
@@ -466,6 +492,11 @@ class SeatPilot {
   private async faction(game: string, m: StoredMessage): Promise<string | undefined> {
     const known = this.factions.get(game);
     if (known) return known;
+    const fromWeb = await this.mgr.factionOf(game, this.userId);
+    if (fromWeb) {
+      this.factions.set(game, family(fromWeb)!);
+      return family(fromWeb);
+    }
     const draft = await this.mgr.draft(game, 10000);
     const mine = (draft?.players ?? []).find((p: Json) => String(p.userId) === this.userId);
     if (mine?.faction) {
