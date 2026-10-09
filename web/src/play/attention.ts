@@ -187,10 +187,12 @@ function scanChannel(
     const pressedControls = m.my_press?.controls ?? state.pressedControls[id];
     const editedAt = m.edited_timestamp ? Date.parse(m.edited_timestamp) : 0;
     /* Only an edit soon after my press is the bot's answer to it; later ones come from other players. */
+    /* A prompt addressed to me by name stays live while the bot keeps updating it ("gain 1 token", again);
+       a table-wide one only if the edit gave it new controls (a scoring tally just changes its text). */
     const editedSincePress =
       editedAt > pressedAt &&
       editedAt - pressedAt < EDIT_ANSWER_MS &&
-      controlSignature(m.components) !== pressedControls;
+      (ping || controlSignature(m.components) !== pressedControls);
     /* An edit after my press is the next step, unless all it left me is a way to take the press back. */
     const answered =
       pressedAt !== undefined && (!editedSincePress || !hasForwardControl(m));
