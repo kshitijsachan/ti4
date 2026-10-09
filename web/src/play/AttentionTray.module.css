@@ -121,6 +121,29 @@
   outline-offset: 1px;
 }
 
+.textBtn {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  color: var(--mantine-color-gray-4);
+}
+
+.textBtn:hover {
+  color: var(--mantine-color-gray-0);
+  background: var(--socket-bg);
+}
+
+.textBtn:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-5);
+  outline-offset: 1px;
+}
+
 .bellOn {
   color: var(--mantine-color-green-4);
 }
@@ -184,12 +207,13 @@
   font-size: 13px;
 }
 
+/* Narrow screens: clear the floating "Channels" button in the bottom-right corner. */
 @media (max-width: 900px) {
   .tray {
     left: 8px;
-    bottom: 8px;
+    bottom: 60px;
     width: calc(100% - 16px);
-    max-height: 50vh;
+    max-height: 45vh;
   }
 
   .compact {

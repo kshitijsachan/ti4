@@ -24,6 +24,7 @@ const REASONS: Record<AttentionItem["reason"], string> = {
   mention: "pinged you",
   "follow-up": "for you",
   role: "everyone",
+  own: "your card",
 };
 
 /** Scrolls the sidebar to a message once its channel is on screen, and flashes it. */
@@ -114,6 +115,7 @@ type Props = {
  * (action log, my hand thread, a combat thread, an only-you message).
  */
 export function AttentionTray({ items, turn }: Props) {
+  const conn = usePlayConnection();
   const [collapsed, setCollapsed] = useState(false);
   const count = items.length;
   const newest = items.reduce<string | undefined>(
@@ -150,6 +152,17 @@ export function AttentionTray({ items, turn }: Props) {
           <span className={classes.headline}>{headline}</span>
           {sub && <span className={classes.sub}>{sub}</span>}
         </div>
+        {count > 1 && !collapsed && (
+          <UnstyledButton
+            className={classes.textBtn}
+            onClick={() => {
+              for (const it of items) conn.actions.dismissPrompt(it.message.id);
+            }}
+            title="Hide every prompt listed here (they stay in their channels)"
+          >
+            Hide all
+          </UnstyledButton>
+        )}
         <AlertsToggle />
         {!empty && (
           <UnstyledButton

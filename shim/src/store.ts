@@ -34,6 +34,8 @@ export type StoredMessage = Json & {
   _ephemeral_for?: string;
   /** The player whose button press this bot post answers (see Hub.attributePrompt); browsers get `prompted_user_id`. */
   _prompted_for?: string;
+  /** Each player's latest press on this message: when (ISO) and the controls it had then. */
+  _presses?: Record<string, { at: string; controls: string }>;
 };
 
 export type Interaction = {

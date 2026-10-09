@@ -201,7 +201,9 @@ function Home() {
 
   return (
     <>
-      <h1 className={classes.heading}>Welcome back, {displayName(me)}</h1>
+      <h1 className={classes.heading}>
+        {games.length ? "Welcome back" : "Welcome"}, {displayName(me)}
+      </h1>
       <section className={classes.section}>
         <div className={classes.label}>
           Your games <span className={classes.count}>{games.length}</span>

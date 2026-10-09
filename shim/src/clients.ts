@@ -85,11 +85,11 @@ export class Clients implements Listener {
   // ---- Listener ----
 
   messageCreate(msg: StoredMessage) {
-    for (const c of this.clients) if (this.messageVisible(c.userId, msg)) this.send(c, { t: "message_create", message: view(msg) });
+    for (const c of this.clients) if (this.messageVisible(c.userId, msg)) this.send(c, { t: "message_create", message: view(msg, c.userId) });
   }
 
   messageUpdate(msg: StoredMessage) {
-    for (const c of this.clients) if (this.messageVisible(c.userId, msg)) this.send(c, { t: "message_update", message: view(msg) });
+    for (const c of this.clients) if (this.messageVisible(c.userId, msg)) this.send(c, { t: "message_update", message: view(msg, c.userId) });
   }
 
   messageDelete(channelId: string, id: string, ephemeralFor?: string) {
@@ -185,7 +185,7 @@ export class Clients implements Listener {
       t: "history",
       nonce: msg.nonce,
       channel_id: msg.channel_id,
-      messages: page.map(view),
+      messages: page.map((m) => view(m, c.userId)),
       has_more: pool.length > page.length,
     });
   }
@@ -274,6 +274,10 @@ export class Clients implements Listener {
     if (!m || !this.messageVisible(c.userId, m)) {
       return this.send(c, { t: "interaction_done", nonce: msg.nonce, error: "That message no longer exists." });
     }
+    // Remember this player's latest press on the message (shown back to them as `my_press`), so every
+    // device they use knows which prompts they already answered.
+    m._presses = { ...m._presses, [c.userId]: { at: new Date().toISOString(), controls: controlIds(m.components) } };
+    this.store.scheduleSave();
     const data: Json = { custom_id: msg.custom_id, component_type: componentType };
     if (componentType !== 2) {
       data.values = msg.values ?? [];
@@ -384,14 +388,30 @@ function submittedWithIds(submitted: Json[], modal: Json[]): Json[] {
 }
 
 /** What a browser sees of a message: wire format plus whether it is only visible to them. */
-function view(msg: StoredMessage): Json {
+function view(msg: StoredMessage, userId: string): Json {
   let out = stripPrivate(msg);
   if (msg.embeds?.length && JSON.stringify(msg.embeds).includes(DISCORD_EMOJI_HOST)) {
     out = { ...out, embeds: JSON.parse(JSON.stringify(msg.embeds).replace(DISCORD_EMOJI_CDN, "/emojis/$1")) };
   }
   if (msg._ephemeral_for) out.ephemeral = true;
   if (msg._prompted_for) out.prompted_user_id = msg._prompted_for;
+  const press = msg._presses?.[userId];
+  if (press) out.my_press = press;
   return out;
+}
+
+/** The custom ids of a message's enabled controls, sorted and joined (as the web client computes them). */
+function controlIds(components: Json[] | undefined): string {
+  const ids: string[] = [];
+  const walk = (list: Json[] | undefined) => {
+    for (const c of list ?? []) {
+      if (c.custom_id && !c.disabled) ids.push(c.custom_id);
+      walk(c.components);
+      if (c.accessory) walk([c.accessory]);
+    }
+  };
+  walk(components);
+  return ids.sort().join("|");
 }
 
 /** The bot puts Discord's emoji CDN in embed thumbnails (faction icons); we serve those emoji ourselves. */

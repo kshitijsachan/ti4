@@ -170,6 +170,8 @@ export type Message = {
   ephemeral?: boolean;
   /** Shim extension: the player whose button press this bot post answers. */
   prompted_user_id?: Snowflake;
+  /** Shim extension: my latest press on this message (any device): when, and the controls it had then. */
+  my_press?: { at: string; controls: string };
 };
 
 export const MessageFlags = {

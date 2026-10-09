@@ -18,10 +18,13 @@ const PHASES: Record<string, string> = {
   agenda: "Agenda phase",
 };
 
+/** "status.scoring" → "Status phase · scoring". */
 function phaseLabel(phase?: string) {
   if (!phase) return undefined;
-  if (phase.startsWith("setup")) return "Setup";
-  return PHASES[phase] ?? phase;
+  const [main, step] = phase.split(".");
+  if (main === "setup") return "Setup";
+  const label = PHASES[main] ?? main;
+  return step ? `${label} · ${step.replace(/_/g, " ")}` : label;
 }
 
 /** Whose turn it is, from the bot's live game document (and the draft while one runs). */
@@ -44,7 +47,8 @@ export function useTurn(
     return { mine: draft.mine, waitingOn: draft.picking, phase: "Draft" };
   }
   const phase = data?.phase;
-  const turnPhase = phase === "strategy" || phase === "action";
+  const main = phase?.split(".")[0];
+  const turnPhase = main === "strategy" || main === "action";
   return {
     mine: turnPhase && !!myId && data?.activeId === myId,
     waitingOn: turnPhase ? data?.activeName : undefined,

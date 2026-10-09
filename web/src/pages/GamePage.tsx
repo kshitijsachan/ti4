@@ -153,7 +153,7 @@ export default function GamePage() {
       picking: draftSummary.picking.name,
     },
   );
-  const attention = useAttention(mapid);
+  const attention = useAttention(mapid, turn.mine);
   useTurnAlerts(
     mapid,
     turn,

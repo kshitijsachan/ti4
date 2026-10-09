@@ -12,8 +12,8 @@ import { ComponentsV2 } from "./ComponentsV2";
 import { toPlainText } from "./markdownParser";
 import classes from "./Message.module.css";
 
-/** A message that is nothing but an image link unfurls into the image, as Discord does. */
-const IMAGE_URL = /^https?:\/\/\S+\.(png|jpe?g|gif|webp)(\?\S*)?$/i;
+/** A message that is nothing but an image link unfurls into the image, as Discord does (incl. our own /art links). */
+const IMAGE_URL = /^(https?:\/\/|\/(art|attachments|emojis)\/)\S+\.(png|jpe?g|gif|webp)(\?\S*)?$/i;
 
 export function isV2(m: MessageT) {
   return ((m.flags ?? 0) & MessageFlags.ComponentsV2) !== 0;

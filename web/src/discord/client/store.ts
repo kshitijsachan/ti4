@@ -67,6 +67,8 @@ export type PlayState = {
   dismissedPrompts: Record<Snowflake, true>;
   /** Messages I pressed something on → when (ms), persisted per browser, newest few hundred. */
   pressed: Record<Snowflake, number>;
+  /** The controls (custom ids) a message had when I pressed it, so a mere text update is not a new step. */
+  pressedControls: Record<Snowflake, string>;
 };
 
 export const EMPTY_CHANNEL: ChannelMessages = {
@@ -106,6 +108,7 @@ export function createPlayStore(storageKey: string) {
     interacted: readStored(`interacted.${storageKey}`),
     dismissedPrompts: readStored(`dismissed.${storageKey}`),
     pressed: readStored(`pressed.${storageKey}`),
+    pressedControls: readStored(`pressedControls.${storageKey}`),
   }));
 
   const set = store.setState;
@@ -231,8 +234,11 @@ export function createPlayStore(storageKey: string) {
     /** Remember that I acted on a message, so prompts at or before it count as answered. */
     noteInteraction(channelId: Snowflake, messageId: Snowflake) {
       const pressed = withId(get().pressed, messageId, Date.now());
-      set({ pressed });
+      const message = get().messages[channelId]?.byId[messageId];
+      const pressedControls = withId(get().pressedControls, messageId, controlSignature(message?.components));
+      set({ pressed, pressedControls });
       writeStored(`pressed.${storageKey}`, pressed);
+      writeStored(`pressedControls.${storageKey}`, pressedControls);
       const cur = get().interacted[channelId];
       if (cur && compareSnowflakes(cur, messageId) >= 0) return;
       const interacted = { ...get().interacted, [channelId]: messageId };
@@ -317,6 +323,20 @@ export function createPlayStore(storageKey: string) {
 }
 
 export type PlayActions = ReturnType<typeof createPlayStore>;
+
+/** The custom ids of a message's controls, sorted: what a press could still do there. */
+export function controlSignature(components: Message["components"]): string {
+  const ids: string[] = [];
+  const walk = (list: Message["components"]) => {
+    for (const c of list ?? []) {
+      if (c.custom_id && !c.disabled) ids.push(c.custom_id);
+      walk(c.components);
+      if (c.accessory) walk([c.accessory]);
+    }
+  };
+  walk(components);
+  return ids.sort().join("|");
+}
 
 /** Sets an entry of a persisted id map, keeping only the newest few hundred ids. */
 function withId<V>(map: Record<Snowflake, V>, id: Snowflake, value: V): Record<Snowflake, V> {
