@@ -45,6 +45,8 @@ type Rule = {
   table?: boolean;
   /** Among several matching controls of one message, take the last instead of the first. */
   last?: boolean;
+  /** May be pressed on a message we already answered (scoring asks for a public and a secret objective). */
+  again?: boolean;
   /** Ranks matching controls (lower first). */
   rank?: (c: Control) => number;
 };
@@ -54,8 +56,8 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue)/i;
-const BLOCKED_LABEL = /^(undo|un-|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
+  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey)/i;
+const BLOCKED_LABEL = /^(undo|un-|retrieve|reassign|reset|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
   // Milty draft (only offered when the draft says it is this seat's pick; see milty()).
@@ -95,8 +97,8 @@ const RULES: Rule[] = [
   { id: /^no_sabotage$/, score: 70, table: true, why: "no sabotage" },
   { id: /^no_when$/, score: 70, table: true, why: "agenda: no whens" },
   { id: /^no_after$/, score: 70, table: true, why: "agenda: no afters" },
-  { id: /^po_no_scoring$/, score: 66, table: true, why: "status: no public objective" },
-  { id: /^so_no_scoring$/, score: 65, table: true, why: "status: no secret objective" },
+  { id: /^po_no_scoring$/, score: 66, table: true, again: true, why: "status: no public objective" },
+  { id: /^so_no_scoring$/, score: 65, table: true, again: true, why: "status: no secret objective" },
   { id: /^pass_on_abilities$/, score: 60, table: true, why: "status: ready for strategy phase" },
   // Prompts addressed to us: move on.
   {
@@ -205,6 +207,8 @@ class SeatPilot {
   private factions = new Map<string, string>();
   /** When we last pressed a control by `${channel}:${custom id}:${content}`: the bot often re-posts a prompt. */
   private recent = new Map<string, number>();
+  /** Messages we pressed on, with their controls then: answered until the bot changes them. */
+  private answered = new Map<string, string>();
 
   constructor(
     private mgr: Autopilot,
@@ -317,13 +321,15 @@ class SeatPilot {
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
     const press = m._presses?.[me];
     if (press && Date.parse(press.at) < this.started && press.controls === signature(controls)) return null;
+    const answered =
+      this.answered.get(m.id) === signature(controls) || Date.now() - (this.recent.get(this.promptKey(m, controls)) ?? 0) < REPOST_MS;
     controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`) && !this.pressedRecently(m, c));
 
     const faction = await this.faction(game, m);
     const content = String(m.content ?? "");
     const mentionsMe = content.includes(`<@${me}>`) || (m.mentions ?? []).some((u: Json) => u.id === me);
     const mentionsOther = !mentionsMe && (m.mentions ?? []).some((u: Json) => u.id !== me && !s.users[u.id]?.bot);
-    const ffcc = (c: Control) => /^FFCC_([^_]+)_/.exec(c.custom_id)?.[1];
+    const ffcc = (c: Control) => family(/^FFCC_([^_]+)_/.exec(c.custom_id)?.[1]);
     const ffccMine = !!faction && controls.some((c) => ffcc(c) === faction);
     // Other factions' buttons, and the controls we never press.
     controls = controls.filter((c) => {
@@ -350,19 +356,29 @@ class SeatPilot {
 
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
+      if (answered && !rule.again) continue;
       let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true));
       if (!hits.length) continue;
       if (rule.rank) hits = [...hits].sort((a, b) => rule.rank!(a) - rule.rank!(b));
       const control = rule.last ? hits[hits.length - 1] : hits[0];
       return { msg: m, control, score: rule.score, why: rule.why };
     }
-    if (!ctx.strong) return null;
-    // A prompt certainly waiting on us that no rule covers: its first control.
+    if (!ctx.strong || answered) return null;
+    // A prompt certainly waiting on us that no rule covers: its first control (not one we just chose in a
+    // similar prompt here, e.g. a second "choose a technology").
+    const fresh = controls.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= REPOST_MS);
+    if (!fresh.length) return null;
+    controls = fresh;
     return { msg: m, control: controls[0], score: controls.length === 1 ? 25 : 10, why: controls.length === 1 ? "only option" : "first option" };
   }
 
   private repostKey(m: StoredMessage, c: Control) {
     return `${m.channel_id}:${c.custom_id}:${String(m.content ?? "").slice(0, 200)}`;
+  }
+
+  /** A prompt by its text and controls: the bot often deletes a prompt and posts it again after a press. */
+  private promptKey(m: StoredMessage, controls: Control[]) {
+    return `${m.channel_id}:${signature(controls)}:${String(m.content ?? "").slice(0, 200)}`;
   }
 
   /** The same control on a re-posted copy of a prompt we answered within the last minute. */
@@ -394,8 +410,8 @@ class SeatPilot {
     const draft = await this.mgr.draft(game, 10000);
     const mine = (draft?.players ?? []).find((p: Json) => String(p.userId) === this.userId);
     if (mine?.faction) {
-      this.factions.set(game, String(mine.faction));
-      return String(mine.faction);
+      this.factions.set(game, family(String(mine.faction))!);
+      return family(String(mine.faction));
     }
     const content = String(m.content ?? "");
     if (content.includes(`<@${this.userId}>`) && !(m.mentions ?? []).some((u: Json) => u.id !== this.userId)) {
@@ -403,8 +419,8 @@ class SeatPilot {
         .map((c) => /^FFCC_([^_]+)_/.exec(c.custom_id)?.[1])
         .filter(Boolean);
       if (ids.length && ids.every((f) => f === ids[0])) {
-        this.factions.set(game, ids[0]!);
-        return ids[0];
+        this.factions.set(game, family(ids[0])!);
+        return family(ids[0]);
       }
     }
     return undefined;
@@ -460,6 +476,9 @@ class SeatPilot {
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
     this.pressed.add(key);
+    this.answered.set(msg.id, signature(controlsOf(fresh.components)));
+    this.recent.set(`${msg.channel_id}:label:${control.label}`, Date.now());
+    this.recent.set(this.promptKey(fresh, controlsOf(fresh.components)), Date.now());
     this.recent.set(this.repostKey(msg, control), Date.now());
     this.lastPressed = msg.id;
     const nonce = `autopilot-${++this.nonce}`;
@@ -494,6 +513,11 @@ class SeatPilot {
     // Let the bot's answer land before deciding again.
     await sleep(800);
   }
+}
+
+/** Keleres is drafted as one faction and played as one of three (keleresm / keleresx / keleresa). */
+function family(faction: string | undefined) {
+  return faction?.startsWith("keleres") ? "keleres" : faction;
 }
 
 /** The game a channel belongs to: `pbd7` for `pbd7-actions`, its table talk, and their threads. */
