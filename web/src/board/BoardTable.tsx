@@ -176,7 +176,8 @@ function fitLayout(bounds: Bounds | null, area: { w: number; h: number }, docked
   // The zoom always leaves room for the popup; the board only slides over while it is open.
   const right = docked ? area.w - reserve : area.w;
   const cx = right / 2;
-  const cy = FIT_PAD + availH / 2;
+  // A narrow table shows the popup as a bottom sheet: lift the board to the top, above it.
+  const cy = docked && !reserve ? FIT_PAD + (bh * zoom) / 2 : FIT_PAD + availH / 2;
   return {
     zoom,
     marginLeft: cx - ((bounds.minX + bounds.maxX) / 2) * zoom,
