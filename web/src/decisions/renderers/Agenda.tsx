@@ -16,7 +16,7 @@ function outcomes(a: AgendaInfo) {
       { label: "Against", text: strip(a.text2) },
     ].filter((o) => o.text);
   }
-  return [{ label: a.target ?? "Effect", text: [a.text1, a.text2].filter(Boolean).join(" ") }];
+  return [{ label: "", text: [a.text1, a.text2].filter(Boolean).join(" ") }];
 }
 
 /** The agenda card itself, as printed. */
@@ -34,7 +34,8 @@ export function AgendaCard({ agenda, compact }: { agenda: AgendaInfo; compact?: 
         {!compact &&
           outcomes(agenda).map((o) => (
             <p key={o.label} className={classes.cardText}>
-              <b>{o.label}:</b> {o.text}
+              {o.label && <b>{o.label}: </b>}
+              {o.text}
             </p>
           ))}
       </div>

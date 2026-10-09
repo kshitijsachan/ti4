@@ -126,7 +126,12 @@ export class SoloGames {
     try {
       const exp = await this.waitFor(job, "the expansion choice", 90 * SECOND, () => find(new RegExp(`^chooseExp_${expansion}$`)));
       this.note(job, `Choosing ${expansion === "te" ? "Thunder's Edge + PoK" : expansion}`);
+      const sinceExp = this.lastId(actionsId);
       await this.retry(job, "the expansion button", () => p.click(exp, `chooseExp_${expansion}`));
+      // The Milty settings read the expansion when they open: let the choice land first.
+      await this.waitFor(job, "the expansion to be set", 20 * SECOND, () =>
+        this.newer(actionsId, sinceExp, userId).find((m) => /^Set game to use/.test(String(m.content ?? ""))),
+      ).catch((e) => log.warn(`solo ${job.game}: ${(e as Error).message}`));
 
       const milty = await this.waitFor(job, "Start Milty Setup", 30 * SECOND, () => find(/^miltySetup$/));
       const sinceMilty = this.lastId(actionsId);
