@@ -55,6 +55,9 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
       tone: "stop",
     };
   }
+  if (id.startsWith("confirmSecondAction")) {
+    return { choice: c, title: "Take another action", sub: "Use your ability to act again", icon: <IconRepeat size={22} stroke={1.6} />, tone: "go" };
+  }
   if (id.startsWith("doAnotherAction")) {
     return { choice: c, title: "Do another action", sub: "Only if a card or ability gives you one", icon: <IconRepeat size={22} stroke={1.6} />, tone: "go" };
   }

@@ -229,6 +229,18 @@ const rules: Rule[] = [
   (m) => (/^All players have picked a strategy card/.test(m.content) ? noise("picks done", { phase: "action" }) : null),
   (m) => (/^All players have passed\.?$/.test(m.content.trim()) ? noise("all passed", { phase: "status" }) : null),
 
+  // Rewind / undo from the web (bot/patches: UndoService) -----------------------------------------------------
+  (m) => {
+    if (!m.content.startsWith("\u23EA")) return null;
+    const hit = actorAt(m.content.slice(1));
+    const rest = hit?.rest ?? m.content.slice(1);
+    const rw = rest.match(/rewound the game to just after: \*\*(.+?)\*\*/);
+    if (rw) return ev({ kind: "edit", importance: 3, actor: hit?.actor, summary: [txt("rewound the game to just after "), b(rw[1])] });
+    const un = rest.match(/undid: \*\*(.+?)\*\*/);
+    if (un) return ev({ kind: "edit", importance: 2, actor: hit?.actor, summary: [txt("undid "), b(un[1])] });
+    return null;
+  },
+
   // Edits -------------------------------------------------------------------------------------------------
   (m) => {
     const c = m.content.match(/^```(?:sus|notSus)?\n?(.+?) used (\/[^\n`]+)\n?```/s);
