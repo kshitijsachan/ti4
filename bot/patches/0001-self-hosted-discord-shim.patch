@@ -2446,10 +2446,10 @@ index 0000000..0ff478c
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoService.java b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 new file mode 100644
-index 0000000..7c93ad6
+index 0000000..deff29c
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoService.java
-@@ -0,0 +1,284 @@
+@@ -0,0 +1,287 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.io.BufferedReader;
@@ -2565,6 +2565,9 @@ index 0000000..7c93ad6
 +            } catch (Exception e) {
 +                BotLogger.error("Could not keep the pre-rewind state of " + gameName, e);
 +            }
++            // Undoing the rewind must not re-post the restored state's old prompt (the bot re-posts the "saved
++            // buttons" of the state being undone); the pre-rewind prompts are still in the channel.
++            restored.setSavedButtons(new ArrayList<>());
 +            String reason = REWIND_MARK + " " + who + " rewound the game to: " + targetLabel;
 +            GameManager.save(restored, reason);
 +            MessageHelper.sendMessageToChannel(
