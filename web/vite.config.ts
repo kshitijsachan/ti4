@@ -55,18 +55,29 @@ function botArt(): Plugin {
   };
 }
 
+/**
+ * The React compiler only pays off on components. Running it over the large
+ * generated data modules (src/entities/data) and plain .ts helpers made
+ * production builds take ~20 minutes, so it is limited to .tsx outside them.
+ */
 const ReactCompilerConfig = {
   target: "19",
+  sources: (filename: string) =>
+    filename.endsWith(".tsx") && !filename.includes("/src/entities/"),
 };
 
 export default defineConfig({
   plugins: [
     botArt(),
-    react({
-      babel: {
-        plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]],
-      },
-    }),
+    react(
+      process.env.NO_REACT_COMPILER
+        ? {}
+        : {
+            babel: {
+              plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]],
+            },
+          },
+    ),
   ],
   resolve: {
     alias: {

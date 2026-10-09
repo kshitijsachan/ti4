@@ -51,6 +51,27 @@ index a54a239..716905c 100644
              MessageHelper.sendMessageToChannel(
                      event.getMessageChannel(), member.getUser().getAsMention() + """
                       You need to have completed at least one game (or be currently in a game) to create new games via this button. \
+diff --git a/src/main/java/ti4/helpers/TransactionHelper.java b/src/main/java/ti4/helpers/TransactionHelper.java
+index 22ecac6..4adb45d 100644
+--- a/src/main/java/ti4/helpers/TransactionHelper.java
++++ b/src/main/java/ti4/helpers/TransactionHelper.java
+@@ -1571,6 +1571,7 @@ public class TransactionHelper {
+ 
+     private static boolean sendMemeInsteadOfText(ButtonInteractionEvent event, Game game) {
+         if (game.getName().startsWith("test")) return true;
++        if (event == null) return false; // selfhost: web trade panel sends offers without a button event
+         if (event.getTimeCreated().getMonth() == Month.APRIL
+                 && event.getTimeCreated().getDayOfMonth() == 1) return true;
+         if ("pbd100two".equals(game.getName())) return RandomHelper.isOneInX(5);
+@@ -1631,7 +1632,7 @@ public class TransactionHelper {
+                         + ":\n" + privateOfferText,
+                 buttons);
+ 
+-        event.getMessage().delete().queue(Consumers.nop(), BotLogger::catchRestError);
++        if (event != null) event.getMessage().delete().queue(Consumers.nop(), BotLogger::catchRestError);
+ 
+         int offerNumber = 1;
+         String key = "offerFrom" + player.getFaction() + "To" + p2.getFaction();
 diff --git a/src/main/java/ti4/image/ImageHelper.java b/src/main/java/ti4/image/ImageHelper.java
 index d389e4e..bf1fc4e 100644
 --- a/src/main/java/ti4/image/ImageHelper.java
@@ -1108,5 +1129,891 @@ index 0000000..8db5384
 +        Matcher m = EMOJI.matcher(formatted);
 +        if (!m.find()) return null;
 +        return "/emojis/" + m.group(2) + ("a".equals(m.group(1)) ? ".gif" : ".png");
++    }
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/TradeController.java b/src/main/java/ti4/spring/api/selfhost/TradeController.java
+new file mode 100644
+index 0000000..73e74fb
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/TradeController.java
+@@ -0,0 +1,68 @@
++package ti4.spring.api.selfhost;
++
++import java.util.Map;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.CacheControl;
++import org.springframework.http.HttpStatus;
++import org.springframework.http.ResponseEntity;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.web.bind.annotation.ExceptionHandler;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.RequestBody;
++import org.springframework.web.bind.annotation.RequestMapping;
++import org.springframework.web.bind.annotation.RestController;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.spring.api.selfhost.TradeModels.PendingResponse;
++import ti4.spring.api.selfhost.TradeModels.ProposeRequest;
++import ti4.spring.api.selfhost.TradeModels.ProposeResponse;
++import ti4.spring.api.selfhost.TradeModels.TradeOptions;
++import ti4.spring.context.RequestContext;
++import ti4.spring.context.SetupRequestContext;
++
++/**
++ * Per-player trade endpoints for the self-hosted web trade panel. Auth: {@code Authorization: Bearer <seat token>}
++ * (the shim forwards it; non-GET is allowed under /api/game/**).
++ * <ul>
++ *   <li>{@code GET  /api/game/{gameName}/trade/options} — what I can offer, who I can trade with, what they have</li>
++ *   <li>{@code POST /api/game/{gameName}/trade/propose} — build the bot transaction and send the offer</li>
++ *   <li>{@code GET  /api/game/{gameName}/trade/pending} — open offers to / from me, with the bot's buttons</li>
++ * </ul>
++ */
++@RestController
++@RequiredArgsConstructor
++@RequestMapping("/api/game/{gameName}/trade")
++public class TradeController {
++
++    private final TradeService tradeService;
++
++    @GetMapping("/options")
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public ResponseEntity<TradeOptions> options(@PathVariable String gameName) {
++        Game game = RequestContext.getGame();
++        Player me = RequestContext.getPlayer();
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(tradeService.options(game, me));
++    }
++
++    @PostMapping("/propose")
++    @SetupRequestContext
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public ProposeResponse propose(@PathVariable String gameName, @RequestBody ProposeRequest request) {
++        return tradeService.propose(RequestContext.getGame(), RequestContext.getPlayer(), request);
++    }
++
++    @GetMapping("/pending")
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public ResponseEntity<PendingResponse> pending(@PathVariable String gameName) {
++        Game game = RequestContext.getGame();
++        Player me = RequestContext.getPlayer();
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(tradeService.pending(game, me));
++    }
++
++    @ExceptionHandler(TradeService.TradeException.class)
++    public ResponseEntity<Map<String, String>> tradeError(TradeService.TradeException e) {
++        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
++    }
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/TradeModels.java b/src/main/java/ti4/spring/api/selfhost/TradeModels.java
+new file mode 100644
+index 0000000..e09cc47
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/TradeModels.java
+@@ -0,0 +1,143 @@
++package ti4.spring.api.selfhost;
++
++import java.util.List;
++import java.util.Map;
++
++/**
++ * JSON shapes for the self-hosted web trade panel ({@code /api/game/{gameName}/trade/**}). A trade is the bot's own
++ * "transaction": the offerer's transaction items plus the offer message with Accept / Reject buttons that
++ * {@code TransactionHelper.sendOffer} posts to the receiver. Acceptance and execution stay 100% bot logic.
++ */
++public final class TradeModels {
++    private TradeModels() {}
++
++    /**
++     * @param blockedReason non-null when the calling player can't propose any trade right now (old transaction
++     *                      model, Hidden Agenda in the agenda phase, ...)
++     */
++    public record TradeOptions(
++            String game,
++            String phase,
++            int round,
++            boolean newTransactionModel,
++            String blockedReason,
++            long version,
++            TradeSelf me,
++            List<TradeCounterparty> counterparties) {}
++
++    /** Everything the calling player could put into an offer. */
++    public record TradeSelf(
++            String userId,
++            String userName,
++            String faction,
++            String color,
++            int tg,
++            int commodities,
++            int commoditiesTotal,
++            boolean canSendCommodities,
++            List<CardRef> promissoryNotes,
++            List<CardRef> actionCards,
++            Map<String, Integer> fragments,
++            List<CardRef> relics,
++            String icon) {}
++
++    /**
++     * Another player, with whether we may trade with them (the bot's own {@code canTheseTwoTransact} check) and their
++     * publicly known stuff that can be requested.
++     *
++     * @param requestablePromissoryNotes their own PNs not in anyone's play area (the bot's "request" list; whether
++     *                                   they still hold one is private)
++     * @param debtIHold     their debt tokens in my debt pool (what I can clear for them)
++     * @param debtTheyHold  my debt tokens in their pool (what they can clear for me)
++     * @param excludedGivePromissoryNotes my PNs I can't give them (Alliance to a Hubris player)
++     */
++    public record TradeCounterparty(
++            String userId,
++            String userName,
++            String faction,
++            String color,
++            boolean canTrade,
++            boolean neighbor,
++            String reason,
++            int tg,
++            int commodities,
++            int commoditiesTotal,
++            boolean canSendCommodities,
++            int pnCount,
++            int acCount,
++            Map<String, Integer> fragments,
++            List<CardRef> requestablePromissoryNotes,
++            List<CardRef> relics,
++            boolean canTradeActionCards,
++            int debtIHold,
++            int debtTheyHold,
++            List<String> excludedGivePromissoryNotes,
++            String icon) {}
++
++    // icon / otherIcon: the faction's emoji image as served by the shim ("/emojis/<id>"), or null.
++
++    /** A card-like thing: PN (owner set), action card, relic. */
++    public record CardRef(String id, String name, String text, String ownerFaction, String ownerColor) {}
++
++    /** Request body for {@code POST /trade/propose}. */
++    public record ProposeRequest(String to, TradeSide give, TradeSide receive, String note) {}
++
++    /**
++     * One side of an offer.
++     *
++     * @param promissoryNotes PN ids; on the receive side {@code "any"} asks for a PN of their choice
++     * @param actionCards     action card ids (give side only)
++     * @param actionCardCount number of unspecified action cards (receive side only; the giver picks)
++     * @param fragments       trait ({@code cultural|industrial|hazardous|frontier}) -> count
++     * @param sendDebt        debt tokens the giver sends into the other's debt pool
++     * @param clearDebt       the other's debt tokens the giver clears from their own pool
++     */
++    public record TradeSide(
++            Integer tg,
++            Integer commodities,
++            List<String> promissoryNotes,
++            List<String> actionCards,
++            Integer actionCardCount,
++            Map<String, Integer> fragments,
++            List<String> relics,
++            Integer sendDebt,
++            Integer clearDebt) {}
++
++    public record ProposeResponse(
++            boolean ok, int offerNumber, String to, List<TradeItem> items, String offerText, List<String> warnings) {}
++
++    /**
++     * One line of an offer, decoded from a bot transaction item {@code sending<f>_receiving<f>_<thing>_<detail>}.
++     *
++     * @param kind tg | commodities | pn | pnAny | ac | acAny | fragment | relic | sendDebt | clearDebt | note | other
++     */
++    public record TradeItem(String from, String to, String kind, int amount, String id, String label, String raw) {}
++
++    /**
++     * An open offer. {@code direction} is "incoming" (to me; {@code accept}/{@code reject}/{@code counter} are the
++     * bot's buttons) or "outgoing" (from me; {@code rescind}). Press a button through the shim's /app/ws
++     * {@code click} op with the given channel / message / custom id.
++     *
++     * @param current false when a newer offer replaced it (the bot will refuse to accept it)
++     */
++    public record PendingOffer(
++            String direction,
++            String otherFaction,
++            String otherUserId,
++            String otherUserName,
++            String otherColor,
++            int offerNumber,
++            boolean current,
++            String text,
++            List<TradeItem> items,
++            ButtonRef accept,
++            ButtonRef reject,
++            ButtonRef counter,
++            ButtonRef rescind,
++            String createdAt,
++            String otherIcon) {}
++
++    public record ButtonRef(String channelId, String messageId, String customId, String label) {}
++
++    public record PendingResponse(List<PendingOffer> incoming, List<PendingOffer> outgoing) {}
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/TradeService.java b/src/main/java/ti4/spring/api/selfhost/TradeService.java
+new file mode 100644
+index 0000000..9a7bd68
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/TradeService.java
+@@ -0,0 +1,657 @@
++package ti4.spring.api.selfhost;
++
++import java.lang.reflect.Method;
++import java.util.ArrayList;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
++import net.dv8tion.jda.api.components.buttons.Button;
++import net.dv8tion.jda.api.entities.Message;
++import net.dv8tion.jda.api.entities.MessageHistory;
++import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
++import org.springframework.stereotype.Service;
++import ti4.discord.JdaService;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.helpers.ButtonHelper;
++import ti4.helpers.ButtonHelperExplore;
++import ti4.helpers.Constants;
++import ti4.helpers.TransactionHelper;
++import ti4.image.Mapper;
++import ti4.model.ActionCardModel;
++import ti4.model.PromissoryNoteModel;
++import ti4.model.RelicModel;
++import ti4.service.agenda.IsPlayerElectedService;
++import ti4.spring.api.selfhost.TradeModels.ButtonRef;
++import ti4.spring.api.selfhost.TradeModels.CardRef;
++import ti4.spring.api.selfhost.TradeModels.PendingOffer;
++import ti4.spring.api.selfhost.TradeModels.PendingResponse;
++import ti4.spring.api.selfhost.TradeModels.ProposeRequest;
++import ti4.spring.api.selfhost.TradeModels.ProposeResponse;
++import ti4.spring.api.selfhost.TradeModels.TradeCounterparty;
++import ti4.spring.api.selfhost.TradeModels.TradeItem;
++import ti4.spring.api.selfhost.TradeModels.TradeOptions;
++import ti4.spring.api.selfhost.TradeModels.TradeSelf;
++import ti4.spring.api.selfhost.TradeModels.TradeSide;
++
++/**
++ * Builds the web trade panel's view of the bot's transaction system and proposes offers through it. Proposing
++ * writes the same transaction items the {@code offerToTransact_} buttons write, then calls the bot's own
++ * {@link TransactionHelper#sendOffer} so the receiver gets the usual Accept / Reject / Counter buttons.
++ */
++@Service
++public class TradeService {
++
++    /** Thrown for a request the bot's transaction rules don't allow; mapped to HTTP 400. */
++    public static class TradeException extends RuntimeException {
++        public TradeException(String message) {
++            super(message);
++        }
++    }
++
++    private static final List<String> FRAGMENT_TRAITS =
++            List.of(Constants.CULTURAL, Constants.INDUSTRIAL, Constants.HAZARDOUS, Constants.FRONTIER);
++    private static final int MAX_GENERIC = 7;
++    private static final int MAX_DIGIT = 9;
++    private static final long HISTORY_TTL_MS = 3000;
++
++    private record HistoryEntry(long at, long version, List<Message> messages) {}
++
++    private final Map<String, HistoryEntry> historyCache = new ConcurrentHashMap<>();
++
++    // ---------------------------------------------------------------- options
++
++    public TradeOptions options(Game game, Player me) {
++        List<TradeCounterparty> others = new ArrayList<>();
++        for (Player p : game.getRealPlayers()) {
++            if (p == me || p.getFaction().equalsIgnoreCase(me.getFaction())) continue;
++            if (!Mapper.isValidFaction(p.getFaction())) continue;
++            others.add(counterparty(game, me, p));
++        }
++        return new TradeOptions(
++                game.getName(),
++                game.getPhaseOfGame(),
++                game.getRound(),
++                TransactionHelper.useNewTransactionModel(game),
++                blockedReason(game, me),
++                game.getLastModifiedDate(),
++                self(game, me),
++                others);
++    }
++
++    private static String blockedReason(Game game, Player me) {
++        if (game.isFowMode()) return "Trading from the web panel isn't available in fog of war games.";
++        if (!TransactionHelper.useNewTransactionModel(game))
++            return "This game uses the old transaction method (direct sends), which has no offers.";
++        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame().toLowerCase(Locale.ROOT);
++        if (game.isHiddenAgendaMode()
++                && phase.contains("agenda")
++                && game.getStoredValue("executiveOrder").isEmpty())
++            return "Hidden Agenda mode doesn't allow transactions in the agenda phase.";
++        if (me.hasAbility("policy_the_people_control") && !"action".equals(phase))
++            return "Policy - The People: Control prevents you from transacting outside the action phase.";
++        return null;
++    }
++
++    private static TradeSelf self(Game game, Player me) {
++        List<CardRef> pns = new ArrayList<>();
++        for (String id : me.getPromissoryNotes().keySet()) {
++            if (me.getPromissoryNotesInPlayArea().contains(id)) continue;
++            pns.add(pnRef(game, id));
++        }
++        List<CardRef> acs = new ArrayList<>();
++        for (String id : me.getActionCards().keySet()) {
++            ActionCardModel ac = Mapper.getActionCard(id);
++            acs.add(new CardRef(id, ac == null ? id : ac.getName(), ac == null ? null : ac.getText(), null, null));
++        }
++        return new TradeSelf(
++                me.getUserID(),
++                me.getUserName(),
++                me.getFaction(),
++                me.getColor(),
++                me.getTg(),
++                me.getCommodities(),
++                me.getCommoditiesTotal(),
++                !me.hasAbility("military_industrial_complex"),
++                pns,
++                acs,
++                fragments(me),
++                relics(me),
++                emojiUrl(me));
++    }
++
++    private static TradeCounterparty counterparty(Game game, Player me, Player p) {
++        boolean canTrade = canTheseTwoTransact(game, me, p);
++        String reason = null;
++        if (!canTrade) {
++            reason = IsPlayerElectedService.isPlayerElected(game, me, "tf-censure")
++                            || IsPlayerElectedService.isPlayerElected(game, p, "tf-censure")
++                    ? "Censured"
++                    : "Not neighbors (action phase)";
++        } else if (p.hasAbility("policy_the_people_control") && !"action".equalsIgnoreCase(game.getPhaseOfGame())) {
++            canTrade = false;
++            reason = "Their Policy - The People: Control forbids it outside the action phase";
++        }
++        boolean hubris = me.hasAbility("hubris");
++        List<CardRef> requestable = new ArrayList<>();
++        for (String id : p.getPromissoryNotesOwned()) {
++            if (ButtonHelper.anyoneHaveInPlayArea(game, id)) continue;
++            if (hubris && id.endsWith("_an")) continue;
++            if (Mapper.getPromissoryNote(id) == null) continue;
++            requestable.add(pnRef(game, id));
++        }
++        List<String> excludedGive = new ArrayList<>();
++        if (p.hasAbility("hubris")) {
++            for (String id : me.getPromissoryNotes().keySet()) {
++                if (id.endsWith("_an")) excludedGive.add(id);
++            }
++        }
++        return new TradeCounterparty(
++                p.getUserID(),
++                p.getUserName(),
++                p.getFaction(),
++                p.getColor(),
++                canTrade,
++                me.isNeighboursWith(p),
++                reason,
++                p.getTg(),
++                p.getCommodities(),
++                p.getCommoditiesTotal(),
++                !p.hasAbility("military_industrial_complex"),
++                p.getPnCount(),
++                p.getAcCount(),
++                fragments(p),
++                requestable,
++                relics(p),
++                canTradeActionCards(me, p),
++                me.getDebtTokenCount(p.getColor()),
++                p.getDebtTokenCount(me.getColor()),
++                excludedGive,
++                emojiUrl(p));
++    }
++
++    private static CardRef pnRef(Game game, String id) {
++        PromissoryNoteModel pn = Mapper.getPromissoryNote(id);
++        Player owner = game.getPNOwner(id);
++        return new CardRef(
++                id,
++                pn == null ? id : pn.getName(),
++                pn == null || pn.getText() == null ? null : pn.getText().replaceAll("<([A-Za-z0-9_]+)>", "$1"),
++                owner == null ? null : owner.getFaction(),
++                owner == null ? null : owner.getColor());
++    }
++
++    private static Map<String, Integer> fragments(Player p) {
++        Map<String, Integer> out = new LinkedHashMap<>();
++        for (String trait : FRAGMENT_TRAITS) out.put(trait, ButtonHelperExplore.getNormalFragmentCount(p, trait));
++        return out;
++    }
++
++    private static List<CardRef> relics(Player p) {
++        List<CardRef> out = new ArrayList<>();
++        for (String id : p.getTradableRelics()) {
++            RelicModel r = Mapper.getRelic(id);
++            out.add(new CardRef(id, r == null ? id : r.getName(), r == null ? null : r.getText(), null, null));
++        }
++        return out;
++    }
++
++    private static boolean canTradeActionCards(Player a, Player b) {
++        return hasActionCardTrading(a) || hasActionCardTrading(b);
++    }
++
++    private static boolean hasActionCardTrading(Player p) {
++        return p.hasAbility("arbiters") || p.hasTech("tf-guildships");
++    }
++
++    // ---------------------------------------------------------------- propose
++
++    public ProposeResponse propose(Game game, Player me, ProposeRequest req) {
++        String blocked = blockedReason(game, me);
++        if (blocked != null) throw new TradeException(blocked);
++        if (req == null || req.to() == null || req.to().isBlank()) throw new TradeException("Missing 'to'.");
++        Player them = findPlayer(game, req.to());
++        if (them == null || them == me || !them.isRealPlayer())
++            throw new TradeException("Unknown trade partner: " + req.to());
++        TradeCounterparty cp = counterparty(game, me, them);
++        List<String> warnings = new ArrayList<>();
++        if (!cp.canTrade()) throw new TradeException("You can't trade with " + them.getUserName() + ": " + cp.reason());
++
++        List<String> items = new ArrayList<>();
++        addGive(game, me, them, cp, req.give(), items);
++        addReceive(game, me, them, cp, req.receive(), items);
++        if (req.note() != null && !req.note().isBlank()) {
++            String note = req.note().trim();
++            if (note.length() > 400) note = note.substring(0, 400);
++            items.add(prefix(me, them) + "details_"
++                    + note.replace("_", "").replace(",", "").replace("\n", " ").replace(" ", "fin777"));
++        }
++        if (items.isEmpty()) throw new TradeException("The offer is empty.");
++
++        me.clearTransactionItemsWithPlayer(them);
++        for (String item : items) me.addTransactionItem(item);
++        TransactionHelper.sendOffer(game, me, "sendOffer_" + them.getColor(), null);
++
++        String key = "offerFrom" + me.getFaction() + "To" + them.getFaction();
++        int offerNumber = parseInt(game.getStoredValue(key), 0);
++        return new ProposeResponse(
++                true,
++                offerNumber,
++                them.getFaction(),
++                decode(game, me.getTransactionItemsWithPlayer(them)),
++                offerText(game, me, them),
++                warnings);
++    }
++
++    private static void addGive(Game game, Player me, Player them, TradeCounterparty cp, TradeSide s, List<String> out) {
++        if (s == null) return;
++        String pre = prefix(me, them);
++        int tg = nz(s.tg());
++        if (tg < 0 || tg > me.getTg()) throw new TradeException("You have " + me.getTg() + " trade goods.");
++        if (tg > 0) out.add(pre + "TGs_" + tg);
++        int comms = nz(s.commodities());
++        if (comms < 0 || comms > me.getCommodities())
++            throw new TradeException("You have " + me.getCommodities() + " commodities.");
++        if (comms > 0 && me.hasAbility("military_industrial_complex"))
++            throw new TradeException("Military Industrial Complex: you can't trade commodities.");
++        if (comms > 0) out.add(pre + "Comms_" + comms);
++
++        List<String> pns = list(s.promissoryNotes());
++        if (pns.size() > 1) throw new TradeException("You may only send 1 promissory note per transaction.");
++        for (String id : pns) {
++            Integer num = me.getPromissoryNotes().get(id);
++            if (num == null) throw new TradeException("You don't hold promissory note " + id + ".");
++            if (me.getPromissoryNotesInPlayArea().contains(id))
++                throw new TradeException(id + " is in your play area.");
++            if (cp.excludedGivePromissoryNotes().contains(id))
++                throw new TradeException("They have Hubris and can't receive an Alliance.");
++            out.add(pre + "PNs_" + num);
++        }
++        List<String> acs = list(s.actionCards());
++        if (!acs.isEmpty() && !cp.canTradeActionCards())
++            throw new TradeException("Neither of you can trade action cards.");
++        for (String id : acs) {
++            Integer num = me.getActionCards().get(id);
++            if (num == null) throw new TradeException("You don't hold action card " + id + ".");
++            out.add(pre + "ACs_" + num);
++        }
++        addFragments(pre, s.fragments(), me, "You", out);
++        for (String id : list(s.relics())) {
++            if (!me.getTradableRelics().contains(id)) throw new TradeException(id + " isn't a tradable relic of yours.");
++            out.add(pre + "Relics_" + id);
++        }
++        int send = nz(s.sendDebt());
++        if (send < 0 || send > MAX_DIGIT) throw new TradeException("Debt must be 0-" + MAX_DIGIT + ".");
++        if (send > 0) out.add(pre + "SendDebt_" + send);
++        int clear = nz(s.clearDebt());
++        if (clear < 0 || clear > cp.debtIHold())
++            throw new TradeException("You hold " + cp.debtIHold() + " of their debt tokens.");
++        if (clear > 0) out.add(pre + "ClearDebt_" + clear);
++    }
++
++    private static void addReceive(
++            Game game, Player me, Player them, TradeCounterparty cp, TradeSide s, List<String> out) {
++        if (s == null) return;
++        String pre = prefix(them, me);
++        int tg = nz(s.tg());
++        if (tg < 0 || tg > them.getTg()) throw new TradeException("They have " + them.getTg() + " trade goods.");
++        if (tg > 0) out.add(pre + "TGs_" + tg);
++        int comms = nz(s.commodities());
++        if (comms < 0 || comms > them.getCommodities())
++            throw new TradeException("They have " + them.getCommodities() + " commodities.");
++        if (comms > 0 && them.hasAbility("military_industrial_complex"))
++            throw new TradeException("Military Industrial Complex: they can't trade commodities.");
++        if (comms > 0) out.add(pre + "Comms_" + comms);
++
++        List<String> pns = list(s.promissoryNotes());
++        if (pns.size() > 1) throw new TradeException("They may only send 1 promissory note per transaction.");
++        for (String id : pns) {
++            if ("any".equalsIgnoreCase(id)) {
++                out.add(pre + "PNs_generic1");
++                continue;
++            }
++            boolean requestable =
++                    cp.requestablePromissoryNotes().stream().anyMatch(r -> r.id().equals(id));
++            if (!requestable) throw new TradeException(id + " can't be requested from them.");
++            Integer num = them.getPromissoryNotes().get(id);
++            out.add(pre + "PNs_" + (num != null ? String.valueOf(num) : id.replace("_", "fin9")));
++        }
++        int acCount = nz(s.actionCardCount());
++        if (acCount > 0 && !cp.canTradeActionCards())
++            throw new TradeException("Neither of you can trade action cards.");
++        if (acCount < 0 || acCount > Math.min(MAX_GENERIC, them.getAcCount()))
++            throw new TradeException("They hold " + them.getAcCount() + " action cards.");
++        if (acCount > 0) out.add(pre + "ACs_generic" + acCount);
++        addFragments(pre, s.fragments(), them, "They", out);
++        for (String id : list(s.relics())) {
++            if (!them.getTradableRelics().contains(id))
++                throw new TradeException(id + " isn't a tradable relic of theirs.");
++            out.add(pre + "Relics_" + id);
++        }
++        int send = nz(s.sendDebt());
++        if (send < 0 || send > MAX_DIGIT) throw new TradeException("Debt must be 0-" + MAX_DIGIT + ".");
++        if (send > 0) out.add(pre + "SendDebt_" + send);
++        int clear = nz(s.clearDebt());
++        if (clear < 0 || clear > cp.debtTheyHold())
++            throw new TradeException("They hold " + cp.debtTheyHold() + " of your debt tokens.");
++        if (clear > 0) out.add(pre + "ClearDebt_" + clear);
++    }
++
++    private static void addFragments(
++            String pre, Map<String, Integer> frags, Player holder, String who, List<String> out) {
++        if (frags == null) return;
++        for (Map.Entry<String, Integer> e : frags.entrySet()) {
++            int n = nz(e.getValue());
++            if (n == 0) continue;
++            String trait = e.getKey().toLowerCase(Locale.ROOT);
++            String code =
++                    switch (trait) {
++                        case Constants.CULTURAL -> "CRF";
++                        case Constants.INDUSTRIAL -> "IRF";
++                        case Constants.HAZARDOUS -> "HRF";
++                        case Constants.FRONTIER, "unknown" -> "URF";
++                        default -> throw new TradeException("Unknown fragment type " + e.getKey() + ".");
++                    };
++            String canon = "URF".equals(code) ? Constants.FRONTIER : trait;
++            int held = ButtonHelperExplore.getNormalFragmentCount(holder, canon);
++            if (n < 0 || n > held || n > MAX_DIGIT)
++                throw new TradeException(who + " hold " + held + " " + canon + " fragments.");
++            out.add(pre + "Frags_" + code + n);
++        }
++    }
++
++    // ---------------------------------------------------------------- pending
++
++    public PendingResponse pending(Game game, Player me) {
++        List<PendingOffer> incoming = new ArrayList<>();
++        List<PendingOffer> outgoing = new ArrayList<>();
++        ThreadChannel myThread = me.getCardsInfoThread();
++        if (myThread == null) return new PendingResponse(incoming, outgoing);
++        List<Message> mine = history(myThread, game);
++
++        Map<String, Boolean> seenRescind = new LinkedHashMap<>();
++        for (Message m : mine) {
++            ButtonRef accept = null, reject = null, counter = null, rescind = null;
++            for (Button b : m.getComponentTree().findAll(Button.class)) {
++                String id = b.getCustomId();
++                if (id == null) continue;
++                ButtonRef ref = new ButtonRef(myThread.getId(), m.getId(), id, b.getLabel());
++                if (id.startsWith("acceptOffer_")) accept = ref;
++                else if (id.startsWith("rejectOffer_")) reject = ref;
++                else if (id.startsWith("resetOffer_")) counter = ref;
++                else if (id.startsWith("rescindOffer_")) rescind = ref;
++            }
++            if (accept != null) {
++                PendingOffer offer = incomingOffer(game, me, m, accept, reject, counter);
++                if (offer != null) incoming.add(offer);
++            }
++            if (rescind != null) {
++                String color = rescind.customId().split("_")[1];
++                if (seenRescind.putIfAbsent(color, true) != null) continue; // newest first
++                PendingOffer offer = outgoingOffer(game, me, m, color, rescind);
++                if (offer != null) outgoing.add(offer);
++            }
++        }
++        return new PendingResponse(incoming, outgoing);
++    }
++
++    private PendingOffer incomingOffer(
++            Game game, Player me, Message m, ButtonRef accept, ButtonRef reject, ButtonRef counter) {
++        String[] parts = accept.customId().split("_");
++        Player from = game.getPlayerFromColorOrFaction(parts[1]);
++        if (from == null) return null;
++        int num = parts.length > 2 ? parseInt(parts[2], -1) : -1;
++        int latest = parseInt(game.getStoredValue("offerFrom" + from.getFaction() + "To" + me.getFaction()), -1);
++        List<String> items = from.getTransactionItemsWithPlayer(me);
++        boolean current = (num == -1 || num == latest) && !items.isEmpty();
++        return new PendingOffer(
++                "incoming",
++                from.getFaction(),
++                from.getUserID(),
++                from.getUserName(),
++                from.getColor(),
++                num,
++                current,
++                m.getContentRaw(),
++                current ? decode(game, items) : List.of(),
++                accept,
++                reject,
++                counter,
++                null,
++                m.getTimeCreated().toString(),
++                emojiUrl(from));
++    }
++
++    private PendingOffer outgoingOffer(Game game, Player me, Message m, String color, ButtonRef rescind) {
++        Player to = game.getPlayerFromColorOrFaction(color);
++        if (to == null) return null;
++        List<String> items = me.getTransactionItemsWithPlayer(to);
++        if (items.isEmpty()) return null;
++        int latest = parseInt(game.getStoredValue("offerFrom" + me.getFaction() + "To" + to.getFaction()), -1);
++        ThreadChannel theirs = to.getCardsInfoThread();
++        if (theirs == null) return null;
++        boolean open = false;
++        for (Message tm : history(theirs, game)) {
++            for (Button b : tm.getComponentTree().findAll(Button.class)) {
++                String id = b.getCustomId();
++                if (id != null && id.startsWith("acceptOffer_" + me.getColor() + "_" + latest)) open = true;
++            }
++            if (open) break;
++        }
++        if (!open) return null;
++        return new PendingOffer(
++                "outgoing",
++                to.getFaction(),
++                to.getUserID(),
++                to.getUserName(),
++                to.getColor(),
++                latest,
++                true,
++                m.getContentRaw(),
++                decode(game, items),
++                null,
++                null,
++                null,
++                rescind,
++                m.getTimeCreated().toString(),
++                emojiUrl(to));
++    }
++
++    private List<Message> history(ThreadChannel channel, Game game) {
++        long now = System.currentTimeMillis();
++        HistoryEntry hit = historyCache.get(channel.getId());
++        if (hit != null && hit.version == game.getLastModifiedDate() && now - hit.at < HISTORY_TTL_MS)
++            return hit.messages;
++        try {
++            MessageHistory mh = channel.getHistory();
++            List<Message> got = mh.retrievePast(100).timeout(5, TimeUnit.SECONDS).complete();
++            String botId = JdaService.getBotId();
++            List<Message> fromBot = got.stream()
++                    .filter(msg -> botId == null || botId.equals(msg.getAuthor().getId()))
++                    .toList();
++            historyCache.put(channel.getId(), new HistoryEntry(now, game.getLastModifiedDate(), fromBot));
++            return fromBot;
++        } catch (Exception e) {
++            return hit != null ? hit.messages : List.of();
++        }
++    }
++
++    // ---------------------------------------------------------------- decoding
++
++    /** Decodes bot transaction items into display lines. */
++    static List<TradeItem> decode(Game game, List<String> items) {
++        List<TradeItem> out = new ArrayList<>();
++        for (String raw : items) {
++            String[] parts = raw.split("_", 4);
++            if (parts.length < 4) continue;
++            Player from = game.getPlayerFromColorOrFaction(parts[0].replaceFirst("^sending", ""));
++            Player to = game.getPlayerFromColorOrFaction(parts[1].replaceFirst("^receiving", ""));
++            String fromF = from == null ? parts[0].replaceFirst("^sending", "") : from.getFaction();
++            String toF = to == null ? parts[1].replaceFirst("^receiving", "") : to.getFaction();
++            out.add(decodeOne(game, from, fromF, toF, parts[2], parts[3], raw));
++        }
++        return out;
++    }
++
++    private static TradeItem decodeOne(
++            Game game, Player from, String fromF, String toF, String thing, String detail, String raw) {
++        switch (thing) {
++            case "TGs" -> {
++                int n = parseInt(detail, 0);
++                return new TradeItem(fromF, toF, "tg", n, null, n + " trade good" + (n == 1 ? "" : "s"), raw);
++            }
++            case "Comms" -> {
++                int n = parseInt(detail, 0);
++                return new TradeItem(fromF, toF, "commodities", n, null, n + " commodit" + (n == 1 ? "y" : "ies"), raw);
++            }
++            case "SendDebt" -> {
++                int n = parseInt(detail, 0);
++                return new TradeItem(fromF, toF, "sendDebt", n, null, "Send " + n + " debt", raw);
++            }
++            case "ClearDebt" -> {
++                int n = parseInt(detail, 0);
++                return new TradeItem(fromF, toF, "clearDebt", n, null, "Clear " + n + " debt", raw);
++            }
++            case "PNs" -> {
++                if (detail.startsWith("generic"))
++                    return new TradeItem(fromF, toF, "pnAny", 1, null, "A promissory note of their choice", raw);
++                String id = detail.contains("fin9") ? detail.replace("fin9", "_") : pnIdFromNumber(from, detail);
++                PromissoryNoteModel pn = id == null ? null : Mapper.getPromissoryNote(id);
++                return new TradeItem(fromF, toF, "pn", 1, id, pn == null ? "Promissory note" : pn.getName(), raw);
++            }
++            case "ACs" -> {
++                if (detail.startsWith("generic")) {
++                    int n = parseInt(detail.substring("generic".length()), 1);
++                    return new TradeItem(
++                            fromF, toF, "acAny", n, null, n + " action card" + (n == 1 ? "" : "s") + " (their pick)", raw);
++                }
++                String id = acIdFromNumber(from, detail);
++                ActionCardModel ac = id == null ? null : Mapper.getActionCard(id);
++                return new TradeItem(fromF, toF, "ac", 1, id, ac == null ? "Action card" : ac.getName(), raw);
++            }
++            case "Frags" -> {
++                if (detail.startsWith("supermassive"))
++                    return new TradeItem(fromF, toF, "fragment", 1, detail, "Supermassive fragment", raw);
++                String trait =
++                        switch (detail.substring(0, Math.min(3, detail.length())).toUpperCase(Locale.ROOT)) {
++                            case "CRF" -> Constants.CULTURAL;
++                            case "IRF" -> Constants.INDUSTRIAL;
++                            case "HRF" -> Constants.HAZARDOUS;
++                            default -> Constants.FRONTIER;
++                        };
++                int n = parseInt(detail.substring(Math.min(3, detail.length())), 1);
++                return new TradeItem(fromF, toF, "fragment", n, trait, n + " " + trait + " fragment" + (n == 1 ? "" : "s"), raw);
++            }
++            case "Relics" -> {
++                RelicModel r = Mapper.getRelic(detail);
++                return new TradeItem(fromF, toF, "relic", 1, detail, r == null ? detail : r.getName(), raw);
++            }
++            case "details" -> {
++                return new TradeItem(fromF, toF, "note", 0, null, detail.replace("fin777", " "), raw);
++            }
++            default -> {
++                return new TradeItem(fromF, toF, "other", 0, detail, thing + " " + detail, raw);
++            }
++        }
++    }
++
++    private static String pnIdFromNumber(Player holder, String num) {
++        if (holder == null) return null;
++        int n = parseInt(num, -1);
++        return holder.getPromissoryNotes().entrySet().stream()
++                .filter(e -> e.getValue() == n)
++                .map(Map.Entry::getKey)
++                .findFirst()
++                .orElse(null);
++    }
++
++    private static String acIdFromNumber(Player holder, String num) {
++        if (holder == null) return null;
++        int n = parseInt(num, -1);
++        return holder.getActionCards().entrySet().stream()
++                .filter(e -> e.getValue() == n)
++                .map(Map.Entry::getKey)
++                .findFirst()
++                .orElse(null);
++    }
++
++    // ---------------------------------------------------------------- helpers
++
++    private static Player findPlayer(Game game, String to) {
++        Player p = game.getPlayer(to);
++        if (p != null) return p;
++        p = game.getPlayerFromColorOrFaction(to.toLowerCase(Locale.ROOT));
++        if (p != null) return p;
++        return game.getRealPlayers().stream()
++                .filter(x -> to.equalsIgnoreCase(x.getUserName()))
++                .findFirst()
++                .orElse(null);
++    }
++
++    private static final java.util.regex.Pattern EMOJI_ID = java.util.regex.Pattern.compile("<a?:\\w+:(\\d+)>");
++
++    private static String emojiUrl(Player p) {
++        try {
++            java.util.regex.Matcher m = EMOJI_ID.matcher(String.valueOf(p.getFactionEmoji()));
++            return m.find() ? "/emojis/" + m.group(1) : null;
++        } catch (Exception e) {
++            return null;
++        }
++    }
++
++    private static String prefix(Player from, Player to) {
++        return "sending" + from.getFaction() + "_receiving" + to.getFaction() + "_";
++    }
++
++    private static int nz(Integer v) {
++        return v == null ? 0 : v;
++    }
++
++    private static List<String> list(List<String> v) {
++        return v == null ? List.of() : v.stream().filter(s -> s != null && !s.isBlank()).toList();
++    }
++
++    private static int parseInt(String s, int dflt) {
++        try {
++            return Integer.parseInt(s);
++        } catch (Exception e) {
++            return dflt;
++        }
++    }
++
++    // The bot keeps these private; call them reflectively instead of duplicating its rules.
++
++    private static Method canTransact;
++    private static Method buildOffer;
++
++    private static boolean canTheseTwoTransact(Game game, Player a, Player b) {
++        try {
++            if (canTransact == null) {
++                Method m = TransactionHelper.class.getDeclaredMethod(
++                        "canTheseTwoTransact", Game.class, Player.class, Player.class);
++                m.setAccessible(true);
++                canTransact = m;
++            }
++            return (boolean) canTransact.invoke(null, game, a, b);
++        } catch (ReflectiveOperationException e) {
++            return a.isNeighboursWith(b) || !"action".equalsIgnoreCase(game.getPhaseOfGame());
++        }
++    }
++
++    private static String offerText(Game game, Player a, Player b) {
++        try {
++            if (buildOffer == null) {
++                Method m = TransactionHelper.class.getDeclaredMethod(
++                        "buildTransactionOffer", Player.class, Player.class, Game.class, boolean.class);
++                m.setAccessible(true);
++                buildOffer = m;
++            }
++            return (String) buildOffer.invoke(null, a, b, game, false);
++        } catch (ReflectiveOperationException e) {
++            return null;
++        }
 +    }
 +}
