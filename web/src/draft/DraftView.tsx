@@ -397,30 +397,6 @@ export function DraftView({
             />
           </section>
 
-          {draft.mapTemplate && (
-            <section className={cx(classes.plate, classes.asidePanel)}>
-              <header className={classes.rail}>
-                <span className={classes.railLabel}>Galaxy</span>
-                <span className={classes.railSpacer} />
-                <span className={classes.railMeta}>
-                  {previewSeat != null
-                    ? ghostSlice
-                      ? `Slice ${ghostSlice.name} in seat ${previewSeat}`
-                      : `Seat ${previewSeat}`
-                    : "Pick a position to preview your seat"}
-                </span>
-              </header>
-              <div className={classes.galaxyWrap}>
-                <GalaxyPreview
-                  draft={draft}
-                  botBase={botBase}
-                  width={318}
-                  seat={previewSeat}
-                  ghostSlice={ghostSlice}
-                />
-              </div>
-            </section>
-          )}
           <section className={cx(classes.plate, classes.asidePanel)}>
             <header className={classes.rail}>
               <span className={classes.railLabel}>Inspector</span>
@@ -453,6 +429,30 @@ export function DraftView({
               </p>
             )}
           </section>
+          {draft.mapTemplate && (
+            <section className={cx(classes.plate, classes.asidePanel)}>
+              <header className={classes.rail}>
+                <span className={classes.railLabel}>Galaxy</span>
+                <span className={classes.railSpacer} />
+                <span className={classes.railMeta}>
+                  {previewSeat != null
+                    ? ghostSlice
+                      ? `Slice ${ghostSlice.name} in seat ${previewSeat}`
+                      : `Seat ${previewSeat}`
+                    : "Pick a position to preview your seat"}
+                </span>
+              </header>
+              <div className={classes.galaxyWrap}>
+                <GalaxyPreview
+                  draft={draft}
+                  botBase={botBase}
+                  width={318}
+                  seat={previewSeat}
+                  ghostSlice={ghostSlice}
+                />
+              </div>
+            </section>
+          )}
         </aside>
       </div>
     </div>

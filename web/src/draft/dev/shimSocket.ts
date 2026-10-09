@@ -22,7 +22,12 @@ export class ShimSocket {
         reject(new Error("socket error")),
       );
       this.ws.addEventListener("message", (ev) => {
-        const f = JSON.parse(String(ev.data)) as { t: string; nonce?: string; error?: string; [k: string]: unknown };
+        const f = JSON.parse(String(ev.data)) as {
+          t: string;
+          nonce?: string;
+          error?: string;
+          [k: string]: unknown;
+        };
         if (f.t === "hello") resolve(f as unknown as ShimHello);
         this.onFrame?.(f);
         if (

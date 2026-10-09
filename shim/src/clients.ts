@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { stripPrivate, type Hub, type Listener } from "./hub.js";
+import { normalizeComponents, stripPrivate, type Hub, type Listener } from "./hub.js";
 import { PERMS_ALL, type Json, type StoredMessage } from "./store.js";
 import { log } from "./log.js";
 
@@ -268,7 +268,7 @@ export class Clients implements Listener {
     const origin = this.store.interactions.get(msg.interaction_id);
     const channelId = origin?.channel_id ?? msg.channel_id;
     const message = origin?.message_id ? this.store.findMessage(channelId, origin.message_id) : undefined;
-    const data = { custom_id: msg.custom_id, components: msg.components };
+    const data = { custom_id: msg.custom_id, components: submittedWithIds(msg.components ?? [], origin?.modal?.components ?? []) };
     this.dispatchInteraction(c, msg.nonce, 5, channelId, data, message);
   }
 
@@ -333,6 +333,30 @@ export class Clients implements Listener {
     }
     return { users, members };
   }
+}
+
+/**
+ * Discord's modal-submit components carry the same numeric ids as the modal that was shown. Copy them from the
+ * modal (matched by the inputs' custom_id, else by position); anything still missing is numbered depth-first.
+ */
+function submittedWithIds(submitted: Json[], modal: Json[]): Json[] {
+  const leafId = (c: Json): string | undefined => c?.custom_id ?? c?.component?.custom_id ?? c?.components?.[0]?.custom_id;
+  const copy = (sub: Json, src: Json | undefined) => {
+    if (!sub || typeof sub !== "object") return;
+    if (src && typeof sub.id !== "number" && typeof src.id === "number") sub.id = src.id;
+    if (sub.component) copy(sub.component, src?.component);
+    if (Array.isArray(sub.components)) {
+      sub.components.forEach((child: Json, i: number) => {
+        const match = src?.components?.find((x: Json) => leafId(x) && leafId(x) === leafId(child)) ?? src?.components?.[i];
+        copy(child, match);
+      });
+    }
+  };
+  submitted.forEach((sub, i) => {
+    const key = leafId(sub);
+    copy(sub, (key && modal.find((m) => leafId(m) === key)) || modal[i]);
+  });
+  return normalizeComponents(submitted);
 }
 
 /** What a browser sees of a message: wire format plus whether it is only visible to them. */

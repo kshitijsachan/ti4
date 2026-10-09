@@ -453,7 +453,7 @@
 /* ---------- shared states ----------------------------------------------- */
 
 .focused {
-  border-color: var(--bay-lit-edge, rgba(96, 165, 250, 0.34));
+  border-color: color-mix(in srgb, var(--draft-you) 60%, transparent);
   background-color: var(--bay-lit-tint, rgba(59, 130, 246, 0.08));
 }
 
@@ -470,7 +470,7 @@
 
 .sliceGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(214px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
   gap: 8px;
 }
 
@@ -776,7 +776,7 @@
 
 .factionGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
 }
 
@@ -1185,10 +1185,24 @@
   clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
 }
 
+.inspectorSliceHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inspectorTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
 .inspectorCluster {
   display: flex;
   justify-content: center;
-  padding: 4px 0;
+  padding: 4px;
   background: var(--socket-bg);
   box-shadow: var(--socket-inset);
   border-radius: 2px;

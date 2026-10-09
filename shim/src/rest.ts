@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { snowflake, token } from "./ids.js";
 import { discordError, noContent, readBody, sendJson, type Body } from "./http.js";
-import { stripPrivate, type Hub } from "./hub.js";
+import { normalizeComponents, stripPrivate, type Hub } from "./hub.js";
 import { newRole, type Interaction, type Json, type StoredMessage } from "./store.js";
 import { log } from "./log.js";
 
@@ -703,6 +703,9 @@ export class Rest {
         resource = { type };
         break;
       case 9:
+        // Discord assigns numeric component ids (depth-first, 1-based) to modal components lacking one.
+        data.components = normalizeComponents(data.components ?? []);
+        inter.modal = data;
         for (const l of this.hub.listeners) l.modal(inter.user_id, inter.id, data);
         resource = { type };
         break;

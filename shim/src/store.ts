@@ -47,6 +47,8 @@ export type Interaction = {
   ephemeral?: boolean;
   /** Slash command name (application command interactions). */
   command_name?: string;
+  /** The modal this interaction opened (type 9 callback), with Discord-assigned component ids. */
+  modal?: Json;
   created: number;
   acked: boolean;
 };

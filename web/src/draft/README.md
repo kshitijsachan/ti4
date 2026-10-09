@@ -18,19 +18,19 @@ import { DraftView } from "@/draft";
     socket.click(channelId, messageId, customId)
   }
   refreshSignal={lastMessageIdInActionsChannel} // optional: bump it to refetch right away
-/>
+/>;
 ```
 
 Props:
 
-| prop | |
-|---|---|
-| `gameName` | the bot game id (`pbd2`) |
-| `myUserId` | the viewer's Discord user id (`hello.me.id` from the shim) |
+| prop                                     |                                                                                                                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gameName`                               | the bot game id (`pbd2`)                                                                                                                                          |
+| `myUserId`                               | the viewer's Discord user id (`hello.me.id` from the shim)                                                                                                        |
 | `onPick(customId, channelId, messageId)` | presses the bot button. It may return a promise. If the promise rejects, or resolves to `{ error }`, the view shows the error and rolls back its optimistic pick. |
-| `botBase` | where the bot API is mounted (default `/bot`, the shim proxy) |
-| `refreshSignal` | any value. A change triggers an immediate refetch. |
-| `className` | added to the root element |
+| `botBase`                                | where the bot API is mounted (default `/bot`, the shim proxy)                                                                                                     |
+| `refreshSignal`                          | any value. A change triggers an immediate refetch.                                                                                                                |
+| `className`                              | added to the root element                                                                                                                                         |
 
 The view fills its container and scrolls with the page. The right column is sticky. It renders a placeholder
 when the game has no draft (`status: "none"`). It polls every 2 s and pauses polling while the tab is hidden.

@@ -37,38 +37,38 @@ export function SliceInspector({
   const t = slice.totals;
   return (
     <div className={classes.inspectorBody}>
-      <div className={classes.inspectorHead}>
-        <span className={classes.sliceLetterLg}>{slice.name}</span>
+      <div className={classes.inspectorSliceHead}>
         <div className={classes.inspectorTitle}>
-          <span className={classes.railLabel}>Slice {slice.name}</span>
-          <span className={classes.inspectorStats}>
-            <ResInf resources={t.resources} influence={t.influence} size="lg" />
-            <span className={classes.optimal}>
-              opt{" "}
-              <ResInf
-                resources={t.optimalResources}
-                influence={t.optimalInfluence}
-              />
-              {t.optimalFlex > 0 && (
-                <span className={classes.flex}>+{t.optimalFlex}</span>
-              )}
-            </span>
+          <div className={classes.inspectorTitleRow}>
+            <span className={classes.sliceLetterLg}>{slice.name}</span>
+            {owner && <PlayerTag player={owner} draft={draft} compact />}
+          </div>
+          <span className={classes.statLabel}>Total</span>
+          <ResInf resources={t.resources} influence={t.influence} size="lg" />
+          <span className={classes.statLabel}>Optimal</span>
+          <span className={classes.optimal}>
+            <ResInf
+              resources={t.optimalResources}
+              influence={t.optimalInfluence}
+            />
+            {t.optimalFlex > 0 && (
+              <span className={classes.flex}>+{t.optimalFlex}</span>
+            )}
           </span>
         </div>
-        {owner && <PlayerTag player={owner} draft={draft} />}
-      </div>
-      <div className={classes.inspectorCluster}>
-        <SliceHexCluster
-          tiles={slice.tiles}
-          layout={template?.sliceLayout ?? []}
-          tileWidth={template?.tileWidth ?? 345}
-          tileHeight={template?.tileHeight ?? 300}
-          width={230}
-          botBase={botBase}
-          homeLabel={slice.name}
-          highlightIndex={hoverTile}
-          onTileHover={setHoverTile}
-        />
+        <div className={classes.inspectorCluster}>
+          <SliceHexCluster
+            tiles={slice.tiles}
+            layout={template?.sliceLayout ?? []}
+            tileWidth={template?.tileWidth ?? 345}
+            tileHeight={template?.tileHeight ?? 300}
+            width={176}
+            botBase={botBase}
+            homeLabel={slice.name}
+            highlightIndex={hoverTile}
+            onTileHover={setHoverTile}
+          />
+        </div>
       </div>
       <ol className={classes.tileList}>
         {slice.tiles.map((tile, i) => (
