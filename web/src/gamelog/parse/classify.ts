@@ -327,11 +327,20 @@ const rules: Rule[] = [
     const moved = lines.filter((l) => /^>\s*moved /.test(l));
     const tally = unitTally(moved);
     const details: Seg[][] = [];
+    let from: Seg[] | null = null;
+    let fromLines: string[] = [];
+    const flush = () => {
+      if (from && fromLines.length) details.push([...from, txt(": "), ...tallySegs(unitTally(fromLines))]);
+      fromLines = [];
+    };
     for (const l of lines) {
-      const from = l.match(/^From system (\w+) \(([^)]*)\)/);
-      if (from) details.push([txt("from "), b(from[2]), txt(` (${from[1]})`)]);
-      else if (/^>\s*moved /.test(l)) details.push(richText(l.replace(/^>\s*/, "  ")));
+      const f = l.match(/^From system (\w+) \(([^)]*)\)/);
+      if (f) {
+        flush();
+        from = [txt("from "), b(f[2]), txt(` (${f[1]})`)];
+      } else if (/^>\s*moved /.test(l)) fromLines.push(l);
     }
+    flush();
     const actor = ctx.lastActivation?.position === t[1] ? ctx.lastActivation.actor : undefined;
     return ev({
       kind: "move",
@@ -422,7 +431,7 @@ const rules: Rule[] = [
       actor: first?.actor,
       target: second?.actor,
       systemPosition: thread?.position ?? tile?.[1],
-      summary: [txt("started combat"), ...(second ? [txt(" against "), who(second.actor)] : []), ...(thread ? [txt(" in system "), b(thread.position)] : [])],
+      summary: [txt("started combat"), ...(second ? [txt(" against "), who(second.actor)] : [])],
     });
   },
   (m) => {

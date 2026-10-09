@@ -105,14 +105,17 @@ export function groupDigest(cat: CategoryId, events: GameEvent[], perPlayer = fa
       return parts.join(" · ") || list(events.map(line), 2);
     }
     case "agenda": {
-      const out: string[] = [];
+      const out: { name: string; outcome?: string; law?: boolean }[] = [];
       for (const e of events) {
         const t = segText(e.summary);
-        if (/^Agenda revealed: /.test(t)) out.push(bold(e)[0] ?? t);
-        else if (/ resolved: /.test(t)) out[out.length - 1] = `${out[out.length - 1] ?? bold(e)[0]} → ${bold(e)[1] ?? ""}`;
-        else if (/is now law|Law repealed/.test(t)) out.push(t);
+        const cur = out[out.length - 1];
+        if (/^Agenda revealed: /.test(t)) out.push({ name: bold(e)[0] ?? t });
+        else if (/ resolved: /.test(t) && cur) cur.outcome = bold(e)[1];
+        else if (/is now law/.test(t) && cur) cur.law = true;
+        else if (/Law repealed/.test(t)) out.push({ name: `repealed ${bold(e)[0] ?? ""}` });
       }
-      return list(out, 3) || list(events.map(line), 2);
+      const fmt = out.map((a) => `${a.name}${a.outcome ? ` → ${a.outcome}` : ""}${a.law ? " (law)" : ""}`);
+      return list(fmt, 3) || list(events.map(line), 2);
     }
     case "movement": {
       const systems = uniq(of("activate", "move").map((e) => e.systemPosition).filter((p): p is string => !!p));

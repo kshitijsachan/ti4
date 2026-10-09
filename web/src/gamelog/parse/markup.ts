@@ -5,7 +5,7 @@ export const EMOJI_RE = /<a?:(\w+):(\d+)>/g;
 const EMOJI_AT_START = /^<a?:(\w+):(\d+)>/;
 
 /** Emoji that carry no information in a one-line history (layout spacers, dice faces, decoration). */
-const NOISE_EMOJI = /^(Blank|d10\w+|RollDice|position\w*|slice\w*|sc_\d+_\d+|SC\d+(Back)?|SpeakerToken)$/;
+const NOISE_EMOJI = /^(Blank|RollDice|position\w*|slice\w*|sc_\d+_\d+|SC\d+(Back)?|SpeakerToken)$/;
 
 /** Colour emoji the bot puts in player representations are named after the colour, lower-case. */
 const isColorEmojiName = (n: string) => /^[a-z][a-z_]*$/.test(n);
