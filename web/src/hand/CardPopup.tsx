@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Markdown, useChannelMessages } from "@/discord";
+import type { Component, Message } from "@/discord";
+import { usePendingKey } from "@/discord/client/hooks";
 import { usePressButton } from "@/play/usePressButton";
 import { getFactionImage } from "@/entities/lookup/factions";
 import type { PlayerData } from "@/entities/data/types";
@@ -141,16 +143,15 @@ export function CardPopup(props: Props) {
               {replies.map((message) => (
                 <div key={message.id} className={classes.ask}>
                   {message.content && <Markdown content={message.content} className={classes.askText} />}
-                  {messageButtons(message).length > 0 && (
+                  {replyButtons(message, meId).length > 0 && (
                     <div className={classes.pickerRow}>
-                      {messageButtons(message).map((b) => (
-                        <button
+                      {replyButtons(message, meId).map((b) => (
+                        <ReplyButton
                           key={b.custom_id}
-                          className={classes.seat}
-                          onClick={() => void press(message.channel_id, message.id, b.custom_id!)}
-                        >
-                          {b.label || b.custom_id}
-                        </button>
+                          label={b.label || b.custom_id!}
+                          pendingKey={`${message.id}:${b.custom_id}`}
+                          onPress={() => void press(message.channel_id, message.id, b.custom_id!)}
+                        />
                       ))}
                     </div>
                   )}
@@ -162,6 +163,24 @@ export function CardPopup(props: Props) {
       </div>
     </div>,
     document.body,
+  );
+}
+
+const NOT_FOR_ME = /^(ultimateUndo|sabotage_|no_sabotage)/;
+
+/** Buttons of a reply that are mine to press: only on posts that name me, never undo or others' reactions. */
+function replyButtons(message: Message, meId: string | undefined): Component[] {
+  const addressed = message.ephemeral || (!!meId && (message.content ?? "").includes(`<@${meId}>`));
+  if (!addressed) return [];
+  return messageButtons(message).filter((b) => !NOT_FOR_ME.test(b.custom_id ?? ""));
+}
+
+function ReplyButton({ label, pendingKey, onPress }: { label: string; pendingKey: string; onPress: () => void }) {
+  const pending = usePendingKey(pendingKey);
+  return (
+    <button className={classes.seat} disabled={pending} onClick={onPress}>
+      {pending ? "…" : label}
+    </button>
   );
 }
 

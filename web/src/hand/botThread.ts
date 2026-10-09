@@ -200,9 +200,17 @@ export function findNewButton(
 const HAND_NOISE =
   /^(__Action Cards__|__Scored Secret Objectives|#+ __Promissory notes|Click a button below to play an action card|Use these buttons to (score|discard)|You may use these buttons to do various things)|someone refreshed your/;
 
-/** Hand listings and menus the bot reposts after every change: the tray already shows them. */
+const HAND_BUTTON = /^(ac_play_from_hand_|ac_discard_from_hand_|so_score_hand_|discardSecret_|SODISCARD_|getDiscardButtonsACs|get_so_)/;
+
+/**
+ * Hand listings and menus the bot reposts after every change, card pickers the
+ * tray already answered, and command echoes: the tray shows all of that itself.
+ */
 function isHandNoise(message: Message): boolean {
-  return HAND_NOISE.test(message.content ?? "");
+  const content = message.content ?? "";
+  if (HAND_NOISE.test(content) || content.startsWith("```notSus")) return true;
+  const buttons = buttonsOf(message);
+  return buttons.length > 0 && buttons.every((b) => HAND_BUTTON.test(b.custom_id ?? ""));
 }
 
 function newBotMessages(
@@ -237,7 +245,7 @@ export function botReplies(
   const mine = (m: Message) => !!meId && ((m.content ?? "").includes(`<@${meId}>`) || m.prompted_user_id === meId);
   return [
     ...newBotMessages(thread, afterId, (m) => !isHandNoise(m)),
-    ...newBotMessages(actions, afterId, mine),
+    ...newBotMessages(actions, afterId, (m) => mine(m) && !isHandNoise(m)),
   ].sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
 }
 

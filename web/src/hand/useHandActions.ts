@@ -149,9 +149,11 @@ export function useRunCardAction(threadId: string | undefined, actionsId?: strin
 
   return async (action: CardAction, target?: string): Promise<ActionOutcome> => {
     const step = action.step;
-    const channelId = step.type === "show" ? threadId : step.type === "press" ? step.button.channelId : step.opener.channelId;
+    // Slash commands only run in a game channel (not the cards thread), so "show" goes through the actions channel.
+    const channelId =
+      step.type === "show" ? (actionsId ?? threadId) : step.type === "press" ? step.button.channelId : step.opener.channelId;
     if (!channelId) return { error: "Your cards thread is not open yet." };
-    const ids = [newestId(connection, channelId), actionsId && newestId(connection, actionsId)].filter(
+    const ids = [newestId(connection, channelId), threadId && newestId(connection, threadId), actionsId && newestId(connection, actionsId)].filter(
       (id): id is string => !!id,
     );
     const baseline = ids.reduce<string | undefined>((a, b) => (!a || BigInt(b) > BigInt(a) ? b : a), undefined);
