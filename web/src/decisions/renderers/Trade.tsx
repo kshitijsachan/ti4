@@ -28,7 +28,7 @@ export function TradeBody({ d, data, onPress, pendingKey }: RendererProps) {
     <div className={classes.stack}>
       <ul className={classes.ledgerLines}>
         <li>
-          <span className={classes.dim}>{from?.userName ?? trade?.from ?? "They"} give:</span>{" "}
+          <span className={classes.dim}>{from?.userName ?? trade?.from ?? "They"} gives:</span>{" "}
           {theirs?.items.length ? theirs.items.join(", ") : "nothing"}
         </li>
         <li>

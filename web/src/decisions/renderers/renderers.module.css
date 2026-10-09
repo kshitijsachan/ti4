@@ -215,8 +215,8 @@
 
 .tone_card {
   --dec-tile-fill: rgba(255, 255, 255, 0.03);
-  --dec-tile-fill-hover: rgba(var(--play-yellow), 0.1);
-  --dec-tile-edge: rgba(var(--play-yellow), 0.3);
+  --dec-tile-fill-hover: rgba(255, 255, 255, 0.07);
+  --dec-tile-edge: var(--play-border);
   --dec-tile-edge-hover: rgba(var(--play-yellow), 0.7);
 }
 

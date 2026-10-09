@@ -6,6 +6,7 @@ import cx from "clsx";
 import { usePlay, usePlayConnection } from "@/discord";
 import { snowflakeTime } from "@/discord/shared/snowflake";
 import { usePlayerData } from "@/api/usePlayerData";
+import type { PlayerDataResponse } from "@/entities/data/types";
 import { getToken } from "@/play/session";
 import { findGame } from "../detect/games";
 import { usePendingPrompts } from "../detect/pending";
@@ -43,6 +44,16 @@ function useHandAliases(gameName: string, enabled: boolean) {
     },
   });
   return query.data?.actionCards;
+}
+
+/** A space combat is over once one side has no ships left there (the bot leaves its buttons up). */
+function combatOver(d: Decision, web?: PlayerDataResponse) {
+  const c = d.combat;
+  if (!c?.position || c.kind !== "space" || c.factions.length < 2 || !web) return false;
+  const space = web.tileUnitData?.[c.position]?.space;
+  if (!space) return false;
+  const ships = (f: string) => (space[f] ?? []).some((u) => u.entityType === "unit" && u.count > 0 && !["gf", "mf"].includes(u.entityId));
+  return c.factions.some((f) => !ships(f));
 }
 
 /** The bot often answers one press with a few prompts at once (pay, then gain tokens): keep those in posting order. */
@@ -127,7 +138,9 @@ export function DecisionHost({ gameName, placement = "fixed", className }: Decis
     const all = prompts.map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }));
     /* "Decide now whether to follow X" is moot once X has been played. */
     const played = new Set((web?.strategyCards ?? []).filter((sc) => sc.played).map((sc) => sc.initiative));
-    const live = all.filter((d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)));
+    const live = all.filter(
+      (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "combat" && combatOver(d, web)),
+    );
     const ordered = inBursts(live);
     return [...ordered.filter((d) => !d.optional), ...ordered.filter((d) => d.optional)];
   }, [prompts, game, users, channels, messages, web, mePlayer]);

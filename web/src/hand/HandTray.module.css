@@ -36,18 +36,18 @@
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 18px;
-  height: 40px;
-  padding: 0 16px 0 18px;
-  border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.28));
+  gap: 14px;
+  height: 32px;
+  padding: 0 12px 0 14px;
+  border: 1px solid var(--panel-hairline, rgba(148, 163, 184, 0.16));
   border-bottom: none;
   border-radius: 8px 8px 0 0;
   background: var(--details-card-bg, #0c0c0d);
-  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.45);
   color: inherit;
   font: inherit;
   cursor: pointer;
   white-space: nowrap;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .bar:hover .chevron,
@@ -55,32 +55,35 @@
   color: var(--hand-ink);
 }
 
+/* Something can be played right now: the only time the bar asks for attention. */
+.barPlayable {
+  border-color: color-mix(in srgb, var(--hand-live) 55%, transparent);
+  box-shadow: 0 0 14px -4px var(--hand-live);
+}
+
 .barTitle {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--hand-ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hand-ink);
 }
 
 .barGroup {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
-.barBack {
-  width: 16px;
-  height: 23px;
-  object-fit: cover;
-  border-radius: 2px;
-  box-shadow: 0 0 0 1px var(--accent);
+.barSwatch {
+  width: 6px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: 0.8;
 }
 
 .barNum {
   font-family: var(--font-data);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--hand-ink);
 }
@@ -93,24 +96,23 @@
 .barScored {
   font-family: var(--font-data);
   font-size: 10px;
-  color: var(--hand-so);
+  color: var(--hand-ink-muted);
 }
 
 .barLive {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 11px;
   font-weight: 600;
   color: var(--hand-live);
 }
 
 .liveDot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--hand-live);
-  box-shadow: 0 0 6px var(--hand-live);
 }
 
 .barEmpty {
@@ -119,7 +121,7 @@
 }
 
 .chevron {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--hand-ink-muted);
   transition: transform 160ms ease;
 }
@@ -137,7 +139,7 @@
 
 .shelf {
   position: absolute;
-  bottom: 40px;
+  bottom: 32px;
   left: 50%;
   transform: translate(-50%, 12px);
   opacity: 0;
@@ -788,8 +790,7 @@
     padding: 0 10px;
   }
 
-  .barLabel,
-  .barTitle {
+  .barLabel {
     display: none;
   }
 

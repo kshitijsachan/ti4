@@ -11,11 +11,49 @@
   scrollbar-width: thin;
 }
 
+.scroller.fitted {
+  overflow: hidden;
+}
+
+/* Zoom: three small quiet buttons in the top-right corner of the table, brighter on hover. */
 .zoom {
   position: absolute;
-  top: 12px;
-  right: 16px;
+  top: 10px;
+  right: 10px;
   z-index: var(--z-zoom-controls);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--panel-field-strip);
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.zoom:hover,
+.zoom:focus-within {
+  opacity: 1;
+}
+
+.zoomButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--mantine-color-gray-3);
+}
+
+.zoomButton:hover:not(:disabled) {
+  color: var(--mantine-color-gray-0);
+  background: var(--socket-bg);
+}
+
+.zoomButton:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 /* Set on a map tile (by id) while something asks the table to look at it: lifts it over its neighbours. */

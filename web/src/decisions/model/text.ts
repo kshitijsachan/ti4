@@ -60,6 +60,7 @@ export function cleanText(content: string, names: Names): string {
   });
   s = s.replace(/<@!?(\d+)>/g, (_m, id: string) => names.user(id) ?? "a player");
   s = s.replace(/<@&\d+>,? please indicate your choice with these buttons\.?/gi, "");
+  s = s.replace(/^<@&\d+>,?\s*/gm, "");
   s = s.replace(/<@&\d+>/g, "everyone");
   s = s.replace(/<#(\d+)>/g, (_m, id: string) => names.channel(id) ?? "a channel");
   s = s.replace(/(message link is:\s*)?https:\/\/discord\.com\/channels\/[\d/]+\.?/gi, "");

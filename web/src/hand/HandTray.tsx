@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CardFace, backForGroup } from "./CardFace";
+import { CardFace } from "./CardFace";
 import { CardPopup } from "./CardPopup";
 import { timingOf, type CardGroup, type HandCard } from "./model";
 import { useHand, type HandState } from "./useHand";
@@ -139,19 +139,19 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
 
       <button
         type="button"
-        className={classes.bar}
+        className={`${classes.bar} ${playableCount > 0 ? classes.barPlayable : ""}`}
         onClick={() => setPinned((p) => !p)}
         aria-expanded={open}
         title={pinned ? "Put your hand away" : "Keep your hand open"}
       >
-        <span className={classes.barTitle}>Your hand</span>
+        <span className={classes.barTitle}>Hand</span>
         {hand.groups.map((group) => (
           <BarCount key={group.id} group={group} />
         ))}
         {playableCount > 0 && (
           <span className={classes.barLive}>
             <span className={classes.liveDot} />
-            {playableCount} playable now
+            {playableCount} playable
           </span>
         )}
         {total === 0 && !hand.loading && <span className={classes.barEmpty}>{hand.error ?? "No cards"}</span>}
@@ -184,7 +184,7 @@ function BarCount({ group }: { group: CardGroup }) {
   if (group.id === "relic" && group.cards.length === 0) return null;
   return (
     <span className={`${classes.barGroup} ${classes[`group_${group.id}`]}`}>
-      <img className={classes.barBack} src={backForGroup(group.id)} alt="" />
+      <span className={classes.barSwatch} />
       <span className={classes.barNum}>{count}</span>
       <span className={classes.barLabel}>{SHORT[group.id]}</span>
       {scored > 0 && <span className={classes.barScored}>+{scored} scored</span>}

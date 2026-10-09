@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePlay } from "@/discord";
 import { fetchPendingTrades } from "@/trade";
@@ -52,6 +52,21 @@ function useJumps(
   });
 }
 
+/** Whether a decision popup is open (not minimised) on the table, so the board can keep clear of it. */
+function useDocked(stageRef: RefObject<HTMLElement | null>) {
+  const [docked, setDocked] = useState(false);
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const check = () => setDocked(!!stage.querySelector('[role="dialog"][aria-modal="false"]'));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(stage, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [stageRef]);
+  return docked;
+}
+
 type Props = {
   gameName: string;
   turn: TurnState;
@@ -70,6 +85,8 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
   const [drawer, setDrawer] = useState<DrawerName | null>(null);
   const [rawChannel, setRawChannel] = useState<string | null>(null);
   const [objectivesOpen, setObjectivesOpen] = useState(false);
+  const stageRef = useRef<HTMLElement>(null);
+  const docked = useDocked(stageRef);
   useExternalFocus();
 
   const handId = game?.hand?.id;
@@ -101,7 +118,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
 
   let stage: ReactNode = takeover;
   if (!stage) {
-    stage = data ? <BoardTable gameName={gameName} /> : boardMissing ? null : <MapLoadingState gameId={gameName} />;
+    stage = data ? <BoardTable gameName={gameName} docked={docked} /> : boardMissing ? null : <MapLoadingState gameId={gameName} />;
   }
 
   return (
@@ -112,7 +129,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
         turn={turn}
         activeColor={active ? getPrimaryColorCSS(active.color) : undefined}
         myNote={myNote}
-        objectivesLabel={revealed ? `Objectives (${revealed})` : "Objectives"}
+        objectives={revealed}
         drawer={drawer}
         onDrawer={setDrawer}
         onObjectives={data && !takeover ? () => setObjectivesOpen(true) : undefined}
@@ -120,16 +137,20 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
         incomingTrades={incomingTrades}
       />
       {!takeover && <PlayerRail myUserId={me?.id} />}
-      <main className={classes.stage}>
+      <main ref={stageRef} className={classes.stage}>
         {stage}
         {!takeover && (
           <div className={classes.ticker}>
-            <LogSlot gameName={gameName} variant="ticker" max={2} onOpen={() => setDrawer("log")} />
+            <LogSlot gameName={gameName} variant="ticker" transient onOpen={() => setDrawer("log")} />
           </div>
         )}
-        <DecisionSlot gameName={gameName} />
+        {!takeover && (
+          <div className={classes.hand}>
+            <HandSlot gameName={gameName} />
+          </div>
+        )}
+        <DecisionSlot gameName={gameName} className={classes.decision} />
       </main>
-      {!takeover && <HandSlot gameName={gameName} />}
       <GameDrawers
         game={game}
         drawer={drawer}

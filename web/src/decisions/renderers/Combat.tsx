@@ -57,12 +57,9 @@ function combatChoices(d: Decision): Item[] {
   const seen = new Set<string>();
   const items: Item[] = [];
   const all = [d, ...(d.steps ?? [])];
-  const hitsFirst = [...all].sort(
-    (a, b) =>
-      Number(b.choices.some((c) => AUTO_HITS.test(baseId(c.customId)))) -
-      Number(a.choices.some((c) => AUTO_HITS.test(baseId(c.customId)))),
-  );
-  for (const target of hitsFirst) {
+  /* The bot repeats "Roll dice" on its hit prompt; press it on the plain combat prompt so the hit prompt stays open. */
+  const hasHits = (x: Decision) => x.choices.some((c) => AUTO_HITS.test(baseId(c.customId)));
+  for (const target of [...all.filter((x) => !hasHits(x)), ...all.filter(hasHits)]) {
     for (const c of target.choices) {
       const id = c.customId ?? c.key;
       if (seen.has(id)) continue;

@@ -30,11 +30,24 @@ export function ReactionBody({ d, data, onPress, pendingKey }: RendererProps) {
     if (c.rank === "undo" || c.rank === "more") return c.rank;
     return PASS.test(baseId(c.customId)) ? "primary" : "secondary";
   };
+  const choices = d.choices.map((c) => {
+    const id = baseId(c.customId);
+    if (PASS.test(id)) return { ...c, style: 3, label: kind === "sabotage" ? "Let it resolve" : c.label.replace(/\s*\(.*\)$/, "") };
+    if (/^sabotage_/.test(id)) return { ...c, label: "Sabotage it", style: 2 };
+    return c;
+  });
+  const lead = d.text.split("\n")[0].replace(/\.+$/, ".");
+  const cardText = d.prompt.message.embeds?.[0]?.description?.replace(/\*/g, "").trim();
   return (
     <div className={classes.stack}>
       {d.agenda && <AgendaCard agenda={d.agenda} compact />}
-      <Prose text={d.text} clamp={2} />
-      <ChoiceButtons choices={d.choices} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} rankOf={rankOf} />
+      <Prose text={kind === "sabotage" ? lead : d.text} clamp={2} />
+      <ChoiceButtons choices={choices} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} rankOf={rankOf} />
+      {kind === "sabotage" && cardText && (
+        <Details label="Card text">
+          <Prose text={cardText} clamp={6} muted />
+        </Details>
+      )}
       {data.hand && (
         <Details label={cards.length ? `You could play ${cards.length === 1 ? cards[0].name : `${cards.length} cards`}` : "Your cards"}>
           {cards.length ? (

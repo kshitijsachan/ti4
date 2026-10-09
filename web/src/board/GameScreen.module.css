@@ -22,21 +22,45 @@
   --map-viewport-height: 100%;
 }
 
-/* What just happened, in a corner of the table. */
+/* What just happened: one line at the top of the table that fades away again. */
 .ticker {
   position: absolute;
-  top: 12px;
-  left: 16px;
+  top: 10px;
+  left: 50%;
   z-index: var(--z-zoom-controls);
-  max-width: min(520px, calc(100% - 220px));
-  padding: 4px 10px;
-  border: 1px solid var(--panel-hairline);
-  border-radius: 6px;
-  background: var(--panel-field-strip);
+  display: flex;
+  justify-content: center;
+  width: min(560px, calc(100% - 120px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.ticker > * {
+  pointer-events: auto;
+}
+
+/* Your hand: a quiet bar at the bottom edge of the table, in front of you. */
+.hand {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  z-index: var(--z-floating-panel);
+  transform: translateX(-50%);
 }
 
 @media (max-width: 640px) {
   .ticker {
     display: none;
+  }
+}
+
+/* The decision popup docks right (a bottom sheet on phones); keep the hand bar uncovered. */
+.decision.decision {
+  padding-bottom: 48px;
+}
+
+@media (min-width: 721px) {
+  .decision.decision {
+    padding: 12px 12px 48px;
   }
 }

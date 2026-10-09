@@ -10,12 +10,17 @@ export type GameLogProps = {
   max?: number;
   /** Ticker only: show a "Log" button that calls this (e.g. to open the drawer). */
   onOpen?: () => void;
+  /** Ticker only: show just the newest event, and only for a few seconds after it happens. */
+  transient?: boolean;
   /** Full only: initial grouping. */
   defaultView?: LogView;
 };
 
 /** The game's history as clean one-line events (not chat). Must sit inside `<PlayProvider>`. */
-export function GameLog({ gameName, variant, className, max, onOpen, defaultView }: GameLogProps) {
-  if (variant === "ticker") return <GameLogTicker gameName={gameName} className={className} max={max} onOpen={onOpen} />;
+export function GameLog({ gameName, variant, className, max, onOpen, transient, defaultView }: GameLogProps) {
+  if (variant === "ticker")
+    return (
+      <GameLogTicker gameName={gameName} className={className} max={max} onOpen={onOpen} transient={transient} />
+    );
   return <GameLogFull gameName={gameName} className={className} defaultView={defaultView} />;
 }

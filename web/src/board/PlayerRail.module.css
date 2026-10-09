@@ -1,9 +1,8 @@
 /* The seats: a slim strip under the header, same surface, one hairline below. */
 .rail {
-  display: grid;
-  grid-template-columns: repeat(var(--seats), minmax(0, 228px));
+  display: flex;
   justify-content: center;
-  gap: 4px;
+  gap: 12px;
   height: 48px;
   padding: 4px 12px;
   background: var(--header-bg);
@@ -12,8 +11,9 @@
 
 .seat {
   display: flex;
+  flex: 0 1 auto;
   min-width: 0;
-  container: seat / inline-size;
+  max-width: 260px;
 }
 
 .seatButton {
@@ -50,13 +50,16 @@
 /* Phones: seats shrink to icon, cards and score; with many players the strip scrolls sideways. */
 @media (max-width: 640px) {
   .rail {
-    grid-template-columns: repeat(var(--seats), minmax(68px, 1fr));
-    justify-content: start;
+    justify-content: flex-start;
     gap: 2px;
     height: 44px;
     padding: 4px 6px;
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .seat {
+    flex: 1 0 auto;
   }
 }
 

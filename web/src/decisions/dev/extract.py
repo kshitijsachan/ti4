@@ -69,6 +69,12 @@ def main():
     uid = user["id"]
     if message_id.startswith("latest:"):
         message_id = latest(s, game, uid, message_id[len("latest:"):], player)
+    if message_id.startswith("frame:"):
+        # A captured gateway frame (docs/fixtures/*.json) whose message is no longer in the store.
+        frame = json.load(open(message_id[len("frame:"):]))["message"]
+        s["messages"].setdefault(frame["channel_id"], []).append(frame)
+        s["messages"][frame["channel_id"]].sort(key=lambda m: int(m["id"]))
+        message_id = frame["id"]
     channel_id = next(cid for cid, msgs in s["messages"].items() if any(m["id"] == message_id for m in msgs))
     game_channels = [c for c in s["channels"].values() if c["name"].startswith(f"{game}-") or f"-{game}-" in c["name"]]
     if s["channels"][channel_id] not in game_channels:

@@ -1,10 +1,11 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Tooltip, UnstyledButton } from "@mantine/core";
+import { IconMinus, IconPlus, IconArrowsMinimize } from "@tabler/icons-react";
 import { InteractiveMapRenderer } from "@/domains/map/components/renderer/InteractiveMapRenderer";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { useTabsAndTooltips } from "@/hooks/useTabsAndTooltips";
 import { useGameData, useGameDataState } from "@/state/useGameContext";
 import { useAppStore, useSettingsStore } from "@/state/appStore";
-import ZoomControls from "@/shared/ui/map/ZoomControls";
 import { useMapContentSize } from "@/domains/map/components/hooks/useMapContentSize";
 import { useTilesList } from "@/hooks/useTilesList";
 import { shouldHideZoomControls, computeMapZoom } from "@/utils/zoom";
@@ -13,7 +14,12 @@ import { ReconnectButton } from "@/domains/map/components/renderer/ReconnectButt
 import { getMapLayoutConfig } from "@/domains/map/components/mapLayout";
 import { useMapKeyboardShortcuts } from "@/domains/map/components/hooks/useMapKeyboardShortcuts";
 import { useScrollToReplayHighlight } from "@/hooks/useScrollToReplayHighlight";
-import { HEX_PATH, TILE_HEIGHT, TILE_WIDTH } from "@/entities/geometry/tilePositioning";
+import {
+  calculateStatTilePositions,
+  HEX_PATH,
+  TILE_HEIGHT,
+  TILE_WIDTH,
+} from "@/entities/geometry/tilePositioning";
 import { useBoardFocus } from "./focus";
 import classes from "./BoardTable.module.css";
 
@@ -112,11 +118,101 @@ function useFocusReveal(containerRef: RefObject<HTMLDivElement | null>) {
   }, [containerRef, position, persist, key]);
 }
 
+/** Space kept clear for the decision popup docked on the right of a wide table. */
+const DOCK_RESERVE = 400;
+/** Below this table width the popup is a bottom sheet and nothing is reserved for it. */
+const DOCK_MIN_TABLE = 1000;
+/** Kept clear at the bottom for the hand bar. */
+const HAND_RESERVE = 40;
+const FIT_PAD = 12;
+const FIT_MAX = 1;
+
+type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
+
+/** The painted extent of the board (tiles and the stat tiles around it), unscaled. */
+function usePaintedBounds(): Bounds | null {
+  const gameData = useGameData();
+  const tiles = useTilesList(gameData?.tiles);
+  return useMemo(() => {
+    if (!tiles.length) return null;
+    const stats = calculateStatTilePositions(
+      Object.values(gameData?.statTilePositions ?? {}).flat(),
+      gameData?.ringCount,
+      gameData?.tilePositions,
+    );
+    const points = [...tiles.map((t) => t.properties), ...stats];
+    return {
+      minX: Math.min(...points.map((p) => p.x)),
+      minY: Math.min(...points.map((p) => p.y)),
+      maxX: Math.max(...points.map((p) => p.x + TILE_WIDTH)),
+      maxY: Math.max(...points.map((p) => p.y + TILE_HEIGHT)),
+    };
+  }, [tiles, gameData?.statTilePositions, gameData?.ringCount, gameData?.tilePositions]);
+}
+
+function useAreaSize(ref: RefObject<HTMLDivElement | null>) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return size;
+}
+
+/** The zoom that shows the whole board in the free part of the table, and where to put it. */
+function fitLayout(bounds: Bounds | null, area: { w: number; h: number }, docked: boolean) {
+  if (!bounds || !area.w || !area.h) return null;
+  const reserve = area.w >= DOCK_MIN_TABLE ? DOCK_RESERVE : 0;
+  const bw = bounds.maxX - bounds.minX;
+  const bh = bounds.maxY - bounds.minY;
+  const availW = area.w - FIT_PAD * 2 - reserve;
+  const availH = area.h - FIT_PAD * 2 - HAND_RESERVE;
+  const zoom = Math.min(FIT_MAX, Math.max(0.05, Math.min(availW / bw, availH / bh)));
+  // The zoom always leaves room for the popup; the board only slides over while it is open.
+  const right = docked ? area.w - reserve : area.w;
+  const cx = right / 2;
+  const cy = FIT_PAD + availH / 2;
+  return {
+    zoom,
+    marginLeft: cx - ((bounds.minX + bounds.maxX) / 2) * zoom,
+    marginTop: cy - ((bounds.minY + bounds.maxY) / 2) * zoom,
+    width: bounds.maxX * zoom,
+    height: bounds.maxY * zoom,
+  };
+}
+
+function ZoomButton({ label, onClick, disabled, children }: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip label={label} position="left" openDelay={300}>
+      <UnstyledButton className={classes.zoomButton} onClick={onClick} disabled={disabled} aria-label={label}>
+        {children}
+      </UnstyledButton>
+    </Tooltip>
+  );
+}
+
+type Props = {
+  gameName: string;
+  /** A decision popup is docked on the right: keep the board clear of it. */
+  docked?: boolean;
+};
+
 /**
- * The table: the live map, full bleed, pannable. The first time a game's board
- * arrives it is fitted to the space so every system is in view.
+ * The table: the live map. At rest the whole board is fitted into the free part of the table (clear of the
+ * hand bar and of a docked decision popup) and follows the window size; zooming in makes it pannable, and
+ * zooming back out (or the fit button) returns to the fitted view.
  */
-export function BoardTable({ gameName }: { gameName: string }) {
+export function BoardTable({ gameName, docked = false }: Props) {
   const gameData = useGameData();
   const tilesList = useTilesList(gameData?.tiles);
   const gameDataState = useGameDataState();
@@ -136,35 +232,61 @@ export function BoardTable({ gameName }: { gameName: string }) {
 
   const mapLayout = getMapLayoutConfig("pannable");
   const contentSize = useMapContentSize("pannable");
-  const zoom = computeMapZoom(storeZoom, contentSize.width + 150);
-  const board = boardGeometry(contentSize, contentSize.width + mapLayout.mapWidthExtra, zoom);
   const containerRef = useRef<HTMLDivElement>(null);
+  const area = useAreaSize(containerRef);
+  const bounds = usePaintedBounds();
+  const fit = fitLayout(bounds, area, docked);
 
-  const fitBoard = (smooth = true) => {
-    const area = containerRef.current;
-    if (!area || !area.clientHeight) return;
-    const availW = area.clientWidth - CLEARANCE * 2;
-    const availH = area.clientHeight - CLEARANCE * 2;
-    const widthToFit = Math.max(board.paintedWidth, (board.paintedHeight * availW) / availH);
-    const fitZoom = handleZoomFitToWidth(widthToFit, availW);
+  // Fitted until the player zooms past the fit; zooming back down to it (or below) fits again.
+  const [fitted, setFitted] = useState(true);
+  const fitZoom = fit?.zoom ?? 0;
+  const lastStoreZoom = useRef(storeZoom);
+  useEffect(() => {
+    const changed = lastStoreZoom.current !== storeZoom;
+    lastStoreZoom.current = storeZoom;
+    if (!fitZoom) return;
+    if (storeZoom <= fitZoom) setFitted(true);
+    else if (changed) setFitted(false);
+  }, [storeZoom, fitZoom]);
+  useEffect(() => setFitted(true), [gameName]);
+
+  const useFit = fitted && !!fit;
+  const zoom = useFit ? fit.zoom : computeMapZoom(storeZoom, contentSize.width + 150);
+  const board = boardGeometry(contentSize, contentSize.width + mapLayout.mapWidthExtra, zoom);
+  const placement = useFit
+    ? {
+        width: fit.width,
+        height: fit.height,
+        margins: {
+          marginLeft: fit.marginLeft,
+          marginTop: fit.marginTop,
+          transition: "margin-left 240ms ease",
+        },
+      }
+    : { width: board.width, height: board.height, margins: board.margins };
+
+  /** Out of the fitted view: the next zoom step above it, centred on the board. */
+  const zoomIn = () => {
+    if (!useFit) return handleZoomIn();
+    let next = handleZoomFitToWidth(1, fitZoom);
+    if (next <= fitZoom) {
+      handleZoomIn();
+      next = useAppStore.getState().zoomLevel;
+    }
+    setFitted(false);
     requestAnimationFrame(() => {
-      const centreX = CLEARANCE + (board.paintedWidth * fitZoom) / 2;
-      area.scrollTo({
-        left: Math.max(0, centreX - area.clientWidth / 2),
-        top: 0,
-        behavior: smooth ? "smooth" : "auto",
+      const el = containerRef.current;
+      if (!el || !bounds) return;
+      el.scrollTo({
+        left: ((bounds.minX + bounds.maxX) / 2) * next - el.clientWidth / 2 + CLEARANCE,
+        top: ((bounds.minY + bounds.maxY) / 2) * next - el.clientHeight / 2 + CLEARANCE,
       });
     });
   };
-
-  const fitted = useRef<string | null>(null);
-  const hasBoard = !!gameData && contentSize.width > 0;
-  useEffect(() => {
-    if (!hasBoard || fitted.current === gameName) return;
-    fitted.current = gameName;
-    fitBoard(false);
-    // Fit once per game, when its board first has a size.
-  }, [hasBoard, gameName]);
+  const zoomOut = () => {
+    if (useFit) return;
+    handleZoomOut();
+  };
 
   useMapKeyboardShortcuts({ handlers, settings, handleZoomIn, handleZoomOut, handleAreaSelect, selectedArea });
   useScrollToReplayHighlight(containerRef);
@@ -172,18 +294,18 @@ export function BoardTable({ gameName }: { gameName: string }) {
 
   return (
     <div className={classes.table}>
-      <div ref={containerRef} className={`dragscroll ${classes.scroller}`}>
+      <div ref={containerRef} className={`dragscroll ${classes.scroller} ${useFit ? classes.fitted : ""}`}>
         {gameData && (
           <InteractiveMapRenderer
             mapLayoutConfig={mapLayout}
             zoom={zoom}
             isFirefox={settings.isFirefox}
             contentSize={contentSize}
-            layoutWidthOverride={board.width}
-            layoutHeightOverride={board.height}
+            layoutWidthOverride={placement.width}
+            layoutHeightOverride={placement.height}
             widthOverride={board.unscaledWidth}
             heightOverride={board.unscaledHeight}
-            styleOverrides={board.margins}
+            styleOverrides={placement.margins}
             gameData={gameData}
             tilesList={tilesList}
             onUnitMouseOver={handleUnitMouseEnter}
@@ -198,7 +320,15 @@ export function BoardTable({ gameName }: { gameName: string }) {
       </div>
       {!shouldHideZoomControls() && (
         <div className={classes.zoom}>
-          <ZoomControls zoomClass="" hideFitToScreen onFitBoard={() => fitBoard()} />
+          <ZoomButton label="Zoom in" onClick={zoomIn} disabled={!useFit && storeZoom >= 2}>
+            <IconPlus size={14} stroke={1.8} />
+          </ZoomButton>
+          <ZoomButton label="Zoom out" onClick={zoomOut} disabled={useFit}>
+            <IconMinus size={14} stroke={1.8} />
+          </ZoomButton>
+          <ZoomButton label="Fit the board" onClick={() => setFitted(true)} disabled={useFit}>
+            <IconArrowsMinimize size={14} stroke={1.8} />
+          </ZoomButton>
         </div>
       )}
       <ReconnectButton gameDataState={gameDataState} />
