@@ -66,7 +66,12 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
             : ""}
       </p>
       <ChoiceButtons
-        choices={d.choices}
+        choices={d.choices.map((c) => {
+          const id = baseId(c.customId);
+          if (/^vote$/.test(id)) return { ...c, label: "Vote", style: 3 };
+          if (/^resolveAgendaVote_0$/.test(id) || /choose to abstain/i.test(c.label)) return { ...c, label: "Abstain", style: 2 };
+          return c;
+        })}
         onPress={onPress}
         pendingKey={pendingKey}
         channelId={d.prompt.channelId}

@@ -130,9 +130,10 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
     .map((c) => (/^(ring_|ChooseDifferentDestination|getTilesThisFarAway_)/.test(baseId(c.customId)) ? { ...c, style: 2 } : c));
   const choosingSystem = !movingFrom && (systems.length > 0 || rest.some((c) => /^ring_/.test(baseId(c.customId))));
   let text = d.text;
-  if (choosingSystem) text = "Choose the system to activate. Not listed? Open the ring it sits in — ring 1 surrounds Mecatol Rex.";
+  if (choosingSystem) text = "Not listed? Open the ring it is in (ring 1 surrounds Mecatol Rex).";
   const moved = movingFrom && /\bmoved\b/i.test(d.text) ? d.text.replace(/^\*\*Tactical Action in system[^\n]*\n*/i, "") : "";
-  if (movingFrom) text = moved ? "" : "Pick a system to move ships out of, choose the ships, then press Done moving.";
+  if (movingFrom) text = moved ? "" : "Pick where your ships come from.";
+  if (unitMoves.length) text = d.text.match(/from system [^\n(]+/i)?.[0]?.trim() ?? "";
   return (
     <div className={classes.stack}>
       {active && d.position && !choosingSystem && (
