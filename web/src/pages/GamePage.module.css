@@ -94,3 +94,8 @@
   color: var(--mantine-color-gray-6);
   text-align: center;
 }
+
+.draft {
+  height: 100%;
+  overflow-y: auto;
+}

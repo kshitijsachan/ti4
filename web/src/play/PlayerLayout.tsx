@@ -3,6 +3,9 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ModalHost, PlayProvider, Toasts } from "@/discord";
 import { adoptTokenFromUrl } from "@/play/session";
+import { useGameLinkInterception } from "@/play/useGameLinkInterception";
+import { useChannelJump } from "@/play/channelJump";
+import { ChannelJumpRouter } from "@/play/ChannelJumpRouter";
 import { SiteFrame } from "@/play/SiteFrame";
 import classes from "./PlayerLayout.module.css";
 
@@ -38,6 +41,7 @@ function UnknownLink() {
  */
 export function PlayerLayout() {
   const [token] = useState(adoptTokenFromUrl);
+  useGameLinkInterception();
   const me = useQuery({
     queryKey: ["me", token],
     queryFn: () => fetchMe(token!),
@@ -50,7 +54,11 @@ export function PlayerLayout() {
   if (me.data === null) return <UnknownLink />;
 
   return (
-    <PlayProvider token={token}>
+    <PlayProvider
+      token={token}
+      onNavigateChannel={(id) => useChannelJump.getState().jump(id)}
+    >
+      <ChannelJumpRouter />
       <Outlet />
       <ModalHost />
       <Toasts />

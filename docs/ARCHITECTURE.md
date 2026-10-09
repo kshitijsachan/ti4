@@ -11,6 +11,8 @@ against a **fake Discord** that we host, and gives players a web client instead 
 
 ## Pieces
 
+- Bot additions (new files under `ti4/spring/api/selfhost/`): draft state (`/api/public/game/{g}/draft`), trades
+  (`/api/game/{g}/trade/{options,propose,pending}`), art (`/api/public/selfhost/art/**`, `/api/public/selfhost/tile/{id}`).
 - `bot/` — how we build the bot: upstream `AsyncTI4/TI4_map_generator_bot` at `bot/UPSTREAM_COMMIT` plus
   `bot/patches/*.patch`. Keep patches tiny and guarded by `ti4.selfhost.SelfHosted.isEnabled()` (true when
   `DISCORD_API_BASE` is set) so upstream merges stay easy. The bot is the source of truth for rules.
@@ -18,7 +20,10 @@ against a **fake Discord** that we host, and gives players a web client instead 
   - `/api/v10/*` Discord REST subset (`rest.ts`), `/gateway` Discord gateway (`gateway.ts`). JDA is pointed here.
   - `/app/ws?token=` browser realtime protocol (`clients.ts`), `/app/*` site HTTP endpoints (`lobby.ts`).
   - `/attachments/:id/:name`, `/emojis/:id` serve files the bot uploaded (map images, 1500+ emoji icons).
-  - `/bot/*` proxies GETs to the bot's own API (`/bot/api/public/game/...`) and `/bot/ws` its STOMP socket.
+  - `/bot/*` proxies to the bot's own API (`/bot/api/public/game/...`; non-GET only under `/api/game/**`, seat
+    token as Bearer) and `/bot/ws` its STOMP socket.
+  - `/art/*` game art (tiles, units, tokens, cards) from the bot's resources: from `$ART_DIR` if set, else proxied
+    to the bot's `/api/public/selfhost/art/**`. Links the bot posts to AsyncTI4's art CDNs are rewritten to `/art/`.
   - Serves the built web client (`web/dist`) for everything else (SPA fallback).
   - State in `$SHIM_DATA/state.json` (+ `files/`, `emojis/`). Messages are stored Discord-shaped.
   - `hub.ts` is the single place that mutates state and fans out to both the bot and browsers.

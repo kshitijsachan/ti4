@@ -1,5 +1,4 @@
-import { useState, type ReactNode } from "react";
-import { IconMessages } from "@tabler/icons-react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { AppShell, Box, Tabs, SimpleGrid } from "@mantine/core";
 import { GameHeader } from "@/play/GameHeader";
@@ -33,8 +32,17 @@ import { TabActiveContext } from "@/hooks/useIsTabActive";
 
 type ContentProps = {
   pannable: boolean;
-  /** Rendered in place of the board while the game has no map yet (setup). */
-  setupView?: ReactNode;
+  /** Takes the map tab's place, e.g. the draft or the setup log before a board exists. */
+  mapOverride?: GameViewTab | null;
+  /** Extra views next to the upstream ones (after Map). */
+  extraTabs?: GameViewTab[];
+};
+
+export type GameViewTab = {
+  value: string;
+  label: string;
+  Icon: ComponentType<{ size?: number }>;
+  node: ReactNode;
 };
 
 type TabContentProps = {
@@ -55,7 +63,11 @@ function TabContent({ gameId, ready, isError, children }: TabContentProps) {
   return <MapViewportLoader label="Acquiring game state" />;
 }
 
-function GameMapContent({ pannable, setupView }: ContentProps) {
+function GameMapContent({
+  pannable,
+  mapOverride,
+  extraTabs = [],
+}: ContentProps) {
   const data = useGameContext();
   const gameDataState = useGameDataState();
   const isError = !!gameDataState?.isError;
@@ -84,8 +96,11 @@ function GameMapContent({ pannable, setupView }: ContentProps) {
       : `${gameId} · TI4 Online`,
   );
 
-  const hasBoard = (data?.tilePositions?.length ?? 0) > 0;
-  const showSetup = !!setupView && !hasBoard && (isError || !!data);
+  const extraValues = new Set(extraTabs.map((t) => t.value));
+  const shownTab =
+    activeTab.startsWith("x-") && !extraValues.has(activeTab)
+      ? "map"
+      : activeTab;
 
   return (
     <AppShell header={{ height: APP_HEADER_HEIGHT }}>
@@ -94,7 +109,7 @@ function GameMapContent({ pannable, setupView }: ContentProps) {
       <AppShell.Main>
         <Box className={classes.mainBackground}>
           <Tabs
-            value={activeTab}
+            value={shownTab}
             onChange={(value) => changeActiveTab(value || "map")}
             h={{ base: "100vh", sm: "calc(100vh - var(--app-header-height))" }}
             keepMounted
@@ -105,9 +120,9 @@ function GameMapContent({ pannable, setupView }: ContentProps) {
                   return null;
                 }
 
-                const isSetupTab = tab.value === "map" && showSetup;
-                const Icon = isSetupTab ? IconMessages : tab.Icon;
-                return (
+                const override = tab.value === "map" ? mapOverride : null;
+                const Icon = override?.Icon ?? tab.Icon;
+                return [
                   <Tabs.Tab
                     key={tab.value}
                     value={tab.value}
@@ -115,9 +130,22 @@ function GameMapContent({ pannable, setupView }: ContentProps) {
                     leftSection={<Icon size={16} />}
                     visibleFrom={tab.visibleFrom}
                   >
-                    {isSetupTab ? "Setup" : tab.label}
-                  </Tabs.Tab>
-                );
+                    {override?.label ?? tab.label}
+                  </Tabs.Tab>,
+                  ...(tab.value === "map"
+                    ? extraTabs.map((extra) => (
+                        <Tabs.Tab
+                          key={extra.value}
+                          value={extra.value}
+                          className={classes.tabsTab}
+                          leftSection={<extra.Icon size={16} />}
+                          visibleFrom="sm"
+                        >
+                          {extra.label}
+                        </Tabs.Tab>
+                      ))
+                    : []),
+                ];
               })}
               <TabsControls
                 onTryDecalsClick={() =>
@@ -131,9 +159,9 @@ function GameMapContent({ pannable, setupView }: ContentProps) {
                 over real data — chrome calibrated to nothing is the artifact
                 this replaces. */}
             <Tabs.Panel value="map" h="calc(100% - var(--map-tabs-height))">
-              <TabActiveContext value={activeTab === "map"}>
-                {showSetup ? (
-                  setupView
+              <TabActiveContext value={shownTab === "map"}>
+                {mapOverride ? (
+                  mapOverride.node
                 ) : !data ? (
                   <MapLoadingState gameId={gameId} />
                 ) : pannable ? (
@@ -143,6 +171,16 @@ function GameMapContent({ pannable, setupView }: ContentProps) {
                 )}
               </TabActiveContext>
             </Tabs.Panel>
+
+            {extraTabs.map((extra) => (
+              <Tabs.Panel
+                key={extra.value}
+                value={extra.value}
+                h="calc(100% - var(--map-tabs-height))"
+              >
+                {shownTab === extra.value && extra.node}
+              </Tabs.Panel>
+            ))}
 
             <TabPanelSection
               value="players"
@@ -202,12 +240,10 @@ function GameMapContent({ pannable, setupView }: ContentProps) {
   );
 }
 
-type Props = {
-  setupView?: ReactNode;
-};
+type Props = Pick<ContentProps, "mapOverride" | "extraTabs">;
 
 /** The upstream board view: map, player areas, objectives, general. */
-function GameMapPage({ setupView }: Props) {
+function GameMapPage({ mapOverride, extraTabs }: Props) {
   const params = useParams<{ mapid: string }>();
   const gameId = params.mapid!;
   const themeClassName = usePageThemeClass({ mobile: isMobileDevice() });
@@ -220,7 +256,11 @@ function GameMapPage({ setupView }: Props) {
     <>
       <GameContextProvider gameId={gameId}>
         <div className={themeClassName}>
-          <GameMapContent pannable={effectivePannable} setupView={setupView} />
+          <GameMapContent
+            pannable={effectivePannable}
+            mapOverride={mapOverride}
+            extraTabs={extraTabs}
+          />
         </div>
       </GameContextProvider>
     </>

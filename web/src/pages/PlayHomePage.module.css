@@ -140,7 +140,9 @@
 .go {
   margin-left: auto;
   color: var(--mantine-color-gray-6);
-  transition: color 0.2s ease, transform 0.2s ease;
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .panel {
@@ -169,7 +171,10 @@
   box-shadow: var(--socket-inset);
   font-size: var(--text-body);
   color: var(--mantine-color-gray-4);
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .person:hover {

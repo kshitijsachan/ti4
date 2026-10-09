@@ -150,6 +150,79 @@ index 8501858..8990781 100644
      private static final String DISCORD_CLIENT_ID = System.getenv("DISCORD_CLIENT_ID");
      private static final String DISCORD_CLIENT_SECRET = System.getenv("DISCORD_CLIENT_SECRET");
  
+diff --git a/src/main/java/ti4/spring/api/selfhost/ArtController.java b/src/main/java/ti4/spring/api/selfhost/ArtController.java
+new file mode 100644
+index 0000000..6c9866f
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/ArtController.java
+@@ -0,0 +1,67 @@
++package ti4.spring.api.selfhost;
++
++import jakarta.servlet.http.HttpServletRequest;
++import java.io.IOException;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.TimeUnit;
++import org.springframework.core.io.FileSystemResource;
++import org.springframework.core.io.Resource;
++import org.springframework.http.CacheControl;
++import org.springframework.http.MediaType;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.RestController;
++import ti4.helpers.Storage;
++
++/**
++ * Serves the bot's own art (tiles, units, tokens, cards, factions) to the self-hosted web client as
++ * {@code GET /api/public/selfhost/art/<path under resources>}, so the site doesn't depend on AsyncTI4's CDN.
++ * The web asks for .webp and .png interchangeably, so other image extensions are tried when the exact file is missing.
++ */
++@RestController
++public class ArtController {
++
++    private static final String PREFIX = "/api/public/selfhost/art/";
++    private static final List<String> EXTENSIONS = List.of(".png", ".webp", ".jpg", ".jpeg", ".gif", ".svg");
++    private static final Map<String, MediaType> TYPES = Map.of(
++            ".png", MediaType.IMAGE_PNG,
++            ".webp", MediaType.parseMediaType("image/webp"),
++            ".jpg", MediaType.IMAGE_JPEG,
++            ".jpeg", MediaType.IMAGE_JPEG,
++            ".gif", MediaType.IMAGE_GIF,
++            ".svg", MediaType.parseMediaType("image/svg+xml"));
++
++    @GetMapping(PREFIX + "**")
++    public ResponseEntity<Resource> art(HttpServletRequest request) throws IOException {
++        String resources = Storage.getResourcePath();
++        if (resources == null) return ResponseEntity.notFound().build();
++        Path root = Path.of(resources).toRealPath();
++        String rel = request.getRequestURI().substring(request.getRequestURI().indexOf(PREFIX) + PREFIX.length());
++        rel = java.net.URLDecoder.decode(rel, java.nio.charset.StandardCharsets.UTF_8);
++        Path requested = root.resolve(rel).normalize();
++        if (!requested.startsWith(root)) return ResponseEntity.badRequest().build();
++
++        Path file = resolve(requested);
++        if (file == null) return ResponseEntity.notFound().build();
++        String name = file.getFileName().toString();
++        String ext = name.contains(".") ? name.substring(name.lastIndexOf('.')).toLowerCase() : "";
++        return ResponseEntity.ok()
++                .contentType(TYPES.getOrDefault(ext, MediaType.APPLICATION_OCTET_STREAM))
++                .cacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic())
++                .body(new FileSystemResource(file));
++    }
++
++    private static Path resolve(Path requested) {
++        if (Files.isRegularFile(requested)) return requested;
++        String name = requested.getFileName().toString();
++        String stem = name.contains(".") ? name.substring(0, name.lastIndexOf('.')) : name;
++        for (String ext : EXTENSIONS) {
++            Path candidate = requested.resolveSibling(stem + ext);
++            if (Files.isRegularFile(candidate)) return candidate;
++        }
++        return null;
++    }
++}
 diff --git a/src/main/java/ti4/spring/api/selfhost/DraftButtonLocator.java b/src/main/java/ti4/spring/api/selfhost/DraftButtonLocator.java
 new file mode 100644
 index 0000000..19401c4

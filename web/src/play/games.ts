@@ -90,3 +90,22 @@ export function lobbyChannel(channels: Record<string, Channel>) {
     (c) => c.type === 0 && c.name === "lobby",
   );
 }
+
+/** The game a channel or thread belongs to, if any. */
+export function gameOfChannel(
+  channels: Record<string, Channel>,
+  channelId: string,
+): GameChannels | undefined {
+  const channel = channels[channelId];
+  if (!channel) return undefined;
+  return deriveGames(channels).find(
+    (g) =>
+      g.actions.id === channelId ||
+      g.tableTalk?.id === channelId ||
+      g.hand?.id === channelId ||
+      channel.parent_id === g.actions.id ||
+      channel.parent_id === g.tableTalk?.id ||
+      channel.name.startsWith(`${g.name}-`) ||
+      isHandThread(channel.name, g.name),
+  );
+}

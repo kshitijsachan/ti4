@@ -19,6 +19,19 @@ const INTERNAL_URL = process.env.SHIM_INTERNAL_URL ?? `http://127.0.0.1:${PORT}`
 const PUBLIC_URL = process.env.PUBLIC_URL ?? "";
 const WEB_DIST = process.env.WEB_DIST ?? join(process.cwd(), "..", "web", "dist");
 const BOT_API = process.env.BOT_API_URL ?? "http://127.0.0.1:8081";
+/** Optional local copy of the bot's resources dir for serving /art faster; otherwise /art is proxied to the bot. */
+const ART_DIR = process.env.ART_DIR ?? "";
+const ART_EXTS = [".png", ".webp", ".jpg", ".jpeg", ".gif", ".svg"];
+
+/** First existing file for the art path, trying other image extensions (the web mixes .webp and .png). */
+function resolveArt(rel: string): string | null {
+  const clean = normalize(decodeURIComponent(rel)).replace(/^(\.\.[\/\\])+/, "");
+  const base = join(ART_DIR, clean);
+  if (!base.startsWith(join(ART_DIR, "/"))) return null;
+  const stem = base.slice(0, base.length - extname(base).length);
+  for (const f of [base, ...ART_EXTS.map((e) => stem + e)]) if (existsSync(f) && statSync(f).isFile()) return f;
+  return null;
+}
 
 const store = new Store(DATA_DIR);
 const gateway = new Gateway(store, () => INTERNAL_URL.replace(/^http/, "ws") + "/gateway");
@@ -89,6 +102,12 @@ const server = createServer({ shouldUpgradeCallback: (req: import("node:http").I
       return res.end(defaultAvatarPng(Number((BigInt(ua[1]) >> 22n) % 6n)));
     }
     if (path.startsWith("/bot/")) return proxyToBot(req, res, path.slice(4) + url.search);
+    // Game art (tiles, units, tokens, cards) from the bot's resources: local copy if ART_DIR is set, else the bot.
+    if (path.startsWith("/art/")) {
+      const file = ART_DIR ? resolveArt(path.slice(5)) : null;
+      if (file && serveFile(res, file, "public, max-age=604800")) return;
+      return proxyToBot(req, res, "/api/public/selfhost/art/" + path.slice(5));
+    }
     if (path === "/healthz") return sendJson(res, 200, { ok: true, bot: gateway.isReady });
     // Static web client with SPA fallback.
     const rel = normalize(decodeURIComponent(path)).replace(/^(\.\.[\/\\])+/, "");
@@ -128,7 +147,7 @@ async function proxyToBot(req: import("node:http").IncomingMessage, res: import(
     const body = Buffer.from(await upstream.arrayBuffer());
     res.writeHead(upstream.status, {
       "content-type": upstream.headers.get("content-type") ?? "application/json",
-      "cache-control": "no-cache",
+      "cache-control": upstream.headers.get("cache-control") ?? "no-cache",
     });
     res.end(body);
   } catch {

@@ -84,6 +84,10 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // The board view is one large lazy chunk by design; it loads with the game.
+    chunkSizeWarningLimit: 2500,
+  },
   assetsInclude: ["**/*.woff", "**/*.woff2", "**/*.ttf", "**/*.otf"],
   server: {
     proxy: {

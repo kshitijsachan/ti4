@@ -93,6 +93,7 @@ export class Hub {
   }
 
   buildMessage(channelId: string, authorId: string, json: Json, attachments: Json[] = []): StoredMessage {
+    json = localizeArt(json, this.publicUrl());
     const ch = this.store.channel(channelId);
     const id = snowflake();
     const content: string = json.content ?? "";
@@ -217,6 +218,7 @@ export class Hub {
   }
 
   editMessage(msg: StoredMessage, json: Json, files: UploadedFile[]) {
+    json = localizeArt(json, this.publicUrl());
     if ("content" in json) msg.content = json.content ?? "";
     if ("components" in json) msg.components = normalizeComponents(json.components ?? []);
     const atts = this.resolveAttachments(json, files, msg.attachments ?? []);
@@ -390,4 +392,19 @@ function guessType(name: string) {
       md: "text/markdown",
     }[ext ?? ""] ?? "application/octet-stream"
   );
+}
+
+/** Upstream art CDNs the bot links to; we serve the same files from /art (see index.ts). */
+const ART_CDN = /https?:\/\/(?:cdn\.statically\.io\/gh|raw\.githubusercontent\.com|cdn\.jsdelivr\.net\/gh)\/AsyncTI4\/TI4_map_generator_bot\/[^/]+\/src\/main\/resources\/([^\s)"'<>?#]*)(?:\?raw=true)?/gi;
+
+/** Rewrites links to AsyncTI4's art CDNs (e.g. strategy card images) to our own /art route. */
+export function localizeArt<T>(value: T, publicUrl: string): T {
+  if (typeof value === "string") return value.replace(ART_CDN, (_m, path: string) => `${publicUrl}/art/${path}`) as T;
+  if (Array.isArray(value)) return value.map((v) => localizeArt(v, publicUrl)) as T;
+  if (value && typeof value === "object") {
+    const out: Json = {};
+    for (const [k, v] of Object.entries(value)) out[k] = localizeArt(v, publicUrl);
+    return out as T;
+  }
+  return value;
 }

@@ -2,7 +2,7 @@ import { useState, type PointerEvent } from "react";
 
 const STORAGE_KEY = "ti4online.sidebarWidth";
 const MIN_WIDTH = 320;
-const DEFAULT_WIDTH = 420;
+const DEFAULT_WIDTH = 460;
 
 function clamp(width: number) {
   const max = Math.max(MIN_WIDTH, window.innerWidth * 0.6);

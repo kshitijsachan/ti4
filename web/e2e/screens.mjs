@@ -48,12 +48,18 @@ await shot("admin", `/admin?key=${state.admin_token}`, "text=Players");
 await shot("play", `/play?t=${token}`, "text=Your games");
 console.log("token stripped:", !page.url().includes("t="));
 await shot("game", `/game/${game}`, "[role=tablist]", 4000);
-for (const tab of ["Hand", "Threads", "Table talk"]) {
+for (const tab of ["Hand", "Trade", "Threads", "Table talk"]) {
   await page.getByRole("tab", { name: tab }).click();
   await page.waitForTimeout(1200);
   await page.screenshot({
     path: `${out}/game-${tab.replace(" ", "-").toLowerCase()}.png`,
   });
+}
+const draftTab = page.getByRole("tab", { name: "Draft" });
+if (await draftTab.count()) {
+  await draftTab.first().click();
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${out}/game-draft.png` });
 }
 const setupGame = process.env.SETUP_GAME ?? "pbd3";
 await shot("game-setup", `/game/${setupGame}`, "[role=tablist]", 3000);

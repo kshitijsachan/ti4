@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { UnstyledButton } from "@mantine/core";
 import {
   IconArrowLeft,
@@ -7,7 +7,12 @@ import {
   IconMessage,
   IconMessages,
   IconSubtask,
+  IconTransfer,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchPendingTrades, TradePanel } from "@/trade";
+import { getToken } from "@/play/session";
+import { usePressButton } from "@/play/usePressButton";
 import cx from "clsx";
 import {
   ActionLog,
@@ -16,17 +21,19 @@ import {
   HandPanel,
   usePlay,
 } from "@/discord";
-import { findGame, type GameChannels } from "@/play/games";
+import { findGame, gameOfChannel, type GameChannels } from "@/play/games";
+import { useChannelJump } from "@/play/channelJump";
 import { useResizableWidth } from "@/play/useResizableWidth";
 import classes from "./PlaySidebar.module.css";
 
-type TabValue = "actions" | "talk" | "hand" | "threads";
+type TabValue = "actions" | "talk" | "hand" | "trade" | "threads";
 
 type Props = {
   gameName: string;
   /** During setup the action channel is the main view, so it leaves the sidebar. */
   actionsInMain: boolean;
   open: boolean;
+  onOpen: () => void;
   onClose: () => void;
 };
 
@@ -34,22 +41,22 @@ function Empty({ children }: { children: ReactNode }) {
   return <div className={classes.empty}>{children}</div>;
 }
 
-function Threads({ game }: { game: GameChannels }) {
-  const [openId, setOpenId] = useState<string | null>(null);
-  const open = game.threads.find((t) => t.id === openId);
+type ThreadsProps = {
+  game: GameChannels;
+  openId: string | null;
+  onSelect: (channelId: string | null) => void;
+};
 
-  if (open) {
+function Threads({ game, openId, onSelect }: ThreadsProps) {
+  if (openId) {
     return (
       <div className={classes.thread}>
-        <UnstyledButton
-          className={classes.back}
-          onClick={() => setOpenId(null)}
-        >
+        <UnstyledButton className={classes.back} onClick={() => onSelect(null)}>
           <IconArrowLeft size={14} />
           <span className={classes.threadName}>All threads</span>
         </UnstyledButton>
         <div className={classes.fill}>
-          <ChannelView key={open.id} channelId={open.id} />
+          <ChannelView key={openId} channelId={openId} />
         </div>
       </div>
     );
@@ -61,7 +68,7 @@ function Threads({ game }: { game: GameChannels }) {
     <div className={classes.fill}>
       <ChannelList
         gameName={game.name}
-        onSelect={setOpenId}
+        onSelect={onSelect}
         className={classes.list}
       />
     </div>
@@ -72,12 +79,44 @@ function Threads({ game }: { game: GameChannels }) {
  * The play side of the game screen: action log, table talk, the player's hand
  * and any side threads, next to the board.
  */
-export function PlaySidebar({ gameName, actionsInMain, open, onClose }: Props) {
+export function PlaySidebar({
+  gameName,
+  actionsInMain,
+  open,
+  onOpen,
+  onClose,
+}: Props) {
   const channels = usePlay((s) => s.channels);
   const status = usePlay((s) => s.status);
   const game = findGame(channels, gameName);
   const { width, handleProps, dragging } = useResizableWidth();
   const [chosen, setChosen] = useState<TabValue>("actions");
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const jumpTarget = useChannelJump((s) => s.target);
+  const clearJump = useChannelJump((s) => s.clear);
+
+  /** Shows a channel of this game in whichever tab holds it. */
+  const showChannel = (channelId: string | null) => {
+    if (!game || !channelId) {
+      setThreadId(null);
+      return;
+    }
+    if (channelId === game.actions.id) setChosen("actions");
+    else if (channelId === game.tableTalk?.id) setChosen("talk");
+    else if (channelId === game.hand?.id) setChosen("hand");
+    else {
+      setChosen("threads");
+      setThreadId(channelId);
+    }
+  };
+
+  useEffect(() => {
+    if (!jumpTarget || !game) return;
+    if (gameOfChannel(channels, jumpTarget)?.name !== game.name) return;
+    clearJump();
+    showChannel(jumpTarget);
+    onOpen();
+  });
   const unread = usePlay((s) => s.unread);
   const mentions = usePlay((s) => s.mentions);
   const unreadIn = (ids: (string | undefined)[]) =>
@@ -85,12 +124,30 @@ export function PlaySidebar({ gameName, actionsInMain, open, onClose }: Props) {
   const mentionedIn = (ids: (string | undefined)[]) =>
     ids.some((id) => id && mentions[id]);
   const threadIds = game?.threads.map((t) => t.id) ?? [];
+  const token = getToken();
+  const press = usePressButton();
+  const handId = game?.hand?.id;
+  const handSignal = usePlay((s) =>
+    handId
+      ? (s.messages[handId]?.ids.at(-1) ?? s.channels[handId]?.last_message_id)
+      : undefined,
+  );
+  const incomingTrades = useQuery({
+    queryKey: ["tradesPending", gameName, handSignal],
+    queryFn: () => fetchPendingTrades("/bot", gameName, token!),
+    enabled: !!token && !!handId,
+    refetchInterval: 15000,
+    retry: false,
+    select: (data) => data.incoming.length,
+  }).data;
 
   const tabs: {
     value: TabValue;
     label: string;
     icon: ReactNode;
     ids: (string | undefined)[];
+    /** Count to show instead of unread messages, e.g. offers awaiting me. */
+    badge?: number;
   }[] = [
     ...(actionsInMain
       ? []
@@ -113,6 +170,13 @@ export function PlaySidebar({ gameName, actionsInMain, open, onClose }: Props) {
       label: "Hand",
       icon: <IconCards size={14} />,
       ids: [game?.hand?.id],
+    },
+    {
+      value: "trade",
+      label: "Trade",
+      icon: <IconTransfer size={14} />,
+      ids: [],
+      badge: incomingTrades,
     },
     {
       value: "threads",
@@ -151,7 +215,25 @@ export function PlaySidebar({ gameName, actionsInMain, open, onClose }: Props) {
         ),
       )}
       {panel("hand", <HandPanel gameName={game.name} />)}
-      {panel("threads", <Threads game={game} />)}
+      {panel(
+        "trade",
+        token && game.hand ? (
+          <div className={classes.scroll}>
+            <TradePanel
+              gameName={game.name}
+              token={token}
+              onPress={press}
+              refreshSignal={handSignal}
+            />
+          </div>
+        ) : (
+          <Empty>Trading opens once you have a seat in a started game.</Empty>
+        ),
+      )}
+      {panel(
+        "threads",
+        <Threads game={game} openId={threadId} onSelect={showChannel} />,
+      )}
     </>
   );
 
@@ -179,7 +261,12 @@ export function PlaySidebar({ gameName, actionsInMain, open, onClose }: Props) {
           >
             {tab.icon}
             <span>{tab.label}</span>
-            {active !== tab.value && unreadIn(tab.ids) > 0 && (
+            {!!tab.badge && (
+              <span className={cx(classes.count, classes.mention)}>
+                {tab.badge}
+              </span>
+            )}
+            {!tab.badge && active !== tab.value && unreadIn(tab.ids) > 0 && (
               <span
                 className={cx(
                   classes.count,
