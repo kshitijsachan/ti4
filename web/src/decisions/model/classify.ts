@@ -209,13 +209,6 @@ function genericTitle(text: string): { title: string; rest: string } {
   return { title, rest: rest.trim() };
 }
 
-function phaseEyebrow(ctx: ClassifyContext, fallback: string) {
-  const phase = ctx.web?.gameState?.phase?.split(".")[0];
-  const round = ctx.web?.gameRound;
-  const label = phase ? `${phase.charAt(0).toUpperCase()}${phase.slice(1)} phase` : fallback;
-  return round ? `Round ${round} · ${label}` : label;
-}
-
 /** Shapes a pending prompt into what the popup shows: kind, plain-language title and text, ranked choices. */
 export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   const m = prompt.message;
@@ -230,7 +223,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     id: m.id,
     prompt,
     kind: "generic",
-    eyebrow: phaseEyebrow(ctx, "Decision"),
+    eyebrow: "",
     title: generic.title,
     text,
     choices,
@@ -254,17 +247,17 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return {
       ...base,
       kind: "agendaPeek",
-      eyebrow: "Agenda deck · only you see this",
+      eyebrow: "Only you see this",
       title: agenda ? `${agenda.name}: top or bottom?` : "Top or bottom of the agenda deck?",
       agenda,
     };
   }
   if (has(choices, ID.scPick)) {
-    return { ...base, kind: "scPick", eyebrow: phaseEyebrow(ctx, "Strategy phase"), title: "Pick a strategy card" };
+    return { ...base, kind: "scPick", eyebrow: "", title: "Pick a strategy card" };
   }
   if (has(choices, ID.transaction)) {
     const trade = tradeOf(text);
-    return { ...base, kind: "transaction", eyebrow: "Trade offer", title: `${trade.from} offers a trade`, trade };
+    return { ...base, kind: "transaction", eyebrow: "", title: `${trade.from} offers a trade`, trade };
   }
   if (has(choices, ID.combat) || prompt.reason === "combat") {
     const combat = combatOf(ctx, prompt, choices);
@@ -275,8 +268,8 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return {
       ...base,
       kind: "combat",
-      eyebrow: `Combat${combat.position ? ` · system ${combat.position}` : ""}`,
-      title: `${kindLabel}${combat.round ? ` round ${combat.round}` : ""} — ${step}`,
+      eyebrow: "",
+      title: `${kindLabel} — ${step}`,
       combat,
       position: combat.position,
     };
@@ -286,7 +279,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return {
       ...base,
       kind: "reaction",
-      eyebrow: "Reaction window",
+      eyebrow: "",
       title: card ? `Sabotage ${card}?` : "Sabotage?",
     };
   }
@@ -316,7 +309,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return {
       ...base,
       kind: "agenda",
-      eyebrow: phaseEyebrow(ctx, "Agenda phase"),
+      eyebrow: "",
       title: agenda ? `Agenda: ${agenda.name} — vote` : "Agenda — vote",
       agenda,
     };
@@ -330,7 +323,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return {
       ...base,
       kind: "scPrimary",
-      eyebrow: phaseEyebrow(ctx, "Action phase"),
+      eyebrow: "",
       title: name ? `Resolve ${name}` : "Resolve your strategy card",
       sc,
     };
@@ -353,7 +346,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return {
       ...base,
       kind: "scFollow",
-      eyebrow: phaseEyebrow(ctx, "Action phase"),
+      eyebrow: "",
       title: name ? `Follow ${name}?` : "Follow the strategy card?",
       sc,
     };
@@ -363,7 +356,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return {
       ...base,
       kind: "turn",
-      eyebrow: phaseEyebrow(ctx, "Action phase"),
+      eyebrow: "",
       title: fresh ? "Your turn — choose an action" : "Finish your turn",
     };
   }
@@ -373,16 +366,16 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return {
       ...base,
       kind: "tactical",
-      eyebrow: phaseEyebrow(ctx, "Tactical action"),
+      eyebrow: "",
       title: tacticalTitle(choices, text, ring.length > 0),
       position: ring.length ? undefined : active,
     };
   }
   if (has(choices, ID.scoring)) {
-    return { ...base, kind: "scoring", eyebrow: phaseEyebrow(ctx, "Status phase"), title: "Score objectives" };
+    return { ...base, kind: "scoring", eyebrow: "", title: "Score objectives" };
   }
   if (has(choices, ID.status)) {
-    return { ...base, kind: "status", eyebrow: phaseEyebrow(ctx, "Status phase"), title: "Status phase — tidy up" };
+    return { ...base, kind: "status", eyebrow: "", title: "Status phase — tidy up" };
   }
   return { ...base, text: generic.rest };
 }

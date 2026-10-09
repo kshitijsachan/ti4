@@ -83,9 +83,18 @@
 
 .headTop {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 2px;
   min-height: 22px;
+}
+
+.titles {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 2px;
 }
 
 .eyebrow {
@@ -117,15 +126,15 @@
 .pager {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  margin-right: 6px;
+  gap: 0;
+  margin-right: 2px;
 }
 
 .pagerText {
   font-family: var(--font-data);
   font-size: 11px;
   color: var(--play-ink);
-  min-width: 42px;
+  min-width: 26px;
   text-align: center;
 }
 

@@ -216,15 +216,17 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className 
       >
         <header className={classes.head}>
           <div className={classes.headTop}>
-            <span className={classes.eyebrow}>{shown.eyebrow}</span>
-            <span className={classes.grow} />
+            <div className={classes.titles}>
+              {shown.eyebrow && <span className={classes.eyebrow}>{shown.eyebrow}</span>}
+              <h2 className={classes.title}>{shown.title}</h2>
+            </div>
             {count > 1 && (
               <span className={classes.pager}>
                 <UnstyledButton className={classes.iconBtn} onClick={() => go(-1)} aria-label="Previous decision">
                   <IconChevronLeft size={15} />
                 </UnstyledButton>
                 <span className={classes.pagerText}>
-                  {index + 1} of {count}
+                  {index + 1}/{count}
                 </span>
                 <UnstyledButton className={classes.iconBtn} onClick={() => go(1)} aria-label="Next decision">
                   <IconChevronRight size={15} />
@@ -242,7 +244,6 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className 
               </UnstyledButton>
             </Tooltip>
           </div>
-          <h2 className={classes.title}>{shown.title}</h2>
         </header>
         <div className={classes.body}>
           {renderBody(shown, {
