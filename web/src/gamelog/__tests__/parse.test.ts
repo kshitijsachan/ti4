@@ -35,7 +35,7 @@ const SOL = "<:Sol:1558154703500607488><@1558155013916852224> <:vapourwave:15581
 const SOL_NOPING = "<:Sol:1558154703500607488>Alice <:vapourwave:1558154672991240192>**Vapourwave**";
 const MENTAK = "<:Mentak:1558154745624002560><@1558155013921046528> <:gold:1558154785268563968>**Gold**";
 
-test("player representation: ping, no-ping and bare forms", () => {
+void test("player representation: ping, no-ping and bare forms", () => {
   const a = one(bot(`${SOL_NOPING} has passed.`));
   assert.equal(a.kind, "pass");
   assert.equal(a.actor?.faction, "sol");
@@ -51,7 +51,7 @@ test("player representation: ping, no-ping and bare forms", () => {
   assert.match(c.line, /landed 1 Infantry on Lazul Rex/);
 });
 
-test("strategy card played (fixture) and following", () => {
+void test("strategy card played (fixture) and following", () => {
   const p = one(fixture("strategy-card-played-with-reactions"));
   assert.equal(p.kind, "sc_play");
   assert.ok(p.actor?.faction);
@@ -62,7 +62,7 @@ test("strategy card played (fixture) and following", () => {
   assert.equal(n.importance, 1);
 });
 
-test("tactical action: activation, movement attributed to the activator, explore", () => {
+void test("tactical action: activation, movement attributed to the activator, explore", () => {
   const msgs = [
     bot(`<:Mentak:1558154745624002560>Bob <:gold:1558154785268563968>**Gold** activated 201 (Cresius/Lazul Rex).`, { id: "10" }),
     bot("## Tactical Action in system 201 (Cresius/Lazul Rex):\n\nFrom system 301 (Moll Primus - Mentak) (1 tile away)\n>  moved 2 <:fighter:1558154773298020352>\n>  moved 1 <:carrier:1558154791207698432>\n>  moved 2 <:infantry:1558154644117651456> from the planet Moll Primus (4/1)", { id: "11" }),
@@ -79,7 +79,7 @@ test("tactical action: activation, movement attributed to the activator, explore
   assert.match(x.line, /explored Lazul Rex — Cybernetic Research Facility/);
 });
 
-test("combat: dice roll fixture, hits assigned, thread gives the system", () => {
+void test("combat: dice roll fixture, hits assigned, thread gives the system", () => {
   const roll = one(fixture("combat-dice-roll", "pbd1-round-1-system-201-turn-2-yssaril-vs-mentak"));
   assert.equal(roll.kind, "combat");
   assert.match(roll.line, /rolled 2 hits \(round 1\)/);
@@ -88,7 +88,7 @@ test("combat: dice roll fixture, hits assigned, thread gives the system", () => 
   assert.match(hits.line, /lost 2 Destroyers, 1 Cruiser/);
 });
 
-test("objectives: reveal embeds, scoring with VP", () => {
+void test("objectives: reveal embeds, scoring with VP", () => {
   const r = classify(fixture("public-objectives-embeds"), ctx());
   assert.equal(r.cls.type, "event");
   assert.ok(r.drafts.length >= 1);
@@ -97,10 +97,10 @@ test("objectives: reveal embeds, scoring with VP", () => {
   assert.equal(s.vp, 1);
   assert.equal(s.importance, 3);
   const so = one(bot("<:Ghost:1>Bot Alpha <:glacier:2>**Glacier** scored <:SecretObjectiveAlt:3>_Destroy Heretical Works_ (Status Phase): Purge 2 of your relic fragments of any type. (0/2)"));
-  assert.match(so.line, /scored Destroy Heretical Works \(\+1 VP · secret objective\)/);
+  assert.match(so.line, /scored Destroy Heretical Works \(secret objective\)/);
 });
 
-test("agenda: reveal fixture, votes, outcome uses the revealed agenda name", () => {
+void test("agenda: reveal fixture, votes, outcome uses the revealed agenda name", () => {
   const msgs = [
     { ...fixture("agenda-revealed"), id: "20" },
     bot("<:Mentak:1> used the following: \n> Cresius (0/1) for 1 vote.\n> Lazul Rex (2/2) for 2 votes.\nFor a total of **4** votes on the outcome \"Mentak\".", { id: "21" }),
@@ -114,7 +114,7 @@ test("agenda: reveal fixture, votes, outcome uses the revealed agenda name", () 
   assert.equal(events.find((e) => e.kind === "phase")?.phase, "agenda");
 });
 
-test("action card, transaction", () => {
+void test("action card, transaction", () => {
   const ac = one(fixture("action-card-played-sabotage-window"));
   assert.equal(ac.kind, "action_card");
   const tx = one(bot("A transaction has been ratified:\n> <:Yssaril:1>Carol gives:\n> - <:tg:2><:tg:2>\n\n> <:Mentak:3>Bob gives:\n> - The Front Half Of Our Pantomime Horse"));
@@ -124,7 +124,7 @@ test("action card, transaction", () => {
   assert.match(segText(tx.details![0]), /gave: 2 TG/);
 });
 
-test("prompts, banners, ephemerals and chatter are dropped", () => {
+void test("prompts, banners, ephemerals and chatter are dropped", () => {
   for (const name of ["strategy-card-pick-buttons", "status-homework-buttons", "strategy-phase-banner-image", "ephemeral-with-buttons", "turn-order", "image-url-only-content"]) {
     const r = classify(fixture(name), ctx());
     assert.equal(r.cls.type, "noise", `${name} should be dropped, got ${JSON.stringify(r.cls)}`);
@@ -132,7 +132,7 @@ test("prompts, banners, ephemerals and chatter are dropped", () => {
   assert.equal(classify(bot("gg", { bot: false }), ctx()).cls.type, "noise");
 });
 
-test("phase tracking from banners and round starts", () => {
+void test("phase tracking from banners and round starts", () => {
   const msgs = [
     bot("Started Round 1", { id: "1" }),
     bot("", { id: "2", attachments: ["action1banner_2026.webp"] }),
@@ -148,12 +148,12 @@ test("phase tracking from banners and round starts", () => {
   assert.equal(events.find((e) => e.kind === "pass")?.phase, "action");
 });
 
-test("captured fixtures: nothing in the log scope is unrecognised", () => {
+void test("captured fixtures: nothing in the log scope is unrecognised", () => {
   const { stats } = buildTimeline(fixtureMessages());
   assert.equal(stats.other, 0, stats.otherSamples.join("\n"));
 });
 
-test("live games: at most 5% of bot messages unrecognised", { skip: !hasState() && "no shim state" }, () => {
+void test("live games: at most 5% of bot messages unrecognised", { skip: !hasState() && "no shim state" }, () => {
   for (const g of ["pbd1", "pbd8", "pbd9"]) {
     const msgs = gameMessages(g);
     if (!msgs.length) continue;
@@ -164,6 +164,6 @@ test("live games: at most 5% of bot messages unrecognised", { skip: !hasState() 
   }
 });
 
-test("MENTAK constant parses (guards the representation regex)", () => {
+void test("MENTAK constant parses (guards the representation regex)", () => {
   assert.equal(one(bot(`${MENTAK} has passed.`)).actor?.color, "Gold");
 });

@@ -317,7 +317,7 @@ const rules: Rule[] = [
       kind: "activate",
       actor: hit.actor,
       systemPosition: a[1],
-      summary: [txt("activated "), b(a[2] || a[1]), txt(` (${a[1]})`)],
+      summary: [txt("activated "), b(a[2] || a[1])],
     });
   },
   (m, ctx) => {
@@ -515,7 +515,7 @@ const rules: Rule[] = [
       actor: hit.actor,
       vp,
       dedupe: `scored:${hit.actor.faction}:${s[3]}`,
-      summary: [txt("scored "), ...(emoji ? emo(emojiRef(emoji)) : []), b(s[3]), txt(` (+${vp} VP${label ? ` · ${label}` : ""})`)],
+      summary: [txt("scored "), ...(emoji ? emo(emojiRef(emoji)) : []), b(s[3]), ...(label ? [txt(` (${label})`)] : [])],
     });
   },
   (m) => {
@@ -640,7 +640,12 @@ const rules: Rule[] = [
       .filter((s): s is { actor: Actor; items: string[] } => !!s);
     const [a, bSide] = sides;
     if (!a) return ev({ kind: "transaction", summary: [txt("A "), b("transaction"), txt(" was ratified")] });
+    const short = (items: string[]) => {
+      const j = items.join(", ") || "nothing";
+      return j.length > 48 ? `${j.slice(0, 46)}…` : j;
+    };
     const summary: Seg[] = [txt("traded with "), ...(bSide ? [who(bSide.actor)] : [b("someone")])];
+    if (bSide) summary.push(txt(": "), b(short(a.items)), txt(" for "), b(short(bSide.items)));
     const details = sides.map((s) => [who(s.actor), txt(" gave: "), b(s.items.join(", ") || "nothing")]);
     return ev({ kind: "transaction", actor: a.actor, target: bSide?.actor, summary, details });
   },

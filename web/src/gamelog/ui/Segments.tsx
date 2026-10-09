@@ -1,0 +1,59 @@
+import { colors } from "@/entities/data/colors";
+import type { Actor, Seg } from "../types";
+import { actorLabel } from "../parse/markup";
+import classes from "./Segments.module.css";
+
+type RGB = { red: number; green: number; blue: number };
+const byName = new Map<string, (typeof colors)[number]>();
+for (const c of colors) {
+  for (const n of [c.name, c.displayName, c.alias, ...c.aliases]) if (n) byName.set(n.toLowerCase(), c);
+}
+
+function rgbOf(name: string | undefined, which: "primary" | "secondary", depth = 0): RGB | undefined {
+  const c = name ? byName.get(name.toLowerCase()) : undefined;
+  if (!c || depth > 3) return undefined;
+  const direct = which === "primary" ? c.primaryColor : c.secondaryColor;
+  if (direct) return direct;
+  const ref = which === "primary" ? c.primaryColorRef : c.secondaryColorRef;
+  return ref ? rgbOf(ref, "primary", depth + 1) : undefined;
+}
+
+const css = (c: RGB) => `rgb(${c.red}, ${c.green}, ${c.blue})`;
+
+/** The player's colour as a small swatch (split for two-tone colours). */
+export function ColorDot({ color }: { color?: string }) {
+  const p = rgbOf(color, "primary");
+  if (!p) return null;
+  const s = rgbOf(color, "secondary");
+  const background = s ? `linear-gradient(135deg, ${css(p)} 50%, ${css(s)} 50%)` : css(p);
+  return <span className={classes.dot} style={{ background }} title={color} aria-hidden />;
+}
+
+export function EmojiImg({ id, name, size = "text" }: { id: string; name: string; size?: "text" | "icon" }) {
+  return <img className={size === "icon" ? classes.icon : classes.emoji} src={`/emojis/${id}`} alt={name} title={name} loading="lazy" decoding="async" draggable={false} />;
+}
+
+/** Faction icon + colour swatch + name. */
+export function ActorName({ actor, iconless }: { actor: Actor; iconless?: boolean }) {
+  const label = actorLabel(actor) || "Someone";
+  return (
+    <span className={classes.actor} title={[actor.name, actor.faction, actor.color].filter(Boolean).join(" · ")}>
+      {!iconless && actor.factionEmoji && <EmojiImg id={actor.factionEmoji.id} name={actor.faction ?? ""} size="icon" />}
+      <span className={classes.actorName}>{label}</span>
+      <ColorDot color={actor.color} />
+    </span>
+  );
+}
+
+export function Segments({ segs }: { segs: Seg[] }) {
+  return (
+    <>
+      {segs.map((s, i) => {
+        if (s.t === "text") return <span key={i}>{s.v}</span>;
+        if (s.t === "b") return <strong key={i} className={classes.key}>{s.v}</strong>;
+        if (s.t === "emoji") return <EmojiImg key={i} id={s.id} name={s.name} />;
+        return <ActorName key={i} actor={s.actor} />;
+      })}
+    </>
+  );
+}

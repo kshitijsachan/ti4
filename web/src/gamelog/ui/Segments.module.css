@@ -1,0 +1,41 @@
+.emoji {
+  width: 1.15em;
+  height: 1.15em;
+  object-fit: contain;
+  vertical-align: -0.22em;
+  margin: 0 0.12em;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex: none;
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  flex: none;
+}
+
+.actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: -3px;
+  white-space: nowrap;
+}
+
+.actorName {
+  font-weight: 600;
+  color: var(--play-ink-bright);
+}
+
+.key {
+  font-weight: 600;
+  color: var(--play-ink-bright);
+}
