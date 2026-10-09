@@ -2216,10 +2216,10 @@ index 0000000..145811a
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoJournal.java b/src/main/java/ti4/spring/api/selfhost/UndoJournal.java
 new file mode 100644
-index 0000000..b73caea
+index 0000000..4f512c6
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoJournal.java
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,167 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.nio.charset.StandardCharsets;
@@ -2251,7 +2251,8 @@ index 0000000..b73caea
 +            String kind,
 +            String byUserId,
 +            String byName,
-+            String label) {}
++            String label,
++            List<Long> lostSavedAt) {}
 +
 +    private record Context(String kind, String byUserId, String byName, String label) {}
 +
@@ -2286,7 +2287,8 @@ index 0000000..b73caea
 +                    clean(c == null ? "undo" : c.kind()),
 +                    clean(c == null ? "" : c.byUserId()),
 +                    clean(c == null ? "" : c.byName()),
-+                    clean(c == null ? "" : c.label()));
++                    clean(c == null ? "" : c.label()),
++                    lostSaves(gameName, toIndex, fromIndex));
 +            synchronized (fileLock) {
 +                Path file = file(gameName);
 +                Files.writeString(
@@ -2327,13 +2329,52 @@ index 0000000..b73caea
 +                            p[5],
 +                            p[6],
 +                            p[7],
-+                            p[8]));
++                            p[8],
++                            parseLongs(p.length > 9 ? p[9] : "")));
 +                } catch (NumberFormatException ignored) {
 +                    // skip a damaged line
 +                }
 +            }
 +        } catch (Exception e) {
 +            BotLogger.error("Could not read undo journal for " + gameName, e);
++        }
++        return out;
++    }
++
++    /** Save times of the undo copies this roll-back is about to delete (after {@code toIndex}). */
++    private static String lostSaves(String gameName, int toIndex, int fromIndex) {
++        StringBuilder sb = new StringBuilder();
++        for (int i = toIndex + 1; i <= fromIndex && i - toIndex <= 200; i++) {
++            Path undo = Storage.getGameUndo(gameName, gameName + "_" + i + ".txt");
++            long t = savedAt(undo);
++            if (t <= 0) continue;
++            if (!sb.isEmpty()) sb.append(',');
++            sb.append(t);
++        }
++        return sb.toString();
++    }
++
++    private static long savedAt(Path undoFile) {
++        if (!Files.exists(undoFile)) return 0;
++        try (var lines = Files.lines(undoFile, StandardCharsets.UTF_8)) {
++            return lines.limit(400)
++                    .filter(l -> l.startsWith("last_modified_date "))
++                    .findFirst()
++                    .map(l -> Long.parseLong(l.substring("last_modified_date ".length()).trim()))
++                    .orElse(0L);
++        } catch (Exception e) {
++            return 0;
++        }
++    }
++
++    private static List<Long> parseLongs(String csv) {
++        List<Long> out = new ArrayList<>();
++        for (String s : csv.split(",")) {
++            try {
++                if (!s.isBlank()) out.add(Long.parseLong(s.trim()));
++            } catch (NumberFormatException ignored) {
++                // skip
++            }
 +        }
 +        return out;
 +    }
@@ -2348,10 +2389,10 @@ index 0000000..b73caea
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoModels.java b/src/main/java/ti4/spring/api/selfhost/UndoModels.java
 new file mode 100644
-index 0000000..43d9ad7
+index 0000000..0ff478c
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoModels.java
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,51 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.util.List;
@@ -2377,7 +2418,10 @@ index 0000000..43d9ad7
 +            String phase,
 +            boolean current) {}
 +
-+    /** A roll-back from the bot's own undo code (any path). See {@link UndoJournal}. */
++    /**
++     * A roll-back from the bot's own undo code (any path). See {@link UndoJournal}. {@code lostSavedAt}: save times of
++     * the undo copies it deleted (the bot keeps only one linear history).
++     */
 +    public record Rewind(
 +            long at,
 +            int fromIndex,
@@ -2387,7 +2431,8 @@ index 0000000..43d9ad7
 +            String kind,
 +            String byUserId,
 +            String byName,
-+            String label) {}
++            String label,
++            List<Long> lostSavedAt) {}
 +
 +    public record UndoPointsResponse(
 +            String gameName, int latestIndex, boolean canUndo, List<UndoPoint> points, List<Rewind> rewinds) {}
@@ -2401,7 +2446,7 @@ index 0000000..43d9ad7
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoService.java b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 new file mode 100644
-index 0000000..ecacaf3
+index 0000000..7c93ad6
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 @@ -0,0 +1,284 @@
@@ -2476,7 +2521,7 @@ index 0000000..ecacaf3
 +        }
 +        List<Rewind> rewinds = UndoJournal.read(gameName).stream()
 +                .map(e -> new Rewind(e.at(), e.fromIndex(), e.toIndex(), e.fromSavedAt(), e.toSavedAt(), e.kind(),
-+                        e.byUserId(), e.byName(), e.label()))
++                        e.byUserId(), e.byName(), e.label(), e.lostSavedAt()))
 +                .toList();
 +        boolean canUndo = latest > 1 && numbers.contains(latest - 1);
 +        return new UndoPointsResponse(gameName, latest, canUndo, points, rewinds);
