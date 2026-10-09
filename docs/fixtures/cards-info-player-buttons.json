@@ -1,0 +1,142 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158714312196096",
+    "channel_id": "1558155837237755904",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "You may use these buttons to do various things:",
+    "timestamp": "2026-10-09T16:46:26.681Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "custom_id": "transaction",
+            "style": 1,
+            "disabled": false,
+            "label": "Transaction",
+            "type": 2
+          },
+          {
+            "custom_id": "getModifyTiles",
+            "style": 2,
+            "disabled": false,
+            "label": "Modify Units",
+            "type": 2
+          },
+          {
+            "custom_id": "offerPlayerPref",
+            "style": 2,
+            "disabled": false,
+            "label": "Player Settings",
+            "type": 2
+          },
+          {
+            "custom_id": "searchMyGames",
+            "style": 2,
+            "disabled": false,
+            "label": "List My Games",
+            "type": 2
+          },
+          {
+            "custom_id": "showObjInfo_both",
+            "style": 3,
+            "disabled": false,
+            "label": "Scoring Info",
+            "type": 2
+          }
+        ],
+        "type": 1
+      },
+      {
+        "components": [
+          {
+            "custom_id": "chooseMapView",
+            "style": 2,
+            "disabled": false,
+            "label": "Map Features",
+            "type": 2
+          },
+          {
+            "custom_id": "resolvePreassignment_Pre Pass sol",
+            "style": 4,
+            "disabled": false,
+            "label": "Pass on Next Turn",
+            "type": 2
+          },
+          {
+            "custom_id": "refreshInfoButtons",
+            "style": 3,
+            "disabled": false,
+            "label": "Other Info",
+            "type": 2
+          },
+          {
+            "custom_id": "notepadPost",
+            "style": 1,
+            "disabled": false,
+            "label": "Post Notes",
+            "type": 2
+          },
+          {
+            "custom_id": "notepadEdit~MDL",
+            "style": 1,
+            "disabled": false,
+            "label": "Edit Notes",
+            "type": 2
+          }
+        ],
+        "type": 1
+      },
+      {
+        "components": [
+          {
+            "custom_id": "cardsInfo",
+            "style": 3,
+            "disabled": false,
+            "label": "Cards Info Refresh",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

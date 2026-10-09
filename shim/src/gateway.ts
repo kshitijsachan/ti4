@@ -10,12 +10,20 @@ import { log } from "./log.js";
 export class Gateway {
   private ws: WebSocket | null = null;
   private seq = 0;
-  private sessionId = token(16);
+  private sessionId: string;
   private ready = false;
   private backlog: { t: string; d: Json }[] = [];
   private heartbeatMs = 41250;
 
-  constructor(private store: Store, private publicWsUrl: () => string) {}
+  constructor(private store: Store, private publicWsUrl: () => string) {
+    // The session id survives shim restarts so the bot can RESUME instead of re-identifying. A re-identify makes
+    // JDA rebuild its Guild object, and the bot keeps a stale reference to the old one (JdaService.guildPrimary).
+    this.sessionId = store.state.gateway_session ??= token(16);
+    store.scheduleSave();
+  }
+
+  /** Set when queued events were dropped; the session can then no longer be resumed. */
+  private backlogLost = false;
 
   get isReady() {
     return this.ready;
@@ -49,7 +57,10 @@ export class Gateway {
   dispatch(t: string, d: Json) {
     if (!this.ready) {
       this.backlog.push({ t, d });
-      if (this.backlog.length > 5000) this.backlog.shift();
+      if (this.backlog.length > 5000) {
+        this.backlog.shift();
+        this.backlogLost = true;
+      }
       return;
     }
     this.send({ op: 0, t, s: ++this.seq, d });
@@ -85,9 +96,11 @@ export class Gateway {
 
   private identify(ws: WebSocket) {
     const s = this.store.state;
-    this.sessionId = token(16);
+    this.sessionId = s.gateway_session = token(16);
+    this.store.scheduleSave();
     this.seq = 0;
     this.backlog = [];
+    this.backlogLost = false;
     const ready = {
       v: 10,
       user: { ...this.store.userJson(s.bot_id), verified: true, mfa_enabled: false, flags: 0, email: null },
@@ -111,11 +124,15 @@ export class Gateway {
   }
 
   private resume(ws: WebSocket, d: Json) {
-    if (d.session_id !== this.sessionId) {
+    if (d.session_id !== this.sessionId || this.backlogLost) {
+      this.backlogLost = false;
       this.send({ op: 9, d: false }, ws);
       return;
     }
+    // Continue numbering after the bot's last seen sequence (it may be from before a shim restart).
+    if (typeof d.seq === "number" && d.seq > this.seq) this.seq = d.seq;
     this.ready = true;
+    log.info(`bot resumed session (${this.backlog.length} queued events)`);
     for (const e of this.backlog.splice(0)) this.send({ op: 0, t: e.t, s: ++this.seq, d: e.d }, ws);
     this.send({ op: 0, t: "RESUMED", s: ++this.seq, d: {} }, ws);
   }

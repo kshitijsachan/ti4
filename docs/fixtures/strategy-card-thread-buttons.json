@@ -1,0 +1,126 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558160282298220544",
+    "channel_id": "1558160281711017984",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "These buttons will work inside the thread.",
+    "timestamp": "2026-10-09T16:52:40.518Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "custom_id": "sc_trade_follow",
+            "style": 3,
+            "disabled": false,
+            "label": "Spend A Strategy Token",
+            "type": 2
+          },
+          {
+            "custom_id": "sc_no_follow_5",
+            "style": 1,
+            "disabled": false,
+            "label": "Not Following",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "comm",
+              "animated": false,
+              "id": "1558154810283393024"
+            },
+            "custom_id": "sc_refresh",
+            "style": 2,
+            "disabled": false,
+            "label": "Replenish Commodities",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "Wash",
+              "animated": true,
+              "id": "1558154740322402304"
+            },
+            "custom_id": "sc_refresh_and_wash",
+            "style": 2,
+            "disabled": false,
+            "label": "Replenish and Wash",
+            "type": 2
+          },
+          {
+            "custom_id": "requestAllFollow_5",
+            "style": 2,
+            "disabled": false,
+            "label": "Request All Resolve Now",
+            "type": 2
+          }
+        ],
+        "type": 1
+      },
+      {
+        "components": [
+          {
+            "custom_id": "transaction",
+            "style": 1,
+            "disabled": false,
+            "label": "Transaction",
+            "type": 2
+          },
+          {
+            "custom_id": "sendTradeHolder_tg_yssaril",
+            "style": 3,
+            "disabled": false,
+            "label": "Send 1 Trade Good",
+            "type": 2
+          },
+          {
+            "custom_id": "sendTradeHolder_debt_yssaril",
+            "style": 2,
+            "disabled": false,
+            "label": "Send 1 Debt",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

@@ -50,6 +50,10 @@
   /* Above every map control, because it is what the player must act on when the
      socket drops — but still under the modals. */
   --z-reconnect-prompt: 2420;
+  /* Site chrome outside the board: the sticky page bar, and the play sidebar
+     when it covers the board on narrow screens. */
+  --z-site-header: 2400;
+  --z-play-sidebar-overlay: 2450;
 
   /* MODALS - Settings, shortcuts and popovers (3000-3999) */
   --z-settings-modal: 3000;

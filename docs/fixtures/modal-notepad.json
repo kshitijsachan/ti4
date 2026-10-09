@@ -1,0 +1,23 @@
+{
+  "t": "modal",
+  "interaction_id": "1558159893683372032",
+  "nonce": "Bob-7",
+  "modal": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "notes",
+          "style": 2,
+          "placeholder": "Start typing your notes...",
+          "type": 4,
+          "required": true
+        },
+        "description": null,
+        "label": "Edit summary",
+        "type": 18
+      }
+    ],
+    "custom_id": "notepadModal",
+    "title": "Mentak's Notepad"
+  }
+}

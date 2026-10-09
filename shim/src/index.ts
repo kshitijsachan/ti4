@@ -8,7 +8,7 @@ import { Hub } from "./hub.js";
 import { Rest } from "./rest.js";
 import { Clients } from "./clients.js";
 import { Lobby } from "./lobby.js";
-import { discordError, sendJson } from "./http.js";
+import { defaultAvatarPng, discordError, sendJson } from "./http.js";
 import { log } from "./log.js";
 
 const PORT = Number(process.env.PORT ?? 8090);
@@ -26,6 +26,8 @@ const hub = new Hub(store, gateway, () => PUBLIC_URL);
 const rest = new Rest(hub, () => INTERNAL_URL.replace(/^http/, "ws") + "/gateway", () => PUBLIC_URL);
 (hub as any).rest = rest;
 const clients = new Clients(hub);
+// Threads created before mention auto-join existed: replay it over stored messages (idempotent).
+for (const list of Object.values(store.state.messages)) for (const m of list) hub.autoJoinMentioned(m);
 const lobby = new Lobby(hub, clients);
 
 const MIME: Record<string, string> = {
@@ -53,7 +55,9 @@ function serveFile(res: import("node:http").ServerResponse, file: string, cache 
   return true;
 }
 
-const server = createServer(async (req, res) => {
+// Only websocket upgrades go to the 'upgrade' handler. Java's HttpClient (the bot fetching emoji/attachment
+// images from us) sends `Upgrade: h2c` on plain-HTTP requests, which must be served as normal requests.
+const server = createServer({ shouldUpgradeCallback: (req: import("node:http").IncomingMessage) => /websocket/i.test(String(req.headers.upgrade ?? "")) } as any, async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   const path = url.pathname;
   try {
@@ -72,6 +76,18 @@ const server = createServer(async (req, res) => {
       if (emoji && serveFile(res, join(DATA_DIR, "emojis", `${id}.${emoji._ext ?? "png"}`))) return;
       return discordError(res, 404, 0, "not found");
     }
+    // Discord CDN default avatars (the bot draws player avatars into some images).
+    const av = /^\/embed\/avatars\/(\d+)\.png$/.exec(path);
+    if (av) {
+      res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=86400" });
+      return res.end(defaultAvatarPng(Number(av[1])));
+    }
+    // Custom avatars are not supported; fall back to the user's default avatar.
+    const ua = /^\/avatars\/(\d+)\/[^/]+$/.exec(path);
+    if (ua) {
+      res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=86400" });
+      return res.end(defaultAvatarPng(Number((BigInt(ua[1]) >> 22n) % 6n)));
+    }
     if (path.startsWith("/bot/")) return proxyToBot(req, res, path.slice(4) + url.search);
     if (path === "/healthz") return sendJson(res, 200, { ok: true, bot: gateway.isReady });
     // Static web client with SPA fallback.
@@ -85,11 +101,30 @@ const server = createServer(async (req, res) => {
   }
 });
 
-/** The bot's own Spring API (game state JSON for the map). Read-only GETs only. */
+/**
+ * The bot's own Spring API (game state JSON for the map). GETs are open; other methods only reach the
+ * authenticated /api/game/** endpoints. Auth: `Authorization: Bearer <seat token>` (the bot resolves it via
+ * our /api/v10/users/@me), or `?token=<seat token>` which we turn into that header.
+ */
 async function proxyToBot(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, path: string) {
-  if (req.method !== "GET") return discordError(res, 405, 0, "read only");
+  const method = req.method ?? "GET";
+  const u = new URL(path, "http://x");
+  if (method !== "GET" && !u.pathname.startsWith("/api/game/")) return discordError(res, 405, 0, "read only");
+  const headers: Record<string, string> = { accept: String(req.headers.accept ?? "*/*") };
+  const seatToken = u.searchParams.get("token");
+  if (seatToken) {
+    u.searchParams.delete("token");
+    headers.authorization = `Bearer ${seatToken}`;
+  } else if (req.headers.authorization) headers.authorization = String(req.headers.authorization);
+  if (req.headers["content-type"]) headers["content-type"] = String(req.headers["content-type"]);
   try {
-    const upstream = await fetch(BOT_API + path, { headers: { accept: req.headers.accept ?? "*/*" } });
+    let reqBody: string | undefined;
+    if (method !== "GET" && method !== "HEAD") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      reqBody = Buffer.concat(chunks).toString("utf8");
+    }
+    const upstream = await fetch(BOT_API + u.pathname + u.search, { method, headers, body: reqBody });
     const body = Buffer.from(await upstream.arrayBuffer());
     res.writeHead(upstream.status, {
       "content-type": upstream.headers.get("content-type") ?? "application/json",

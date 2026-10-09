@@ -1,0 +1,86 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558161803534532608",
+    "channel_id": "1558155837237755904",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "Click a button below to play an action card.",
+    "timestamp": "2026-10-09T16:58:43.209Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "ActionCard",
+              "animated": false,
+              "id": "1558154640514744320"
+            },
+            "custom_id": "ac_play_from_hand_306",
+            "style": 4,
+            "disabled": false,
+            "label": "(306) Reactor Meltdown",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "ActionCard",
+              "animated": false,
+              "id": "1558154640514744320"
+            },
+            "custom_id": "ac_play_from_hand_872",
+            "style": 4,
+            "disabled": false,
+            "label": "(872) Direct Hit",
+            "type": 2
+          },
+          {
+            "custom_id": "getDiscardButtonsACs",
+            "style": 1,
+            "disabled": false,
+            "label": "Discard an Action Card",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

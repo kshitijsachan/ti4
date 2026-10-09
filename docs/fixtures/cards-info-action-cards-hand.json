@@ -1,0 +1,49 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558161803463229441",
+    "channel_id": "1558155837237755904",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "__Action Cards__ (2/7):\n1\\. <:ActionCard:1558154640514744320> _Reactor Meltdown_ `(306)`\n> Action: Destroy 1 space dock in a non-home system.\n> -# [As with most action cards, you cannot target your own units for destruction with this action card.]\n2\\. <:ActionCard:1558154640514744320> _Direct Hit_ `(872)`\n> After another player's ship uses SUSTAIN DAMAGE to cancel a hit produced by your units or abilities: Destroy that ship.",
+    "timestamp": "2026-10-09T16:58:43.193Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

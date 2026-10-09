@@ -9,18 +9,14 @@ import {
   Tooltip,
   Transition,
 } from "@mantine/core";
-import { IconCards, IconHistory } from "@tabler/icons-react";
+import { IconHistory } from "@tabler/icons-react";
 import { GameEventPanel } from "@/domains/game-shell/components/GameEventPanel";
-import { SecretHand } from "@/domains/game-shell/components/SecretHand";
-import { usePlayerHand } from "@/domains/game-shell/components/SecretHand/usePlayerHand";
-import { useSecretHandAccess } from "@/domains/game-shell/components/SecretHand/useSecretHandAccess";
 import { useSettingsStore } from "@/state/appStore";
 import classes from "./FloatingMapToolbar.module.css";
 
-type FloatingPanel = "events" | "cards";
+type FloatingPanel = "events";
 
 type Props = {
-  gameId: string;
   rightOffset: string;
   topOffset?: number;
   isDragging?: boolean;
@@ -28,21 +24,17 @@ type Props = {
 
 const panels: Record<FloatingPanel, { title: string; label: string }> = {
   events: { title: "Event Log", label: "Events" },
-  cards: { title: "Your Cards", label: "Cards" },
 };
 
 const DEFAULT_TOP_OFFSET = 163;
 const BUTTON_STEP = 52;
 
 export function FloatingMapToolbar({
-  gameId,
   rightOffset,
   topOffset = DEFAULT_TOP_OFFSET,
   isDragging = false,
 }: Props) {
   const [openPanel, setOpenPanel] = useState<FloatingPanel | null>(null);
-  const { canViewSecretHand } = useSecretHandAccess();
-  const { data: handData, isLoading, error } = usePlayerHand(gameId);
   const animateEventPreviews = useSettingsStore(
     (state) => state.settings.animateEventPreviews,
   );
@@ -66,15 +58,9 @@ export function FloatingMapToolbar({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [openPanel]);
 
-  useEffect(() => {
-    if (canViewSecretHand) return;
-    setOpenPanel((current) => (current === "cards" ? null : current));
-  }, [canViewSecretHand]);
-
   const transitionClassName = isDragging ? classes.noTransition : undefined;
   const renderedPanel = openPanel ?? "events";
-  const panelTop =
-    topOffset + (renderedPanel === "cards" ? BUTTON_STEP : 0);
+  const panelTop = topOffset;
 
   return (
     <>
@@ -96,21 +82,6 @@ export function FloatingMapToolbar({
           </ActionIcon>
         </Tooltip>
 
-        {canViewSecretHand && (
-          <Tooltip label={panels.cards.label} position="left" withArrow>
-            <ActionIcon
-              aria-label={panels.cards.label}
-              aria-controls={panelId}
-              aria-expanded={openPanel === "cards"}
-              radius="xl"
-              variant="subtle"
-              className={`${classes.button} ${openPanel === "cards" ? classes.buttonActive : ""}`}
-              onClick={() => togglePanel("cards")}
-            >
-              <IconCards size={22} stroke={1.8} />
-            </ActionIcon>
-          </Tooltip>
-        )}
       </Box>
 
       <Transition
@@ -163,15 +134,7 @@ export function FloatingMapToolbar({
             </Group>
 
             <Box className={classes.panelBody}>
-              {renderedPanel === "cards" ? (
-                <SecretHand
-                  handData={handData}
-                  isLoading={isLoading}
-                  error={error}
-                />
-              ) : (
-                <GameEventPanel animated={animateEventPreviews} />
-              )}
+              <GameEventPanel animated={animateEventPreviews} />
             </Box>
           </Box>
         )}

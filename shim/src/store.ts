@@ -45,6 +45,8 @@ export type Interaction = {
   /** Message created as the interaction's response (reply / deferred reply). */
   original_id?: string;
   ephemeral?: boolean;
+  /** Slash command name (application command interactions). */
+  command_name?: string;
   created: number;
   acked: boolean;
 };
@@ -64,6 +66,10 @@ export type State = {
   commands: Record<string, Json>;
   emojis: Record<string, Json>;
   seats: Record<string, Seat>;
+  /** Channel webhooks (id -> webhook object incl. token). */
+  webhooks?: Record<string, Json>;
+  /** Gateway session id, kept across restarts so the bot can RESUME. */
+  gateway_session?: string;
   /** Admin token for creating tables. */
   admin_token: string;
 };

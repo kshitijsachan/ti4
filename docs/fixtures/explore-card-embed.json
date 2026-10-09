@@ -1,0 +1,81 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558160178191400960",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "<:Mentak:1558154745624002560><@1558155013921046528> <:gold:1558154785268563968>**Gold** explored <:Industrial:1558154674840928256>Planet <:LazulRex:1558154754809528320> Lazul Rex <:Resources_2:1558154667840634880><:Influence_2:1558154817292075008> in tile 201:",
+    "timestamp": "2026-10-09T16:52:15.697Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [
+      {
+        "id": "1558155013921046528",
+        "username": "bob",
+        "global_name": "Bob",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false,
+        "member": {
+          "roles": [
+            "1558155836839297024"
+          ],
+          "nick": null,
+          "avatar": null,
+          "banner": null,
+          "joined_at": "2026-10-09T16:31:44.439Z",
+          "premium_since": null,
+          "deaf": false,
+          "mute": false,
+          "flags": 0,
+          "pending": false,
+          "communication_disabled_until": null
+        }
+      }
+    ],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [
+      {
+        "type": "rich",
+        "color": 65280,
+        "description": "This planet has a yellow technology specialty. If this planet already has a technology specialty, this planet's resource and influence values are each increased by 1 instead.",
+        "title": "<:Industrial:1558154674840928256>__Cybernetic Research Facility__"
+      }
+    ],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

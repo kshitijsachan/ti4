@@ -1,0 +1,133 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558159863656349696",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "Use buttons to do your turn.",
+    "timestamp": "2026-10-09T16:51:00.706Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "custom_id": "FFCC_mentak_tacticalAction",
+            "style": 3,
+            "disabled": false,
+            "label": "Tactical Action (3)",
+            "type": 2
+          },
+          {
+            "custom_id": "FFCC_mentak_componentAction",
+            "style": 3,
+            "disabled": false,
+            "label": "Component Action (0)",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "SC1",
+              "animated": false,
+              "id": "1558154754511732736"
+            },
+            "custom_id": "FFCC_mentak_strategicAction_1",
+            "style": 3,
+            "disabled": false,
+            "label": "Play Leadership",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "SC6",
+              "animated": false,
+              "id": "1558154773893611520"
+            },
+            "custom_id": "FFCC_mentak_strategicAction_6",
+            "style": 3,
+            "disabled": false,
+            "label": "Play Warfare",
+            "type": 2
+          },
+          {
+            "custom_id": "transaction",
+            "style": 1,
+            "disabled": false,
+            "label": "Transaction",
+            "type": 2
+          }
+        ],
+        "type": 1
+      },
+      {
+        "components": [
+          {
+            "custom_id": "getModifyTiles",
+            "style": 2,
+            "disabled": false,
+            "label": "Modify Units",
+            "type": 2
+          },
+          {
+            "custom_id": "showMap",
+            "style": 2,
+            "disabled": false,
+            "label": "Show Map",
+            "type": 2
+          },
+          {
+            "custom_id": "showPlayerAreas",
+            "style": 2,
+            "disabled": false,
+            "label": "Show Player Areas",
+            "type": 2
+          },
+          {
+            "custom_id": "ultimateUndo_31",
+            "style": 2,
+            "disabled": false,
+            "label": "UNDO",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

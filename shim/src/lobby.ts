@@ -9,6 +9,26 @@ import type { Json } from "./store.js";
 export class Lobby {
   constructor(private hub: Hub, private clients: Clients) {
     this.ensureLobbyChannel();
+    this.ensureBotLogChannel();
+  }
+
+  /**
+   * The bot reports errors (with stack traces in a thread) to a `bot-log` channel in its primary guild. Players
+   * cannot see it; the shim mirrors its contents into the shim log.
+   */
+  ensureBotLogChannel(): Json {
+    const s = this.store.state;
+    let ch = Object.values(s.channels).find((c) => c.name === "bot-log" && c.type === 0);
+    if (!ch) {
+      ch = this.store.createChannel({
+        type: 0,
+        name: "bot-log",
+        topic: "Bot errors and logs",
+        permission_overwrites: [{ id: s.guild_id, type: 0, allow: "0", deny: "1024" }],
+      });
+      this.hub.channelCreate(ch);
+    }
+    return ch;
   }
 
   private get store() {

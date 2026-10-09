@@ -1,0 +1,5 @@
+# Automatic HTTPS (Let's Encrypt) for $DOMAIN, proxying everything (incl. websockets) to the shim.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy shim:8090
+}

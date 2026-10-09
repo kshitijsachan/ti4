@@ -12,7 +12,6 @@ import {
   createBrowserRouter,
   RouterProvider,
   Navigate,
-  useParams,
 } from "react-router-dom";
 import {
   createTheme,
@@ -24,66 +23,37 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import LoginPage, { loginLoader } from "./pages/LoginPage";
-import LandingPage from "./pages/LandingPage/LandingPage";
-import MapTogglePage from "./pages/MapTogglePage";
+import LandingPage from "./pages/LandingPage";
 import { isMobileDevice } from "./utils/isTouchDevice";
 
 const queryClient = new QueryClient();
 
-const RedirectToGame = () => {
-  const { mapid } = useParams<{ mapid: string }>();
-  return <Navigate to={`/game/${mapid}`} replace />;
-};
-
 const router = createBrowserRouter([
+  { path: "/", element: <LandingPage /> },
   {
-    path: "/",
-    element: <LandingPage />,
-  },
-  {
-    path: "/game/:mapid",
-    element: <MapTogglePage />,
-  },
-  {
-    path: "/games",
     lazy: () =>
-      import("./pages/GamesPage").then((m) => ({ Component: m.default })),
-  },
-  {
-    path: "/dashboard",
-    lazy: () =>
-      import("./pages/DashboardPage").then((m) => ({ Component: m.default })),
-  },
-  {
-    path: "/dashboard/settings",
-    lazy: () =>
-      import("./pages/DashboardSettingsPage").then((m) => ({
-        Component: m.default,
+      import("./play/PlayerLayout").then((m) => ({
+        Component: m.PlayerLayout,
       })),
+    children: [
+      {
+        path: "/play",
+        lazy: () =>
+          import("./pages/PlayHomePage").then((m) => ({
+            Component: m.default,
+          })),
+      },
+      {
+        path: "/game/:mapid",
+        lazy: () =>
+          import("./pages/GamePage").then((m) => ({ Component: m.default })),
+      },
+    ],
   },
   {
-    path: "/game/:mapid/newui",
-    element: <RedirectToGame />,
-  },
-  {
-    path: "/embed/:mapid/map-only",
+    path: "/admin",
     lazy: () =>
-      import("./pages/EmbeddedMapPage").then((m) => ({
-        Component: m.default,
-      })),
-  },
-  {
-    path: "/froggame/:discordid/:mapid",
-    lazy: () =>
-      import("./pages/image-map/FrogGamePage").then((m) => ({
-        Component: m.default,
-      })),
-  },
-  {
-    path: "/login",
-    element: <LoginPage />,
-    loader: loginLoader,
+      import("./pages/AdminPage").then((m) => ({ Component: m.default })),
   },
   {
     path: "/system/:systemId",
@@ -92,6 +62,7 @@ const router = createBrowserRouter([
         (m) => ({ Component: m.SystemTilePage }),
       ),
   },
+  { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
 document.body.classList.toggle("mobile", isMobileDevice());
@@ -141,11 +112,11 @@ const theme = createTheme({
    * modules, this ladder is for component props.
    */
   fontSizes: {
-    xs: "0.75rem", /*    12 */
-    sm: "0.875rem", /*   14 */
-    md: "1rem", /*       16 */
-    lg: "1.125rem", /*   18 */
-    xl: "1.25rem", /*    20 */
+    xs: "0.75rem" /*    12 */,
+    sm: "0.875rem" /*   14 */,
+    md: "1rem" /*       16 */,
+    lg: "1.125rem" /*   18 */,
+    xl: "1.25rem" /*    20 */,
   },
   lineHeights: {
     /* xs is the uppercase label role — single line, tight. sm upward can wrap, so
@@ -200,25 +171,6 @@ const theme = createTheme({
     },
   },
 });
-
-/*
- * A note for anyone who opens the console. This audience is unusually likely to
- * read the source, so the easter egg is a genuinely useful signpost rather than a
- * joke or a recruiting pitch — the reward for curiosity is knowing where to look.
- */
-function printConsoleSignature() {
-  console.log(
-    "%cASYNC TI4%c  fan project for Twilight Imperium\u2122 \u00b7 play-by-Discord",
-    "font-weight:700;letter-spacing:0.12em;color:#e2e8f0;background:#0b0b0c;padding:3px 7px;border-radius:2px",
-    "color:#868e96"
-  );
-  console.log(
-    "%cPoking around? The board renders from src/domains/map, player areas from src/domains/player, and the whole visual system is documented in DESIGN.md.",
-    "color:#6b7280"
-  );
-}
-
-printConsoleSignature();
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,

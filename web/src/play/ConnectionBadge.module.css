@@ -1,0 +1,35 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--panel-hairline);
+  border-radius: var(--panel-radius);
+  background: var(--socket-bg);
+  box-shadow: var(--socket-inset);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--mantine-color-red-6);
+}
+
+.ok {
+  background: var(--mantine-color-green-5);
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+}
+
+.warn {
+  background: var(--mantine-color-yellow-5);
+}
+
+.name {
+  font-size: var(--text-meta);
+  font-weight: var(--weight-title);
+  color: var(--mantine-color-gray-2);
+  white-space: nowrap;
+}

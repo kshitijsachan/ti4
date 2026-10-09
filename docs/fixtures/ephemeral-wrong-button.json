@@ -1,0 +1,88 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558161050761822208",
+    "channel_id": "1558160984722505728",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "To <:Mentak:1558154745624002560>: these buttons are for someone else\nWould you like this warning to be ephemeral in the future?",
+    "timestamp": "2026-10-09T16:55:43.734Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 64,
+    "components": [
+      {
+        "components": [
+          {
+            "custom_id": "wrongButtonEphemeral_true",
+            "style": 3,
+            "disabled": false,
+            "label": "Yes",
+            "type": 2
+          },
+          {
+            "custom_id": "wrongButtonEphemeral_false",
+            "style": 4,
+            "disabled": false,
+            "label": "No",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    },
+    "webhook_id": "1558153075842220033",
+    "application_id": "1558153075842220033",
+    "interaction_metadata": {
+      "id": "1558161050619215872",
+      "type": 3,
+      "user": {
+        "id": "1558155013921046528",
+        "username": "bob",
+        "global_name": "Bob",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false
+      },
+      "authorizing_integration_owners": {
+        "0": "1558153075842220032"
+      }
+    },
+    "ephemeral": true
+  }
+}

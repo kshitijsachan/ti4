@@ -28,7 +28,7 @@ export function DiscordCommands({ colorName, decalId }: Props) {
   return (
     <Box py="sm" px="md" className={classes.commands}>
       <Text size="sm" fw={600} mb="xs" c="gray.3">
-        Discord Commands
+        Slash commands
       </Text>
       <Stack gap="xs">
         {colorName && (

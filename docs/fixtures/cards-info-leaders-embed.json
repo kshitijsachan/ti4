@@ -1,0 +1,133 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158714102480896",
+    "channel_id": "1558155837237755904",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "**Leaders Information:**",
+    "timestamp": "2026-10-09T16:46:26.631Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [
+      {
+        "type": "rich",
+        "thumbnail": {
+          "description": "Evelyn DeLouis",
+          "url": "https://cdn.discordapp.com/emojis/1558154807129276416.webp"
+        },
+        "color": 65280,
+        "footer": {
+          "text": ""
+        },
+        "title": "<:Sol:1558154703500607488> __**Evelyn DeLouis**__ <:Agent:1558154674459246592> Master Tactician",
+        "fields": [
+          {
+            "inline": false,
+            "name": "**At the start of a ground combat round:**",
+            "value": "You may exhaust this card to choose 1 ground force in the active system: that ground force rolls 1 additional die during this combat round."
+          }
+        ]
+      },
+      {
+        "type": "rich",
+        "thumbnail": {
+          "description": "Claire Gibson",
+          "url": "https://cdn.discordapp.com/emojis/1558154762451550208.webp"
+        },
+        "color": 16711680,
+        "footer": {
+          "text": ""
+        },
+        "author": {
+          "name": "🔒 Locked"
+        },
+        "description": "\n*Unlock: Control planets that have a combined total of at least 12 resources.*",
+        "title": "<:Sol:1558154703500607488> __**Claire Gibson**__ <:Commander:1558154752485883904> Voice of the People",
+        "fields": [
+          {
+            "inline": false,
+            "name": "**At the start of a ground combat on a planet you control:**",
+            "value": "You may place 1 infantry from your reinforcements on that planet."
+          }
+        ]
+      },
+      {
+        "type": "rich",
+        "thumbnail": {
+          "description": "Jace X, 4th Air Legion",
+          "url": "https://cdn.discordapp.com/emojis/1558154637125746688.webp"
+        },
+        "color": 16711680,
+        "footer": {
+          "text": ""
+        },
+        "author": {
+          "name": "🔒 Locked"
+        },
+        "description": "\n*Unlock: Have 3 scored objectives.*",
+        "title": "<:Sol:1558154703500607488> __**Jace X, 4th Air Legion**__ <:Hero:1558154671745531904> Federation Hero",
+        "fields": [
+          {
+            "inline": false,
+            "name": "Helio Command Array: Twilight Directive\n**ACTION:**",
+            "value": "Remove each of your command tokens from the game board and return them to your reinforcements. Then, purge this card."
+          }
+        ]
+      }
+    ],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "Hero",
+              "animated": false,
+              "id": "1558154671745531904"
+            },
+            "custom_id": "refreshLeaderInfo",
+            "style": 3,
+            "disabled": false,
+            "label": "Leader Info",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

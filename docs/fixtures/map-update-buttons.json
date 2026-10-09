@@ -1,0 +1,90 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158717772496896",
+    "channel_id": "1558155837137092608",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "",
+    "timestamp": "2026-10-09T16:46:27.507Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "style": 5,
+            "disabled": false,
+            "label": "Open in browser",
+            "type": 2,
+            "url": "/attachments/1558158717671833600/pbd1_2026.10.09_-_16.46.27.webp"
+          },
+          {
+            "custom_id": "gameInfoButtons",
+            "style": 3,
+            "disabled": false,
+            "label": "Player Info",
+            "type": 2
+          },
+          {
+            "custom_id": "cardsInfo",
+            "style": 3,
+            "disabled": false,
+            "label": "Cards Info",
+            "type": 2
+          },
+          {
+            "custom_id": "offerDeckButtons",
+            "style": 1,
+            "disabled": false,
+            "label": "Show Decks",
+            "type": 2
+          },
+          {
+            "custom_id": "showGameAgain",
+            "style": 2,
+            "disabled": false,
+            "label": "Refresh Map",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

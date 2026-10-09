@@ -1,10 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { IconMessages } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { AppShell, Box, Tabs, SimpleGrid } from "@mantine/core";
-import { MapHeaderSwitch } from "@/layout/MapHeaderSwitch";
+import { GameHeader } from "@/play/GameHeader";
 import classes from "@/shared/ui/map/MapUI.module.css";
 import ScoreBoard from "@/domains/objectives/components/ScoreBoard/ScoreBoard";
-import { UpdateNeededScreen } from "@/domains/game-shell/components/chrome/UpdateNeededScreen";
 import { SettingsModal } from "@/domains/settings/components/SettingsModal";
 import { SystemDossierModal } from "@/domains/map/components/SystemDossier/SystemDossierModal";
 import { KeyboardShortcutsModal } from "@/domains/game-shell/components/KeyboardShortcutsModal";
@@ -16,15 +16,12 @@ import {
 } from "@/state/useGameContext";
 import PlayerCard from "@/domains/player/components/composition/PlayerCard";
 import { TabsControls } from "@/domains/game-shell/components/TabsControls";
-import { useTabManagement } from "@/domains/tabs/hooks/useTabManagement";
 import GeneralArea from "@/domains/game-shell/components/GeneralArea";
 import { PannableMapView } from "@/domains/game-shell/components/layouts/PannableMapView";
 import { MapView } from "@/domains/game-shell/components/layouts/MapView";
 import { MapLoadingState } from "@/domains/map/components/MapLoadingState";
 import { MapViewportLoader } from "@/shared/ui/primitives/MapViewportLoader";
-import { MapViewSelectionModal } from "@/domains/game-shell/components/MapViewSelectionModal";
 import { isMobileDevice } from "@/utils/isTouchDevice";
-import { NavigationDrawer } from "@/domains/game-shell/components/navigation/NavigationDrawer";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { usePageThemeClass } from "@/hooks/usePageThemeClass";
 import { PlayerDataErrorAlert } from "@/shared/ui/PlayerDataErrorAlert";
@@ -34,11 +31,10 @@ import { TabPanelSection } from "@/domains/game-shell/components/TabPanelSection
 import { APP_HEADER_HEIGHT } from "@/shared/ui/AppHeader";
 import { TabActiveContext } from "@/hooks/useIsTabActive";
 
-const REQUIRED_VERSION_SCHEMA = 5;
-
 type ContentProps = {
   pannable: boolean;
-  onShowOldUI?: () => void;
+  /** Rendered in place of the board while the game has no map yet (setup). */
+  setupView?: ReactNode;
 };
 
 type TabContentProps = {
@@ -59,20 +55,16 @@ function TabContent({ gameId, ready, isError, children }: TabContentProps) {
   return <MapViewportLoader label="Acquiring game state" />;
 }
 
-function GameMapContent({ pannable, onShowOldUI }: ContentProps) {
+function GameMapContent({ pannable, setupView }: ContentProps) {
   const data = useGameContext();
   const gameDataState = useGameDataState();
   const isError = !!gameDataState?.isError;
   const params = useParams<{ mapid: string }>();
   const gameId = params.mapid!;
 
-  const { activeTabs, changeTab, removeTab } = useTabManagement();
   const settings = useSettingsStore((state) => state.settings);
   const handlers = useSettingsStore((state) => state.handlers);
-  const versionSchema = data?.versionSchema;
-  const hasChannelLinks = !!(data?.actionsJumpLink || data?.tableTalkJumpLink);
 
-  const [drawerOpened, setDrawerOpened] = useState(false);
   const [activeTab, setActiveTab] = useState("map");
   // Tabs mount on first visit and then stay mounted (hidden), so switching back
   // to the map doesn't rebuild ~10k components every time.
@@ -88,39 +80,19 @@ function GameMapContent({ pannable, onShowOldUI }: ContentProps) {
   const activePlayerName = data?.playerData?.find((p) => p.active)?.userName;
   useDocumentTitle(
     activePlayerName
-      ? `⏳ ${activePlayerName} · ${gameId} - Async TI`
-      : `${gameId} - Async TI`,
+      ? `⏳ ${activePlayerName} · ${gameId} · TI4 Online`
+      : `${gameId} · TI4 Online`,
   );
 
-  if (
-    data &&
-    !gameDataState?.isLoading &&
-    (!versionSchema || versionSchema < REQUIRED_VERSION_SCHEMA)
-  ) {
-    return (
-      <UpdateNeededScreen
-        gameId={gameId}
-        activeTabs={activeTabs}
-        changeTab={changeTab}
-        removeTab={removeTab}
-      />
-    );
-  }
+  const hasBoard = (data?.tilePositions?.length ?? 0) > 0;
+  const showSetup = !!setupView && !hasBoard && (isError || !!data);
 
   return (
     <AppShell header={{ height: APP_HEADER_HEIGHT }}>
-      <MapHeaderSwitch
-        gameId={gameId}
-        buttonLabel="OLD UI"
-        onButtonClick={onShowOldUI}
-        hideOnMobile
-      />
+      <GameHeader gameId={gameId} />
 
       <AppShell.Main>
-        <Box
-          className={classes.mainBackground}
-          mod={{ "channel-links": hasChannelLinks }}
-        >
+        <Box className={classes.mainBackground}>
           <Tabs
             value={activeTab}
             onChange={(value) => changeActiveTab(value || "map")}
@@ -133,7 +105,8 @@ function GameMapContent({ pannable, onShowOldUI }: ContentProps) {
                   return null;
                 }
 
-                const Icon = tab.Icon;
+                const isSetupTab = tab.value === "map" && showSetup;
+                const Icon = isSetupTab ? IconMessages : tab.Icon;
                 return (
                   <Tabs.Tab
                     key={tab.value}
@@ -142,12 +115,11 @@ function GameMapContent({ pannable, onShowOldUI }: ContentProps) {
                     leftSection={<Icon size={16} />}
                     visibleFrom={tab.visibleFrom}
                   >
-                    {tab.label}
+                    {isSetupTab ? "Setup" : tab.label}
                   </Tabs.Tab>
                 );
               })}
               <TabsControls
-                onMenuClick={() => setDrawerOpened(true)}
                 onTryDecalsClick={() =>
                   window.dispatchEvent(new CustomEvent("toggleTryDecals"))
                 }
@@ -160,10 +132,12 @@ function GameMapContent({ pannable, onShowOldUI }: ContentProps) {
                 this replaces. */}
             <Tabs.Panel value="map" h="calc(100% - var(--map-tabs-height))">
               <TabActiveContext value={activeTab === "map"}>
-                {!data ? (
+                {showSetup ? (
+                  setupView
+                ) : !data ? (
                   <MapLoadingState gameId={gameId} />
                 ) : pannable ? (
-                  <PannableMapView gameId={gameId} />
+                  <PannableMapView />
                 ) : (
                   <MapView gameId={gameId} />
                 )}
@@ -181,11 +155,11 @@ function GameMapContent({ pannable, onShowOldUI }: ContentProps) {
                 isError={isError}
               >
                 <SimpleGrid cols={{ base: 1, md: 2, xl2: 3 }} spacing="sm">
-                  {filterPlayersWithAssignedFaction(
-                    data?.playerData ?? [],
-                  ).map((player) => (
-                    <PlayerCard key={player.color} playerData={player} />
-                  ))}
+                  {filterPlayersWithAssignedFaction(data?.playerData ?? []).map(
+                    (player) => (
+                      <PlayerCard key={player.color} playerData={player} />
+                    ),
+                  )}
                 </SimpleGrid>
               </TabContent>
             </TabPanelSection>
@@ -224,67 +198,31 @@ function GameMapContent({ pannable, onShowOldUI }: ContentProps) {
         opened={settings.keyboardShortcutsModalOpened}
         onClose={() => handlers.setKeyboardShortcutsModalOpened(false)}
       />
-
-      <NavigationDrawer
-        opened={drawerOpened}
-        onClose={() => setDrawerOpened(false)}
-        activeTab={activeTab}
-        onTabChange={changeActiveTab}
-        gameId={gameId}
-        activeTabs={activeTabs}
-        onGameChange={changeTab}
-        onRemoveTab={removeTab}
-        onShowOldUI={onShowOldUI}
-      />
     </AppShell>
   );
 }
 
 type Props = {
-  onShowOldUI?: () => void;
+  setupView?: ReactNode;
 };
 
-function GameMapPage({ onShowOldUI }: Props) {
+/** The upstream board view: map, player areas, objectives, general. */
+function GameMapPage({ setupView }: Props) {
   const params = useParams<{ mapid: string }>();
   const gameId = params.mapid!;
   const themeClassName = usePageThemeClass({ mobile: isMobileDevice() });
   const mapViewPreference = useSettingsStore(
     (state) => state.settings.mapViewPreference,
   );
-  const handlers = useSettingsStore((state) => state.handlers);
-
-  const [showSelectionModal, setShowSelectionModal] = useState(false);
-
-  useEffect(() => {
-    if (isMobileDevice()) {
-      setShowSelectionModal(false);
-      return;
-    }
-    if (!mapViewPreference) {
-      setShowSelectionModal(true);
-    }
-  }, [mapViewPreference]);
-
-  const effectivePannable =
-    isMobileDevice() || mapViewPreference !== "panels";
+  const effectivePannable = isMobileDevice() || mapViewPreference !== "panels";
 
   return (
     <>
       <GameContextProvider gameId={gameId}>
         <div className={themeClassName}>
-          <GameMapContent
-            pannable={effectivePannable}
-            onShowOldUI={onShowOldUI}
-          />
+          <GameMapContent pannable={effectivePannable} setupView={setupView} />
         </div>
       </GameContextProvider>
-      {!isMobileDevice() && (
-        <MapViewSelectionModal
-          opened={showSelectionModal}
-          onClose={() => setShowSelectionModal(false)}
-          onSelect={handlers.setMapViewPreference}
-        />
-      )}
     </>
   );
 }

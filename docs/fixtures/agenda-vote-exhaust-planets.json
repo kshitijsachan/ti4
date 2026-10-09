@@ -1,0 +1,133 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558163609572474880",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "# _Archived Secret_\nCurrent status of votes and outcomes is: \n- <:Yssaril:1558154714279968768> Yssaril: 0. (<:Yssaril:1558154714279968768>-Leadership Rider)\n\n\nChose to vote for Mentak. Click buttons to exhaust planets and use abilities for votes.",
+    "timestamp": "2026-10-09T17:05:53.802Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "MollPrimus",
+              "animated": false,
+              "id": "1558154806558851072"
+            },
+            "custom_id": "exhaustForVotes_planet_mollprimus",
+            "style": 2,
+            "disabled": false,
+            "label": "Moll Primus (1)",
+            "type": 2,
+            "id": 2
+          },
+          {
+            "emoji": {
+              "name": "LazulRex",
+              "animated": false,
+              "id": "1558154754809528320"
+            },
+            "custom_id": "exhaustForVotes_planet_lazulrex",
+            "style": 2,
+            "disabled": false,
+            "label": "Lazul Rex (2)",
+            "type": 2,
+            "id": 3
+          },
+          {
+            "emoji": {
+              "name": "Cresius",
+              "animated": false,
+              "id": "1558154792474378240"
+            },
+            "custom_id": "exhaustForVotes_planet_cresius",
+            "style": 2,
+            "disabled": false,
+            "label": "Cresius (1)",
+            "type": 2,
+            "id": 4
+          },
+          {
+            "custom_id": "exhaustForVotes_allPlanets_4",
+            "style": 2,
+            "disabled": false,
+            "label": "Exhaust All Voting Planets (4)",
+            "type": 2,
+            "id": 5
+          },
+          {
+            "custom_id": "FFCC_mentak_proceedToFinalizingVote",
+            "style": 4,
+            "disabled": false,
+            "label": "Done exhausting planets.",
+            "type": 2,
+            "id": 6
+          }
+        ],
+        "type": 1,
+        "id": 1
+      },
+      {
+        "components": [
+          {
+            "custom_id": "FFCC_mentak_resetMyVote",
+            "style": 2,
+            "disabled": false,
+            "label": "Reset My Vote",
+            "type": 2,
+            "id": 8
+          },
+          {
+            "custom_id": "ultimateUndo_203",
+            "style": 2,
+            "disabled": false,
+            "label": "UNDO",
+            "type": 2,
+            "id": 9
+          }
+        ],
+        "type": 1,
+        "id": 7
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

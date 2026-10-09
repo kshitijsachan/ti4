@@ -1,0 +1,124 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558163420640051200",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "<@&1558155836839297024>, <:Yssaril:1558154714279968768>Carol <:camouflage:1558154748006367232>**Camouflage** played the action card _Leadership Rider_.",
+    "timestamp": "2026-10-09T17:05:08.757Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [
+      "1558155836839297024"
+    ],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [
+      {
+        "type": "rich",
+        "color": 16762880,
+        "footer": {
+          "text": ""
+        },
+        "description": "\n***After an agenda is revealed:***\nYou cannot vote on this agenda. Predict aloud an outcome of this agenda. If your prediction is correct, gain 3 command tokens.",
+        "title": "<:ActionCard:1558154640514744320>__**Leadership Rider**__",
+        "fields": [
+          {
+            "inline": true,
+            "name": "‎",
+            "value": "*Rev's impassioned speech stunned the other councilors. Perhaps there was more to these humans than they had initially thought.*"
+          }
+        ]
+      }
+    ],
+    "reactions": [
+      {
+        "count": 1,
+        "count_details": {
+          "burst": 0,
+          "normal": 1
+        },
+        "me": true,
+        "me_burst": false,
+        "burst_colors": [],
+        "emoji": {
+          "id": "1558154714279968768",
+          "name": "Yssaril"
+        }
+      }
+    ],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "Sabotage",
+              "animated": false,
+              "id": "1558154760522170368"
+            },
+            "custom_id": "sabotage_ac_Leadership Rider_yssaril",
+            "style": 4,
+            "disabled": false,
+            "label": "Cancel Action Card With Sabotage",
+            "type": 2,
+            "id": 2
+          },
+          {
+            "emoji": {
+              "name": "NoSabo",
+              "animated": false,
+              "id": "1558154699654430720"
+            },
+            "custom_id": "no_sabotage",
+            "style": 1,
+            "disabled": false,
+            "label": "No Sabotage",
+            "type": 2,
+            "id": 3
+          },
+          {
+            "custom_id": "FFCC_yssaril_moveAlongAfterAllHaveReactedToAC_Leadership Rider",
+            "style": 2,
+            "disabled": false,
+            "label": "Pause Timer While Waiting For Sabotage",
+            "type": 2,
+            "id": 4
+          }
+        ],
+        "type": 1,
+        "id": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

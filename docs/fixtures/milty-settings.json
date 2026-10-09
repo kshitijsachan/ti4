@@ -1,0 +1,102 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558157101514227712",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "# **__Draft Settings:__**\n- *Edit draft settings, then start the draft!*\n**__General Game Settings:__**\n- *Adjust settings for the game such as point total*\n> `        Points`: 10\n> `       Stage1s`: 5\n> `       Stage2s`: 5\n> `       Secrets`: 3\n> `          TIGL`: ❌\n> `TIGL Fractured`: ❌\n> `      Alliance`: ❌\n> `      Template`: 3pHyperlanes\n\n**__Draft settings:__**\n- *Advanced settings to fine-tune how rich the galaxy will be*\n> `#Factions`: 4\n> `  #Slices`: 4\n> `   MinRes`: 2\n> `   MinInf`: 3\n> `   TotVal`: [9-13]\n> `  ExtraWH`: ✅\n> `  Legends`: [1-2]\n\n**__Players and Factions:__**\n- *Adjust which players are actually playing, draft order, and stuff like that*\n> `    Players`: [Alice,Bob,Carol]\n> `StaticOrder`: ❌\n> `BanFactions`: []\n> `PriFactions`: []\n\n**__Expansions and Homebrew:__**\n- *Adjust various settings related to expansions and homebrew that you wish to use*\n> `         BaseGame`: ✅\n> `              PoK`: ✅\n> `          Codexes`: ✅\n> `     ThundersEdge`: ✅\n> `       DiscoStars`: ❌\n> `      BlueReverie`: ❌\n> `     UnchartSpace`: ❌\n> `            Absol`: ❌\n> `            Ignis`: ❌\n> `          Eronous`: ❌\n> `     WhispersVoid`: ❌\n> `      DeepReaches`: ❌\n> `     LostLegacies`: ❌\n> `        Monuments`: ❌\n> `EchoesOfYggdrasil`: ❌\n> `  ActionCardDeck2`: ❌",
+    "timestamp": "2026-10-09T16:40:02.160Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "✏️"
+            },
+            "custom_id": "jmfN_main.game_0",
+            "style": 2,
+            "disabled": false,
+            "label": "Edit General Game Settings",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "✏️"
+            },
+            "custom_id": "jmfN_main.slice_0",
+            "style": 2,
+            "disabled": false,
+            "label": "Edit Draft settings",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "✏️"
+            },
+            "custom_id": "jmfN_main.players_0",
+            "style": 2,
+            "disabled": false,
+            "label": "Edit Players and Factions",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "✏️"
+            },
+            "custom_id": "jmfN_main.source_0",
+            "style": 2,
+            "disabled": false,
+            "label": "Edit Expansions and Homebrew",
+            "type": 2
+          },
+          {
+            "custom_id": "jmfA_main_startMilty",
+            "style": 3,
+            "disabled": false,
+            "label": "Start Milty Draft!",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

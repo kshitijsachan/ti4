@@ -17,7 +17,7 @@ function describeFailure(error: Error | null): string | undefined {
     return "No game data exists under this id. Check the game name, or ask the bot to rebuild it.";
   }
   if (error.status === 403 || error.status === 401) {
-    return "This game's data is not public. Log in with the Discord account that plays in it.";
+    return "This game's data is not public.";
   }
   if (error.status >= 500) {
     return `The game data service answered ${error.status}. Nothing has changed on the board — a retry usually clears it.`;

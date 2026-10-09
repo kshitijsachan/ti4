@@ -9,7 +9,7 @@
 .token-sprite--tokens-official {
   --token-sprite-sheet-width: 993px;
   --token-sprite-sheet-height: 504px;
-  background-image: url("https://images.asyncti4.com/tokens/sheets/tokens-official.webp?v=4");
+  background-image: url("/art/tokens/sheets/tokens-official.webp");
 }
 
 .token-sprite--token-asteroids {
@@ -218,7 +218,7 @@
 .token-sprite--tokens-homebrew {
   --token-sprite-sheet-width: 994px;
   --token-sprite-sheet-height: 415px;
-  background-image: url("https://images.asyncti4.com/tokens/sheets/tokens-homebrew.webp?v=4");
+  background-image: url("/art/tokens/sheets/tokens-homebrew.webp");
 }
 
 .token-sprite--token-anomaly {
@@ -539,7 +539,7 @@
 .token-sprite--attachment-tokens-official {
   --token-sprite-sheet-width: 1019px;
   --token-sprite-sheet-height: 111px;
-  background-image: url("https://images.asyncti4.com/tokens/sheets/attachment-tokens-official.webp?v=4");
+  background-image: url("/art/tokens/sheets/attachment-tokens-official.webp");
 }
 
 .token-sprite--attachment-biotic {
@@ -699,7 +699,7 @@
 .token-sprite--attachment-tokens-homebrew {
   --token-sprite-sheet-width: 1017px;
   --token-sprite-sheet-height: 275px;
-  background-image: url("https://images.asyncti4.com/tokens/sheets/attachment-tokens-homebrew.webp?v=4");
+  background-image: url("/art/tokens/sheets/attachment-tokens-homebrew.webp");
 }
 
 .token-sprite--attachment-arcane_citadel {

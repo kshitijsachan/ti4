@@ -1,0 +1,46 @@
+.toggle {
+  padding: 3px 8px;
+  margin-right: 8px;
+  border: 1px solid var(--play-hairline-strong);
+  border-radius: 3px;
+  background: none;
+  color: var(--play-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-label);
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.toggle[aria-pressed="true"] {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.16);
+  color: var(--play-ink-bright);
+}
+
+.toggle:focus-visible {
+  outline: 1px solid var(--play-accent);
+}
+
+.empty {
+  padding: 16px;
+  color: var(--play-ink-muted);
+  font-size: var(--text-data);
+  text-align: center;
+}
+
+.missing {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--play-ground);
+}
+
+.missingTitle {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--play-hairline);
+  color: var(--play-ink-bright);
+  font-size: var(--text-title);
+  font-weight: var(--weight-title);
+}

@@ -1,0 +1,49 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558160985041272832",
+    "channel_id": "1558160984722505728",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "__**Tile: 201 (Cresius/Lazul Rex)**__\nSpace\n<:Mentak:1558154745624002560><:gold:1558154785268563968>**Gold** `2x` <:fighter:1558154773298020352> Fighter I\n<:Mentak:1558154745624002560><:gold:1558154785268563968>**Gold** `1x` <:carrier:1558154791207698432> Carrier I\n<:Mentak:1558154745624002560><:gold:1558154785268563968>**Gold** `1x` <:cruiser:1558154650002259968> Cruiser I\n<:Yssaril:1558154714279968768><:camouflage:1558154748006367232>**Camouflage** `2x` <:destroyer:1558154778951942144> Destroyer I\n<:Yssaril:1558154714279968768><:camouflage:1558154748006367232>**Camouflage** `1x` <:cruiser:1558154650002259968> Cruiser I\n----------\n<:SemLore:1558154816625180672> Lazul Rex <:Resources_2:1558154667840634880><:Influence_2:1558154817292075008><:CyberneticTech:1558154656453099520>\n<:Mentak:1558154745624002560><:gold:1558154785268563968>**Gold** `1x` <:infantry:1558154644117651456> Infantry I\n----------\n<:Cresius:1558154792474378240> Cresius <:Resources_0:1558154672810885120><:Influence_1:1558154781254615040>\n<:Mentak:1558154745624002560><:gold:1558154785268563968>**Gold** `1x` <:infantry:1558154644117651456> Infantry I\n----------",
+    "timestamp": "2026-10-09T16:55:28.065Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

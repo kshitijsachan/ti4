@@ -1,0 +1,152 @@
+# TI4 Online: postgres + AsyncTI4 bot + shim/web (+ optional Caddy for HTTPS).
+#
+#   cd deploy && cp .env.example .env   # then edit PUBLIC_URL (deploy.sh does this for you)
+#   docker compose up -d --build
+#   docker compose logs shim | grep "admin link"
+#
+# HTTPS with your own domain:  set DOMAIN + PUBLIC_URL=https://DOMAIN in .env, then
+#   docker compose --profile https up -d --build
+# Behind Cloudflare Tunnel (home machine, no port forwarding): --profile tunnel (or quicktunnel).
+#
+# Only the shim's port (and, with the https profile, 80/443) is published. Postgres and the bot's
+# API stay on the internal network; the shim proxies the bot's read-only API at /bot/*.
+
+name: ${COMPOSE_PROJECT_NAME:-ti4}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tibot
+      POSTGRES_USER: tibot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tibot}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tibot -d tibot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: ${POSTGRES_MEMORY:-512m}
+    logging: *logging
+
+  shim:
+    build:
+      context: ..
+      dockerfile: deploy/app.Dockerfile
+    image: ${APP_IMAGE:-ti4-online/app:local}
+    restart: unless-stopped
+    environment:
+      PORT: "8090"
+      SHIM_DATA: /data
+      SHIM_INTERNAL_URL: http://shim:8090
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      WEB_DIST: /app/web
+      BOT_API_URL: http://bot:8081
+    volumes:
+      - shimdata:/data
+    ports:
+      - "${SHIM_BIND:-0.0.0.0}:${SHIM_PORT:-8090}:8090"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    mem_limit: ${SHIM_MEMORY:-768m}
+    logging: *logging
+
+  bot:
+    build:
+      context: ..
+      dockerfile: deploy/bot.Dockerfile
+    image: ${BOT_IMAGE:-ti4-online/bot:local}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      shim:
+        condition: service_healthy
+    environment:
+      DISCORD_API_BASE: http://shim:8090/api/v10/
+      # Bot token / user id / guild id are read from the shim's state.json by the entrypoint.
+      SHIM_STATE_FILE: /shim-data/state.json
+      DB_PATH: /opt/STORAGE
+      RESOURCE_PATH: /opt/resources
+      POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/tibot
+      POSTGRES_USER: tibot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tibot}
+      POSTGRES_POOL_SIZE: "5"
+      # The JVM heap follows the container memory limit below.
+      JAVA_OPTS: -XX:MaxRAMPercentage=${BOT_HEAP_PERCENT:-75} -XX:InitialRAMPercentage=20 -XX:+UseStringDeduplication -XX:+ExitOnOutOfMemoryError
+    volumes:
+      - botstorage:/opt/STORAGE
+      - shimdata:/shim-data:ro
+    healthcheck:
+      test: ["CMD", "/app/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10m
+      retries: 5
+    mem_limit: ${BOT_MEMORY:-3g}
+    stop_grace_period: 60s
+    logging: *logging
+
+  caddy:
+    profiles: ["https"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - shim
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    mem_limit: 256m
+    logging: *logging
+
+  # Home machine / no open ports: Cloudflare Tunnel. Named tunnel (stable hostname on your domain):
+  #   set CLOUDFLARE_TUNNEL_TOKEN + PUBLIC_URL=https://<hostname> in .env, then --profile tunnel
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - shim
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    mem_limit: 256m
+    logging: *logging
+
+  # Throwaway https://<random>.trycloudflare.com URL, no account needed (testing only; the URL changes
+  # on every restart). --profile quicktunnel, then: docker compose logs cloudflared-quick | grep trycloudflare
+  cloudflared-quick:
+    profiles: ["quicktunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - shim
+    command: tunnel --no-autoupdate --url http://shim:8090
+    mem_limit: 256m
+    logging: *logging
+
+volumes:
+  pgdata:
+  botstorage:
+  shimdata:
+  caddydata:
+  caddyconfig:

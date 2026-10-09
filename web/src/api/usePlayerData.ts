@@ -39,7 +39,7 @@ export class GameDataFetchError extends Error {
   }
 }
 
-async function fetchPlayerData(
+export async function fetchPlayerData(
   gameId: string
 ): Promise<PlayerDataResponse> {
   const response = await fetch(`${config.api.gameDataUrl}/${gameId}/web-data`);

@@ -69,7 +69,7 @@ function ReplayAutoScroll({
   return null;
 }
 
-export function PannableMapView({ gameId }: { gameId: string }) {
+export function PannableMapView() {
   const isMobile = isMobileDevice();
   const gameData = useGameData();
   const tilesList = useTilesList(gameData?.tiles);
@@ -158,7 +158,7 @@ export function PannableMapView({ gameId }: { gameId: string }) {
           <Box className={classes.gameStateOverlay}>
             <GameStatePanel />
           </Box>
-          <FloatingMapToolbar gameId={gameId} rightOffset="35px" />
+          <FloatingMapToolbar rightOffset="35px" />
         </>
       )}
 

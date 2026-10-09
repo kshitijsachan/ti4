@@ -1,25 +1,13 @@
-import { Image } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
+import { Link } from "react-router-dom";
+import classes from "./Logo.module.css";
 
-import desktopLogo from "@/assets/banner.png";
-import mobileLogo from "@/assets/bannerStacked.png";
-import { useNavigate } from "react-router-dom";
-
+/** Wordmark. Links home, which resolves to the player's games when signed in. */
 function Logo() {
-  const navigate = useNavigate();
-  const isMobile = useMediaQuery("(max-width: 47.999em)");
   return (
-    <Image
-      src={isMobile ? mobileLogo : desktopLogo}
-      alt="banner"
-      className="logo"
-      onClick={() => navigate("/")}
-      style={{ cursor: "pointer" }}
-      h={25}
-      p={{ base: 0, sm: 4 }}
-      w="auto"
-      fit="contain"
-    />
+    <Link to="/" className={classes.logo} aria-label="TI4 Online home">
+      <span className={classes.mark}>TI4</span>
+      <span className={classes.word}>Online</span>
+    </Link>
   );
 }
 

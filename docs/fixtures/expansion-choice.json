@@ -1,0 +1,90 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558155837527162881",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "## Which expansion are you using for this game? (Required)\n-# This will adjust available components accordingly. To elaborate on the options:\n> **New PoK** - Use components from Prophecy of Kings and Thunder's Edge, but don't include the new factions, breakthroughs, action cards, or The Fracture. This mode has the new relics, finalized Codex cards (except Xxcha hero), new tiles, and new Strategy Cards.\n> **Old PoK** - Use only components from Prophecy of Kings expansion + Codicies 1-4.5\n> **Thunder's Edge + New PoK** - Use components from both expansions, including all mechanics from Thunder's Edge. It is the default if you do not press any of these buttons.\n-# Please realize that these are broad overviews and that some small components may not fit perfectly into these categories.",
+    "timestamp": "2026-10-09T16:35:00.802Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "custom_id": "setupBaseGameMode",
+            "style": 4,
+            "disabled": false,
+            "label": "Start Base Game Only Setup",
+            "type": 2
+          },
+          {
+            "custom_id": "chooseExp_newPoK",
+            "style": 3,
+            "disabled": false,
+            "label": "New PoK",
+            "type": 2
+          },
+          {
+            "custom_id": "chooseExp_oldPoK",
+            "style": 2,
+            "disabled": false,
+            "label": "Old PoK",
+            "type": 2
+          },
+          {
+            "custom_id": "chooseExp_te",
+            "style": 1,
+            "disabled": false,
+            "label": "Thunder's Edge + New PoK",
+            "type": 2
+          },
+          {
+            "custom_id": "ultimateUndo_1",
+            "style": 2,
+            "disabled": false,
+            "label": "UNDO",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

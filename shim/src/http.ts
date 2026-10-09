@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import busboy from "busboy";
+import { deflateSync } from "node:zlib";
 import type { Json } from "./store.js";
 
 export type UploadedFile = { field: string; filename: string; contentType: string; data: Buffer };
@@ -107,4 +108,57 @@ export function imageSize(buf: Buffer): { width: number; height: number } | null
     if (chunk === "VP8 ") return { width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff };
   }
   return null;
+}
+
+/** Discord's default avatar colours (embed/avatars/0..5.png), drawn as a filled circle PNG. */
+const AVATAR_COLORS = [0x5865f2, 0x757e8a, 0x3ba55c, 0xfaa61a, 0xed4245, 0xeb459f];
+const avatarCache = new Map<number, Buffer>();
+export function defaultAvatarPng(index: number): Buffer {
+  const i = ((index % 6) + 6) % 6;
+  const hit = avatarCache.get(i);
+  if (hit) return hit;
+  const size = 128;
+  const color = AVATAR_COLORS[i];
+  const raw = Buffer.alloc((size * 4 + 1) * size);
+  for (let y = 0; y < size; y++) {
+    raw[y * (size * 4 + 1)] = 0;
+    for (let x = 0; x < size; x++) {
+      const o = y * (size * 4 + 1) + 1 + x * 4;
+      const inside = (x - 63.5) ** 2 + (y - 63.5) ** 2 <= 64 * 64;
+      raw[o] = (color >> 16) & 255;
+      raw[o + 1] = (color >> 8) & 255;
+      raw[o + 2] = color & 255;
+      raw[o + 3] = inside ? 255 : 0;
+    }
+  }
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(td) >>> 0);
+    return Buffer.concat([len, td, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const png = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+  avatarCache.set(i, png);
+  return png;
+}
+
+function crc32(buf: Buffer): number {
+  let c = ~0;
+  for (const b of buf) {
+    c ^= b;
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+  }
+  return ~c;
 }

@@ -1,0 +1,109 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558160984999329792",
+    "channel_id": "1558160984722505728",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "<:Yssaril:1558154714279968768><@1558155013925240832> <:camouflage:1558154748006367232>**Camouflage**<:Mentak:1558154745624002560><@1558155013921046528> <:gold:1558154785268563968>**Gold**, please resolve the interaction here.\n## Steps for End of Movement & Space Combat:\n> 1. End of movement abilities (**Foresight**, _Stymie_, etc.)\n> 2. Space Cannon Offense\n> 3. Start of Combat (_Skilled Retreat_, _Morale Boost_, etc.)\n> 4. Anti-Fighter Barrage\n> 5. Declare Retreats (including _Rout_)\n> 6. Roll Dice!\n> 7. Rerolls (Thundarian, War Funding, Thalnos, etc.)\n> 8. Cancel hits (Shields Holding, Sustain Damage, Titans agent)\n> 9. Assign Hits (This is the only step that is done simultaneously)\n> 10. Retreat (if declared in step 5)\n> 11. After a round of combat abilities (Yin Devotion, Sardakk Exo 2)\n\nImage of System:",
+    "timestamp": "2026-10-09T16:55:28.055Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [
+      {
+        "id": "1558155013925240832",
+        "username": "carol",
+        "global_name": "Carol",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false,
+        "member": {
+          "roles": [
+            "1558155836839297024"
+          ],
+          "nick": null,
+          "avatar": null,
+          "banner": null,
+          "joined_at": "2026-10-09T16:31:44.440Z",
+          "premium_since": null,
+          "deaf": false,
+          "mute": false,
+          "flags": 0,
+          "pending": false,
+          "communication_disabled_until": null
+        }
+      },
+      {
+        "id": "1558155013921046528",
+        "username": "bob",
+        "global_name": "Bob",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false,
+        "member": {
+          "roles": [
+            "1558155836839297024"
+          ],
+          "nick": null,
+          "avatar": null,
+          "banner": null,
+          "joined_at": "2026-10-09T16:31:44.439Z",
+          "premium_since": null,
+          "deaf": false,
+          "mute": false,
+          "flags": 0,
+          "pending": false,
+          "communication_disabled_until": null
+        }
+      }
+    ],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [
+      {
+        "id": "1558160984995135488",
+        "filename": "pbd1_2026.10.09_-_16.55.27.webp",
+        "size": 22818,
+        "url": "/attachments/1558160984995135488/pbd1_2026.10.09_-_16.55.27.webp",
+        "proxy_url": "/attachments/1558160984995135488/pbd1_2026.10.09_-_16.55.27.webp",
+        "content_type": "application/octet-stream",
+        "width": 445,
+        "height": 400
+      }
+    ],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

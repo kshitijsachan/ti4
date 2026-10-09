@@ -1,0 +1,102 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558161737344221184",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "Please score objectives, <@&1558155836839297024>.\n\n# __Scoring Summary__\n<:SC1Back:1558154824539832320><:Mentak:1558154745624002560>Bob <:gold:1558154785268563968>**Gold**\n> <:Public1:1558154810648297472> <:Public2:1558154804075823104> 🙅\n> <:SecretObjective:1558154665143697408> ❓\n<:SC4Back:1558154793434873856><:Yssaril:1558154714279968768>Carol <:camouflage:1558154748006367232>**Camouflage**\n> <:Public1:1558154810648297472> <:Public2:1558154804075823104> 🙅\n> <:SecretObjective:1558154665143697408> ❓\n<:SC7Back:1558154725457788928><:Sol:1558154703500607488>Alice <:vapourwave:1558154672991240192>**Vapourwave**\n> <:Public1:1558154810648297472> <:Public2:1558154804075823104> 🙅\n> <:SecretObjective:1558154665143697408> ❓",
+    "timestamp": "2026-10-09T16:58:27.428Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [
+      "1558155836839297024"
+    ],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "Public1alt",
+              "animated": false,
+              "id": "1558154819674439680"
+            },
+            "custom_id": "po_scoring_1",
+            "style": 3,
+            "disabled": false,
+            "label": "(1) Intimidate Council",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "Public1alt",
+              "animated": false,
+              "id": "1558154819674439680"
+            },
+            "custom_id": "po_scoring_2",
+            "style": 3,
+            "disabled": false,
+            "label": "(2) Populate the Outer Rim",
+            "type": 2
+          },
+          {
+            "custom_id": "po_no_scoring",
+            "style": 4,
+            "disabled": false,
+            "label": "No Public Objective Scored",
+            "type": 2
+          },
+          {
+            "custom_id": "get_so_score_buttons",
+            "style": 1,
+            "disabled": false,
+            "label": "Score A Secret Objective",
+            "type": 2
+          },
+          {
+            "custom_id": "so_no_scoring",
+            "style": 4,
+            "disabled": false,
+            "label": "No Secret Objective Scored",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

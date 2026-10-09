@@ -1,30 +1,22 @@
-const devConfig = {
+/**
+ * Every backend call is same-origin. The shim (shim/src/index.ts) proxies
+ * `/bot/*` to the AsyncTI4 bot's Spring API and STOMP socket, and serves the
+ * site endpoints under `/app/*`. In dev, vite.config.ts forwards the same paths.
+ */
+function wsOrigin() {
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  return `${protocol}://${location.host}`;
+}
+
+export const config = {
   api: {
-    mapsUrl: "https://asyncti4.com/maps.json",
-    proxyMapsUrl: "/proxy/maps.json",
-    frogMapUrl:
-      "https://qw2j1lld43.execute-api.us-east-1.amazonaws.com/Production/frog",
-    discordLoginUrl: "http://localhost:8000/login",
-    discordRedirectUri: "http://localhost:5173/login",
     gameDataUrl: "/bot/api/public/game",
     botApiUrl: "/bot/api",
-    websocketUrl: "wss://bot.asyncti4.com/ws",
-    // websocketUrl: "ws://localhost:8081/ws",
+    get websocketUrl() {
+      return `${wsOrigin()}/bot/ws`;
+    },
+    get appSocketUrl() {
+      return `${wsOrigin()}/app/ws`;
+    },
   },
 };
-
-const prodConfig = {
-  api: {
-    mapsUrl: "https://asyncti4.com/maps.json",
-    proxyMapsUrl: "/proxy/maps.json",
-    frogMapUrl:
-      "https://qw2j1lld43.execute-api.us-east-1.amazonaws.com/Production/frog",
-    discordLoginUrl: "https://api.asyncti4.com/login",
-    discordRedirectUri: "https://asyncti4.com/login",
-    gameDataUrl: "https://bot.asyncti4.com/api/public/game",
-    botApiUrl: "https://bot.asyncti4.com/api",
-    websocketUrl: "wss://bot.asyncti4.com/ws",
-  },
-};
-
-export const config = import.meta.env.DEV ? devConfig : prodConfig;

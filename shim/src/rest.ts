@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { snowflake } from "./ids.js";
+import { snowflake, token } from "./ids.js";
 import { discordError, noContent, readBody, sendJson, type Body } from "./http.js";
 import { stripPrivate, type Hub } from "./hub.js";
-import { newRole, type Json, type StoredMessage } from "./store.js";
+import { newRole, type Interaction, type Json, type StoredMessage } from "./store.js";
 import { log } from "./log.js";
 
 type Ctx = { req: IncomingMessage; res: ServerResponse; params: string[]; query: URLSearchParams; body: Body };
@@ -71,9 +71,16 @@ export class Rest {
       }),
     );
     this.on("GET", "/gateway", ({ res }) => sendJson(res, 200, { url: this.publicWsUrl() }));
-    this.on("GET", "/users/@me", ({ res }) =>
-      sendJson(res, 200, { ...this.store.userJson(s().bot_id), verified: true, mfa_enabled: false, flags: 0 }),
-    );
+    this.on("GET", "/users/@me", ({ req, res }) => {
+      // OAuth2 bearer tokens (used by the bot's web API to identify a site user) are seat tokens here.
+      const auth = String(req.headers.authorization ?? "");
+      if (auth.startsWith("Bearer ")) {
+        const seat = s().seats[auth.slice(7).trim()];
+        if (!seat) return discordError(res, 401, 0, "401: Unauthorized");
+        return sendJson(res, 200, { ...this.store.userJson(seat.user_id), mfa_enabled: false, locale: "en-US", flags: 0, premium_type: 0 });
+      }
+      sendJson(res, 200, { ...this.store.userJson(s().bot_id), verified: true, mfa_enabled: false, flags: 0 });
+    });
     const app = () => ({
       id: s().bot_id,
       name: "TI4 Bot",
@@ -176,7 +183,10 @@ export class Rest {
     );
     this.on("GET", "/guilds/:g/threads/active", ({ res }) => {
       const threads = Object.values(s().channels).filter((c) => [10, 11, 12].includes(c.type) && !c.thread_metadata?.archived);
-      sendJson(res, 200, { threads, members: [] });
+      const members = threads
+        .filter((t) => (s().thread_members[t.id] ?? []).includes(s().bot_id))
+        .map((t) => ({ id: t.id, user_id: s().bot_id, join_timestamp: t.thread_metadata?.create_timestamp, flags: 0 }));
+      sendJson(res, 200, { threads, members });
     });
     this.on("POST", "/guilds/:g/channels", ({ res, body }) => {
       const ch = this.store.createChannel(body.json);
@@ -258,7 +268,7 @@ export class Rest {
     this.on("GET", "/guilds/:g/emojis", ({ res }) => sendJson(res, 200, []));
     this.on("GET", "/guilds/:g/stickers", ({ res }) => sendJson(res, 200, []));
     this.on("GET", "/guilds/:g/invites", ({ res }) => sendJson(res, 200, []));
-    this.on("GET", "/guilds/:g/webhooks", ({ res }) => sendJson(res, 200, []));
+    this.on("GET", "/guilds/:g/webhooks", ({ res }) => sendJson(res, 200, Object.values(s().webhooks ?? {}).map((w) => this.webhookJson(w))));
     this.on("GET", "/guilds/:g/scheduled-events", ({ res }) => sendJson(res, 200, []));
 
     // ---- channels ----
@@ -308,7 +318,28 @@ export class Rest {
     this.on("POST", "/channels/:c/invites", ({ res, params }) =>
       sendJson(res, 200, { code: "ti4", channel: { id: params[0] }, guild: { id: s().guild_id } }),
     );
-    this.on("GET", "/channels/:c/webhooks", ({ res }) => sendJson(res, 200, []));
+    this.on("GET", "/channels/:c/webhooks", ({ res, params }) =>
+      sendJson(res, 200, Object.values(s().webhooks ?? {}).filter((w) => w.channel_id === params[0]).map((w) => this.webhookJson(w))),
+    );
+    this.on("POST", "/channels/:c/webhooks", (ctx) => {
+      const ch = this.channelOr404(ctx, ctx.params[0]);
+      if (!ch) return;
+      const w = {
+        id: snowflake(),
+        type: 1,
+        guild_id: s().guild_id,
+        channel_id: ch.id,
+        name: ctx.body.json.name ?? "Webhook",
+        avatar: null,
+        token: token(51),
+        application_id: null,
+        user: this.store.userJson(s().bot_id),
+      };
+      (s().webhooks ??= {})[w.id] = w;
+      this.store.scheduleSave();
+      this.hub.gateway.dispatch("WEBHOOKS_UPDATE", { guild_id: s().guild_id, channel_id: ch.id });
+      sendJson(ctx.res, 200, this.webhookJson(w));
+    });
 
     // ---- messages ----
     this.on("GET", "/channels/:c/messages", (ctx) => {
@@ -485,15 +516,26 @@ export class Rest {
       if (!(s().thread_members[ctx.params[0]] ?? []).includes(id)) return discordError(ctx.res, 404, 10007, "Unknown Member");
       sendJson(ctx.res, 200, { id: ctx.params[0], user_id: id, join_timestamp: new Date().toISOString(), flags: 0 });
     });
-    const archived = (type: number[]) => (ctx: Ctx) => {
-      const threads = Object.values(s().channels).filter(
-        (c) => c.parent_id === ctx.params[0] && type.includes(c.type) && c.thread_metadata?.archived,
-      );
-      sendJson(ctx.res, 200, { threads, members: [], has_more: false });
+    // Archived threads, newest archive first, paged with ?before=<ISO timestamp | snowflake>&limit=.
+    const archived = (type: number[], joinedOnly = false) => (ctx: Ctx) => {
+      if (!this.channelOr404(ctx, ctx.params[0])) return;
+      const before = ctx.query.get("before");
+      const beforeMs = before ? (/^\d+$/.test(before) ? Number((BigInt(before) >> 22n) + 1420070400000n) : Date.parse(before)) : Infinity;
+      const limit = Math.max(1, Math.min(100, Number(ctx.query.get("limit") ?? 50)));
+      const all = Object.values(s().channels)
+        .filter((c) => c.parent_id === ctx.params[0] && type.includes(c.type) && c.thread_metadata?.archived)
+        .filter((c) => !joinedOnly || (s().thread_members[c.id] ?? []).includes(s().bot_id))
+        .filter((c) => Date.parse(c.thread_metadata.archive_timestamp) < beforeMs)
+        .sort((a, b) => Date.parse(b.thread_metadata.archive_timestamp) - Date.parse(a.thread_metadata.archive_timestamp));
+      const threads = all.slice(0, limit);
+      const members = threads
+        .filter((t) => (s().thread_members[t.id] ?? []).includes(s().bot_id))
+        .map((t) => ({ id: t.id, user_id: s().bot_id, join_timestamp: t.thread_metadata.create_timestamp, flags: 0 }));
+      sendJson(ctx.res, 200, { threads, members, has_more: all.length > threads.length });
     };
     this.on("GET", "/channels/:c/threads/archived/public", archived([10, 11]));
     this.on("GET", "/channels/:c/threads/archived/private", archived([12]));
-    this.on("GET", "/channels/:c/users/@me/threads/archived/private", archived([12]));
+    this.on("GET", "/channels/:c/users/@me/threads/archived/private", archived([12], true));
 
     // ---- DMs ----
     this.on("POST", "/users/@me/channels", ({ res, body }) => {
@@ -514,7 +556,47 @@ export class Rest {
 
     // ---- interactions ----
     this.on("POST", "/interactions/:id/:token/callback", (ctx) => this.interactionCallback(ctx));
-    this.on("POST", "/webhooks/:app/:token", (ctx) => this.followup(ctx));
+    // Channel webhooks (by id) and interaction followups (by application id + interaction token) share paths.
+    this.on("GET", "/webhooks/:id", (ctx) => {
+      const w = s().webhooks?.[ctx.params[0]];
+      if (!w) return discordError(ctx.res, 404, 10015, "Unknown Webhook");
+      sendJson(ctx.res, 200, this.webhookJson(w));
+    });
+    this.on("PATCH", "/webhooks/:id", (ctx) => {
+      const w = s().webhooks?.[ctx.params[0]];
+      if (!w) return discordError(ctx.res, 404, 10015, "Unknown Webhook");
+      for (const k of ["name", "channel_id"]) if (k in ctx.body.json) w[k] = ctx.body.json[k];
+      this.store.scheduleSave();
+      sendJson(ctx.res, 200, this.webhookJson(w));
+    });
+    this.on("DELETE", "/webhooks/:id", (ctx) => {
+      if (!s().webhooks?.[ctx.params[0]]) return discordError(ctx.res, 404, 10015, "Unknown Webhook");
+      delete s().webhooks![ctx.params[0]];
+      this.store.scheduleSave();
+    });
+    this.on("GET", "/webhooks/:id/:token", (ctx) => {
+      const w = this.channelWebhook(ctx);
+      if (!w) return discordError(ctx.res, 404, 10015, "Unknown Webhook");
+      sendJson(ctx.res, 200, this.webhookJson(w, false));
+    });
+    this.on("POST", "/webhooks/:app/:token", (ctx) => {
+      const w = this.channelWebhook(ctx);
+      if (!w) return this.followup(ctx);
+      const channelId = ctx.query.get("thread_id") ?? w.channel_id;
+      if (!this.channelOr404(ctx, channelId)) return;
+      const json = ctx.body.json;
+      if (!json.content && !json.embeds?.length && !ctx.body.files.length && !json.components?.length) {
+        return discordError(ctx.res, 400, 50006, "Cannot send an empty message");
+      }
+      const atts = this.hub.resolveAttachments(json, ctx.body.files) ?? [];
+      const msg = this.hub.buildMessage(channelId, s().bot_id, json, atts);
+      msg.author = { id: w.id, username: json.username ?? w.name, avatar: null, discriminator: "0000", public_flags: 0, flags: 0, bot: true, global_name: null };
+      delete msg.member;
+      msg.webhook_id = w.id;
+      this.hub.postMessage(msg);
+      if (ctx.query.get("wait") === "true") return sendJson(ctx.res, 200, stripPrivate(msg));
+      noContent(ctx.res);
+    });
     this.on("GET", "/webhooks/:app/:token/messages/:m", (ctx) => {
       const msg = this.webhookMessage(ctx);
       if (!msg) return discordError(ctx.res, 404, 10008, "Unknown Message");
@@ -534,7 +616,24 @@ export class Rest {
 
   // ---- interaction plumbing ----
 
+  private channelWebhook(ctx: Ctx): Json | undefined {
+    const w = this.store.state.webhooks?.[ctx.params[0]];
+    return w && w.token === ctx.params[1] ? w : undefined;
+  }
+
+  private webhookJson(w: Json, withToken = true): Json {
+    const out = { ...w };
+    if (!withToken) delete out.token;
+    out.url = `${this.publicUrl() || ""}/api/webhooks/${w.id}/${w.token}`;
+    return out;
+  }
+
   private webhookMessage(ctx: Ctx): StoredMessage | undefined {
+    const hook = this.channelWebhook(ctx);
+    if (hook) {
+      const m = this.store.findMessageAnywhere(ctx.params[2]);
+      return m && m.webhook_id === hook.id ? m : undefined;
+    }
     const inter = this.store.interactionsByToken.get(ctx.params[1]);
     if (!inter) return undefined;
     const id = ctx.params[2] === "@original" ? inter.original_id : ctx.params[2];
@@ -542,7 +641,7 @@ export class Rest {
     return this.store.findMessage(inter.channel_id, id) ?? this.store.findMessageAnywhere(id);
   }
 
-  private interactionMessage(inter: { id: string; user_id: string; type: number }, json: Json, atts: Json[], channelId: string) {
+  private interactionMessage(inter: Interaction, json: Json, atts: Json[], channelId: string, followup = false) {
     const s = this.store.state;
     const msg = this.hub.buildMessage(channelId, s.bot_id, json, atts);
     msg.webhook_id = s.bot_id;
@@ -555,6 +654,12 @@ export class Rest {
       user: this.store.userJson(inter.user_id),
       authorizing_integration_owners: { "0": s.guild_id },
     };
+    if (inter.type === 2 && inter.command_name) {
+      msg.interaction_metadata.name = inter.command_name;
+      msg.interaction_metadata.command_type = 1;
+    }
+    if (inter.type === 3 && inter.message_id) msg.interaction_metadata.interacted_message_id = inter.message_id;
+    if (followup && inter.original_id) msg.interaction_metadata.original_response_message_id = inter.original_id;
     if ((json.flags ?? 0) & 64) msg._ephemeral_for = inter.user_id;
     return msg;
   }
@@ -580,6 +685,8 @@ export class Rest {
         break;
       }
       case 6:
+        // DEFERRED_UPDATE_MESSAGE: @original now refers to the message the component is on.
+        if (inter.message_id) inter.original_id = inter.message_id;
         resource = { type };
         break;
       case 7: {
@@ -631,7 +738,7 @@ export class Rest {
       return sendJson(ctx.res, 200, stripPrivate(placeholder));
     }
     const atts = this.hub.resolveAttachments(json, ctx.body.files) ?? [];
-    const msg = this.interactionMessage(inter, json, atts, inter.channel_id);
+    const msg = this.interactionMessage(inter, json, atts, inter.channel_id, true);
     this.hub.postMessage(msg);
     sendJson(ctx.res, 200, stripPrivate(msg));
   }

@@ -1,0 +1,91 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158517146353664",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "**__Speaker Order:__**",
+    "timestamp": "2026-10-09T16:45:39.673Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "position1",
+              "animated": false,
+              "id": "1558154744109858816"
+            },
+            "custom_id": "milty_order_1",
+            "style": 3,
+            "disabled": false,
+            "label": " ",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "position2",
+              "animated": false,
+              "id": "1558154746391560192"
+            },
+            "custom_id": "milty_order_2",
+            "style": 3,
+            "disabled": false,
+            "label": " ",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "position3",
+              "animated": false,
+              "id": "1558154750921408512"
+            },
+            "custom_id": "milty_order_3",
+            "style": 3,
+            "disabled": false,
+            "label": " ",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

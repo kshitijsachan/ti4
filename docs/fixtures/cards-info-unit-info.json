@@ -1,0 +1,159 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158714165395456",
+    "channel_id": "1558155837237755904",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "__**Unit Info:**__",
+    "timestamp": "2026-10-09T16:46:26.646Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [
+      {
+        "type": "rich",
+        "title": "<:Sol:1558154703500607488><:carrier:1558154791207698432> __Advanced Carrier I__ ",
+        "fields": [
+          {
+            "inline": true,
+            "name": "Values:",
+            "value": "Cost: <:Resources_3:1558154663835074560>\nMove: 1\nCapacity: 6"
+          },
+          {
+            "inline": true,
+            "name": "Dice Rolls:",
+            "value": "Combat: 9"
+          }
+        ]
+      },
+      {
+        "type": "rich",
+        "title": "<:Sol:1558154703500607488><:flagship:1558154721510948864> __Genesis __ ",
+        "fields": [
+          {
+            "inline": true,
+            "name": "Values:",
+            "value": "Cost: <:Resources_8:1558154649788350464>\nMove: 1\nCapacity: 12"
+          },
+          {
+            "inline": true,
+            "name": "Dice Rolls:",
+            "value": "Combat: 5 (x2)"
+          },
+          {
+            "inline": true,
+            "name": "Traits:",
+            "value": "SUSTAIN DAMAGE"
+          },
+          {
+            "inline": false,
+            "name": "Ability:",
+            "value": "At the end of the status phase, place 1 infantry from your reinforcements in this system's space area."
+          }
+        ]
+      },
+      {
+        "type": "rich",
+        "title": "<:Sol:1558154703500607488><:infantry:1558154644117651456> __Spec Ops I__ ",
+        "fields": [
+          {
+            "inline": true,
+            "name": "Values:",
+            "value": "Cost: <:Resources_1:1558154669958758400> per 2 <:infantry:1558154644117651456>"
+          },
+          {
+            "inline": true,
+            "name": "Dice Rolls:",
+            "value": "Combat: 7"
+          }
+        ]
+      },
+      {
+        "type": "rich",
+        "title": "<:Sol:1558154703500607488><:mech:1558154684399747072> __ZS Thunderbolt M2__ ",
+        "fields": [
+          {
+            "inline": true,
+            "name": "Values:",
+            "value": "Cost: <:Resources_2:1558154667840634880>"
+          },
+          {
+            "inline": true,
+            "name": "Dice Rolls:",
+            "value": "Combat: 6"
+          },
+          {
+            "inline": true,
+            "name": "Traits:",
+            "value": "SUSTAIN DAMAGE"
+          },
+          {
+            "inline": false,
+            "name": "Ability:",
+            "value": "DEPLOY: After you use your Orbital Drop faction ability, you may spend 3 resources to place 1 mech on that planet."
+          }
+        ]
+      }
+    ],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "UnitUpgradeTech",
+              "animated": false,
+              "id": "1558154821339578368"
+            },
+            "custom_id": "refreshUnitInfo",
+            "style": 3,
+            "disabled": false,
+            "label": "Unit Info",
+            "type": 2
+          },
+          {
+            "custom_id": "refreshUnitInfoAll",
+            "style": 3,
+            "disabled": false,
+            "label": "Show All Units",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

@@ -1,0 +1,16 @@
+# Only the shim and web sources (no local node_modules / build output / data).
+*
+!shim/package.json
+!shim/package-lock.json
+!shim/tsconfig.json
+!shim/src/
+!web/
+web/node_modules
+web/dist
+web/.git
+web/.cursor
+web/.impeccable
+web/.github
+**/*.log
+**/.env
+**/.env.*

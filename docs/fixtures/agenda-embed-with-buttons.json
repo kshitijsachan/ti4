@@ -1,0 +1,85 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558162267642658816",
+    "channel_id": "1558155837250338816",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "",
+    "timestamp": "2026-10-09T17:00:33.861Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [
+      {
+        "type": "rich",
+        "color": 255,
+        "description": "**Law:** *Elect Player*\nThe elected player gains this card. When the owner of this card resolves the primary or secondary ability of the \"Technology\" strategy card, they do not need to spend resources to research technology.\n",
+        "title": "<:Agenda:1558154720789528576>__Minister of Sciences__"
+      }
+    ],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "🔼"
+            },
+            "custom_id": "topAgenda_184",
+            "style": 3,
+            "disabled": false,
+            "label": "Put Minister of Sciences on the top of the agenda deck.",
+            "type": 2,
+            "id": 2
+          },
+          {
+            "emoji": {
+              "name": "🔽"
+            },
+            "custom_id": "bottomAgenda_184",
+            "style": 4,
+            "disabled": false,
+            "label": "Put Minister of Sciences on the bottom of the agenda deck.",
+            "type": 2,
+            "id": 3
+          }
+        ],
+        "type": 1,
+        "id": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

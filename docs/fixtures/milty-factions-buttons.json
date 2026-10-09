@@ -1,0 +1,103 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158517112799232",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "**__Factions:__**",
+    "timestamp": "2026-10-09T16:45:39.665Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "Sol",
+              "animated": false,
+              "id": "1558154703500607488"
+            },
+            "custom_id": "milty_faction_sol",
+            "style": 2,
+            "disabled": false,
+            "label": "The Federation of Sol",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "Firmament",
+              "animated": false,
+              "id": "1558154799881519104"
+            },
+            "custom_id": "milty_faction_firmament",
+            "style": 2,
+            "disabled": false,
+            "label": "The Firmament",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "Yssaril",
+              "animated": false,
+              "id": "1558154714279968768"
+            },
+            "custom_id": "milty_faction_yssaril",
+            "style": 2,
+            "disabled": false,
+            "label": "The Yssaril Tribes",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "Mentak",
+              "animated": false,
+              "id": "1558154745624002560"
+            },
+            "custom_id": "milty_faction_mentak",
+            "style": 2,
+            "disabled": false,
+            "label": "The Mentak Coalition",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

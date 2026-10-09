@@ -225,10 +225,19 @@ export class Clients implements Listener {
   }
 
   private dispatchInteraction(c: Client, nonce: string | undefined, type: number, channelId: string, data: Json, message?: StoredMessage) {
+    if (!this.store.canView(c.userId, channelId)) {
+      return this.send(c, { t: "interaction_done", nonce, error: "You cannot use that channel." });
+    }
     if (!this.hub.gateway.isReady) {
       return this.send(c, { t: "interaction_done", nonce, error: "The game server is starting up. Try again in a moment." });
     }
-    const inter = this.store.newInteraction({ type, user_id: c.userId, channel_id: channelId, message_id: message?.id });
+    const inter = this.store.newInteraction({
+      type,
+      user_id: c.userId,
+      channel_id: channelId,
+      message_id: message?.id,
+      command_name: type === 2 ? data.name : undefined,
+    });
     const payload: Json = { ...this.basePayload(c, channelId), id: inter.id, token: inter.token, type, data };
     if (message) payload.message = stripPrivate(message);
     const timer = setTimeout(() => {

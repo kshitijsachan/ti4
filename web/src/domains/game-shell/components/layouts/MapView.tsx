@@ -202,7 +202,6 @@ export function MapView({
 
       {!embedded && (
         <FloatingMapToolbar
-          gameId={gameId}
           rightOffset={floatingControlsRightOffset}
           topOffset={PANELS_TOOLBAR_TOP}
           isDragging={isDragging}

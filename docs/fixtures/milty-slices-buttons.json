@@ -1,0 +1,103 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158517075050496",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "**__Slices:__**",
+    "timestamp": "2026-10-09T16:45:39.656Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [
+      {
+        "components": [
+          {
+            "emoji": {
+              "name": "sliceA",
+              "animated": false,
+              "id": "1558154715341127680"
+            },
+            "custom_id": "milty_slice_A",
+            "style": 3,
+            "disabled": false,
+            "label": " ",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "sliceB",
+              "animated": false,
+              "id": "1558154719195693056"
+            },
+            "custom_id": "milty_slice_B",
+            "style": 3,
+            "disabled": false,
+            "label": " ",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "sliceC",
+              "animated": false,
+              "id": "1558154721880047616"
+            },
+            "custom_id": "milty_slice_C",
+            "style": 3,
+            "disabled": false,
+            "label": " ",
+            "type": 2
+          },
+          {
+            "emoji": {
+              "name": "sliceD",
+              "animated": false,
+              "id": "1558154724333715456"
+            },
+            "custom_id": "milty_slice_D",
+            "style": 3,
+            "disabled": false,
+            "label": " ",
+            "type": 2
+          }
+        ],
+        "type": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

@@ -5,7 +5,7 @@ import { AreaType } from "@/hooks/useTabsAndTooltips";
 import classes from "@/shared/ui/map/MapUI.module.css";
 import { useGameData, useGameDataState } from "@/state/useGameContext";
 import { PlayerDataErrorAlert } from "@/shared/ui/PlayerDataErrorAlert";
-import { useSecretHandAccess } from "@/domains/game-shell/components/SecretHand/useSecretHandAccess";
+import { usePlay } from "@/discord";
 
 type RightSidebarProps = {
   isRightPanelCollapsed: boolean;
@@ -39,7 +39,7 @@ export function RightSidebar({
   const loadingState = useGameDataState();
   const isError = !!loadingState?.isError;
 
-  const { userDiscordId } = useSecretHandAccess(playerData);
+  const userDiscordId = usePlay((s) => s.me?.id);
   const userPlayer = playerData?.find(
     (p) => p.discordId === userDiscordId,
   );

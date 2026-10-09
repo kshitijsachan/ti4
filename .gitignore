@@ -28,5 +28,6 @@ __pycache__/
 venv/
 
 # local runtime data
-data/
+/data/
+shim/data/
 *.tsbuildinfo

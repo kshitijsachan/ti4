@@ -1,11 +1,9 @@
-import { Box, Button, Group, ActionIcon, UnstyledButton } from "@mantine/core";
+import { Box, Button, Group, UnstyledButton } from "@mantine/core";
 import cx from "clsx";
 import type { ReactNode } from "react";
 import {
   IconKeyboard,
   IconSettings,
-  IconHash,
-  IconMenu2,
   IconSticker,
   IconLinkPlus,
 } from "@tabler/icons-react";
@@ -183,32 +181,6 @@ function ControlButtons({
   );
 }
 
-function DiscordLinks() {
-  const game = useGameData();
-  const links = [
-    { href: game?.actionsJumpLink, label: "actions" },
-    { href: game?.tableTalkJumpLink, label: "table-talk" },
-  ];
-
-  return links.map(({ href, label }) =>
-    href ? (
-      <Button
-        key={label}
-        component="a"
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        size="compact-xs"
-        leftSection={<IconHash size={14} />}
-        px={6}
-        className={classes.discordButton}
-      >
-        {label}
-      </Button>
-    ) : null,
-  );
-}
-
 function DesktopTabsControls({
   onTryDecalsClick,
 }: {
@@ -223,52 +195,31 @@ function DesktopTabsControls({
 
       <div style={{ flex: 1 }} />
 
-      <Group gap={4} mr={12}>
-        <DiscordLinks />
-      </Group>
-
       {!isMobileDevice() && <ThemeSwatches />}
     </>
   );
 }
 
 function MobileTabsControls({
-  onMenuClick,
   onTryDecalsClick,
 }: {
-  onMenuClick: () => void;
   onTryDecalsClick?: () => void;
 }) {
   return (
-    <>
-      <Group gap={4} px={8} pb={4} style={{ width: "100%" }}>
-        <ControlButtons
-          showKeyboardButton={false}
-          onTryDecalsClick={onTryDecalsClick}
-        />
-        <div style={{ flex: 1 }} />
-        <ActionIcon
-          size="lg"
-          variant="filled"
-          color="blue"
-          onClick={onMenuClick}
-          style={{ marginLeft: 4 }}
-        >
-          <IconMenu2 size={20} />
-        </ActionIcon>
-      </Group>
-      <Group gap={4} px={8} pb={4} style={{ width: "100%" }}>
-        <DiscordLinks />
-      </Group>
-    </>
+    <Group gap={4} px={8} pb={4} style={{ width: "100%" }}>
+      <ControlButtons
+        showKeyboardButton={false}
+        onTryDecalsClick={onTryDecalsClick}
+      />
+      <div style={{ flex: 1 }} />
+      <SettingsButton />
+    </Group>
   );
 }
 
 export function TabsControls({
-  onMenuClick,
   onTryDecalsClick,
 }: {
-  onMenuClick?: () => void;
   onTryDecalsClick?: () => void;
 }) {
   return (
@@ -276,14 +227,9 @@ export function TabsControls({
       <Box visibleFrom="sm" style={{ display: "contents" }}>
         <DesktopTabsControls onTryDecalsClick={onTryDecalsClick} />
       </Box>
-      {onMenuClick && (
-        <Box hiddenFrom="sm" style={{ display: "contents" }}>
-          <MobileTabsControls
-            onMenuClick={onMenuClick}
-            onTryDecalsClick={onTryDecalsClick}
-          />
-        </Box>
-      )}
+      <Box hiddenFrom="sm" style={{ display: "contents" }}>
+        <MobileTabsControls onTryDecalsClick={onTryDecalsClick} />
+      </Box>
     </>
   );
 }

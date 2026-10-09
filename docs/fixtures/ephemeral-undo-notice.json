@@ -1,0 +1,68 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558159704826445824",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "You undid something, the details of which can be found in the `#undo-log` thread.",
+    "timestamp": "2026-10-09T16:50:22.838Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 64,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    },
+    "webhook_id": "1558153075842220033",
+    "application_id": "1558153075842220033",
+    "interaction_metadata": {
+      "id": "1558159703333273600",
+      "type": 3,
+      "user": {
+        "id": "1558155013916852224",
+        "username": "alice",
+        "global_name": "Alice",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false
+      },
+      "authorizing_integration_owners": {
+        "0": "1558153075842220032"
+      }
+    },
+    "ephemeral": true
+  }
+}
