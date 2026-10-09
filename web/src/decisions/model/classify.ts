@@ -8,6 +8,7 @@ import { baseId, choicesOf, cleanLabel, type Choice } from "./controls";
 import { cleanText, firstLine, namesFrom } from "./text";
 
 export type DecisionKind =
+  | "tech"
   | "agendaPeek"
   | "scPrimary"
   | "spend"
@@ -294,7 +295,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
   }
   if (has(choices, ID.spend)) {
     const inf = has(choices, /_inf(_|$)/);
-    const res = has(choices, /_res(_|$)|_tech|_build/);
+    const res = has(choices, /_(res\w*|\w*tech|build\w*)$/);
     const what = inf && !res ? "influence" : res && !inf ? "resources" : "resources or influence";
     return { ...base, kind: "spend", title: `Pay with ${what}`, text };
   }
@@ -319,6 +320,9 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       title: agenda ? `Agenda: ${agenda.name} — vote` : "Agenda — vote",
       agenda,
     };
+  }
+  if (has(choices, /^getTech_/)) {
+    return { ...base, kind: "tech", title: "Research a technology" };
   }
   if (prompt.ownCall && has(choices, ID.scFollow)) {
     const sc = scOfFollow(m, choices);

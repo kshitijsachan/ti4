@@ -6,6 +6,7 @@ import { GainTokensBody, SpendBody } from "./Economy";
 import { GenericBody, TacticalBody } from "./Generic";
 import { ReactionBody } from "./Reaction";
 import { ScFollowBody, ScPickBody, ScPrimaryBody } from "./Strategy";
+import { TechBody } from "./Tech";
 import { TradeBody } from "./Trade";
 import { TurnBody } from "./Turn";
 import type { RendererProps } from "./types";
@@ -23,6 +24,8 @@ export function renderBody(d: Decision, props: RendererProps): ReactNode {
       return <TurnBody {...props} />;
     case "tactical":
       return <TacticalBody {...props} />;
+    case "tech":
+      return <TechBody {...props} />;
     case "agendaPeek":
       return <AgendaPeekBody {...props} />;
     case "agenda":

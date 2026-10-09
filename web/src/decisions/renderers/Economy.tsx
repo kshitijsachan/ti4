@@ -20,8 +20,8 @@ function planetOf(c: Choice) {
 /** What the payment is for, from the `_inf` / `_res` suffix the bot puts on its spend buttons. */
 export function spendFor(choices: Choice[]): "influence" | "resources" | "both" {
   const ids = choices.map((c) => baseId(c.customId)).filter((id) => /^(spend_|reduceTG_|reduceComm_|resetSpend_)/.test(id));
-  if (ids.some((id) => /_inf$|_inf_/.test(id))) return "influence";
-  if (ids.some((id) => /_res$|_res_|_tech|_build/.test(id))) return "resources";
+  if (ids.some((id) => /_inf(_|$)/.test(id))) return "influence";
+  if (ids.some((id) => /_(res\w*|\w*tech|build\w*)$/.test(id))) return "resources";
   return "both";
 }
 
