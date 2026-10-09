@@ -361,7 +361,14 @@ function submittedWithIds(submitted: Json[], modal: Json[]): Json[] {
 
 /** What a browser sees of a message: wire format plus whether it is only visible to them. */
 function view(msg: StoredMessage): Json {
-  const out = stripPrivate(msg);
+  let out = stripPrivate(msg);
+  if (msg.embeds?.length && JSON.stringify(msg.embeds).includes(DISCORD_EMOJI_HOST)) {
+    out = { ...out, embeds: JSON.parse(JSON.stringify(msg.embeds).replace(DISCORD_EMOJI_CDN, "/emojis/$1")) };
+  }
   if (msg._ephemeral_for) out.ephemeral = true;
   return out;
 }
+
+/** The bot puts Discord's emoji CDN in embed thumbnails (faction icons); we serve those emoji ourselves. */
+const DISCORD_EMOJI_HOST = "cdn.discordapp.com/emojis/";
+const DISCORD_EMOJI_CDN = /https?:\/\/(?:cdn|media)\.discordapp\.(?:com|net)\/emojis\/(\d+\.\w+)(?:\?[^"\s]*)?/g;

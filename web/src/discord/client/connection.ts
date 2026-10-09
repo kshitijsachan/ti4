@@ -175,6 +175,7 @@ export class PlayConnection {
   }
 
   click(channelId: Snowflake, messageId: Snowflake, customId: string) {
+    this.actions.noteInteraction(channelId, messageId);
     return this.sendTracked(
       { op: "click", channel_id: channelId, message_id: messageId, custom_id: customId },
       `${messageId}:${customId}`,
@@ -183,6 +184,7 @@ export class PlayConnection {
   }
 
   select(channelId: Snowflake, messageId: Snowflake, customId: string, values: string[], componentType: number) {
+    this.actions.noteInteraction(channelId, messageId);
     return this.sendTracked(
       { op: "select", channel_id: channelId, message_id: messageId, custom_id: customId, values, component_type: componentType },
       `${messageId}:${customId}`,

@@ -10,7 +10,7 @@ import type {
   User,
 } from "../types";
 import { compareSnowflakes } from "../shared/snowflake";
-import { readLastRead, writeLastRead } from "./lastRead";
+import { readLastRead, readStored, writeLastRead, writeStored } from "./lastRead";
 
 export type ConnectionStatus = "idle" | "connecting" | "open" | "reconnecting" | "closed";
 
@@ -61,6 +61,10 @@ export type PlayState = {
   activeChannelId: Snowflake | null;
   /** Message the composer is replying to, per channel. */
   replyTo: Record<Snowflake, Message | null>;
+  /** Channel id → newest message I pressed a button / used a select on (persisted per browser). */
+  interacted: Record<Snowflake, Snowflake>;
+  /** Prompts I hid from the "needs you" tray (message ids, persisted per browser). */
+  dismissedPrompts: Record<Snowflake, true>;
 };
 
 export const EMPTY_CHANNEL: ChannelMessages = {
@@ -97,6 +101,8 @@ export function createPlayStore(storageKey: string) {
     toasts: [],
     activeChannelId: null,
     replyTo: {},
+    interacted: readStored(`interacted.${storageKey}`),
+    dismissedPrompts: readStored(`dismissed.${storageKey}`),
   }));
 
   const set = store.setState;
@@ -205,6 +211,21 @@ export function createPlayStore(storageKey: string) {
       set({ viewing: { ...v, [channelId]: Math.max(0, (v[channelId] ?? 0) - 1) } });
     },
     markRead,
+    /** Remember that I acted on a message, so prompts at or before it count as answered. */
+    noteInteraction(channelId: Snowflake, messageId: Snowflake) {
+      const cur = get().interacted[channelId];
+      if (cur && compareSnowflakes(cur, messageId) >= 0) return;
+      const interacted = { ...get().interacted, [channelId]: messageId };
+      set({ interacted });
+      writeStored(`interacted.${storageKey}`, interacted);
+    },
+    dismissPrompt(messageId: Snowflake) {
+      const ids = Object.keys(get().dismissedPrompts).sort(compareSnowflakes).slice(-300);
+      const dismissedPrompts: Record<Snowflake, true> = { [messageId]: true };
+      for (const id of ids) dismissedPrompts[id] = true;
+      set({ dismissedPrompts });
+      writeStored(`dismissed.${storageKey}`, dismissedPrompts);
+    },
     setReply(channelId: Snowflake, message: Message | null) {
       set({ replyTo: { ...get().replyTo, [channelId]: message } });
     },

@@ -94,7 +94,7 @@ if [ -f /etc/iptables/rules.v4 ] && command -v netfilter-persistent >/dev/null 2
 fi
 
 # ---- 5. build + start ----
-log "Building and starting (first build takes ~20-40 minutes: Vite web build, Maven bot build, ~1GB of art)"
+log "Building and starting (first build takes ~10-20 minutes: Maven bot build, ~1GB of art, Vite web build)"
 docker compose "${PROFILE_ARGS[@]}" up -d --build --remove-orphans
 
 log "Waiting for the site"

@@ -21,3 +21,22 @@ export function writeLastRead(scope: string, value: Record<Snowflake, Snowflake>
     /* storage unavailable */
   }
 }
+
+/** Generic per-browser JSON record under `ti4play.<name>`; `{}` when storage is unavailable. */
+export function readStored<T>(name: string): Record<string, T> {
+  try {
+    const raw = window.localStorage.getItem(`ti4play.${name}`);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, T>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function writeStored(name: string, value: object) {
+  try {
+    window.localStorage.setItem(`ti4play.${name}`, JSON.stringify(value));
+  } catch {
+    /* storage unavailable */
+  }
+}

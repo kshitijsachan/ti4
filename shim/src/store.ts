@@ -93,10 +93,45 @@ export class Store {
     const file = join(dir, "state.json");
     if (existsSync(file)) {
       this.state = JSON.parse(readFileSync(file, "utf8"));
+      this.repairOverwrites();
     } else {
       this.state = this.freshState();
       this.saveNow();
     }
+  }
+
+  /**
+   * State written before `parseJson` kept snowflakes intact holds permission-overwrite ids that JS rounded
+   * (e.g. the @everyone deny on a game category). JDA then dropped them when syncing a new channel to its
+   * category, so game channels created later became visible to everyone. Restore the exact ids, and give
+   * such channels the @everyone deny their category carries.
+   */
+  private repairOverwrites() {
+    // Overwrite type 0 targets a role (incl. @everyone = guild id), 1 a member; ids of both kinds can round alike.
+    const byType = [Object.keys(this.state.roles), Object.keys(this.state.users)];
+    const exact = byType.map((ids) => new Map(ids.map((id) => [String(Number(id)), id])));
+    let fixed = 0;
+    for (const ch of Object.values(this.state.channels)) {
+      for (const o of ch.permission_overwrites ?? []) {
+        const kind = o.type === 1 ? 1 : 0;
+        if (typeof o.id === "number" || !byType[kind].includes(String(o.id))) {
+          const id = exact[kind].get(String(Number(o.id)));
+          if (id && id !== o.id) {
+            o.id = id;
+            fixed++;
+          }
+        }
+      }
+    }
+    const everyone = this.state.guild_id;
+    for (const ch of Object.values(this.state.channels)) {
+      const parent = ch.parent_id ? this.state.channels[ch.parent_id] : undefined;
+      if (!parent || ch.type !== 0 || !Array.isArray(ch.permission_overwrites) || !fixed) continue;
+      const deny = (parent.permission_overwrites ?? []).find((o: Json) => o.id === everyone);
+      if (!deny || ch.permission_overwrites.some((o: Json) => o.id === everyone)) continue;
+      ch.permission_overwrites.push({ ...deny });
+    }
+    if (fixed) this.scheduleSave();
   }
 
   get dataDir() {
