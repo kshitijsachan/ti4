@@ -166,8 +166,9 @@ export function ScFollowBody({ d, data, onPress, pendingKey }: RendererProps) {
 const FOLLOW_ID = /^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/;
 
 /** My own strategy card, just played: its primary ability and the buttons that resolve it. */
-export function ScPrimaryBody({ d, data, onPress, pendingKey }: RendererProps) {
+export function ScPrimaryBody({ d, data, onPress, pendingKey, pressOn }: RendererProps) {
   const def = d.sc ? scDefinition(d.sc, data.web) : undefined;
+  const own = d.choices.filter((c) => !FOLLOW_ID.test(baseId(c.customId)) && c.rank !== "undo" && c.rank !== "more");
   return (
     <div className={classes.stack}>
       <div className={classes.followLayout}>
@@ -185,6 +186,19 @@ export function ScPrimaryBody({ d, data, onPress, pendingKey }: RendererProps) {
           <p className={classes.hint}>The other players are now choosing whether to follow.</p>
         </div>
       </div>
+      {(d.steps ?? []).map((step, i) => (
+        <Section key={step.id} label={`Step ${i + 1} · ${step.title}`}>
+          {step.kind === "generic" && step.text && <Prose text={step.text} clamp={2} muted />}
+          <ChoiceButtons
+            choices={step.choices}
+            onPress={pressOn(step)}
+            pendingKey={pendingKey}
+            channelId={step.prompt.channelId}
+            rankOf={(c) => (c.rank === "undo" ? "more" : c.rank)}
+          />
+        </Section>
+      ))}
+      {d.steps?.length && own.length ? <div className={classes.stepRule} /> : null}
       <ChoiceButtons
         choices={d.choices}
         onPress={onPress}

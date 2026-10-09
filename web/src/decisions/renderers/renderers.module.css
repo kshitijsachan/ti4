@@ -557,3 +557,8 @@
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 6px;
 }
+
+.stepRule {
+  height: 1px;
+  background: var(--play-hairline);
+}

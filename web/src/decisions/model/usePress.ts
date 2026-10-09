@@ -47,14 +47,15 @@ export function useDecisionPress() {
       check();
     });
 
-  const press = async (d: Decision, choice: Choice, values?: string[]) => {
+  /** Presses `choice` of `target` (a step of `shown`, or `shown` itself), keeping `shown` on screen meanwhile. */
+  const press = async (shown: Decision, target: Decision, choice: Choice, values?: string[]) => {
     if (!choice.customId || state.pendingKey) return;
-    setState({ held: d, pendingKey: choice.key, error: null });
+    setState({ held: shown, pendingKey: choice.key, error: null });
     const result = values
-      ? await selectAndWait(d, choice, values)
-      : await pressButton(d.prompt.channelId, d.id, choice.customId);
+      ? await selectAndWait(target, choice, values)
+      : await pressButton(target.prompt.channelId, target.id, choice.customId);
     if (result.error) {
-      setState({ held: d, pendingKey: null, error: result.error });
+      setState({ held: shown, pendingKey: null, error: result.error });
       return;
     }
     setState({ held: null, pendingKey: null, error: null });

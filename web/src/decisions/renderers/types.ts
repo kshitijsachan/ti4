@@ -17,6 +17,8 @@ export type RendererProps = {
   d: Decision;
   data: DecisionData;
   onPress: PressFn;
+  /** Press function for another decision folded into this one (a step). */
+  pressOn: (target: Decision) => PressFn;
   pendingKey: string | null;
   onHoverChoice: (c: Choice | null) => void;
 };

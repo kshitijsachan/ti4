@@ -61,6 +61,8 @@ export type Decision = {
   trade?: TradeInfo;
   /** System the prompt is about, for the map highlight. */
   position?: string;
+  /** Prompts the bot posted together with this one that belong to it (my strategy card's follow-up steps). */
+  steps?: Decision[];
   /** Can be answered ahead of time but nothing waits on it yet (pre-declining a card): listed last. */
   optional?: boolean;
 };

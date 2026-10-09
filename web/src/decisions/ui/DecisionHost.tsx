@@ -49,16 +49,29 @@ function useHandAliases(gameName: string, enabled: boolean) {
 const BURST_MS = 3000;
 
 function inBursts(newestFirst: Decision[]): Decision[] {
-  const bursts: Decision[][] = [];
+  return bursts(newestFirst).reverse().flatMap(foldSteps);
+}
+
+/** My strategy card's own prompt absorbs the prompts the bot posted with it (choose speaker, draw agendas, …). */
+function foldSteps(burst: Decision[]): Decision[] {
+  const primary = burst.find((d) => d.kind === "scPrimary");
+  if (!primary) return burst;
+  const steps = burst.filter((d) => d !== primary && d.kind !== "turn" && !d.optional);
+  if (!steps.length) return burst;
+  return burst.filter((d) => !steps.includes(d)).map((d) => (d === primary ? { ...d, steps } : d));
+}
+
+function bursts(newestFirst: Decision[]): Decision[][] {
+  const out: Decision[][] = [];
   for (const d of [...newestFirst].reverse()) {
-    const last = bursts[bursts.length - 1];
+    const last = out[out.length - 1];
     const prev = last?.[last.length - 1];
     const close =
       prev && prev.prompt.channelId === d.prompt.channelId && snowflakeTime(d.id) - snowflakeTime(prev.id) <= BURST_MS;
     if (close) last.push(d);
-    else bursts.push([d]);
+    else out.push([d]);
   }
-  return bursts.reverse().flat();
+  return out;
 }
 
 /** Position of the system a choice is about ("ringTile_301"), for the map highlight while hovering. */
@@ -206,7 +219,8 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className 
           {renderBody(shown, {
             d: shown,
             data,
-            onPress: (c, values) => void press.press(shown, c, values),
+            onPress: (c, values) => void press.press(shown, shown, c, values),
+            pressOn: (target) => (c, values) => void press.press(shown, target, c, values),
             pendingKey: press.pendingKey,
             onHoverChoice,
           })}
