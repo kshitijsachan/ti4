@@ -358,7 +358,13 @@ class SeatPilot {
     const faction = await this.faction(game, m);
     const content = String(m.content ?? "");
     const mentionsMe = content.includes(`<@${me}>`) || (m.mentions ?? []).some((u: Json) => u.id === me);
-    const mentionsOther = !mentionsMe && (m.mentions ?? []).some((u: Json) => u.id !== me && !s.users[u.id]?.bot);
+    // The bot names players as "<faction emoji>Name <color emoji>**Color**", often without a mention.
+    const named = (id: string) => {
+      const n = s.users[id]?.global_name;
+      return !!n && content.includes(`${n} <:`);
+    };
+    const namesOther = !mentionsMe && !named(me) && Object.values(s.seats).some((seat) => seat.user_id !== me && named(seat.user_id));
+    const mentionsOther = namesOther || (!mentionsMe && (m.mentions ?? []).some((u: Json) => u.id !== me && !s.users[u.id]?.bot));
     const ffcc = (c: Control) => family(/^FFCC_([^_]+)_/.exec(c.custom_id)?.[1]);
     const ffccMine = !!faction && controls.some((c) => ffcc(c) === faction);
     // Other factions' buttons, and the controls we never press.
@@ -380,11 +386,14 @@ class SeatPilot {
     const strong = m._ephemeral_for === me || ffccMine || (m._prompted_for === me && !mentionsOther) || calledOut;
     const ctx: Ctx = {
       strong,
-      direct: strong || (mentionsMe && !/is up to draft/.test(content)) || myThread || factionThread,
+      direct: strong || (mentionsMe && !/is up to draft/.test(content)) || ((myThread || factionThread) && !mentionsOther),
       faction,
     };
 
     if (controls.some((c) => c.custom_id.startsWith("milty_"))) return this.milty(m, controls, game);
+    // Combat dice roll for whoever presses: roll once per round (not ahead of the opponent), and each
+    // other kind of roll (anti-fighter barrage, bombardment, space cannon) once per combat.
+    controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || this.mayRoll(ch.id, c.custom_id, faction));
 
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
@@ -417,6 +426,24 @@ class SeatPilot {
   private pressedRecently(m: StoredMessage, c: Control) {
     const at = this.recent.get(this.repostKey(m, c));
     return at !== undefined && Date.now() - at < REPOST_MS;
+  }
+
+  private mayRoll(channelId: string, customId: string, faction: string | undefined): boolean {
+    const kind = /^combatRoll_[^_]+_[^_]+_?(\w+)?/.exec(customId)?.[1];
+    if (kind && kind !== "space" && kind !== "ground") {
+      const key = `${channelId}:roll:${kind}`;
+      return !this.recent.has(key);
+    }
+    if (!faction) return false;
+    let mine = 0;
+    let theirs = 0;
+    for (const m of this.store.messages(channelId)) {
+      const who = /^<a?:(\w+):\d+>\s*rolls for .*combat/i.exec(String(m.content ?? ""))?.[1]?.toLowerCase();
+      if (!who) continue;
+      if (faction.startsWith(who) || who.startsWith(faction)) mine++;
+      else theirs++;
+    }
+    return mine <= theirs;
   }
 
   /** Milty draft: when it is our pick, the first option of a category we have not drafted yet. */
@@ -510,6 +537,8 @@ class SeatPilot {
     this.pressed.add(key);
     this.answered.set(msg.id, { sig: signature(controlsOf(fresh.components)), at: Date.now() });
     this.recent.set(`${msg.channel_id}:label:${control.label}`, Date.now());
+    const rollKind = /^combatRoll_[^_]+_[^_]+_(\w+)/.exec(control.custom_id)?.[1];
+    if (rollKind) this.recent.set(`${msg.channel_id}:roll:${rollKind}`, Date.now());
     this.recent.set(this.promptKey(fresh, controlsOf(fresh.components)), Date.now());
     this.recent.set(this.repostKey(msg, control), Date.now());
     this.lastPressed = msg.id;
