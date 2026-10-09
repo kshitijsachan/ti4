@@ -41,7 +41,8 @@
             "style": 3,
             "disabled": false,
             "label": "(1) Intimidate Council",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "emoji": {
@@ -53,31 +54,36 @@
             "style": 3,
             "disabled": false,
             "label": "(2) Populate the Outer Rim",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "po_no_scoring",
             "style": 4,
             "disabled": false,
             "label": "No Public Objective Scored",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "custom_id": "get_so_score_buttons",
             "style": 1,
             "disabled": false,
             "label": "Score A Secret Objective",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "so_no_scoring",
             "style": 4,
             "disabled": false,
             "label": "No Secret Objective Scored",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

@@ -59,38 +59,44 @@
             "style": 2,
             "disabled": false,
             "label": "Show draft again",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "miltyFactionInfo_remaining",
             "style": 1,
             "disabled": false,
             "label": "Remaining faction info",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "miltyFactionInfo_picked",
             "style": 1,
             "disabled": false,
             "label": "Picked faction info",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "custom_id": "miltyFactionInfo_all",
             "style": 1,
             "disabled": false,
             "label": "All faction info",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "ultimateUndo_10",
             "style": 2,
             "disabled": false,
             "label": "UNDO",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

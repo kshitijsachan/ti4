@@ -39,7 +39,8 @@
             "style": 3,
             "disabled": false,
             "label": " ",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "emoji": {
@@ -51,7 +52,8 @@
             "style": 3,
             "disabled": false,
             "label": " ",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "emoji": {
@@ -63,7 +65,8 @@
             "style": 3,
             "disabled": false,
             "label": " ",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "emoji": {
@@ -75,10 +78,12 @@
             "style": 3,
             "disabled": false,
             "label": " ",
-            "type": 2
+            "type": 2,
+            "id": 5
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

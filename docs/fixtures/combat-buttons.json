@@ -34,7 +34,8 @@
             "style": 4,
             "disabled": false,
             "label": "Assign Hits",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "emoji": {
@@ -46,31 +47,36 @@
             "style": 2,
             "disabled": false,
             "label": "Check Combat Action Cards",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "getRepairButtons_201",
             "style": 3,
             "disabled": false,
             "label": "Repair Damage",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "custom_id": "refreshViewOfSystem_201_yssaril_mentak_space",
             "style": 1,
             "disabled": false,
             "label": "Refresh Picture",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "announceARetreat",
             "style": 2,
             "disabled": false,
             "label": "Announce A Retreat",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       },
       {
         "components": [
@@ -79,24 +85,28 @@
             "style": 4,
             "disabled": false,
             "label": "Retreat",
-            "type": 2
+            "type": 2,
+            "id": 8
           },
           {
             "custom_id": "announceReadyForDice_camouflage_gold",
             "style": 2,
             "disabled": false,
             "label": "Declare Ready To Throw Dice",
-            "type": 2
+            "type": 2,
+            "id": 9
           },
           {
             "custom_id": "combatRoll_201_space",
             "style": 2,
             "disabled": false,
             "label": "Roll Space Combat",
-            "type": 2
+            "type": 2,
+            "id": 10
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 7
       }
     ],
     "sticker_items": [],

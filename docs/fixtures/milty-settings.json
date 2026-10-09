@@ -37,7 +37,8 @@
             "style": 2,
             "disabled": false,
             "label": "Edit General Game Settings",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "emoji": {
@@ -47,7 +48,8 @@
             "style": 2,
             "disabled": false,
             "label": "Edit Draft settings",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "emoji": {
@@ -57,7 +59,8 @@
             "style": 2,
             "disabled": false,
             "label": "Edit Players and Factions",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "emoji": {
@@ -67,17 +70,20 @@
             "style": 2,
             "disabled": false,
             "label": "Edit Expansions and Homebrew",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "jmfA_main_startMilty",
             "style": 3,
             "disabled": false,
             "label": "Start Milty Draft!",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

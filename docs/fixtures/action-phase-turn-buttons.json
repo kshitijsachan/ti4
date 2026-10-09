@@ -34,14 +34,16 @@
             "style": 3,
             "disabled": false,
             "label": "Tactical Action (3)",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "FFCC_mentak_componentAction",
             "style": 3,
             "disabled": false,
             "label": "Component Action (0)",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "emoji": {
@@ -53,7 +55,8 @@
             "style": 3,
             "disabled": false,
             "label": "Play Leadership",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "emoji": {
@@ -65,17 +68,20 @@
             "style": 3,
             "disabled": false,
             "label": "Play Warfare",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "transaction",
             "style": 1,
             "disabled": false,
             "label": "Transaction",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       },
       {
         "components": [
@@ -84,31 +90,36 @@
             "style": 2,
             "disabled": false,
             "label": "Modify Units",
-            "type": 2
+            "type": 2,
+            "id": 8
           },
           {
             "custom_id": "showMap",
             "style": 2,
             "disabled": false,
             "label": "Show Map",
-            "type": 2
+            "type": 2,
+            "id": 9
           },
           {
             "custom_id": "showPlayerAreas",
             "style": 2,
             "disabled": false,
             "label": "Show Player Areas",
-            "type": 2
+            "type": 2,
+            "id": 10
           },
           {
             "custom_id": "ultimateUndo_31",
             "style": 2,
             "disabled": false,
             "label": "UNDO",
-            "type": 2
+            "type": 2,
+            "id": 11
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 7
       }
     ],
     "sticker_items": [],

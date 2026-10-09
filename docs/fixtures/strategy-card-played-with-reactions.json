@@ -104,14 +104,16 @@
             "style": 3,
             "disabled": false,
             "label": "Spend A Strategy Token",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "sc_no_follow_5",
             "style": 1,
             "disabled": false,
             "label": "Not Following",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "emoji": {
@@ -123,7 +125,8 @@
             "style": 2,
             "disabled": false,
             "label": "Replenish Commodities",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "emoji": {
@@ -135,17 +138,20 @@
             "style": 2,
             "disabled": false,
             "label": "Replenish and Wash",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "requestAllFollow_5",
             "style": 2,
             "disabled": false,
             "label": "Request All Resolve Now",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

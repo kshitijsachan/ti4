@@ -34,38 +34,44 @@
             "style": 4,
             "disabled": false,
             "label": "Start Base Game Only Setup",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "chooseExp_newPoK",
             "style": 3,
             "disabled": false,
             "label": "New PoK",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "chooseExp_oldPoK",
             "style": 2,
             "disabled": false,
             "label": "Old PoK",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "custom_id": "chooseExp_te",
             "style": 1,
             "disabled": false,
             "label": "Thunder's Edge + New PoK",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "ultimateUndo_1",
             "style": 2,
             "disabled": false,
             "label": "UNDO",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

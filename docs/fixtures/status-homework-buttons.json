@@ -37,17 +37,20 @@
             "style": 3,
             "disabled": false,
             "label": "Redistribute, Gain, & Confirm Command Tokens",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "pass_on_abilities",
             "style": 4,
             "disabled": false,
             "label": "Ready For Strategy Phase",
-            "type": 2
+            "type": 2,
+            "id": 3
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

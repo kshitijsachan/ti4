@@ -39,7 +39,8 @@
             "style": 2,
             "disabled": false,
             "label": "The Federation of Sol",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "emoji": {
@@ -51,7 +52,8 @@
             "style": 2,
             "disabled": false,
             "label": "The Firmament",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "emoji": {
@@ -63,7 +65,8 @@
             "style": 2,
             "disabled": false,
             "label": "The Yssaril Tribes",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "emoji": {
@@ -75,10 +78,12 @@
             "style": 2,
             "disabled": false,
             "label": "The Mentak Coalition",
-            "type": 2
+            "type": 2,
+            "id": 5
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

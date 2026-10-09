@@ -34,24 +34,28 @@
             "style": 3,
             "disabled": false,
             "label": "Start Milty Setup",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "startDraftSystem_nucleusPreset",
             "style": 3,
             "disabled": false,
             "label": "Start Nucleus Setup",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "addMapString~MDL",
             "style": 3,
             "disabled": false,
             "label": "Add Prebuilt Map String",
-            "type": 2
+            "type": 2,
+            "id": 4
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

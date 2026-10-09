@@ -34,38 +34,44 @@
             "disabled": false,
             "label": "Open in browser",
             "type": 2,
-            "url": "/attachments/1558158717671833600/pbd1_2026.10.09_-_16.46.27.webp"
+            "url": "/attachments/1558158717671833600/pbd1_2026.10.09_-_16.46.27.webp",
+            "id": 2
           },
           {
             "custom_id": "gameInfoButtons",
             "style": 3,
             "disabled": false,
             "label": "Player Info",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "cardsInfo",
             "style": 3,
             "disabled": false,
             "label": "Cards Info",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "custom_id": "offerDeckButtons",
             "style": 1,
             "disabled": false,
             "label": "Show Decks",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "showGameAgain",
             "style": 2,
             "disabled": false,
             "label": "Refresh Map",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

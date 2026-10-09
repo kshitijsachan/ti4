@@ -34,38 +34,44 @@
             "style": 1,
             "disabled": false,
             "label": "Transaction",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "getModifyTiles",
             "style": 2,
             "disabled": false,
             "label": "Modify Units",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "offerPlayerPref",
             "style": 2,
             "disabled": false,
             "label": "Player Settings",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "custom_id": "searchMyGames",
             "style": 2,
             "disabled": false,
             "label": "List My Games",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "custom_id": "showObjInfo_both",
             "style": 3,
             "disabled": false,
             "label": "Scoring Info",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       },
       {
         "components": [
@@ -74,38 +80,44 @@
             "style": 2,
             "disabled": false,
             "label": "Map Features",
-            "type": 2
+            "type": 2,
+            "id": 8
           },
           {
             "custom_id": "resolvePreassignment_Pre Pass sol",
             "style": 4,
             "disabled": false,
             "label": "Pass on Next Turn",
-            "type": 2
+            "type": 2,
+            "id": 9
           },
           {
             "custom_id": "refreshInfoButtons",
             "style": 3,
             "disabled": false,
             "label": "Other Info",
-            "type": 2
+            "type": 2,
+            "id": 10
           },
           {
             "custom_id": "notepadPost",
             "style": 1,
             "disabled": false,
             "label": "Post Notes",
-            "type": 2
+            "type": 2,
+            "id": 11
           },
           {
             "custom_id": "notepadEdit~MDL",
             "style": 1,
             "disabled": false,
             "label": "Edit Notes",
-            "type": 2
+            "type": 2,
+            "id": 12
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 7
       },
       {
         "components": [
@@ -114,10 +126,12 @@
             "style": 3,
             "disabled": false,
             "label": "Cards Info Refresh",
-            "type": 2
+            "type": 2,
+            "id": 14
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 13
       }
     ],
     "sticker_items": [],

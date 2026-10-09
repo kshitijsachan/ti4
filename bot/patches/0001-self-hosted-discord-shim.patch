@@ -51,12 +51,40 @@ index a54a239..716905c 100644
              MessageHelper.sendMessageToChannel(
                      event.getMessageChannel(), member.getUser().getAsMention() + """
                       You need to have completed at least one game (or be currently in a game) to create new games via this button. \
+diff --git a/src/main/java/ti4/image/ImageHelper.java b/src/main/java/ti4/image/ImageHelper.java
+index d389e4e..bf1fc4e 100644
+--- a/src/main/java/ti4/image/ImageHelper.java
++++ b/src/main/java/ti4/image/ImageHelper.java
+@@ -199,6 +199,7 @@ public class ImageHelper {
+     }
+ 
+     private static String sanitizeUrl(String imageUrl) {
++        if (ti4.selfhost.SelfHosted.isEnabled()) imageUrl = ti4.selfhost.SelfHosted.localizeCdnUrl(imageUrl);
+         return imageUrl.replace("animated=true", "animated=false");
+     }
+ 
+diff --git a/src/main/java/ti4/logging/BotLogger.java b/src/main/java/ti4/logging/BotLogger.java
+index 69ff42e..9b14938 100644
+--- a/src/main/java/ti4/logging/BotLogger.java
++++ b/src/main/java/ti4/logging/BotLogger.java
+@@ -271,6 +271,11 @@ public class BotLogger {
+         // Send off message
+         String compiledMessage = msg.toString();
+         int msgLength = compiledMessage.length();
++        if (ti4.selfhost.SelfHosted.isEnabled() && !logToConsole()) {
++            // Self-hosted: also keep the log (with stack trace) on stdout, not only in the bot-log channel.
++            System.out.println(severity.name() + ": " + compiledMessage
++                    + (err == null ? "" : "\n" + ExceptionUtils.getStackTrace(err)));
++        }
+         if (logToConsole()) {
+             if (severity.isErrorOrHigher()) {
+                 System.err.println(severity.name() + ": " + compiledMessage + "\n" + err);
 diff --git a/src/main/java/ti4/selfhost/SelfHosted.java b/src/main/java/ti4/selfhost/SelfHosted.java
 new file mode 100644
-index 0000000..5f85b49
+index 0000000..e03efb2
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/SelfHosted.java
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,29 @@
 +package ti4.selfhost;
 +
 +/** True when the bot runs against the ti4 web shim instead of real Discord. */
@@ -67,5 +95,1018 @@ index 0000000..5f85b49
 +
 +    public static boolean isEnabled() {
 +        return ENABLED;
++    }
++
++    /** Base URL of the shim (DISCORD_API_BASE without the /api/vN suffix), e.g. http://127.0.0.1:8090 */
++    public static String shimBaseUrl() {
++        String api = System.getenv("DISCORD_API_BASE");
++        return api == null ? "" : api.replaceFirst("/api/v\\d+/?$", "");
++    }
++
++    /**
++     * Discord CDN URLs (emoji images, attachments) are served by the shim; relative shim URLs are made absolute.
++     */
++    public static String localizeCdnUrl(String url) {
++        if (url == null || !ENABLED) return url;
++        if (url.startsWith("https://cdn.discordapp.com/")) return shimBaseUrl() + url.substring("https://cdn.discordapp.com".length());
++        if (url.startsWith("https://media.discordapp.net/")) return shimBaseUrl() + url.substring("https://media.discordapp.net".length());
++        if (url.startsWith("/")) return shimBaseUrl() + url;
++        return url;
++    }
++}
+diff --git a/src/main/java/ti4/spring/api/auth/RestDiscordClient.java b/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
+index 8501858..8990781 100644
+--- a/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
++++ b/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
+@@ -19,7 +19,9 @@ import tools.jackson.databind.json.JsonMapper;
+ @Component
+ public class RestDiscordClient {
+     private static final String DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token";
+-    private static final String DISCORD_USER_INFO_URL = "https://discord.com/api/v10/users/@me";
++    private static final String DISCORD_USER_INFO_URL = ti4.selfhost.SelfHosted.isEnabled()
++            ? ti4.selfhost.SelfHosted.shimBaseUrl() + "/api/v10/users/@me"
++            : "https://discord.com/api/v10/users/@me";
+     private static final String DISCORD_CLIENT_ID = System.getenv("DISCORD_CLIENT_ID");
+     private static final String DISCORD_CLIENT_SECRET = System.getenv("DISCORD_CLIENT_SECRET");
+ 
+diff --git a/src/main/java/ti4/spring/api/selfhost/DraftButtonLocator.java b/src/main/java/ti4/spring/api/selfhost/DraftButtonLocator.java
+new file mode 100644
+index 0000000..19401c4
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/DraftButtonLocator.java
+@@ -0,0 +1,71 @@
++package ti4.spring.api.selfhost;
++
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
++import net.dv8tion.jda.api.components.buttons.Button;
++import net.dv8tion.jda.api.entities.Message;
++import net.dv8tion.jda.api.entities.MessageHistory;
++import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
++import org.springframework.stereotype.Component;
++import ti4.discord.JdaService;
++import ti4.game.Game;
++
++/**
++ * Finds which message in the game's main channel currently carries each draft button, so the web client can
++ * "press" it through the shim. Reads the latest 200 messages through JDA (i.e. the shim's REST API) and caches
++ * the result briefly per channel + game version.
++ */
++@Component
++public class DraftButtonLocator {
++
++    /** Interactions that move buttons usually save the game (new version); the TTL covers the ones that do not. */
++    private static final long TTL_MS = 4000;
++    private static final int PAGES = 2;
++
++    private record Entry(long at, long version, Map<String, String> buttons) {}
++
++    private final Map<String, Entry> cache = new ConcurrentHashMap<>();
++
++    /** custom_id -> message id (newest message wins). */
++    public Map<String, String> locate(Game game) {
++        TextChannel channel;
++        try {
++            channel = game.getMainGameChannel();
++        } catch (Exception e) {
++            return Map.of();
++        }
++        if (channel == null) return Map.of();
++        String key = channel.getId();
++        long now = System.currentTimeMillis();
++        Entry hit = cache.get(key);
++        if (hit != null && hit.version == game.getLastModifiedDate() && now - hit.at < TTL_MS) return hit.buttons;
++
++        Map<String, String> found = new HashMap<>();
++        try {
++            MessageHistory mh = channel.getHistory();
++            List<Message> history = new java.util.ArrayList<>();
++            for (int page = 0; page < PAGES; page++) {
++                List<Message> got = mh.retrievePast(100).timeout(5, TimeUnit.SECONDS).complete();
++                history.addAll(got);
++                if (got.size() < 100) break;
++            }
++            // History is newest first; keep the first (newest) message seen for each button.
++            String botId = JdaService.getBotId();
++            for (Message m : history) {
++                if (botId != null && !botId.equals(m.getAuthor().getId())) continue;
++                for (Button b : m.getComponentTree().findAll(Button.class)) {
++                    if (b.getCustomId() == null || b.isDisabled()) continue;
++                    found.putIfAbsent(b.getCustomId(), m.getId());
++                }
++            }
++        } catch (Exception e) {
++            if (hit != null) return hit.buttons;
++            return Map.of();
++        }
++        cache.put(key, new Entry(now, game.getLastModifiedDate(), found));
++        return found;
++    }
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/DraftViewController.java b/src/main/java/ti4/spring/api/selfhost/DraftViewController.java
+new file mode 100644
+index 0000000..f2f3ab6
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/DraftViewController.java
+@@ -0,0 +1,84 @@
++package ti4.spring.api.selfhost;
++
++import java.awt.Graphics2D;
++import java.awt.RenderingHints;
++import java.awt.image.BufferedImage;
++import java.io.ByteArrayOutputStream;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import javax.imageio.ImageIO;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.CacheControl;
++import org.springframework.http.MediaType;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.RequestParam;
++import org.springframework.web.bind.annotation.RestController;
++import ti4.game.Game;
++import ti4.image.ImageHelper;
++import ti4.image.TileHelper;
++import ti4.model.TileModel;
++import ti4.spring.api.selfhost.DraftViewModels.DraftView;
++import ti4.spring.context.RequestContext;
++
++/**
++ * Read-only endpoints for the self-hosted web draft UI.
++ * <ul>
++ *   <li>{@code GET /api/public/game/{gameName}/draft} — full draft state, including the button custom_id (and the
++ *       message carrying it) for every pick.</li>
++ *   <li>{@code GET /api/public/selfhost/tile/{tileId}?w=} — a system tile image from the bot's resources, scaled
++ *       to {@code w} px wide (default 240), so the UI doesn't depend on an external CDN.</li>
++ * </ul>
++ */
++@RestController
++@RequiredArgsConstructor
++public class DraftViewController {
++
++    private final DraftViewService draftViewService;
++    private final Map<String, byte[]> tileCache = new ConcurrentHashMap<>();
++
++    @GetMapping(value = "/api/public/game/{gameName}/draft", produces = MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<DraftView> draft(@PathVariable String gameName) {
++        Game game = RequestContext.getGame();
++        if (game == null || game.isFowMode()) return ResponseEntity.notFound().build();
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(draftViewService.build(game));
++    }
++
++    @GetMapping(value = "/api/public/selfhost/tile/{tileId}", produces = MediaType.IMAGE_PNG_VALUE)
++    public ResponseEntity<byte[]> tile(@PathVariable String tileId, @RequestParam(defaultValue = "240") int w) {
++        int width = Math.clamp(w, 32, 345);
++        String id = tileId.replaceAll("\\.png$", "");
++        TileModel model = TileHelper.getTileById(id);
++        if (model == null) return ResponseEntity.notFound().build();
++        byte[] bytes = tileCache.computeIfAbsent(id + "@" + width, _ -> render(model, width));
++        if (bytes == null || bytes.length == 0) {
++            tileCache.remove(id + "@" + width);
++            return ResponseEntity.notFound().build();
++        }
++        return ResponseEntity.ok()
++                .cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(7)).cachePublic())
++                .contentType(MediaType.IMAGE_PNG)
++                .body(bytes);
++    }
++
++    private static byte[] render(TileModel model, int width) {
++        try {
++            BufferedImage src = ImageHelper.read(model.getTilePath());
++            if (src == null) return new byte[0];
++            int height = Math.round(src.getHeight() * (width / (float) src.getWidth()));
++            BufferedImage out = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
++            Graphics2D g = out.createGraphics();
++            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
++            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
++            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
++            g.drawImage(src, 0, 0, width, height, null);
++            g.dispose();
++            ByteArrayOutputStream bos = new ByteArrayOutputStream();
++            ImageIO.write(out, "png", bos);
++            return bos.toByteArray();
++        } catch (Exception e) {
++            return new byte[0];
++        }
++    }
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/DraftViewModels.java b/src/main/java/ti4/spring/api/selfhost/DraftViewModels.java
+new file mode 100644
+index 0000000..badcb38
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/DraftViewModels.java
+@@ -0,0 +1,144 @@
++package ti4.spring.api.selfhost;
++
++import java.util.List;
++
++/** JSON shapes for {@code GET /api/public/game/{gameName}/draft} (self-hosted web draft view). */
++public final class DraftViewModels {
++    private DraftViewModels() {}
++
++    /**
++     * @param system      "milty" (classic Milty draft, MiltyDraftManager) or "draft" (new DraftManager system, e.g. nucleus)
++     * @param status      "none" (no draft), "drafting", or "finished"
++     * @param version     changes whenever the game is saved; clients can skip re-render when unchanged
++     */
++    public record DraftView(
++            String game,
++            String system,
++            String status,
++            String phase,
++            long version,
++            String channelId,
++            List<DraftPlayer> players,
++            List<String> pickOrder,
++            int pickIndex,
++            String currentPlayer,
++            String nextPlayer,
++            List<SliceView> slices,
++            List<FactionView> factions,
++            List<OrderView> speakerOrder,
++            List<OrderView> seats,
++            List<CategoryView> otherCategories,
++            MapTemplateView mapTemplate,
++            Icons icons) {}
++
++    public record DraftPlayer(
++            String userId,
++            String name,
++            String color,
++            int draftPosition,
++            String faction,
++            String slice,
++            Integer speakerOrder,
++            Integer seat,
++            List<PickView> picks,
++            boolean current,
++            boolean next) {}
++
++    public record PickView(String type, String key, String label) {}
++
++    /**
++     * How to make a pick: press {@code customId} on message {@code messageId} in channel {@code channelId}.
++     * {@code messageId} is null when the button message couldn't be found (e.g. it was deleted).
++     */
++    public record ChoiceView(
++            String key, String label, String customId, String channelId, String messageId, String pickedBy) {}
++
++    public record SliceView(String name, List<TileView> tiles, SliceTotals totals, ChoiceView choice) {}
++
++    public record SliceTotals(
++            int resources,
++            int influence,
++            int optimalResources,
++            int optimalInfluence,
++            int optimalFlex,
++            int optimalTotal,
++            int planets,
++            int legendaries,
++            int anomalies,
++            List<String> techSkips,
++            List<String> wormholes) {}
++
++    public record TileView(
++            String id,
++            String name,
++            String tier,
++            String image,
++            int resources,
++            int influence,
++            List<String> wormholes,
++            List<String> anomalies,
++            List<PlanetView> planets) {}
++
++    public record PlanetView(
++            String id,
++            String name,
++            int resources,
++            int influence,
++            List<String> traits,
++            List<String> techSpecialties,
++            boolean legendary,
++            String legendaryAbility,
++            String legendaryText,
++            boolean station) {}
++
++    public record FactionView(
++            String alias,
++            String name,
++            String shortName,
++            String icon,
++            String source,
++            int commodities,
++            String complexity,
++            String homeSystem,
++            String homeSystemImage,
++            List<PlanetView> homePlanets,
++            List<String> abilities,
++            List<String> factionTech,
++            List<String> startingTech,
++            ChoiceView choice) {}
++
++    /** A numbered pick: speaker order position or seat. */
++    public record OrderView(int number, String label, String icon, ChoiceView choice) {}
++
++    public record CategoryView(String type, String label, List<ChoiceView> choices) {}
++
++    /**
++     * Template geometry in the bot's map pixel space (tile images are {@code tileWidth}x{@code tileHeight}).
++     * {@code sliceLayout[0]} is the home system; {@code sliceLayout[i+1]} is where slice tile {@code i} sits.
++     */
++    public record MapTemplateView(
++            String alias,
++            String description,
++            Integer playerCount,
++            int tileWidth,
++            int tileHeight,
++            List<Point> sliceLayout,
++            List<TemplatePosition> positions) {}
++
++    public record Point(int x, int y) {}
++
++    /** One hex on the galaxy. {@code tileId} is whatever the game map currently has there (draft fills it in). */
++    public record TemplatePosition(
++            String pos,
++            int x,
++            int y,
++            Integer playerNumber,
++            Integer miltyTileIndex,
++            boolean home,
++            String staticTileId,
++            String tileId,
++            String image) {}
++
++    /** Emoji image URLs (served by the shim) for common draft glyphs, keyed by name. */
++    public record Icons(java.util.Map<String, String> glyphs) {}
++}
+diff --git a/src/main/java/ti4/spring/api/selfhost/DraftViewService.java b/src/main/java/ti4/spring/api/selfhost/DraftViewService.java
+new file mode 100644
+index 0000000..8db5384
+--- /dev/null
++++ b/src/main/java/ti4/spring/api/selfhost/DraftViewService.java
+@@ -0,0 +1,658 @@
++package ti4.spring.api.selfhost;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.HashMap;
++import java.util.LinkedHashMap;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Objects;
++import java.util.Set;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++import lombok.RequiredArgsConstructor;
++import org.apache.commons.lang3.StringUtils;
++import org.springframework.stereotype.Service;
++import ti4.game.Game;
++import ti4.game.Planet;
++import ti4.game.Player;
++import ti4.game.Tile;
++import ti4.helpers.StringHelper;
++import ti4.image.Mapper;
++import ti4.image.PositionMapper;
++import ti4.image.TileHelper;
++import ti4.model.AbilityModel;
++import ti4.model.FactionModel;
++import ti4.model.MapTemplateModel;
++import ti4.model.MapTemplateModel.MapTemplateTile;
++import ti4.model.PlanetModel;
++import ti4.model.TechnologyModel;
++import ti4.model.TileModel;
++import ti4.model.WormholeModel;
++import ti4.service.draft.DraftChoice;
++import ti4.service.draft.DraftManager;
++import ti4.service.draft.Draftable;
++import ti4.service.draft.PlayerDraftState;
++import ti4.service.draft.draftables.FactionDraftable;
++import ti4.service.draft.draftables.SeatDraftable;
++import ti4.service.draft.draftables.SliceDraftable;
++import ti4.service.draft.draftables.SpeakerOrderDraftable;
++import ti4.service.draft.orchestrators.PublicSnakeDraftOrchestrator;
++import ti4.service.emoji.ExploreEmojis;
++import ti4.service.emoji.MiltyDraftEmojis;
++import ti4.service.emoji.MiscEmojis;
++import ti4.service.emoji.TI4Emoji;
++import ti4.service.emoji.TechEmojis;
++import ti4.service.milty.MiltyDraftManager;
++import ti4.service.milty.MiltyDraftManager.PlayerDraft;
++import ti4.service.milty.MiltyDraftSlice;
++import ti4.service.milty.MiltyDraftTile;
++import ti4.spring.api.selfhost.DraftViewModels.CategoryView;
++import ti4.spring.api.selfhost.DraftViewModels.ChoiceView;
++import ti4.spring.api.selfhost.DraftViewModels.DraftPlayer;
++import ti4.spring.api.selfhost.DraftViewModels.DraftView;
++import ti4.spring.api.selfhost.DraftViewModels.FactionView;
++import ti4.spring.api.selfhost.DraftViewModels.Icons;
++import ti4.spring.api.selfhost.DraftViewModels.MapTemplateView;
++import ti4.spring.api.selfhost.DraftViewModels.OrderView;
++import ti4.spring.api.selfhost.DraftViewModels.PickView;
++import ti4.spring.api.selfhost.DraftViewModels.PlanetView;
++import ti4.spring.api.selfhost.DraftViewModels.SliceTotals;
++import ti4.spring.api.selfhost.DraftViewModels.SliceView;
++import ti4.spring.api.selfhost.DraftViewModels.TemplatePosition;
++import ti4.spring.api.selfhost.DraftViewModels.TileView;
++
++/** Builds a complete, UI-ready description of a game's draft (classic Milty or the new DraftManager system). */
++@Service
++@RequiredArgsConstructor
++public class DraftViewService {
++
++    private static final Pattern EMOJI = Pattern.compile("<(a?):[\\w~]+:(\\d+)>");
++    static final String TILE_IMAGE_BASE = "/api/public/selfhost/tile/";
++    private static final int TILE_W = 345;
++    private static final int TILE_H = 300;
++
++    private final DraftButtonLocator buttonLocator;
++
++    public DraftView build(Game game) {
++        if (game.getDraftManagerUnsafe() != null || StringUtils.isNotBlank(game.getDraftString())) {
++            DraftManager dm = game.getDraftManager();
++            if (!dm.getDraftables().isEmpty() && dm.getOrchestrator() != null) return buildNewSystem(game, dm);
++        }
++        MiltyDraftManager milty = game.getMiltyDraftManagerUnsafe();
++        if (milty == null && StringUtils.isNotBlank(game.getMiltyDraftString())) milty = game.getMiltyDraftManager();
++        if (milty != null && !milty.getSlices().isEmpty() && !milty.getPlayers().isEmpty()) {
++            return buildMilty(game, milty);
++        }
++        return new DraftView(
++                game.getName(),
++                null,
++                "none",
++                game.getPhaseOfGame(),
++                game.getLastModifiedDate(),
++                channelId(game),
++                List.of(),
++                List.of(),
++                0,
++                null,
++                null,
++                List.of(),
++                List.of(),
++                List.of(),
++                List.of(),
++                List.of(),
++                templateView(game, game.getMapTemplateID()),
++                icons());
++    }
++
++    // ------------------------------------------------------------------------------------------
++    // Classic Milty draft
++    // ------------------------------------------------------------------------------------------
++
++    private DraftView buildMilty(Game game, MiltyDraftManager m) {
++        String channelId = channelId(game);
++        List<String> draftOrder = new ArrayList<>(m.getDraftOrder());
++        int pickIndex = m.getDraftIndex();
++        boolean finished = pickIndex >= draftOrder.size();
++        Map<String, String> buttonMessages = finished ? Map.of() : buttonLocator.locate(game);
++        String current = finished ? null : draftOrder.get(pickIndex);
++        String next = pickIndex + 1 < draftOrder.size() ? draftOrder.get(pickIndex + 1) : null;
++
++        Map<String, String> sliceOwner = new HashMap<>();
++        Map<String, String> factionOwner = new HashMap<>();
++        Map<Integer, String> orderOwner = new HashMap<>();
++        for (Map.Entry<String, PlayerDraft> e : m.getDraft().entrySet()) {
++            PlayerDraft pd = e.getValue();
++            if (pd.getSlice() != null) sliceOwner.put(pd.getSlice().getName(), e.getKey());
++            if (pd.getFaction() != null) factionOwner.put(pd.getFaction(), e.getKey());
++            if (pd.getPosition() != null) orderOwner.put(pd.getPosition(), e.getKey());
++        }
++
++        List<SliceView> slices = new ArrayList<>();
++        for (MiltyDraftSlice slice : m.getSlices()) {
++            String id = "milty_slice_" + slice.getName();
++            ChoiceView choice = new ChoiceView(
++                    slice.getName(),
++                    "Slice " + slice.getName(),
++                    id,
++                    channelId,
++                    buttonMessages.get(id),
++                    sliceOwner.get(slice.getName()));
++            slices.add(sliceView(slice, choice));
++        }
++
++        List<FactionView> factions = new ArrayList<>();
++        for (String alias : m.getFactionDraft()) {
++            FactionModel model = Mapper.getFaction(alias);
++            if (model == null) continue;
++            String id = "milty_faction_" + alias;
++            String name = alias.startsWith("keleres") ? "The Council Keleres" : model.getFactionName();
++            ChoiceView choice =
++                    new ChoiceView(alias, name, id, channelId, buttonMessages.get(id), factionOwner.get(alias));
++            factions.add(factionView(model, name, choice));
++        }
++
++        List<OrderView> order = new ArrayList<>();
++        for (int i = 1; i <= m.getPlayers().size(); i++) {
++            String id = "milty_order_" + i;
++            String label = StringHelper.ordinal(i) + " pick";
++            ChoiceView choice = new ChoiceView(
++                    Integer.toString(i), label, id, channelId, buttonMessages.get(id), orderOwner.get(i));
++            order.add(new OrderView(i, label, emojiUrl(MiltyDraftEmojis.getSpeakerPickEmoji(i)), choice));
++        }
++
++        List<DraftPlayer> players = new ArrayList<>();
++        int draftPosition = 1;
++        for (String userId : m.getPlayers()) {
++            PlayerDraft pd = m.getPlayerDraft(userId);
++            List<PickView> picks = new ArrayList<>();
++            if (pd != null && pd.getSlice() != null)
++                picks.add(new PickView(
++                        "slice",
++                        pd.getSlice().getName(),
++                        "Slice " + pd.getSlice().getName()));
++            if (pd != null && pd.getFaction() != null)
++                picks.add(new PickView("faction", pd.getFaction(), factionName(pd.getFaction())));
++            if (pd != null && pd.getPosition() != null)
++                picks.add(new PickView(
++                        "speakerOrder",
++                        pd.getPosition().toString(),
++                        StringHelper.ordinal(pd.getPosition()) + " pick"));
++            players.add(playerView(
++                    game,
++                    userId,
++                    draftPosition++,
++                    pd == null ? null : pd.getFaction(),
++                    pd == null || pd.getSlice() == null ? null : pd.getSlice().getName(),
++                    pd == null ? null : pd.getPosition(),
++                    null,
++                    picks,
++                    userId.equals(current),
++                    userId.equals(next)));
++        }
++
++        return new DraftView(
++                game.getName(),
++                "milty",
++                finished || m.isFinished() ? "finished" : "drafting",
++                game.getPhaseOfGame(),
++                game.getLastModifiedDate(),
++                channelId,
++                players,
++                draftOrder,
++                pickIndex,
++                current,
++                next,
++                slices,
++                factions,
++                order,
++                List.of(),
++                List.of(),
++                templateView(game, m.getMapTemplate() != null ? m.getMapTemplate() : game.getMapTemplateID()),
++                icons());
++    }
++
++    // ------------------------------------------------------------------------------------------
++    // New draft system (DraftManager + draftables + orchestrator)
++    // ------------------------------------------------------------------------------------------
++
++    private DraftView buildNewSystem(Game game, DraftManager dm) {
++        String channelId = channelId(game);
++        Map<String, PlayerDraftState> states = dm.getPlayerStates();
++
++        List<String> order = dm.getOrchestrator() instanceof PublicSnakeDraftOrchestrator
++                ? PublicSnakeDraftOrchestrator.getDraftOrder(dm)
++                : new ArrayList<>(states.keySet());
++        int rounds = 0;
++        for (Draftable d : dm.getDraftables()) {
++            if (d instanceof ti4.service.draft.draftables.FixedNumberDraftable f) rounds += f.getNumPicksPerPlayer();
++            else rounds++;
++        }
++        List<String> pickOrder = new ArrayList<>();
++        for (int r = 0; r < rounds; r++) {
++            List<String> round = new ArrayList<>(order);
++            if (r % 2 == 1) Collections.reverse(round);
++            pickOrder.addAll(round);
++        }
++        int pickIndex = 0;
++        for (PlayerDraftState s : states.values())
++            for (List<DraftChoice> l : s.getPicks().values()) pickIndex += l.size();
++        boolean finished = pickIndex >= pickOrder.size();
++        String current = null;
++        if (!finished && dm.getOrchestrator() instanceof PublicSnakeDraftOrchestrator psd && !order.isEmpty()) {
++            current = order.get(Math.max(0, Math.min(order.size() - 1, psd.getCurrentPlayerIndex())));
++        } else if (!finished) {
++            current = pickIndex < pickOrder.size() ? pickOrder.get(pickIndex) : null;
++        }
++        String next = !finished && pickIndex + 1 < pickOrder.size() ? pickOrder.get(pickIndex + 1) : null;
++        Map<String, String> buttonMessages = finished ? Map.of() : buttonLocator.locate(game);
++
++        Map<String, String> owner = new HashMap<>();
++        for (Map.Entry<String, PlayerDraftState> e : states.entrySet())
++            for (List<DraftChoice> l : e.getValue().getPicks().values())
++                for (DraftChoice c : l) owner.put(c.type() + "|" + c.choiceKey(), e.getKey());
++
++        List<SliceView> slices = new ArrayList<>();
++        List<FactionView> factions = new ArrayList<>();
++        List<OrderView> speaker = new ArrayList<>();
++        List<OrderView> seats = new ArrayList<>();
++        List<CategoryView> other = new ArrayList<>();
++        for (Draftable d : dm.getDraftables()) {
++            for (DraftChoice c : d.getAllDraftChoices()) {
++                String customId = c.button() == null ? null : c.button().getCustomId();
++                ChoiceView cv = new ChoiceView(
++                        c.choiceKey(),
++                        c.unformattedName(),
++                        customId,
++                        channelId,
++                        customId == null ? null : buttonMessages.get(customId),
++                        owner.get(c.type() + "|" + c.choiceKey()));
++                if (d instanceof SliceDraftable sd) {
++                    MiltyDraftSlice slice = sd.getSliceByName(c.choiceKey());
++                    if (slice != null) slices.add(sliceView(slice, cv));
++                } else if (d instanceof FactionDraftable) {
++                    FactionModel model = Mapper.getFaction(c.choiceKey());
++                    if (model != null) factions.add(factionView(model, c.unformattedName(), cv));
++                } else if (d instanceof SpeakerOrderDraftable) {
++                    int n = parseTrailingInt(c.choiceKey());
++                    speaker.add(new OrderView(n, c.unformattedName(), emojiUrl(c.identifyingEmoji()), cv));
++                } else if (d instanceof SeatDraftable) {
++                    int n = parseTrailingInt(c.choiceKey());
++                    seats.add(new OrderView(n, c.unformattedName(), emojiUrl(c.identifyingEmoji()), cv));
++                }
++            }
++            if (!(d instanceof SliceDraftable
++                    || d instanceof FactionDraftable
++                    || d instanceof SpeakerOrderDraftable
++                    || d instanceof SeatDraftable)) {
++                List<ChoiceView> choices = new ArrayList<>();
++                for (DraftChoice c : d.getAllDraftChoices()) {
++                    String customId = c.button() == null ? null : c.button().getCustomId();
++                    choices.add(new ChoiceView(
++                            c.choiceKey(),
++                            c.unformattedName(),
++                            customId,
++                            channelId,
++                            customId == null ? null : buttonMessages.get(customId),
++                            owner.get(c.type() + "|" + c.choiceKey())));
++                }
++                other.add(new CategoryView(d.getType().toString(), d.getDisplayName(), choices));
++            }
++        }
++
++        List<DraftPlayer> players = new ArrayList<>();
++        int draftPosition = 1;
++        for (String userId : order) {
++            PlayerDraftState s = states.get(userId);
++            List<PickView> picks = new ArrayList<>();
++            String faction = null, slice = null;
++            Integer speakerPos = null, seat = null;
++            for (Map.Entry<ti4.service.draft.DraftableType, List<DraftChoice>> e :
++                    s.getPicks().entrySet()) {
++                for (DraftChoice c : e.getValue()) {
++                    String type = typeKey(e.getKey().toString());
++                    picks.add(new PickView(type, c.choiceKey(), c.unformattedName()));
++                    switch (type) {
++                        case "faction" -> faction = c.choiceKey();
++                        case "slice" -> slice = c.choiceKey();
++                        case "speakerOrder" -> speakerPos = parseTrailingInt(c.choiceKey());
++                        case "seat" -> seat = parseTrailingInt(c.choiceKey());
++                        default -> {}
++                    }
++                }
++            }
++            players.add(playerView(
++                    game,
++                    userId,
++                    draftPosition++,
++                    faction,
++                    slice,
++                    speakerPos,
++                    seat,
++                    picks,
++                    userId.equals(current),
++                    userId.equals(next)));
++        }
++
++        return new DraftView(
++                game.getName(),
++                "draft",
++                finished ? "finished" : "drafting",
++                game.getPhaseOfGame(),
++                game.getLastModifiedDate(),
++                channelId,
++                players,
++                pickOrder,
++                pickIndex,
++                current,
++                next,
++                slices,
++                factions,
++                speaker,
++                seats,
++                other,
++                templateView(game, game.getMapTemplateID()),
++                icons());
++    }
++
++    private static String typeKey(String type) {
++        return switch (type) {
++            case "Slice" -> "slice";
++            case "Faction" -> "faction";
++            case "SpeakerOrder" -> "speakerOrder";
++            case "Seat" -> "seat";
++            default -> type;
++        };
++    }
++
++    // ------------------------------------------------------------------------------------------
++    // Shared pieces
++    // ------------------------------------------------------------------------------------------
++
++    private static String channelId(Game game) {
++        try {
++            var ch = game.getMainGameChannel();
++            return ch == null ? null : ch.getId();
++        } catch (Exception e) {
++            return null;
++        }
++    }
++
++    private static DraftPlayer playerView(
++            Game game,
++            String userId,
++            int draftPosition,
++            String faction,
++            String slice,
++            Integer speakerOrder,
++            Integer seat,
++            List<PickView> picks,
++            boolean current,
++            boolean next) {
++        Player p = game.getPlayer(userId);
++        String name = p == null ? userId : p.getUserName();
++        String color = p == null ? null : p.getColor();
++        if ("null".equals(color)) color = null;
++        return new DraftPlayer(
++                userId, name, color, draftPosition, faction, slice, speakerOrder, seat, picks, current, next);
++    }
++
++    private static int parseTrailingInt(String s) {
++        Matcher m = Pattern.compile("(\\d+)$").matcher(s == null ? "" : s);
++        return m.find() ? Integer.parseInt(m.group(1)) : 0;
++    }
++
++    private static String factionName(String alias) {
++        FactionModel model = Mapper.getFaction(alias);
++        if (model == null) return alias;
++        return alias.startsWith("keleres") ? "The Council Keleres" : model.getFactionName();
++    }
++
++    private static SliceView sliceView(MiltyDraftSlice slice, ChoiceView choice) {
++        List<TileView> tiles = new ArrayList<>();
++        Set<String> skips = new LinkedHashSet<>();
++        List<String> skipList = new ArrayList<>();
++        List<String> wormholes = new ArrayList<>();
++        int planets = 0, legendaries = 0, anomalies = 0;
++        for (MiltyDraftTile dt : slice.getTiles()) {
++            TileView tv = tileView(dt);
++            tiles.add(tv);
++            planets += (int) tv.planets().stream().filter(p -> !p.station()).count();
++            legendaries += (int) tv.planets().stream().filter(PlanetView::legendary).count();
++            if (!tv.anomalies().isEmpty()) anomalies++;
++            wormholes.addAll(tv.wormholes());
++            for (PlanetView p : tv.planets()) {
++                skipList.addAll(p.techSpecialties());
++                skips.addAll(p.techSpecialties());
++            }
++        }
++        SliceTotals totals = new SliceTotals(
++                slice.getTotalRes(),
++                slice.getTotalInf(),
++                slice.getOptimalRes(),
++                slice.getOptimalInf(),
++                slice.getOptimalFlex(),
++                slice.getOptimalTotalValue(),
++                planets,
++                legendaries,
++                anomalies,
++                skipList,
++                wormholes);
++        return new SliceView(slice.getName(), tiles, totals, choice);
++    }
++
++    private static TileView tileView(MiltyDraftTile dt) {
++        Tile tile = dt.getTile();
++        TileModel model = tile.getTileModel();
++        List<String> wormholes = new ArrayList<>();
++        if (model != null && model.getWormholes() != null) {
++            for (WormholeModel.Wormhole wh : model.getWormholes()) wormholes.add(wh.toString().toLowerCase());
++        }
++        if (wormholes.isEmpty()) {
++            if (dt.isHasAlphaWH()) wormholes.add("alpha");
++            if (dt.isHasBetaWH()) wormholes.add("beta");
++            if (dt.isHasOtherWH()) wormholes.add("gamma");
++        }
++        List<String> anomalies = new ArrayList<>();
++        if (model != null) {
++            if (model.isAsteroidField()) anomalies.add("asteroid");
++            if (model.isSupernova()) anomalies.add("supernova");
++            if (model.isNebula()) anomalies.add("nebula");
++            if (model.isGravityRift()) anomalies.add("rift");
++            if (model.isScar()) anomalies.add("scar");
++        }
++        List<PlanetView> planets = new ArrayList<>();
++        for (Planet p : tile.getPlanetUnitHolders()) planets.add(planetView(p));
++        return new TileView(
++                tile.getTileID(),
++                model == null ? tile.getTileID() : model.getNameNullSafe(),
++                dt.getTierList() == null ? null : dt.getTierList().toString(),
++                TILE_IMAGE_BASE + tile.getTileID(),
++                dt.getResources(),
++                dt.getInfluence(),
++                wormholes,
++                anomalies,
++                planets);
++    }
++
++    private static PlanetView planetView(Planet p) {
++        PlanetModel model = p.getPlanetModel();
++        List<String> traits = new ArrayList<>();
++        for (String t : p.getPlanetTypes()) {
++            if (t != null && !t.isBlank() && !"none".equalsIgnoreCase(t)) traits.add(t.toLowerCase());
++        }
++        List<String> skips = new ArrayList<>();
++        for (String s : p.getTechSpecialities()) if (s != null && !s.isBlank()) skips.add(s.toLowerCase());
++        String legendaryAbility = model == null ? null : model.getLegendaryAbilityName();
++        String legendaryText = model == null ? null : model.getLegendaryAbilityText();
++        return new PlanetView(
++                p.getName(),
++                model == null ? p.getName() : model.getName(),
++                p.getResources(),
++                p.getInfluence(),
++                traits,
++                skips,
++                p.isLegendary(),
++                legendaryAbility,
++                legendaryText,
++                p.isSpaceStation());
++    }
++
++    private static PlanetView planetModelView(PlanetModel model) {
++        List<String> traits = new ArrayList<>();
++        if (model.getPlanetTypes() != null)
++            for (var t : model.getPlanetTypes()) traits.add(t.toString().toLowerCase());
++        List<String> skips = new ArrayList<>();
++        if (model.getTechSpecialties() != null)
++            for (var s : model.getTechSpecialties()) skips.add(s.toString().toLowerCase());
++        return new PlanetView(
++                model.getId(),
++                model.getName(),
++                model.getResources(),
++                model.getInfluence(),
++                traits,
++                skips,
++                model.getLegendaryAbilityName() != null,
++                model.getLegendaryAbilityName(),
++                model.getLegendaryAbilityText(),
++                false);
++    }
++
++    private static FactionView factionView(FactionModel model, String displayName, ChoiceView choice) {
++        List<PlanetView> homePlanets = new ArrayList<>();
++        if (model.getHomePlanets() != null) {
++            for (String id : model.getHomePlanets()) {
++                PlanetModel pm = Mapper.getPlanet(id);
++                if (pm != null) homePlanets.add(planetModelView(pm));
++            }
++        }
++        List<String> abilities = new ArrayList<>();
++        if (model.getAbilities() != null) {
++            for (String id : model.getAbilities()) {
++                AbilityModel am = Mapper.getAbility(id);
++                abilities.add(am == null ? id : am.getName());
++            }
++        }
++        List<String> factionTech = techNames(model.getFactionTech());
++        List<String> startingTech = techNames(model.getStartingTech());
++        String home = model.getHomeSystem();
++        String homeImage = null;
++        if (home != null && TileHelper.getTileById(home) != null) homeImage = TILE_IMAGE_BASE + home;
++        return new FactionView(
++                model.getAlias(),
++                displayName,
++                model.getShortName(),
++                emojiUrl(model.getFactionEmoji()),
++                model.getSource() == null ? null : model.getSource().toString(),
++                model.getCommodities(),
++                model.getComplexity(),
++                home,
++                homeImage,
++                homePlanets,
++                abilities,
++                factionTech,
++                startingTech,
++                choice);
++    }
++
++    private static List<String> techNames(List<String> ids) {
++        List<String> out = new ArrayList<>();
++        if (ids == null) return out;
++        for (String id : ids) {
++            TechnologyModel tm = Mapper.getTech(id);
++            out.add(tm == null ? id : tm.getName());
++        }
++        return out;
++    }
++
++    private static MapTemplateView templateView(Game game, String alias) {
++        MapTemplateModel template = alias == null ? null : Mapper.getMapTemplate(alias);
++        if (template == null) return null;
++        List<DraftViewModels.Point> layout = new ArrayList<>();
++        try {
++            for (java.awt.Point p : template.tileDisplayCoords()) layout.add(new DraftViewModels.Point(p.x, p.y));
++        } catch (Exception ignored) {
++            // leave empty
++        }
++        Map<String, TemplatePosition> positions = new LinkedHashMap<>();
++        if (template.getTemplateTiles() != null) {
++            for (MapTemplateTile t : template.getTemplateTiles()) {
++                if (t.getPos() == null) continue;
++                positions.put(t.getPos(), position(game, t.getPos(), t));
++            }
++        }
++        for (String pos : game.getTileMap().keySet()) {
++            if (!positions.containsKey(pos)) positions.put(pos, position(game, pos, null));
++        }
++        List<TemplatePosition> list = positions.values().stream()
++                .filter(Objects::nonNull)
++                .toList();
++        return new MapTemplateView(
++                template.getAlias(),
++                template.getDescr(),
++                template.getPlayerCount(),
++                TILE_W,
++                TILE_H,
++                layout,
++                list);
++    }
++
++    private static TemplatePosition position(Game game, String pos, MapTemplateTile t) {
++        java.awt.Point p = PositionMapper.getTilePosition(pos);
++        if (p == null) return null;
++        Tile tile = game.getTileByPosition(pos);
++        String tileId = tile == null ? null : tile.getTileID();
++        String image = tileId == null ? null : TILE_IMAGE_BASE + tileId;
++        return new TemplatePosition(
++                pos,
++                p.x,
++                p.y,
++                t == null ? null : t.getPlayerNumber(),
++                t == null ? null : t.getMiltyTileIndex(),
++                t != null && Boolean.TRUE.equals(t.getHome()),
++                t == null ? null : t.getStaticTileId(),
++                tileId,
++                image);
++    }
++
++    private static Icons icons() {
++        Map<String, String> g = new LinkedHashMap<>();
++        put(g, "propulsion", TechEmojis.PropulsionTech);
++        put(g, "biotic", TechEmojis.BioticTech);
++        put(g, "cybernetic", TechEmojis.CyberneticTech);
++        put(g, "warfare", TechEmojis.WarfareTech);
++        put(g, "alpha", MiscEmojis.WHalpha);
++        put(g, "beta", MiscEmojis.WHbeta);
++        put(g, "gamma", MiscEmojis.WHgamma);
++        put(g, "legendary", MiscEmojis.LegendaryPlanet);
++        put(g, "speaker", MiscEmojis.SpeakerToken);
++        put(g, "resources", MiscEmojis.resources);
++        put(g, "influence", MiscEmojis.influence);
++        put(g, "cultural", ExploreEmojis.Cultural);
++        put(g, "industrial", ExploreEmojis.Industrial);
++        put(g, "hazardous", ExploreEmojis.Hazardous);
++        put(g, "frontier", ExploreEmojis.Frontier);
++        return new Icons(g);
++    }
++
++    private static void put(Map<String, String> map, String key, TI4Emoji emoji) {
++        String url = emojiUrl(emoji);
++        if (url != null) map.put(key, url);
++    }
++
++    private static String emojiUrl(TI4Emoji emoji) {
++        try {
++            return emoji == null ? null : emojiUrl(emoji.emojiString());
++        } catch (Exception e) {
++            return null;
++        }
++    }
++
++    static String emojiUrl(String formatted) {
++        if (formatted == null) return null;
++        Matcher m = EMOJI.matcher(formatted);
++        if (!m.find()) return null;
++        return "/emojis/" + m.group(2) + ("a".equals(m.group(1)) ? ".gif" : ".png");
 +    }
 +}

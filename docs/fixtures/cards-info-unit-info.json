@@ -124,17 +124,20 @@
             "style": 3,
             "disabled": false,
             "label": "Unit Info",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "refreshUnitInfoAll",
             "style": 3,
             "disabled": false,
             "label": "Show All Units",
-            "type": 2
+            "type": 2,
+            "id": 3
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

@@ -1,7 +1,7 @@
 {
   "t": "modal",
-  "interaction_id": "1558159893683372032",
-  "nonce": "Bob-7",
+  "interaction_id": "1558168278818488320",
+  "nonce": "Bob-78",
   "modal": {
     "components": [
       {
@@ -10,11 +10,14 @@
           "style": 2,
           "placeholder": "Start typing your notes...",
           "type": 4,
-          "required": true
+          "value": "Bob plans: take Mecatol",
+          "required": true,
+          "id": 2
         },
         "description": null,
         "label": "Edit summary",
-        "type": 18
+        "type": 18,
+        "id": 1
       }
     ],
     "custom_id": "notepadModal",

@@ -105,10 +105,12 @@
             "style": 3,
             "disabled": false,
             "label": "Leader Info",
-            "type": 2
+            "type": 2,
+            "id": 2
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

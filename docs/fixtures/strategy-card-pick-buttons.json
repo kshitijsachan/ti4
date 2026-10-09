@@ -64,7 +64,8 @@
             "style": 2,
             "disabled": false,
             "label": "Leadership",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "emoji": {
@@ -76,7 +77,8 @@
             "style": 2,
             "disabled": false,
             "label": "Diplomacy",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "emoji": {
@@ -88,7 +90,8 @@
             "style": 2,
             "disabled": false,
             "label": "Politics",
-            "type": 2
+            "type": 2,
+            "id": 4
           },
           {
             "emoji": {
@@ -100,7 +103,8 @@
             "style": 2,
             "disabled": false,
             "label": "Construction",
-            "type": 2
+            "type": 2,
+            "id": 5
           },
           {
             "emoji": {
@@ -112,10 +116,12 @@
             "style": 2,
             "disabled": false,
             "label": "Trade",
-            "type": 2
+            "type": 2,
+            "id": 6
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       },
       {
         "components": [
@@ -129,7 +135,8 @@
             "style": 2,
             "disabled": false,
             "label": "Warfare",
-            "type": 2
+            "type": 2,
+            "id": 8
           },
           {
             "emoji": {
@@ -141,7 +148,8 @@
             "style": 2,
             "disabled": false,
             "label": "Technology",
-            "type": 2
+            "type": 2,
+            "id": 9
           },
           {
             "emoji": {
@@ -153,17 +161,20 @@
             "style": 2,
             "disabled": false,
             "label": "Imperial",
-            "type": 2
+            "type": 2,
+            "id": 10
           },
           {
             "custom_id": "ultimateUndo_25",
             "style": 2,
             "disabled": false,
             "label": "UNDO",
-            "type": 2
+            "type": 2,
+            "id": 11
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 7
       }
     ],
     "sticker_items": [],

@@ -34,17 +34,20 @@
             "style": 3,
             "disabled": false,
             "label": "Yes",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "wrongButtonEphemeral_false",
             "style": 4,
             "disabled": false,
             "label": "No",
-            "type": 2
+            "type": 2,
+            "id": 3
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

@@ -59,24 +59,28 @@
             "style": 3,
             "disabled": false,
             "label": "Accept",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "rejectOffer_camouflage",
             "style": 4,
             "disabled": false,
             "label": "Reject",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "resetOffer_camouflage",
             "style": 4,
             "disabled": false,
             "label": "Reject and CounterOffer",
-            "type": 2
+            "type": 2,
+            "id": 4
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],

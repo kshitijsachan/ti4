@@ -39,24 +39,28 @@
             "style": 3,
             "disabled": false,
             "label": "Orbital Drop",
-            "type": 2
+            "type": 2,
+            "id": 2
           },
           {
             "custom_id": "FFCC_sol_componentActionRes_generic_",
             "style": 2,
             "disabled": false,
             "label": "Generic Component Action",
-            "type": 2
+            "type": 2,
+            "id": 3
           },
           {
             "custom_id": "deleteButtons",
             "style": 4,
             "disabled": false,
             "label": "Cancel",
-            "type": 2
+            "type": 2,
+            "id": 4
           }
         ],
-        "type": 1
+        "type": 1,
+        "id": 1
       }
     ],
     "sticker_items": [],
