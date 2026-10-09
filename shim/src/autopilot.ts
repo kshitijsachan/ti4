@@ -56,7 +56,7 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|queueAWhen|queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|^sc_(?!no_follow)|^score|_score|^po_scoring|^get_so_)/i;
+  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|^sc_(?!no_follow)|^score|_score|^po_scoring|^get_so_)/i;
 const BLOCKED_LABEL = /^(undo|un-|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -88,6 +88,7 @@ const RULES: Rule[] = [
   { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, why: "agenda: pre-pass on shenanigans" },
   { id: /^declineToQueueA(When|nAfter)$/, score: 72, why: "agenda: no whens / afters" },
   { id: /resolveAgendaVote_0$/, score: 78, why: "agenda: abstain" },
+  { id: /^resolveAgendaVote_outcomeTie/, score: 74, why: "agenda: speaker breaks the tie" },
   { label: /^(?!pre-).*\babstain\b/i, score: 77, why: "agenda: abstain" },
   // Combat: auto-assign hits, roll dice.
   { id: /^autoAssign/, score: 76, why: "combat: auto-assign hits" },
@@ -113,6 +114,9 @@ const RULES: Rule[] = [
 
 /** Confirmations that offer a way to take the choice back: their lone button is not a question for us. */
 const TAKE_BACK_TEXT = /change your mind|if this was an accident|can change (that|your decision)|to undo|remove the preset|be asked (again|to decide)/i;
+
+/** The bot reminding a player that it waits on them. */
+const NUDGE = /this is a nudge|currently waiting on you/i;
 
 const BUSY_WRONG = /these buttons are for someone else/i;
 const MIN_DELAY = 1500;
@@ -214,7 +218,9 @@ class SeatPilot {
   /** When we last pressed a control by `${channel}:${custom id}:${content}`: the bot often re-posts a prompt. */
   private recent = new Map<string, number>();
   /** Messages we pressed on, with their controls then: answered until the bot changes them. */
-  private answered = new Map<string, string>();
+  private answered = new Map<string, { sig: string; at: number }>();
+  /** Per channel, when the bot last nudged us there ("the queue is currently waiting on you"). */
+  private nudges = new Map<string, number>();
 
   constructor(
     private mgr: Autopilot,
@@ -302,6 +308,12 @@ class SeatPilot {
       if (!game) continue;
       const list = this.store.messages(ch.id);
       for (const m of list.slice(-WINDOW)) {
+        if (NUDGE.test(String(m.content ?? "")) && (!m._ephemeral_for || m._ephemeral_for === me) && (ch.type === 12 || String(m.content).includes(`<@${me}>`))) {
+          const at = Date.parse(m.timestamp);
+          if (at > (this.nudges.get(ch.id) ?? 0)) this.nudges.set(ch.id, at);
+        }
+      }
+      for (const m of list.slice(-WINDOW)) {
         const c = await this.consider(m, ch, game);
         if (c) choices.push(c);
       }
@@ -325,10 +337,22 @@ class SeatPilot {
     let controls = controlsOf(m.components);
     if (!controls.length) return null;
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
+    // When we answered this prompt (unchanged since): this run, a re-posted copy, or before a restart.
+    const sig = signature(controls);
+    const mine = this.answered.get(m.id);
     const press = m._presses?.[me];
-    if (press && Date.parse(press.at) < this.started && press.controls === signature(controls)) return null;
-    const answered =
-      this.answered.get(m.id) === signature(controls) || Date.now() - (this.recent.get(this.promptKey(m, controls)) ?? 0) < REPOST_MS;
+    const repost = this.recent.get(this.promptKey(m, controls));
+    const answeredAt =
+      mine?.sig === sig
+        ? mine.at
+        : repost !== undefined && Date.now() - repost < REPOST_MS
+          ? repost
+          : press && press.controls === sig
+            ? Date.parse(press.at)
+            : undefined;
+    // A later nudge in this channel says the bot still waits on us: look at the prompt again.
+    const answered = answeredAt !== undefined && !((this.nudges.get(m.channel_id) ?? 0) > answeredAt);
+    if (answered && press && !mine && Date.parse(press.at) < this.started) return null;
     controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`) && !this.pressedRecently(m, c));
 
     const faction = await this.faction(game, m);
@@ -351,7 +375,9 @@ class SeatPilot {
 
     const myThread = ch.type === 12 && (s.thread_members[ch.id] ?? []).includes(me);
     const factionThread = !!faction && ch.type === 11 && String(ch.name).toLowerCase().includes(faction);
-    const strong = m._ephemeral_for === me || ffccMine || (m._prompted_for === me && !mentionsOther);
+    // Only we are named in an actions-channel post ("@Bot Beta, as Speaker, please decide a winner").
+    const calledOut = mentionsMe && ch.type === 0 && !(m.mention_roles ?? []).length && !/is up to draft/.test(content);
+    const strong = m._ephemeral_for === me || ffccMine || (m._prompted_for === me && !mentionsOther) || calledOut;
     const ctx: Ctx = {
       strong,
       direct: strong || (mentionsMe && !/is up to draft/.test(content)) || myThread || factionThread,
@@ -482,7 +508,7 @@ class SeatPilot {
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
     this.pressed.add(key);
-    this.answered.set(msg.id, signature(controlsOf(fresh.components)));
+    this.answered.set(msg.id, { sig: signature(controlsOf(fresh.components)), at: Date.now() });
     this.recent.set(`${msg.channel_id}:label:${control.label}`, Date.now());
     this.recent.set(this.promptKey(fresh, controlsOf(fresh.components)), Date.now());
     this.recent.set(this.repostKey(msg, control), Date.now());
