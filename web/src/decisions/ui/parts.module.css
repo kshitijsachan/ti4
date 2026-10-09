@@ -1,0 +1,162 @@
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--play-ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.prose :global(p) {
+  margin: 0 0 6px;
+}
+
+.muted {
+  color: var(--play-ink-muted);
+  font-size: 12px;
+}
+
+.proseBody {
+  overflow: hidden;
+}
+
+.clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--clamp);
+}
+
+.textLink {
+  align-self: flex-start;
+  color: var(--play-accent-ink);
+  font-size: 12px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sectionLabel {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--play-ink-muted);
+}
+
+.scArt {
+  display: block;
+  height: auto;
+  border-radius: 6px;
+  user-select: none;
+}
+
+.scFallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--play-border);
+  border-radius: 6px;
+  color: var(--play-ink);
+  font-size: 13px;
+}
+
+.scFallbackNum {
+  font-family: var(--font-display);
+  font-size: 32px;
+  color: var(--play-ink-bright);
+}
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.statValue {
+  font-family: var(--font-data);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--play-ink-bright);
+}
+
+.statLabel {
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.warn .statValue {
+  color: rgb(var(--play-yellow));
+}
+
+.good .statValue {
+  color: rgb(var(--play-green));
+}
+
+.factionIcon {
+  flex: none;
+  object-fit: contain;
+}
+
+.playerTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--play-ink-bright);
+  font-weight: 600;
+}
+
+.units {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.unit {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.unitImg {
+  height: 34px;
+  width: auto;
+  max-width: 64px;
+  object-fit: contain;
+}
+
+.unitCount {
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--play-ink-bright);
+}
+
+.damaged {
+  font-size: 10px;
+  color: rgb(var(--play-yellow));
+}
+
+.none {
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}

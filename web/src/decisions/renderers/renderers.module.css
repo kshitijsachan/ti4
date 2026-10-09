@@ -1,0 +1,424 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.dim {
+  color: var(--play-ink-muted);
+  font-weight: 400;
+}
+
+.num {
+  font-family: var(--font-data);
+  color: var(--play-ink-bright);
+}
+
+.warn {
+  color: rgb(var(--play-yellow));
+}
+
+.cardText {
+  margin: 0;
+  color: var(--play-ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.statRow {
+  display: flex;
+  gap: 16px;
+}
+
+/* Strategy card pick */
+
+.pickLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 252px;
+  gap: 20px;
+  align-items: start;
+}
+
+.scGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 112px);
+  gap: 10px;
+}
+
+.scTile {
+  position: relative;
+  border-radius: 7px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition:
+    transform 140ms var(--play-ease),
+    outline-color 140ms var(--play-ease),
+    filter 140ms var(--play-ease);
+}
+
+.scTile:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.scTileSelected {
+  outline-color: rgba(var(--play-yellow), 0.85);
+}
+
+.scTileTaken {
+  filter: grayscale(0.85) brightness(0.55);
+}
+
+.scTile:disabled {
+  cursor: default;
+}
+
+.tgBadge,
+.takenBadge {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tgBadge {
+  background: rgba(var(--play-yellow), 0.92);
+  color: #1a1404;
+}
+
+.takenBadge {
+  background: rgba(2, 6, 23, 0.85);
+  color: var(--play-ink-bright);
+  border: 1px solid var(--play-border);
+  font-family: var(--font-text);
+}
+
+.tileSpinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.scDetail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.scDetailMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.scName {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--play-ink-bright);
+}
+
+.tgLine {
+  font-size: 12px;
+  color: rgb(var(--play-yellow));
+}
+
+.takenNote {
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.bigConfirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--play-green), 0.6);
+  background: rgba(var(--play-green), 0.2);
+  color: var(--play-ink-bright);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bigConfirm:hover:not(:disabled) {
+  background: rgba(var(--play-green), 0.3);
+}
+
+/* Strategy card follow */
+
+.followLayout {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+/* Turn */
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.actionTile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--dec-tile-edge);
+  background: var(--dec-tile-fill);
+  color: var(--play-ink-bright);
+  text-align: left;
+  transition:
+    background 120ms var(--play-ease),
+    border-color 120ms var(--play-ease);
+}
+
+.actionTile:hover:not(:disabled) {
+  background: var(--dec-tile-fill-hover);
+  border-color: var(--dec-tile-edge-hover);
+}
+
+.actionTile:disabled {
+  opacity: 0.5;
+}
+
+.tone_go {
+  --dec-tile-fill: rgba(var(--play-green), 0.1);
+  --dec-tile-fill-hover: rgba(var(--play-green), 0.2);
+  --dec-tile-edge: rgba(var(--play-green), 0.4);
+  --dec-tile-edge-hover: rgba(var(--play-green), 0.7);
+}
+
+.tone_card {
+  --dec-tile-fill: rgba(var(--play-yellow), 0.08);
+  --dec-tile-fill-hover: rgba(var(--play-yellow), 0.16);
+  --dec-tile-edge: rgba(var(--play-yellow), 0.4);
+  --dec-tile-edge-hover: rgba(var(--play-yellow), 0.7);
+}
+
+.tone_stop {
+  --dec-tile-fill: rgba(var(--play-red), 0.07);
+  --dec-tile-fill-hover: rgba(var(--play-red), 0.16);
+  --dec-tile-edge: rgba(var(--play-red), 0.35);
+  --dec-tile-edge-hover: rgba(var(--play-red), 0.65);
+}
+
+.actionIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  color: var(--play-ink-bright);
+}
+
+.actionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.actionTitle {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.actionSub {
+  font-size: 12px;
+  color: var(--play-ink-muted);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Agenda */
+
+.agendaCard {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(147, 51, 234, 0.35);
+  background: rgba(147, 51, 234, 0.07);
+}
+
+.agendaCompact {
+  grid-template-columns: 40px minmax(0, 1fr);
+  padding: 8px 10px;
+}
+
+.agendaBack {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.agendaBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agendaHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.agendaName {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--play-ink-bright);
+}
+
+.agendaTarget {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--play-ink-muted);
+}
+
+.badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lawBadge {
+  background: rgba(147, 51, 234, 0.25);
+  color: #d8b4fe;
+}
+
+.directiveBadge {
+  background: rgba(59, 130, 246, 0.22);
+  color: #bfdbfe;
+}
+
+/* Combat */
+
+.combatBoard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.combatSide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--play-hairline-strong);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.combatSideHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.versus {
+  align-self: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--play-ink-muted);
+}
+
+/* Trade */
+
+.ledger {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ledgerSide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--play-hairline-strong);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ledgerHead {
+  font-size: 13px;
+}
+
+.items {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--play-ink-bright);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Reaction */
+
+.cardChips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--play-ink-bright);
+}
+
+@media (max-width: 720px) {
+  .pickLayout,
+  .followLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .scGrid {
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  }
+
+  .ledger,
+  .combatBoard {
+    grid-template-columns: 1fr;
+  }
+
+  .versus {
+    display: none;
+  }
+}
