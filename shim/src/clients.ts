@@ -52,6 +52,38 @@ export class Clients implements Listener {
     this.send(client, this.hello(userId));
   }
 
+  /**
+   * A server-side player (an autopilot seat) that speaks the same protocol as a browser: it receives the
+   * frames a browser of that seat would and its ops run through the same handlers, so the bot sees ordinary
+   * interactions. Returns `send(op)` and `close()`.
+   */
+  attachVirtual(userId: string, onFrame: (frame: Json) => void): { send(op: Json): void; close(): void } {
+    const handlers: Record<string, ((arg?: unknown) => void)[]> = {};
+    const fake = {
+      readyState: 1,
+      send(data: string) {
+        try {
+          onFrame(JSON.parse(data));
+        } catch (e) {
+          log.error(`virtual client frame failed: ${(e as Error).stack}`);
+        }
+      },
+      on(event: string, fn: (arg?: unknown) => void) {
+        (handlers[event] ??= []).push(fn);
+      },
+    };
+    this.attach(fake as unknown as WebSocket, userId);
+    return {
+      send: (op: Json) => {
+        for (const fn of handlers.message ?? []) fn(Buffer.from(JSON.stringify(op)));
+      },
+      close: () => {
+        fake.readyState = 3;
+        for (const fn of handlers.close ?? []) fn();
+      },
+    };
+  }
+
   private send(c: Client, payload: Json) {
     if (c.ws.readyState === 1) c.ws.send(JSON.stringify(payload));
   }

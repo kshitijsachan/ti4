@@ -25,6 +25,8 @@ export type Seat = {
   /** Secret that identifies the player in their invite link. */
   token: string;
   user_id: string;
+  /** Played by the shim's autopilot (see autopilot.ts) instead of a person. */
+  autopilot?: boolean;
 };
 
 export type StoredMessage = Json & {

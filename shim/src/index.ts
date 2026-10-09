@@ -8,6 +8,7 @@ import { Hub } from "./hub.js";
 import { Rest } from "./rest.js";
 import { Clients } from "./clients.js";
 import { Lobby } from "./lobby.js";
+import { Autopilot } from "./autopilot.js";
 import { defaultAvatarPng, discordError, sendJson } from "./http.js";
 import { log } from "./log.js";
 
@@ -42,6 +43,8 @@ const clients = new Clients(hub);
 // Threads created before mention auto-join existed: replay it over stored messages (idempotent).
 for (const list of Object.values(store.state.messages)) for (const m of list) hub.autoJoinMentioned(m);
 const lobby = new Lobby(hub, clients);
+// Seats flagged `autopilot` are played by the shim itself (solo testing).
+lobby.autopilot = new Autopilot(hub, clients, BOT_API);
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",

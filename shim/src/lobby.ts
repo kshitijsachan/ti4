@@ -3,10 +3,13 @@ import { token } from "./ids.js";
 import { readBody, sendJson, discordError } from "./http.js";
 import type { Hub } from "./hub.js";
 import type { Clients } from "./clients.js";
+import type { Autopilot } from "./autopilot.js";
 import type { Json } from "./store.js";
 
 /** Site-level endpoints that have no Discord equivalent: player links and table setup. */
 export class Lobby {
+  autopilot?: Autopilot;
+
   constructor(private hub: Hub, private clients: Clients) {
     this.ensureLobbyChannel();
     this.ensureBotLogChannel();
@@ -62,13 +65,14 @@ export class Lobby {
   }
 
   /** Creates a player (Discord user) and returns their private link token. */
-  createSeat(name: string): Json {
+  createSeat(name: string, autopilot = false): Json {
     const user = this.store.addUser(name);
     const tok = token(18);
-    this.store.state.seats[tok] = { token: tok, user_id: user.id };
+    this.store.state.seats[tok] = { token: tok, user_id: user.id, ...(autopilot ? { autopilot: true } : {}) };
     this.store.scheduleSave();
     this.hub.memberAdd(user.id);
-    return { name, user_id: user.id, token: tok };
+    if (autopilot) this.autopilot?.sync();
+    return { name, user_id: user.id, token: tok, autopilot };
   }
 
   async handle(req: IncomingMessage, res: ServerResponse, path: string, query: URLSearchParams) {
@@ -95,7 +99,14 @@ export class Lobby {
       if (!this.isAdmin(query, body)) return discordError(res, 403, 0, "bad key");
       const names: string[] = (body.names ?? []).map((n: string) => String(n).trim()).filter(Boolean);
       if (!names.length) return discordError(res, 400, 0, "no names");
-      return sendJson(res, 200, names.map((n) => this.createSeat(n.slice(0, 32))));
+      return sendJson(res, 200, names.map((n) => this.createSeat(n.slice(0, 32), body.autopilot === true)));
+    }
+
+    /** Hands a seat to the shim's autopilot (or back): {user_id, enabled}. */
+    if (method === "POST" && path === "/admin/autopilot") {
+      if (!this.isAdmin(query, body)) return discordError(res, 403, 0, "bad key");
+      if (!this.autopilot?.setEnabled(String(body.user_id ?? ""), body.enabled === true)) return discordError(res, 404, 0, "no such player");
+      return sendJson(res, 200, { user_id: body.user_id, autopilot: body.enabled === true });
     }
 
     return discordError(res, 404, 0, "not found");
