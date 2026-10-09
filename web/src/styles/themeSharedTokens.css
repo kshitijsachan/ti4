@@ -1,0 +1,168 @@
+:root {
+  /* Shared across all themes */
+  /* Medal colours as triplets, so a rank's fill, edge and text can all be mixed
+     from one value. The rgba() forms below are the same colours, kept for the
+     places that only need the ink. */
+  --army-rank-first-rgb: 255, 215, 0;
+  --army-rank-second-rgb: 192, 192, 192;
+  --army-rank-third-rgb: 205, 127, 50;
+  --army-rank-first-color: rgba(255, 215, 0, 0.95);
+  --unit-details-upgrade-bg: rgba(255, 255, 255, 0.02);
+  /*
+   * The console stack above the board, as one derivation instead of six.
+   *
+   * These were previously six independently-guessed literals: 68px in
+   * GameMapPage's Tabs, 40px in its map panel, 110px here, 110px again on the left
+   * sidebar, 125px on the zoom rail and 163px on the floating toolbar. The tab
+   * strip actually measures 54, not 40, so the map area resolved 6px taller than
+   * the viewport at every size and the board ran under the chrome with no
+   * scroll position that could reach it.
+   *
+   * --app-header-height must match APP_HEADER_HEIGHT in shared/ui/AppHeader.tsx,
+   * which is what AppShell is given. --map-tabs-height is asserted on .tabsList
+   * rather than measured, so the value below is the contract, not a guess.
+   */
+  --app-header-height: 60px;
+  --map-tabs-height: 54px;
+  --map-viewport-top: calc(var(--app-header-height) + var(--map-tabs-height));
+  --map-viewport-height: calc(100vh - var(--map-viewport-top));
+
+  /*
+   * Surface language for data panels (objective cards, score tracker, game
+   * state panel, player-card sub-panels). Defaults ARE the default theme;
+   * other themes override the block to carry their identity. Semantic game
+   * colors (stage orange/blue, secret red, relic gold, faction colors) are
+   * deliberately NOT themed — identity lives in the neutral chrome only.
+   */
+  --panel-field-bg: linear-gradient(
+    180deg,
+    rgba(6, 11, 24, 0.92),
+    rgba(2, 6, 23, 0.96)
+  );
+  /* Flat fills: sealed/unrevealed cards, breakdown grid strip, name plates */
+  --panel-field-flat: rgba(2, 6, 23, 0.5);
+  --panel-field-strip: rgba(2, 6, 23, 0.62);
+  --panel-field-soft: rgba(2, 6, 23, 0.42);
+  --panel-cell-bg: rgba(15, 23, 42, 0.14);
+  /* Hairlines: outer frames, strong frames, internal separators, reticle
+     corner brackets */
+  --panel-hairline: rgba(148, 163, 184, 0.14);
+  --panel-hairline-strong: rgba(148, 163, 184, 0.22);
+  --panel-separator: rgba(148, 163, 184, 0.1);
+  --panel-bracket: rgba(226, 232, 240, 0.14);
+  /* Corner rounding of data panels (softer themes may round more) */
+  --panel-radius: 3px;
+  /* Optional identity layer painted above the field (scanlines, blooms, ...) */
+  --panel-texture: none;
+  /* Full-card ambience inside player card boxes */
+  --player-card-inner-glow: none;
+
+  /*
+   * Machined chrome. The player area is an instrument deck: modules are milled
+   * plates with a cut corner, a recessed label rail, and a light/shade bevel
+   * that reads as material thickness rather than a drawn border. Data panels
+   * are NOT flat — they are shallow. Depth here is measured in one pixel of
+   * top light and one pixel of bottom shade, never in drop shadow, which stays
+   * reserved for surfaces that genuinely float (see overlays.css).
+   */
+
+  /* Bevel: one pixel of top light, one of bottom shade. The whole trick. */
+  --machined-bevel-light: rgba(255, 255, 255, 0.055);
+  --machined-bevel-shade: rgba(0, 0, 0, 0.34);
+  --machined-bevel: inset 0 1px 0 var(--machined-bevel-light),
+    inset 0 -1px 0 var(--machined-bevel-shade);
+
+  /* Size of the cut corner on modules and cells. Echoes the map's hex plates
+     and the strategy card notch. Softer themes may reduce it toward 0. */
+  --machined-chamfer: 9px;
+  --machined-chamfer-sm: 6px;
+
+  /* Optional oxide bloom laid just inside the cut diagonal, one value per
+     chamfer direction. A theme opts in; `none` leaves the notch untouched. */
+  --machined-temper-br: none;
+  --machined-temper-tr: none;
+
+  /*
+   * The surface a plate sits on. Large plates paint their cut corner with a
+   * small gradient triangle in this colour rather than clipping themselves:
+   * clip-path on a big element forces an uncomposited repaint on every frame,
+   * and with ~60 plates on screen that measured at 26ms per frame — a 25fps
+   * scroll. Painting a 9px triangle costs nothing. Themes whose player-card
+   * ground differs must override this to match.
+   */
+  --plate-ground: #121214;
+
+  /* Label rail: recessed strip along a module's top edge where the section
+     name is seated, instead of floating above the content. */
+  --rail-bg: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.36) 0%,
+    rgba(0, 0, 0, 0.16) 100%
+  );
+  --rail-border: rgba(148, 163, 184, 0.16);
+  --rail-ink: rgba(173, 181, 189, 0.92);
+  /*
+   * Brushed sheen on chrome. Was a diagonal crosshatch, which read as a fabric
+   * texture rather than machined metal; a vertical light-to-dark sweep is what a
+   * bezel actually does under an overhead source.
+   */
+  --rail-sheen: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.045) 0%,
+    rgba(255, 255, 255, 0.012) 45%,
+    rgba(0, 0, 0, 0.12) 100%
+  );
+
+  /*
+   * HUD deck edges. The top and bottom decks are the console the board is set
+   * into; each closes with a lit lip and an accent hairline facing the board.
+   * There is deliberately no ornament band — see DESIGN.md.
+   */
+  --hud-edge-light: rgba(226, 232, 240, 0.22);
+  /* Themes override this — it is the one piece of chroma where deck meets map. */
+  --hud-edge-accent: rgba(196, 196, 202, 0.3);
+
+  /*
+   * The bottom deck's console field. Sits a step DARKER than
+   * --player-card-box-bg so the cards read as plates raised onto the deck, and
+   * darker than the board so the board stays the bright thing in the middle.
+   * Per-theme rather than one flat black wash, so each theme tunes its own
+   * board-to-deck contrast instead of inheriting a value tuned for graphite.
+   */
+  --hud-deck-ground: #0b0b0c;
+
+  /*
+   * Survey lattice. Until a game's state arrives there is no board to draw, so
+   * the map field draws the board's *geometry* instead: hairline hexes with a
+   * sweep running outward from Mecatol. Two values, because a scan needs a
+   * resting line and a lit one.
+   *
+   * The resting line is structure and comes straight out of the hairline
+   * vocabulary, so no theme has to restate it. The lit line is the sweep
+   * passing, and it is themed for exactly the reason --hud-edge-accent is:
+   * it lays chroma directly onto the board's own field. Each theme sets a
+   * lighter tint of its own accent rather than a new hue.
+   */
+  --survey-line: var(--panel-hairline-strong);
+  --survey-lit: rgba(212, 212, 218, 0.78);
+
+  /* Sockets: empty capacity. Pressed into the plate, not dashed onto it. */
+  --socket-bg: rgba(0, 0, 0, 0.28);
+  --socket-border: rgba(148, 163, 184, 0.09);
+  --socket-inset: inset 0 1px 2px rgba(0, 0, 0, 0.45),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.022);
+  --socket-tick: rgba(148, 163, 184, 0.2);
+
+  /* Troughs: recessed channels that seat numeric readouts and unit counts. The
+     lower light line is what sells the recess — without a bottom highlight a
+     dark band just reads as a different fill. */
+  --trough-bg: rgba(0, 0, 0, 0.34);
+  --trough-inset: inset 0 2px 3px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+
+  /* Illuminated state: an upgraded/active bay reads as lit from within, which
+     is a material change, not a halo bolted on the outside. */
+  --bay-lit-tint: rgba(59, 130, 246, 0.16);
+  --bay-lit-edge: rgba(96, 165, 250, 0.34);
+  --bay-lit-light: rgba(255, 255, 255, 0.085);
+}

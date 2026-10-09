@@ -1,0 +1,71 @@
+diff --git a/src/main/java/ti4/discord/JdaService.java b/src/main/java/ti4/discord/JdaService.java
+index b3bb870..267549f 100644
+--- a/src/main/java/ti4/discord/JdaService.java
++++ b/src/main/java/ti4/discord/JdaService.java
+@@ -148,7 +148,7 @@ public class JdaService {
+     public static void startJdaAndRegisterListeners(String[] args) {
+         BotLogger.info("STARTING JDA");
+         RestAction.setDefaultTimeout(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+-        jda = JDABuilder.createDefault(args[0])
++        JDABuilder builder = JDABuilder.createDefault(args[0])
+                 .setEventPool(EVENT_EXECUTOR)
+                 .enableIntents(
+                         // Needed to listen for joins/leaves
+@@ -165,8 +165,24 @@ public class JdaService {
+                 .setChunkingFilter(ChunkingFilter.ALL)
+                 .disableCache(DISABLED_JDA_CACHE_FLAGS)
+                 // This allows us to use our own ShutdownHook, created below
+-                .setEnableShutdownHook(false)
+-                .build();
++                .setEnableShutdownHook(false);
++        // Self-hosted mode: talk to a Discord-compatible API (the ti4 web shim) instead of discord.com.
++        String apiBase = System.getenv("DISCORD_API_BASE");
++        if (apiBase != null && !apiBase.isBlank()) {
++            builder.setRestConfig(new net.dv8tion.jda.api.requests.RestConfig().setBaseUrl(apiBase))
++                    .setCompression(net.dv8tion.jda.api.utils.Compression.NONE);
++            String gateway = System.getenv()
++                    .getOrDefault(
++                            "DISCORD_GATEWAY_URL",
++                            apiBase.replaceFirst("^http", "ws").replaceFirst("/api/v\\d+/?$", "/gateway"));
++            builder.setSessionController(new net.dv8tion.jda.api.utils.ConcurrentSessionController() {
++                @Override
++                public String getGateway() {
++                    return gateway;
++                }
++            });
++        }
++        jda = builder.build();
+ 
+         BotLogger.info("INITIALIZING LISTENERS");
+         ListenerManager.registerListeners(jda);
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java
+index a54a239..716905c 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java
+@@ -61,7 +61,7 @@ public class CreateGameButtonHandler {
+ 
+         int completedAndOngoingAmount =
+                 SearchGameHelper.searchGames(member.getUser(), null, false, true, false, true, false, true, true, true);
+-        if (completedAndOngoingAmount < 1 && !owner) {
++        if (completedAndOngoingAmount < 1 && !owner && !ti4.selfhost.SelfHosted.isEnabled()) {
+             MessageHelper.sendMessageToChannel(
+                     event.getMessageChannel(), member.getUser().getAsMention() + """
+                      You need to have completed at least one game (or be currently in a game) to create new games via this button. \
+diff --git a/src/main/java/ti4/selfhost/SelfHosted.java b/src/main/java/ti4/selfhost/SelfHosted.java
+new file mode 100644
+index 0000000..5f85b49
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/SelfHosted.java
+@@ -0,0 +1,12 @@
++package ti4.selfhost;
++
++/** True when the bot runs against the ti4 web shim instead of real Discord. */
++public final class SelfHosted {
++    private static final boolean ENABLED = System.getenv("DISCORD_API_BASE") != null;
++
++    private SelfHosted() {}
++
++    public static boolean isEnabled() {
++        return ENABLED;
++    }
++}

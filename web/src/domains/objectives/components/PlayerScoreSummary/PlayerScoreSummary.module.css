@@ -1,0 +1,182 @@
+/*
+ * A section of the bottom HUD deck, not a card resting on it. The border and
+ * inner padding put its heading 11px further in than the four headings above it.
+ */
+.themedContainer {
+	background: none;
+	border: none;
+	box-shadow: none;
+	padding: 0;
+	overflow: hidden;
+	width: fit-content;
+	max-width: 100%;
+}
+
+.rowContainer {
+	display: grid;
+	grid-template-columns: 440px max-content;
+	gap: 0;
+	border-radius: 2px;
+	overflow: hidden;
+}
+
+.playerInfoColumn {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+	gap: 8px;
+	padding: 0 10px;
+	align-items: center;
+}
+
+.objectivesGrid {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(10, 1fr);
+	gap: 0;
+	height: 44px;
+	background: var(--panel-field-strip);
+}
+
+/* Victory meridian: a gold finish line at the winning VP column, running
+   through the number track and every player row */
+.objectivesGrid::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: calc(var(--vps-to-win, 10) * var(--score-cell, 44px) - 1px);
+	width: 1px;
+	pointer-events: none;
+	z-index: 2000;
+	background: linear-gradient(180deg, rgba(250, 204, 21, 0.45), rgba(234, 179, 8, 0.28));
+	box-shadow: 0 0 6px rgba(234, 179, 8, 0.35);
+}
+
+.numberText {
+	color: var(--mantine-color-dimmed);
+	opacity: 0.7;
+}
+
+.winningNumberText {
+	color: rgba(250, 204, 21, 0.85);
+	opacity: 1;
+}
+
+/* Current leader: the name plate takes a gold hairline and a faint gold wash
+   rather than a left tick, so the marker is the plate itself. */
+.leaderRow .nameBody {
+	box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.42);
+	background-image: linear-gradient(
+		90deg,
+		rgba(234, 179, 8, 0.1) 0%,
+		rgba(234, 179, 8, 0.02) 60%,
+		transparent 100%
+	);
+	padding-left: 8px;
+}
+
+.leaderRow .vp {
+	color: rgba(250, 204, 21, 0.92);
+}
+
+.numberCell {
+	height: 44px;
+	border-top: 1px solid var(--panel-hairline-strong);
+	border-bottom: 1px solid var(--panel-hairline-strong);
+	border-right: 1px solid var(--panel-hairline-strong);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	background: var(--panel-cell-bg);
+}
+
+.numberCell:first-child {
+	border-left: 1px solid var(--panel-hairline-strong);
+}
+
+.playerNameText {
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.initiativeText {
+	text-align: center;
+	min-width: 20px;
+}
+
+.vpText {
+	text-align: right;
+	min-width: 58px;
+}
+
+.noteText {
+	max-width: 620px;
+	line-height: 1.3;
+	text-align: right;
+	margin-left: auto;
+	color: rgba(148, 163, 184, 0.72);
+}
+
+.playerName {
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.nameBody {
+	background: var(--panel-field-soft);
+	border-top: 1px solid rgba(148, 163, 184, 0.06);
+	border-bottom: 1px solid rgba(0, 0, 0, 0.28);
+}
+
+.initiativeBody {
+	color: rgba(226, 232, 240, 0.82);
+}
+
+.vp {
+	color: rgba(226, 232, 240, 0.88);
+}
+
+/* Objectives tab at phone width: the name plate sits above its own track, and
+   the track's columns divide the available width instead of holding 44px. */
+@container scoreboard (max-width: 640px) {
+	.themedContainer {
+		--score-cell: calc(100cqw / var(--score-columns, 10));
+		width: 100%;
+	}
+
+	.rowContainer {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.playerInfoColumn {
+		padding: 4px 8px;
+	}
+
+	.playerInfoColumn:empty {
+		display: none;
+	}
+
+	.objectivesGrid {
+		height: 36px;
+	}
+
+	.numberTrack,
+	.numberCell {
+		height: 24px;
+	}
+
+	.playerNameText.playerNameText {
+		font-size: 14px;
+	}
+
+	.vpText {
+		min-width: 0;
+	}
+
+	.noteText {
+		text-align: left;
+		margin-left: 0;
+	}
+}

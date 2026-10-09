@@ -1,0 +1,306 @@
+import type { ReactNode } from "react";
+import { Group, Text, Box, Image, Stack } from "@mantine/core";
+import cx from "clsx";
+import { PlayerColor } from "@/shared/ui/PlayerColor/PlayerColor";
+import { StatusIndicator } from "../StatusIndicator";
+import { SpeakerToken } from "../SpeakerToken";
+import { TyrantToken } from "../TyrantToken";
+import { StrategyCard } from "../StrategyCard";
+import { NeedsToFollow } from "../NeedsToFollow";
+import { Neighbors } from "../Neighbors";
+import { Breakthrough } from "../Breakthrough/Breakthrough";
+import breakthroughStyles from "../Breakthrough/Breakthrough.module.css";
+import type { BreakthroughData } from "@/entities/data/types";
+import { lowPriorityImageProps } from "@/shared/ui/imageLoading";
+import styles from "./PlayerCardHeaderCompact.module.css";
+import rail from "./HeaderRail.module.css";
+
+type Props = {
+  userName: string;
+  faction: string;
+  factionDisplayName: string;
+  color: string;
+  factionImageUrl: string;
+  isSpeaker?: boolean;
+  isTyrant?: boolean;
+  scs?: number[];
+  exhaustedSCs?: number[];
+  unfollowedSCs?: number[];
+  passed?: boolean;
+  active?: boolean;
+  neighbors?: string[];
+  showNeighbors?: boolean;
+  breakthrough?: BreakthroughData;
+};
+
+/** Speaker and tyrant markers followed by the player's strategy cards. */
+function HeaderTokens({
+  isSpeaker = false,
+  isTyrant = false,
+  scs = [],
+  exhaustedSCs = [],
+}: Pick<
+  Props,
+  "isSpeaker" | "isTyrant" | "scs" | "exhaustedSCs"
+>) {
+  return (
+    <>
+      {isSpeaker && <SpeakerToken />}
+      {isTyrant && <TyrantToken />}
+      {scs.map((scNumber) => (
+        <StrategyCard
+          key={scNumber}
+          initiative={scNumber}
+          isExhausted={exhaustedSCs.includes(scNumber)}
+        />
+      ))}
+    </>
+  );
+}
+
+function PlayerIdentity({
+  userName,
+  factionDisplayName,
+  color,
+}: Pick<Props, "userName" | "factionDisplayName" | "color">) {
+  return (
+    <>
+      <Text span size="sm" className={styles.playerName} flex="0 1 auto">
+        {userName}
+      </Text>
+      <Text span className={styles.factionName} flex="0 0 auto">
+        {factionDisplayName}
+      </Text>
+      <PlayerColor color={color} size="xs" />
+    </>
+  );
+}
+
+const MOBILE_IDENTITY_WIDTH = 354;
+/* Wide enough that the longest breakthrough names are not truncated. */
+const MOBILE_BREAKTHROUGH_WIDTH = 194;
+
+export function PlayerCardHeaderCompact({
+  userName,
+  faction,
+  factionDisplayName,
+  color,
+  factionImageUrl,
+  isSpeaker,
+  isTyrant,
+  scs,
+  exhaustedSCs,
+  passed = false,
+  active = false,
+}: Props) {
+  return (
+    <Group
+      gap={4}
+      px={4}
+      w="100%"
+      align="center"
+      wrap="nowrap"
+      justify="space-between"
+      style={{ minWidth: 0 }}
+    >
+      <Group gap={6} wrap="nowrap" className={styles.identityGroup}>
+        <Image
+          {...lowPriorityImageProps}
+          src={factionImageUrl}
+          alt={faction}
+          w={24}
+          h={24}
+          className={styles.factionIcon}
+        />
+        <PlayerIdentity
+          userName={userName}
+          factionDisplayName={factionDisplayName}
+          color={color}
+        />
+        <StatusIndicator passed={passed} active={active} />
+      </Group>
+
+      <Group gap={8} className={styles.rightGroup}>
+        <HeaderTokens
+          isSpeaker={isSpeaker}
+          isTyrant={isTyrant}
+          scs={scs}
+          exhaustedSCs={exhaustedSCs}
+        />
+      </Group>
+    </Group>
+  );
+}
+
+export function PlayerCardHeaderFull({
+  userName,
+  faction,
+  factionDisplayName,
+  color,
+  factionImageUrl,
+  isSpeaker,
+  isTyrant,
+  scs,
+  exhaustedSCs,
+  unfollowedSCs = [],
+  passed = false,
+  active = false,
+  neighbors = [],
+  showNeighbors = true,
+}: Props) {
+  return (
+    <Group justify="space-between" align="center" mb="md">
+      <Group gap={8} px={4} align="center">
+        <Image
+          {...lowPriorityImageProps}
+          src={factionImageUrl}
+          alt={faction}
+          w={32}
+          h={32}
+          className={styles.factionIcon}
+        />
+        <Stack gap={0}>
+          <Group gap={8} wrap="nowrap">
+            <Text span size="lg" className={styles.playerName}>
+              {userName}
+            </Text>
+            <StatusIndicator passed={passed} active={active} />
+          </Group>
+          <Group gap={8} wrap="nowrap">
+            <Text span className={styles.factionName}>
+              {factionDisplayName}
+            </Text>
+            <PlayerColor color={color} size="xs" />
+          </Group>
+        </Stack>
+        <Stack gap={0}>
+          <Box visibleFrom="sm" ml="xs">
+            {unfollowedSCs.length > 0 && <NeedsToFollow values={unfollowedSCs} />}
+          </Box>
+          <Box visibleFrom="sm" ml="xs">
+            {showNeighbors && <Neighbors neighbors={neighbors} />}
+          </Box>
+        </Stack>
+      </Group>
+
+      <Group gap="xs" align="center">
+        <HeaderTokens
+          isSpeaker={isSpeaker}
+          isTyrant={isTyrant}
+          scs={scs}
+          exhaustedSCs={exhaustedSCs}
+        />
+      </Group>
+    </Group>
+  );
+}
+
+export function PlayerCardHeaderMobile({
+  userName,
+  faction,
+  factionDisplayName,
+  color,
+  factionImageUrl,
+  isSpeaker,
+  isTyrant,
+  scs,
+  exhaustedSCs,
+  passed = false,
+  unfollowedSCs = [],
+  active = false,
+  neighbors = [],
+  showNeighbors = true,
+  breakthrough,
+  rightSection,
+}: Props & { rightSection?: ReactNode }) {
+  return (
+    <Group
+      gap={0}
+      px={4}
+      align="center"
+      wrap="nowrap"
+      className={rail.rail}
+      style={{ width: "100%", minWidth: 0 }}
+    >
+      <Group
+        gap={6}
+        align="center"
+        wrap="nowrap"
+        w={MOBILE_IDENTITY_WIDTH}
+        miw={MOBILE_IDENTITY_WIDTH}
+        maw={MOBILE_IDENTITY_WIDTH}
+        className={cx(rail.railGroup, rail.railIdentity)}
+        style={{ overflow: "hidden", flexShrink: 0 }}
+      >
+        <Image
+          {...lowPriorityImageProps}
+          src={factionImageUrl}
+          alt={faction}
+          w={24}
+          h={24}
+          className={styles.factionIcon}
+        />
+        <PlayerIdentity
+          userName={userName}
+          factionDisplayName={factionDisplayName}
+          color={color}
+        />
+        <StatusIndicator passed={passed} active={active} />
+      </Group>
+
+      {/* Fixed-width slot: the breakthrough column starts at the same x on every
+          card in the stack, filled or not, so the rail's seams line up down the
+          band. */}
+      <Box
+        w={MOBILE_BREAKTHROUGH_WIDTH}
+        miw={MOBILE_BREAKTHROUGH_WIDTH}
+        maw={MOBILE_BREAKTHROUGH_WIDTH}
+        className={cx(rail.railGroup, rail.railFill)}
+        style={{ flexShrink: 0, overflow: "visible" }}
+      >
+        {breakthrough?.breakthroughId && (
+          <Breakthrough
+            breakthroughId={breakthrough.breakthroughId}
+            exhausted={breakthrough.exhausted}
+            tradeGoodsStored={breakthrough.tradeGoodsStored}
+            unlocked={breakthrough.unlocked ?? false}
+            strong={false}
+            chipClassName={breakthroughStyles.headerChip}
+          />
+        )}
+      </Box>
+
+      {unfollowedSCs.length > 0 && (
+        <div className={rail.railGroup}>
+          <NeedsToFollow values={unfollowedSCs} />
+        </div>
+      )}
+
+      {showNeighbors && neighbors.length > 0 && (
+        <div className={rail.railGroup}>
+          <Neighbors neighbors={neighbors} />
+        </div>
+      )}
+
+      {/* Emits its own rail groups, so abilities, notes and faction techs are
+          divided by the same seam as everything else on the rail. */}
+      {rightSection}
+
+      <Box className={styles.headerRule} />
+
+      <Group
+        gap="xs"
+        align="center"
+        wrap="nowrap"
+        className={styles.rightGroup}
+      >
+        <HeaderTokens
+          isSpeaker={isSpeaker}
+          isTyrant={isTyrant}
+          scs={scs}
+          exhaustedSCs={exhaustedSCs}
+        />
+      </Group>
+    </Group>
+  );
+}

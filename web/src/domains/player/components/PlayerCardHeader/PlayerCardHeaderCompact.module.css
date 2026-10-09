@@ -1,0 +1,52 @@
+.factionIcon {
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55)) brightness(1.02);
+}
+
+.playerName {
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-font-family-headings);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.62);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Quiet small-caps faction designation next to the player name */
+.factionName {
+  font-size: 9px;
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  color: rgba(163, 178, 201, 0.85);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.62);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  align-self: center;
+  padding-top: 1px;
+}
+
+.identityGroup {
+  min-width: 0;
+  flex: 1;
+}
+
+.rightGroup {
+  flex-shrink: 0;
+}
+
+/* Plate connector: hairline tying the identity cluster to the SC chips */
+.headerRule {
+  flex: 1;
+  align-self: center;
+  height: 1px;
+  min-width: 16px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--panel-hairline-strong) 60%,
+    var(--panel-hairline-strong)
+  );
+}

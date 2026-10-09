@@ -1,0 +1,504 @@
+/*
+ * Unit bays.
+ *
+ * A unit is a slot in a reinforcement rack, so it is drawn as a bay: a milled
+ * pocket holding the sprite, with the count seated in a recessed trough along
+ * the bottom edge. The cut corner and the trough are what make it read as
+ * hardware instead of a rounded web card; the depth is a one-pixel bevel, not
+ * a drop shadow.
+ */
+
+.bay {
+  --bay-chamfer: var(--machined-chamfer-sm);
+  --bay-frame: var(--panel-hairline);
+  position: relative;
+  padding: 1px;
+  background: var(--bay-frame);
+  cursor: pointer;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--bay-chamfer)),
+    calc(100% - var(--bay-chamfer)) 100%,
+    0 100%
+  );
+}
+
+.bayInner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  box-shadow: var(--machined-bevel);
+  background: var(--panel-field-bg);
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--bay-chamfer)),
+    calc(100% - var(--bay-chamfer)) 100%,
+    0 100%
+  );
+}
+
+/* The sprite sits in a lit pocket: a soft vignette centred slightly high, so
+   the silhouette reads against the field without needing a glow. */
+.bayField {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 3px 4px 2px;
+  background: radial-gradient(
+    72% 58% at 50% 36%,
+    rgba(255, 255, 255, 0.05) 0%,
+    transparent 72%
+  );
+}
+
+/* Count trough: recessed channel along the bottom edge. */
+.trough {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px 4px 3px;
+  background: var(--trough-bg);
+  border-top: 1px solid var(--panel-separator);
+  box-shadow: var(--trough-inset);
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Illuminated bay: an upgraded unit is lit from within. The frame takes the
+   accent, the field gains a tint and a brighter top light. No outer halo. */
+.lit {
+  --bay-frame: var(--bay-lit-edge);
+}
+
+.lit .bayInner {
+  background: linear-gradient(
+      180deg,
+      var(--bay-lit-tint) 0%,
+      rgba(59, 130, 246, 0.07) 100%
+    ),
+    var(--panel-field-bg);
+  box-shadow:
+    inset 0 1px 0 var(--bay-lit-light),
+    inset 0 -1px 0 var(--machined-bevel-shade);
+}
+
+.lit .bayField {
+  background: radial-gradient(
+    72% 58% at 50% 36%,
+    rgba(147, 197, 253, 0.13) 0%,
+    transparent 74%
+  );
+}
+
+.lit .trough {
+  border-top-color: rgba(96, 165, 250, 0.2);
+}
+
+/* Interaction: the frame brightens and the top light rises. Nothing moves,
+   because a 12-cell rack that jitters on hover is noise, not feedback. */
+.animated .bayInner,
+.animated {
+  transition: background 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * Hover is carried by the FIELD, not by the frame. A bright accent ring made the
+ * border the whole event and left the bay itself looking untouched; lifting the
+ * fill reads as the bay illuminating, which is what the rest of the system does
+ * for state. Neutral light, no accent — the accent means "upgraded" here.
+ */
+.animated:hover {
+  --bay-frame: var(--panel-hairline-strong);
+}
+
+.animated:hover .bayInner {
+  background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.11) 0%,
+      rgba(255, 255, 255, 0.055) 100%
+    ),
+    var(--panel-field-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 var(--machined-bevel-shade);
+}
+
+.animated:hover .bayField {
+  background: radial-gradient(
+    72% 58% at 50% 36%,
+    rgba(255, 255, 255, 0.1) 0%,
+    transparent 72%
+  );
+}
+
+.animated.lit:hover {
+  --bay-frame: rgba(96, 165, 250, 0.5);
+}
+
+.animated.lit:hover .bayInner {
+  background: linear-gradient(
+      180deg,
+      rgba(96, 165, 250, 0.28) 0%,
+      rgba(59, 130, 246, 0.14) 100%
+    ),
+    var(--panel-field-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    inset 0 -1px 0 var(--machined-bevel-shade);
+}
+
+.bay:focus-visible {
+  outline: 2px solid rgb(var(--gd-blue));
+  outline-offset: 1px;
+}
+
+/*
+ * An unavailable unit is empty capacity, so it uses the same socket language as
+ * an unresearched tech: pressed in, desaturated, no trough.
+ */
+.locked {
+  --bay-frame: var(--socket-border);
+  cursor: default;
+}
+
+.locked .bayInner {
+  background: var(--socket-bg);
+  box-shadow: var(--socket-inset);
+}
+
+.locked .bayField {
+  background: none;
+  filter: grayscale(1) brightness(0.72);
+}
+
+/* ---------- Badges ---------- */
+
+/* A faction mark you cannot identify is not doing its job, so the glyph is sized
+   to be read. No diagonal: the cut corner earned nothing here — the bay already
+   has one, and a second diagonal inside it was noise. */
+.factionBadge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.factionIcon {
+  width: 17px;
+  height: 17px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
+}
+
+.upgradeFactionBadgesContainer {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  z-index: 2;
+}
+
+.upgradeFactionBadge {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: rgba(2, 6, 23, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.28);
+}
+
+.upgradeFactionIcon {
+  width: 11px;
+  height: 11px;
+  display: block;
+}
+
+/* ---------- Sprites ---------- */
+
+.unitImage {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+
+.unitImage:global(.unit-sprite) {
+  width: auto !important;
+  height: 26px !important;
+}
+
+/* ---------- Numerals ---------- */
+
+.countText {
+  color: var(--mantine-color-gray-1);
+}
+
+.countTextZero {
+  color: var(--mantine-color-red-3);
+}
+
+.countText,
+.countTextZero {
+  font-weight: var(--weight-rail);
+  font-size: 13px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.maxCountText {
+  color: var(--mantine-color-gray-6);
+  font-weight: var(--weight-data);
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.popoverDropdown {
+  padding: 0;
+}
+
+/* ---------- Condensed rack ----------
+ *
+ * The tic-tac-toe grid used in sidebars. Same bay language at a smaller scale:
+ * the container background shows through 1px gaps to draw the rack's seams, so
+ * the cells share one continuous frame instead of each carrying its own border.
+ */
+
+/*
+ * 52px is the rack's natural row: the size the sprite and its count readout want.
+ * When the compartment it sits in is taller — because a neighbouring section has
+ * more rows — the rows absorb the slack instead of leaving a dead band along the
+ * bottom of the plate. minmax keeps 52px as the floor, so nothing shrinks and
+ * the default card is untouched.
+ */
+.denseGrid {
+  display: grid;
+  grid-template-rows: repeat(3, minmax(52px, 1fr));
+  grid-auto-flow: column;
+  /* min-, not height: the rack can grow into a taller compartment but is never
+     compressed below its natural three rows. */
+  min-height: 100%;
+  gap: 1px;
+  padding: 1px;
+  background: var(--panel-hairline-strong);
+  width: max-content;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--machined-chamfer-sm)),
+    calc(100% - var(--machined-chamfer-sm)) 100%,
+    0 100%
+  );
+}
+
+.denseCell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  min-width: 46px;
+  height: 100%;
+  background: var(--panel-field-bg);
+  box-shadow: var(--machined-bevel);
+  cursor: pointer;
+  transition: box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Lit pocket the sprite sits in, matching the standard bay's vignette. */
+.denseCellField {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 5px 3px;
+  background: radial-gradient(
+    74% 62% at 50% 38%,
+    rgba(255, 255, 255, 0.055) 0%,
+    transparent 74%
+  );
+}
+
+/* The count sits in a recessed channel along the cell's bottom edge, so the
+   rack reads as hardware with seated readouts rather than text under a picture. */
+.denseTrough {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 3px 3px;
+  background: var(--trough-bg);
+  border-top: 1px solid var(--panel-separator);
+  box-shadow: var(--trough-inset);
+}
+
+/* Same at rack scale: the cell's fill lifts, no ring, no movement. */
+.denseCell:hover {
+  background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.11) 0%,
+      rgba(255, 255, 255, 0.05) 100%
+    ),
+    var(--panel-field-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 var(--machined-bevel-shade);
+}
+
+.denseCell:hover .denseCellField {
+  background: radial-gradient(
+    74% 62% at 50% 38%,
+    rgba(255, 255, 255, 0.12) 0%,
+    transparent 74%
+  );
+}
+
+.denseCell:focus-visible {
+  outline: 2px solid rgb(var(--gd-blue));
+  outline-offset: -2px;
+}
+
+/* An upgraded unit's bay is lit from within: the field takes the tint and a
+   brighter top light, the trough edge picks up the accent. No outer halo. */
+.denseCellUpgraded {
+  background: linear-gradient(
+      180deg,
+      var(--bay-lit-tint) 0%,
+      rgba(59, 130, 246, 0.08) 100%
+    ),
+    var(--panel-field-bg);
+  box-shadow:
+    inset 0 1px 0 var(--bay-lit-light),
+    inset 0 0 0 1px rgba(96, 165, 250, 0.16),
+    inset 0 -1px 0 var(--machined-bevel-shade);
+}
+
+.denseCellUpgraded .denseCellField {
+  background: radial-gradient(
+    74% 62% at 50% 38%,
+    rgba(147, 197, 253, 0.14) 0%,
+    transparent 76%
+  );
+}
+
+.denseCellUpgraded .denseTrough {
+  border-top-color: rgba(96, 165, 250, 0.2);
+}
+
+.denseCellUpgraded:hover {
+  background: linear-gradient(
+      180deg,
+      rgba(96, 165, 250, 0.28) 0%,
+      rgba(59, 130, 246, 0.14) 100%
+    ),
+    var(--panel-field-bg);
+  box-shadow:
+    inset 0 0 0 1px rgba(96, 165, 250, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    inset 0 -1px 0 var(--machined-bevel-shade);
+}
+
+/* Unavailable to this faction: empty capacity, so it uses the socket language
+   shared with unresearched tech. */
+.denseCellDimmed,
+.denseCellDimmed:hover {
+  background: var(--socket-bg);
+  box-shadow: var(--socket-inset);
+  cursor: default;
+}
+
+.denseCellDimmed .denseCellField {
+  background: none;
+}
+
+.denseCellDimmed .denseUnitImage {
+  filter: grayscale(1) brightness(0.72);
+  opacity: 0.55;
+}
+
+.denseUnitImage {
+  display: block;
+  height: 22px;
+  width: auto;
+}
+
+.denseCommandTokenImage {
+  position: relative;
+  width: 22px;
+  height: 22px;
+}
+
+.denseCommandTokenImage img:first-child {
+  width: 22px;
+  height: 22px;
+}
+
+.denseUnitImage:global(.unit-sprite) {
+  width: auto !important;
+  height: 22px !important;
+}
+
+.denseCellCount {
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.denseCellCount.countText,
+.denseCellCount.countTextZero {
+  font-size: 10px;
+}
+
+.denseCellCount[data-total]::after {
+  content: "/" attr(data-total);
+  font-size: 9px;
+  color: var(--mantine-color-gray-6);
+  font-weight: var(--weight-data);
+  margin-left: 1px;
+}
+
+.denseGrid > * {
+  height: 100%;
+}
+
+.denseFactionIcon {
+  width: 14px;
+  height: 14px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
+}
+
+.denseUpgradeFactionBadge {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(2, 6, 23, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.26);
+}
+
+.denseUpgradeFactionIcon {
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated,
+  .animated .bayInner,
+  .denseCell {
+    transition: none;
+  }
+}

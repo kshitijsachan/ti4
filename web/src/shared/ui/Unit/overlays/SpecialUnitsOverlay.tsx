@@ -1,0 +1,28 @@
+import { SPECIAL_UNIT_SPRITES, SPECIAL_FACTION_SPRITES } from "../unitSprites";
+import "./SpecialUnitsOverlay.css";
+
+type SpecialUnitsOverlayProps = {
+  unitType: string;
+  faction?: string;
+};
+
+export function SpecialUnitsOverlay({
+  faction,
+  unitType,
+}: SpecialUnitsOverlayProps) {
+  const specialByUnit =
+    SPECIAL_UNIT_SPRITES[unitType as keyof typeof SPECIAL_UNIT_SPRITES];
+  const specialByFactionUnit = SPECIAL_FACTION_SPRITES[
+    faction as keyof typeof SPECIAL_FACTION_SPRITES
+  ]?.find((special) => special.sprite === unitType);
+  const label = (specialByFactionUnit ?? specialByUnit)?.label;
+  if (!label) return null;
+
+  return (
+    <div className="special-unit-overlay" aria-hidden="true">
+      <span className={`special-unit-badge special-unit-badge--${unitType}`}>
+        {label}
+      </span>
+    </div>
+  );
+}

@@ -1,0 +1,661 @@
+/*
+ * Top HUD deck.
+ *
+ * The header and the tab row are two halves of one console deck the map sits
+ * behind, the way an RTS floats its chrome over the battlefield. Both take the
+ * same hatched chrome the module rails use, and the deck closes with a bright
+ * lower lip plus a downward shadow so the map reads as being *under* it rather
+ * than merely next to it.
+ */
+.newHeaderGroup {
+  flex-wrap: nowrap;
+  max-width: 100vw;
+  background: var(--rail-sheen), var(--header-bg);
+  border-bottom: 1px solid var(--panel-separator);
+  box-shadow: var(--header-shadow), inset 0 1px 0 var(--machined-bevel-light);
+}
+
+/* Left sidebar overlay styles */
+.leftSidebarOverlay {
+  position: fixed;
+  left: 20px;
+  top: var(--map-viewport-top);
+  width: 300px;
+  max-height: var(--map-viewport-height);
+  height: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: var(--z-left-sidebar);
+  border: var(--sidebar-border);
+  border-radius: 10px;
+  backdrop-filter: blur(var(--sidebar-blur));
+  background-color: var(--left-sidebar-bg);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+/* Dedicated class to avoid relying on nested selector in modules checks */
+.leftSidebarOverlayCollapsed {
+  transform: translateX(-310px);
+  opacity: 0;
+}
+
+/*
+ * The game-state plate floats over the board's top-left corner, which is the
+ * strongest position on the page, so it has to stay small and stay escapable.
+ *
+ * It sizes to its content rather than to a flat 300px: the old fixed width
+ * overrode the panel's own 420px allowance, which sheared the last digit off
+ * every two-digit total in the agenda vote table. And it is bounded, because
+ * the agenda variant runs past 1200px in a large game and used to overflow the
+ * map area entirely with no way to scroll it.
+ */
+.gameStateOverlay {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  width: max-content;
+  min-width: 260px;
+  max-width: min(420px, calc(100vw - 32px));
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: var(--z-game-state-overlay);
+}
+
+/* Section heading styles */
+.sectionHeading {
+  margin: 0 0 1rem 0;
+  color: var(--mantine-color-gray-1);
+  font-size: 1.1rem;
+  font-weight: var(--weight-title);
+}
+
+/* Zoom controls positioning */
+.zoomControlsDynamic {
+  position: fixed;
+  /* Seated 11px below the deck's lower lip, derived rather than restated. */
+  top: calc(var(--map-viewport-top) + 11px);
+  z-index: var(--z-zoom-controls);
+}
+
+.zoomControlsEmbedded {
+  top: 24px;
+}
+
+/* Tile rendering container */
+.tileRenderingContainer {
+  position: relative;
+}
+
+/* Scrolling moves dozens of tile hit targets beneath a stationary pointer.
+   Ignore them until movement stops so pan frames do not churn hover work. */
+:global(.dragscroll-panning) .tileRenderingContainer {
+  pointer-events: none;
+}
+
+/* HUD title for the below-map dashboard: ROUND 05 ───────── game name */
+.hudTitle {
+  min-width: 0;
+}
+
+.hudRoundLabel {
+  font-size: 10px;
+  font-weight: var(--weight-title);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.hudRoundNumeral {
+  font-family: var(--mantine-font-family-headings);
+  font-size: 30px;
+  font-weight: var(--weight-title);
+  line-height: 1;
+  color: var(--mantine-color-gray-1);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.hudGameName {
+  font-size: 12px;
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.hudRule {
+  flex: 1;
+  align-self: center;
+  height: 1px;
+  min-width: 40px;
+  background: linear-gradient(
+    90deg,
+    var(--panel-hairline-strong),
+    transparent
+  );
+}
+
+/* ————— Theme personality (theme classes never apply on mobile) ————— */
+
+/* Vaporwave: the ROUND numeral reads through a CRT — constant chromatic
+   fringe, with a two-frame tracking glitch every ~11 seconds */
+:global(.theme-vaporwavetheme) .hudRoundNumeral {
+  text-shadow:
+    -1.5px 0 rgba(255, 0, 170, 0.6),
+    1.5px 0 rgba(0, 240, 255, 0.6),
+    0 1px 3px rgba(0, 0, 0, 0.7);
+  animation: vwNumeralGlitch 11s steps(1, end) infinite;
+}
+
+@keyframes vwNumeralGlitch {
+  0%,
+  96%,
+  100% {
+    transform: none;
+    text-shadow:
+      -1.5px 0 rgba(255, 0, 170, 0.6),
+      1.5px 0 rgba(0, 240, 255, 0.6),
+      0 1px 3px rgba(0, 0, 0, 0.7);
+  }
+  96.6% {
+    transform: translateX(1.5px);
+    text-shadow:
+      -4px 0 rgba(255, 0, 170, 0.85),
+      4px 0 rgba(0, 240, 255, 0.85),
+      0 1px 3px rgba(0, 0, 0, 0.7);
+  }
+  97.2% {
+    transform: translateX(-1px);
+    text-shadow:
+      3px 0 rgba(255, 0, 170, 0.8),
+      -3px 0 rgba(0, 240, 255, 0.8),
+      0 1px 3px rgba(0, 0, 0, 0.7);
+  }
+  97.8% {
+    transform: none;
+    text-shadow:
+      -1.5px 0 rgba(255, 0, 170, 0.6),
+      1.5px 0 rgba(0, 240, 255, 0.6),
+      0 1px 3px rgba(0, 0, 0, 0.7);
+  }
+}
+
+/* Green: the canopy light drifts across the page, slow as an afternoon */
+:global(.theme-midnightgreentheme) .mainBackground {
+  background-size:
+    220% 220%,
+    200% 200%,
+    auto;
+  animation: canopyDrift 75s ease-in-out infinite alternate;
+}
+
+@keyframes canopyDrift {
+  from {
+    background-position:
+      0% 0%,
+      100% 100%;
+  }
+  to {
+    background-position:
+      24% 14%,
+      74% 80%;
+  }
+}
+
+/* Violet: the nebula bloom breathes sideways like an aurora, slower still */
+:global(.theme-midnightviolettheme) .mainBackground {
+  background-size:
+    240% 200%,
+    220% 200%,
+    auto;
+  animation: auroraDrift 90s ease-in-out infinite alternate;
+}
+
+@keyframes auroraDrift {
+  from {
+    background-position:
+      30% 0%,
+      72% 100%;
+  }
+  to {
+    background-position:
+      58% 8%,
+      42% 86%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.theme-vaporwavetheme) .hudRoundNumeral,
+  :global(.theme-midnightgreentheme) .mainBackground,
+  :global(.theme-midnightviolettheme) .mainBackground {
+    animation: none;
+  }
+}
+
+.mainBackground {
+  background: var(--main-bg);
+  min-height: calc(100vh - 60px);
+}
+
+/*
+ * Below `sm` the strip stacks the Discord channel links under the tool rack.
+ * The strip's height is asserted, so that second row overflowed it and the map
+ * panel painted over the links. The contract grows by the row instead: 22px of
+ * compact button plus its 4px foot.
+ *
+ * The derived offsets are restated because :root resolved them against the
+ * single-row height; a descendant override of --map-tabs-height alone would
+ * leave them stale.
+ */
+@media (max-width: 47.99375em) {
+  .mainBackground[data-channel-links] {
+    --map-tabs-height: 80px;
+    --map-viewport-top: calc(var(--app-header-height) + var(--map-tabs-height));
+    --map-viewport-height: calc(100vh - var(--map-viewport-top));
+  }
+}
+
+.tabsList {
+  position: relative;
+  /* Asserted, not measured. Everything below the header derives its offset from
+     --map-tabs-height, so the strip has to be exactly that tall or the map area
+     drifts against the chrome. All four tabs are single-line by construction. */
+  height: var(--map-tabs-height);
+  box-sizing: border-box;
+  background: var(--rail-sheen), var(--map-tabs-bg);
+  /* The deck's lower lip: a lit edge, then shadow falling onto the map. */
+  box-shadow:
+    inset 0 -1px 0 var(--hud-edge-light),
+    0 8px 22px rgba(0, 0, 0, 0.6);
+  padding-top: 8px !important;
+  padding-bottom: 6px !important;
+  justify-content: flex-start !important;
+  padding-left: 16px !important;
+  align-items: center !important;
+  /* No gap: the view tabs butt against each other and share seams (see
+     .tabsTab), so the strip reads as one segmented control rather than four
+     loose buttons. The tool rack that follows carries its own left padding. */
+  gap: 0;
+}
+
+.tabsList::before {
+  border-width: 0;
+}
+
+/*
+ * View tabs as plates, not browser tabs. The 6px-top-only radius and the navy
+ * fill were the two things that read as web chrome; a tab is now a socket at
+ * rest and a lit plate when selected, with an accent bar seated along its floor.
+ */
+.tabsTab {
+  position: relative;
+  flex-grow: 0;
+  flex-shrink: 0;
+  width: auto;
+  margin: 0;
+  padding: 7px 15px;
+  font-family: var(--mantine-font-family-headings);
+  font-size: 11px;
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  color: var(--mantine-color-gray-5);
+  cursor: pointer;
+  border: 1px solid var(--panel-hairline);
+  border-radius: 0;
+  background: var(--socket-bg);
+  box-shadow: var(--socket-inset);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    color 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * Shared seams. Pulling each tab 1px onto its neighbour collapses the two
+ * hairline borders into one, the same 1px seam the map-tool rack uses, so the
+ * four plates read as one milled strip with the outer corners rounded.
+ */
+.tabsTab + .tabsTab {
+  margin-left: -1px;
+}
+
+.tabsTab:first-of-type {
+  border-top-left-radius: var(--panel-radius);
+  border-bottom-left-radius: var(--panel-radius);
+}
+
+.tabsTab:last-of-type {
+  border-top-right-radius: var(--panel-radius);
+  border-bottom-right-radius: var(--panel-radius);
+  /* Break between the view rack and the tool rack that follows it. */
+  margin-right: 10px;
+}
+
+/* Raised so a hovered or selected plate owns both of its seams instead of
+   having one overpainted by the neighbour it shares with. */
+.tabsTab:hover,
+.tabsTab[data-active="true"] {
+  z-index: 1;
+}
+
+.tabsTab:hover {
+  color: var(--mantine-color-gray-2);
+  border-color: var(--panel-hairline-strong);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: var(--machined-bevel);
+}
+
+.tabsTab[data-active="true"] {
+  color: var(--mantine-color-gray-0);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--panel-hairline-strong);
+  box-shadow: var(--machined-bevel);
+}
+
+/* Selected view gets a seated accent bar on its floor — the HUD equivalent of a
+   lit indicator, and the one place chroma appears in the tab strip. */
+.tabsTab[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(var(--gd-blue), 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabsTab {
+    transition: none;
+  }
+}
+
+.mapContainer {
+  position: relative;
+  display: flex;
+  height: 100%;
+  background: var(--main-bg);
+}
+
+.mapArea {
+  position: relative;
+  overflow: auto;
+}
+
+.sidebar {
+  overflow: scroll;
+  background: var(--sidebar-bg);
+}
+
+.sidebar.collapsedRight {
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.playerCardsContainer {
+  position: relative;
+  min-height: 400px;
+}
+
+.playerCard {
+  position: static;
+  width: auto;
+  visibility: visible;
+  pointer-events: auto;
+  z-index: var(--z-player-card);
+}
+
+.hoverInstructions {
+  text-align: center;
+  color: var(--mantine-color-gray-6);
+}
+
+.hoverInstructionsLine {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.playersTabContent {
+  overflow-y: scroll;
+  padding: 16px;
+}
+
+.mapArea,
+.sidebar,
+.playersTabContent {
+  height: 100%;
+}
+
+/* Custom scrollbar styling for thematic blue-gray design */
+:global(*::-webkit-scrollbar) {
+  width: 16px;
+  height: 16px;
+}
+
+:global(*::-webkit-scrollbar-track) {
+  background: var(--scrollbar-track-bg);
+  border-radius: 6px;
+  border: var(--scrollbar-track-border);
+}
+
+:global(*::-webkit-scrollbar-thumb) {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 6px;
+  border: var(--scrollbar-thumb-border);
+  box-shadow: var(--scrollbar-thumb-shadow);
+}
+
+:global(*::-webkit-scrollbar-thumb:hover) {
+  background: var(--scrollbar-thumb-hover-bg);
+  box-shadow: var(--scrollbar-thumb-hover-shadow);
+}
+
+:global(*::-webkit-scrollbar-thumb:active) {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.7) 0%, rgba(29, 78, 216, 0.8) 100%);
+}
+
+:global(*::-webkit-scrollbar-corner) {
+  background: var(--scrollbar-corner-bg);
+}
+
+/* Firefox scrollbar styling */
+:global(*) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-color-thumb) var(--scrollbar-color-track);
+}
+
+/* Vaporwave (TRON) decorative effects - only when theme is active */
+:global(.theme-vaporwavetheme) .mapArea {
+  position: relative;
+}
+
+:global(.theme-vaporwavetheme) .mapArea::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 6px);
+  mix-blend-mode: lighten;
+  opacity: 0.12;
+}
+
+:global(.theme-vaporwavetheme) .tabsTab {
+  text-shadow: 0 0 6px rgba(255, 0, 170, 0.5), 0 0 12px rgba(0, 240, 255, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+:global(.theme-vaporwavetheme) .tabsTab::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -2px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255, 0, 170, 0.95), rgba(0, 240, 255, 0.95));
+  opacity: 0;
+  transform: scaleX(0.5);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  filter: drop-shadow(0 0 6px rgba(255, 0, 170, 0.6)) drop-shadow(0 0 8px rgba(0, 240, 255, 0.5));
+}
+
+:global(.theme-vaporwavetheme) .tabsTab:hover::after,
+:global(.theme-vaporwavetheme) .tabsTab[data-active="true"]::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+:global(.theme-vaporwavetheme) .tabsTab:hover,
+:global(.theme-vaporwavetheme) .tabsTab[data-active="true"] {
+  animation: vw-pulse-soft 6s ease-in-out infinite alternate;
+}
+
+:global(.theme-vaporwavetheme) .tabsList {
+  position: relative;
+}
+
+:global(.theme-vaporwavetheme) .tabsList::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 0, 170, 0.8), rgba(0, 240, 255, 0.8));
+  box-shadow: 0 0 8px rgba(255, 0, 170, 0.35), 0 0 10px rgba(0, 240, 255, 0.25);
+  opacity: 0.6;
+  animation: vw-border-breathe 8s ease-in-out infinite;
+}
+
+:global(.theme-vaporwavetheme) .leftSidebarOverlay {
+  box-shadow:
+    0 12px 40px rgba(255, 0, 170, 0.14),
+    0 8px 28px rgba(0, 240, 255, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+:global(.theme-vaporwavetheme) .leftSidebarOverlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(350px 140px at 0% 0%, rgba(255, 0, 170, 0.14), transparent 70%),
+    radial-gradient(350px 140px at 100% 0%, rgba(0, 240, 255, 0.12), transparent 70%);
+  mix-blend-mode: screen;
+}
+
+
+/* =========================================================================
+ * HUD decks
+ *
+ * The map is set into a console: a deck above it and a deck below, each closing
+ * with the same scored ornament band facing the board. The band is machined from
+ * gradients — segment marks every 20px with a longer graduation every fifth —
+ * so it costs one element per deck and needs no raster assets.
+ * ========================================================================= */
+
+/*
+ * Bottom deck. Everything below the board — round line, score track, objectives,
+ * laws, player areas, score summary — is one console panel rather than a stack
+ * of unrelated blocks, and every section inside it shares one left margin.
+ */
+.bottomHud {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /*
+   * The deck lives in a horizontally scrolling area, so it must size to its
+   * widest child rather than to the viewport. As a plain block it measured
+   * 1500px against 2576px of content, which cut the console field off mid-scroll
+   * and left the right-hand modules sitting on bare background.
+   */
+  width: max-content;
+  min-width: 100%;
+  /*
+   * Breathing room so the board's lowest tiles clear the deck's lip.
+   *
+   * The overlay layer's bleed past the board wrapper was assumed to be ~20px and
+   * a flat 45px was budgeted for it. Measured, the bleed is 200 unscaled units —
+   * 80px at the default 40% zoom — so 45px was 35px of *overlap*: the bottom row
+   * of plates sat under the deck rather than clear of it. The bleed scales with
+   * zoom, so the deck is handed the scaled figure and adds the 20px of clearance
+   * DESIGN.md specifies. Fallback covers the default zoom.
+   */
+  margin-top: calc(var(--board-bleed-bottom, 80px) + 20px);
+  /* Separation without ornament: a lit lip, an accent hairline facing the board,
+     and shadow cast upward. */
+  border-top: 1px solid var(--hud-edge-accent);
+  /* A fixed-height sheen at the deck's lip over a darkened console field. The
+     sheen must not stretch: as a full-height gradient it would brighten the
+     bottom of a deck that can run several thousand pixels tall. The field sits
+     darker than the map so the cards read as plates raised onto it. */
+  background:
+    var(--rail-sheen) top center / 100% 120px no-repeat,
+    var(--hud-deck-ground);
+  box-shadow:
+    inset 0 1px 0 var(--hud-edge-light),
+    0 -10px 26px rgba(0, 0, 0, 0.66);
+}
+
+.bottomHudBody {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+  padding: 14px 0 24px;
+  width: 100%;
+}
+
+/*
+ * One indent and one width for every section in the deck. Sections stretch to the
+ * deck's width so the round line, score track, objectives, player areas and score
+ * breakdown all end on the same right edge — previously they measured 2150, 2576
+ * and 2150, so the right side of the deck looked ragged.
+ *
+ * box-sizing keeps the indent inside the shared width rather than adding to it.
+ */
+.hudSection {
+  box-sizing: border-box;
+  width: 100%;
+  padding-inline: 16px;
+}
+
+/*
+ * Screen-width deck sections.
+ *
+ * Some sections are read at a glance rather than panned across: the victory track
+ * is a gauge, and the objectives board is a comparison. Stretched to the deck's
+ * full width they ran thousands of pixels across — the finish line ended up
+ * off-screen and Stage II sat far to the right of Stage I, which defeats the point
+ * of putting them side by side.
+ *
+ * Sized to the screen but NOT pinned to it: panning right moves them with
+ * everything else. Sticky kept them nailed to the viewport edge while the board
+ * slid underneath, which made the deck feel like two surfaces moving at different
+ * speeds.
+ *
+ * Scoped to the deck so the Objectives tab's own copies keep their sizing.
+ */
+.hudFitScreen {
+  width: calc(100vw - 32px);
+  max-width: 100%;
+}
+
+/*
+ * Mobile scales this subtree, and viewport units inside a scaled container resolve
+ * against the unscaled viewport. Keyed off the .mobile body class the app already
+ * sets from isMobileDevice(), not a width breakpoint.
+ */
+:global(.mobile) .hudFitScreen,
+:global(.theme-mobile) .hudFitScreen {
+  width: 100%;
+}

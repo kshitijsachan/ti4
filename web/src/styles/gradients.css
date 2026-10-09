@@ -1,0 +1,125 @@
+:root {
+  /* Core color values (RGB values for consistency) */
+  --gd-red: 239, 68, 68;
+  --gd-green: 34, 197, 94;
+  --gd-blue: 59, 130, 246;
+  --gd-cyan: 6, 182, 212;
+  --gd-orange: 249, 115, 22;
+  --gd-yellow: 234, 179, 8;
+  --gd-teal: 20, 184, 166;
+  --gd-purple: 147, 51, 234;
+  --gd-gray: 148, 163, 184;
+}
+
+/* Base gradient utilities */
+.gradient-border {
+  border: 1px solid rgba(var(--gradient-color), 0.16);
+}
+
+.gradient-icon-filter {
+  filter: drop-shadow(0 1px 2px rgba(var(--gradient-color), 0.2));
+}
+
+.gradient-pattern {
+  background: rgba(var(--gradient-color), 0.04);
+}
+
+/* Color-specific classes */
+.gradient-red {
+  --gradient-color: var(--gd-red);
+  --gradient-border-alpha-strong: 0.26;
+  --gradient-shimmer-alpha-strong: 0.06;
+}
+
+.gradient-green {
+  --gradient-color: var(--gd-green);
+  --gradient-border-alpha-strong: 0.26;
+  --gradient-bg-alpha-strong: 0.05;
+  --gradient-shimmer-alpha-strong: 0.025;
+}
+
+.gradient-blue {
+  --gradient-color: var(--gd-blue);
+  --gradient-border-alpha-strong: 0.24;
+  --gradient-bg-alpha-strong: 0.08;
+  --gradient-shimmer-alpha-strong: 0.05;
+}
+
+.gradient-cyan {
+  --gradient-color: var(--gd-cyan);
+  --gradient-border-alpha-strong: 0.3;
+  --gradient-bg-alpha-strong: 0.08;
+}
+
+.gradient-orange {
+  --gradient-color: var(--gd-orange);
+  --gradient-border-alpha-strong: 0.28;
+  --gradient-bg-alpha-strong: 0.10;
+  --gradient-shimmer-alpha-strong: 0.055;
+}
+
+.gradient-yellow {
+  --gradient-color: var(--gd-yellow);
+}
+
+.gradient-teal {
+  --gradient-color: var(--gd-teal);
+}
+
+.gradient-purple {
+  --gradient-color: var(--gd-purple);
+  --gradient-border-alpha-strong: 0.26;
+  --gradient-bg-alpha-strong: 0.09;
+  --gradient-shimmer-alpha-strong: 0.055;
+}
+
+.gradient-gray,
+.gradient-grey {
+  --gradient-color: var(--gd-gray);
+}
+
+.shimmer-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(var(--gradient-color), 0.03);
+  pointer-events: none;
+}
+
+.gradient-red.gradient-border,
+.gradient-cyan.gradient-border,
+.gradient-blue.gradient-border,
+.gradient-orange.gradient-border,
+.gradient-purple.gradient-border,
+.gradient-green.gradient-border {
+  border-color: rgba(var(--gradient-color), var(--gradient-border-alpha-strong));
+}
+
+.gradient-cyan.gradient-border,
+.gradient-blue.gradient-border,
+.gradient-orange.gradient-border,
+.gradient-purple.gradient-border,
+.gradient-green.gradient-border {
+  background: rgba(var(--gradient-color), var(--gradient-bg-alpha-strong));
+}
+
+.shimmer-container.gradient-red::before,
+.shimmer-container.gradient-blue::before,
+.shimmer-container.gradient-orange::before,
+.shimmer-container.gradient-purple::before,
+.shimmer-container.gradient-green::before {
+  background: rgba(var(--gradient-color), var(--gradient-shimmer-alpha-strong));
+}
+
+/* Special blue pattern for certain components */
+.gradient-blue .gradient-pattern {
+  background: rgba(var(--gd-blue), 0.025);
+}

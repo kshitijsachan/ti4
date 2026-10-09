@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favico.png" />
+    <link rel="preconnect" href="https://images.asyncti4.com" crossorigin />
+    <link rel="dns-prefetch" href="https://images.asyncti4.com" />
+    <!--
+      Text and data faces. Slider (self-hosted, styles/fonts.css) carries display;
+      IBM Plex Sans carries UI text and IBM Plex Mono every numeral. One
+      superfamily for text and data keeps them coherent, and Plex holds up at the
+      9-12px sizes this interface actually runs at. Only the weights in the type
+      scale are requested, latin only, and swap so text paints immediately.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Enable pinch-zoom out below 1 and allow user scaling -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5, user-scalable=yes"
+    />
+    <meta
+      name="description"
+      content="AsyncTI4 – A fan project for Twilight Imperium™. Play Twilight Imperium 4th Edition online asynchronously, entirely through Discord (mobile or desktop)."
+    />
+    <title>AsyncTI4 | A fan project for Twilight Imperium™</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,85 @@
+:root {
+  --ability-background: rgba(147, 51, 234, 0.12);
+  --ability-border: rgba(147, 51, 234, 0.3);
+  --ability-shadow: rgba(147, 51, 234, 0.08);
+  --ability-highlight: rgba(147, 51, 234, 0.4);
+  --ability-background-exhausted: rgba(128, 128, 128, 0.15);
+  --ability-border-exhausted: rgba(128, 128, 128, 0.35);
+}
+
+.abilityCard {
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+}
+
+.abilityCard:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1) !important;
+  box-shadow:
+    0 4px 12px rgba(147, 51, 234, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.mainStack {
+  padding: 6px var(--mantine-spacing-xs);
+  border: 1px solid var(--ability-border);
+  background: linear-gradient(
+    135deg,
+    var(--ability-background) 0%,
+    rgba(30, 9, 60, 0.6) 100%
+  );
+  border-radius: 12px;
+}
+
+.exhausted {
+  border-color: var(--ability-border-exhausted);
+  background: linear-gradient(
+    135deg,
+    var(--ability-background-exhausted) 0%,
+    rgba(70, 70, 70, 0.35) 100%
+  );
+  filter: grayscale(0.4) opacity(0.5) !important;
+}
+
+.joinedRight {
+  background: rgba(76, 29, 149, 0.16);
+  border: 1px solid var(--planet-border);
+  border-left-width: 1px; /* divider line */
+  border-right-width: 1px;
+  border-top-width: 1px;
+  border-bottom-width: 1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+  height: 150px;
+}
+
+.joinedRight.exhausted {
+  background: rgba(76, 29, 149, 0.16);
+}
+
+.bottomStack {
+  flex-grow: 1;
+  justify-content: flex-end;
+}
+
+.planetName {
+  font-size: var(--mantine-font-size-xs);
+  color: white;
+  font-weight: var(--weight-rail);
+  writing-mode: vertical-rl;
+  text-orientation: sideways;
+  white-space: nowrap;
+  transform: rotate(180deg);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Legendary icon */
+.legendaryIcon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}

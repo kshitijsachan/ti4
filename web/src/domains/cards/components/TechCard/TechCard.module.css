@@ -1,0 +1,34 @@
+.content {
+  height: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.factionIcon {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+.bottomSection {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+}
+
+.techIconContainer {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.stackIcon {
+  width: 14px !important;
+  height: 14px !important;
+}

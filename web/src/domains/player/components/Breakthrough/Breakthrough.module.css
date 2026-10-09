@@ -1,0 +1,58 @@
+.container {
+  position: relative;
+}
+
+.headerChip {
+  width: 100%;
+}
+
+.container.exhausted {
+  filter: grayscale(0.2);
+}
+
+.container.locked {
+  filter: grayscale(0.8);
+  opacity: 0.7;
+}
+
+.exhaustedChip {
+  opacity: 0.72;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.035);
+}
+
+.synergyIcon::before {
+  position: relative;
+  bottom: 1px;
+  margin-right: -2px;
+}
+
+.exhaustedIcon::before {
+  filter: grayscale(0.55) brightness(0.9);
+}
+
+.tradeGoodsText {
+  margin-left: 6px;
+}
+
+.lockIcon {
+  position: absolute;
+  top: -8px;
+  right: -4px;
+  pointer-events: none;
+}
+
+.exhaustedBadge {
+  position: absolute;
+  right: -6px;
+  bottom: -7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(58, 12, 18, 0.82);
+  border: 1px solid rgba(226, 232, 240, 0.12);
+  box-shadow: none;
+  pointer-events: none;
+}

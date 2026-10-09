@@ -1,0 +1,43 @@
+.container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--mantine-color-dark-8);
+  color: var(--mantine-color-gray-0);
+}
+
+.tileContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 2rem 0;
+  padding: 2rem;
+  background: var(--mantine-color-dark-7);
+  border-radius: 12px;
+  border: 2px solid var(--mantine-color-dark-4);
+}
+
+.systemTileDisplay {
+  position: relative;
+  transform: scale(1.2);
+}
+
+.tile {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.systemTileDisplay,
+.tile {
+  width: 345px;
+  height: 299px;
+}
+
+.costMapSquare {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: opacity 0.2s ease;
+}

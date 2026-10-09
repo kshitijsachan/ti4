@@ -1,0 +1,80 @@
+.lawCard {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  padding: 6px 8px;
+  /* Law purple carried by a full hairline plus the fading tint below, rather
+     than a thick left rail. */
+  border: 1px solid rgba(168, 85, 247, 0.36);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, rgba(168, 85, 247, 0.10), rgba(168, 85, 247, 0.025) 48%),
+    rgba(9, 10, 16, 0.82);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+}
+
+.lawCard::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  background: rgba(168, 85, 247, 0.38);
+}
+
+.lawCard:hover {
+  border-color: rgba(168, 85, 247, 0.38);
+  background:
+    linear-gradient(90deg, rgba(168, 85, 247, 0.14), rgba(168, 85, 247, 0.035) 48%),
+    rgba(12, 14, 22, 0.88);
+}
+
+.lawIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: rgba(216, 180, 254, 0.92);
+  background: rgba(168, 85, 247, 0.11);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+}
+
+.lawText {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.lawTitle {
+  overflow: hidden;
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-font-family-headings);
+  font-size: 12px;
+  font-weight: var(--weight-rail);
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mapText {
+  overflow: hidden;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 12px;
+  font-weight: var(--weight-data);
+  line-height: var(--lh-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.factionIcon {
+  flex: 0 0 auto;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
