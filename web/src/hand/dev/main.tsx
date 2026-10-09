@@ -14,6 +14,7 @@ import { isHandThread } from "@/discord/channels/GamePanels";
 import { usePlayerDataSocket } from "@/api/usePlayerData";
 import { setToken } from "@/play/session";
 import { HandTray } from "../HandTray";
+import { Gallery } from "./Gallery";
 
 const params = new URLSearchParams(location.search);
 const game = params.get("game") ?? "pbd9";
@@ -70,7 +71,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <MantineProvider forceColorScheme="dark">
       <QueryClientProvider client={queryClient}>
-        {token ? (
+        {params.get("gallery") === "1" ? (
+          <Gallery />
+        ) : token ? (
           <PlayProvider token={token}>
             <Table />
             <ModalHost />

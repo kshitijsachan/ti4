@@ -2,7 +2,9 @@
  * The hand tray. Signal colours (action yellow, secret red, promissory cyan,
  * relic gold) are fixed across themes; surfaces come from the theme tokens.
  */
-.tray {
+.tray,
+.backdrop,
+.card {
   --hand-ac: #eab308;
   --hand-so: #ef4444;
   --hand-pn: #06b6d4;
@@ -10,9 +12,15 @@
   --hand-live: #22c55e;
   --hand-ink: var(--mantine-color-gray-2, #e9ecef);
   --hand-ink-muted: var(--mantine-color-gray-5, #adb5bd);
+}
+
+.tray,
+.card {
   --hand-card-w: 112px;
   --hand-card-h: 158px;
+}
 
+.tray {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -534,13 +542,6 @@
 /* ---------- focused card popup ---------- */
 
 .backdrop {
-  --hand-ac: #eab308;
-  --hand-so: #ef4444;
-  --hand-pn: #06b6d4;
-  --hand-relic: #ffd700;
-  --hand-live: #22c55e;
-  --hand-ink: var(--mantine-color-gray-2, #e9ecef);
-  --hand-ink-muted: var(--mantine-color-gray-5, #adb5bd);
   position: fixed;
   inset: 0;
   z-index: var(--z-app-modal, 3500);

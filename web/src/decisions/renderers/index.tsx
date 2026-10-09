@@ -5,7 +5,7 @@ import { CombatBody } from "./Combat";
 import { GainTokensBody, SpendBody } from "./Economy";
 import { GenericBody, TacticalBody } from "./Generic";
 import { ReactionBody } from "./Reaction";
-import { ScFollowBody, ScPickBody } from "./Strategy";
+import { ScFollowBody, ScPickBody, ScPrimaryBody } from "./Strategy";
 import { TradeBody } from "./Trade";
 import { TurnBody } from "./Turn";
 import type { RendererProps } from "./types";
@@ -15,6 +15,8 @@ export function renderBody(d: Decision, props: RendererProps): ReactNode {
   switch (d.kind) {
     case "scPick":
       return <ScPickBody {...props} />;
+    case "scPrimary":
+      return <ScPrimaryBody {...props} />;
     case "scFollow":
       return <ScFollowBody {...props} />;
     case "turn":

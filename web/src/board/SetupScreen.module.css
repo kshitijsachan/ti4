@@ -44,10 +44,3 @@
   margin-top: 8px;
 }
 
-.log {
-  height: 55vh;
-  margin-top: 8px;
-  border: 1px solid var(--panel-hairline-strong);
-  border-radius: 6px;
-  overflow: hidden;
-}

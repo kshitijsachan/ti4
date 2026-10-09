@@ -8,6 +8,7 @@ import { baseId, choicesOf, cleanLabel, type Choice } from "./controls";
 import { cleanText, firstLine, namesFrom } from "./text";
 
 export type DecisionKind =
+  | "scPrimary"
   | "spend"
   | "gainTokens"
   | "scPick"
@@ -169,8 +170,15 @@ function tradeOf(text: string): TradeInfo {
 function genericTitle(text: string): { title: string; rest: string } {
   const first = firstLine(text, 400);
   const sentence = first.split(/(?<=[.!?])\s/)[0] ?? "";
-  const bare = sentence.replace(/^[\w' -]{1,32},\s+/, "").replace(/[.:]$/, "").trim();
-  if (!bare || bare.length > 72) return { title: "The game needs your answer", rest: text };
+  let bare = sentence.replace(/^[\w' -]{1,32},\s+/, "").replace(/[.:]$/, "").trim();
+  if (bare.length > 72) {
+    const ask = bare.match(/\b(choose|select|pick|decide|use (?:the |these )?buttons? to|please)\b[^.!?]{3,60}/i)?.[0];
+    if (!ask) return { title: "The game needs your answer", rest: text };
+    bare = ask.replace(/^please,?\s*/i, "").replace(/^use (the |these )?buttons? to\s*/i, "");
+    const title = bare.charAt(0).toUpperCase() + bare.slice(1);
+    return { title, rest: text };
+  }
+  if (!bare) return { title: "The game needs your answer", rest: text };
   const title = bare.charAt(0).toUpperCase() + bare.slice(1);
   const idx = text.indexOf(sentence.slice(-Math.min(sentence.length, 24)));
   const rest = idx >= 0 ? text.slice(idx + Math.min(sentence.length, 24)).replace(/^[\s*_]+/, "") : text;
@@ -264,6 +272,17 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       eyebrow: phaseEyebrow(ctx, "Agenda phase"),
       title: agenda ? `Agenda: ${agenda.name} — vote` : "Agenda — vote",
       agenda,
+    };
+  }
+  if (prompt.ownCall && has(choices, ID.scFollow)) {
+    const sc = scOfFollow(m, choices);
+    const name = sc ? scName(ctx, sc) : undefined;
+    return {
+      ...base,
+      kind: "scPrimary",
+      eyebrow: phaseEyebrow(ctx, "Action phase"),
+      title: name ? `Resolve ${name}` : "Resolve your strategy card",
+      sc,
     };
   }
   if (has(choices, ID.scFollow)) {

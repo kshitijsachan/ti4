@@ -162,3 +162,40 @@ export function ScFollowBody({ d, data, onPress, pendingKey }: RendererProps) {
     </div>
   );
 }
+
+const FOLLOW_ID = /^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/;
+
+/** My own strategy card, just played: its primary ability and the buttons that resolve it. */
+export function ScPrimaryBody({ d, data, onPress, pendingKey }: RendererProps) {
+  const def = d.sc ? scDefinition(d.sc, data.web) : undefined;
+  return (
+    <div className={classes.stack}>
+      <div className={classes.followLayout}>
+        {d.sc && <ScArt initiative={d.sc} web={data.web} width={168} />}
+        <div className={classes.stack}>
+          {def && def.primaryTexts.length > 0 && (
+            <Section label="Primary ability">
+              {def.primaryTexts.map((t) => (
+                <p key={t} className={classes.cardText}>
+                  {t}
+                </p>
+              ))}
+            </Section>
+          )}
+          <p className={classes.hint}>The other players are now choosing whether to follow.</p>
+        </div>
+      </div>
+      <ChoiceButtons
+        choices={d.choices}
+        onPress={onPress}
+        pendingKey={pendingKey}
+        channelId={d.prompt.channelId}
+        rankOf={(c) => {
+          if (FOLLOW_ID.test(baseId(c.customId))) return "more";
+          if (c.rank === "undo" || c.rank === "more") return c.rank;
+          return "primary";
+        }}
+      />
+    </div>
+  );
+}
