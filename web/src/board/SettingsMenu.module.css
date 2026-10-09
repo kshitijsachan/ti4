@@ -1,0 +1,23 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  color: var(--mantine-color-gray-4);
+}
+
+.trigger:hover {
+  color: var(--mantine-color-gray-0);
+  background: var(--socket-bg);
+}
+
+/* ThemeSwatches carries its own side margins for the old tab strip. */
+.swatches {
+  padding: 4px 2px 8px;
+}
+
+.swatches > * {
+  margin: 0 !important;
+}

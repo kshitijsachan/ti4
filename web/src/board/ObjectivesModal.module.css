@@ -1,0 +1,16 @@
+.content {
+  width: min(1400px, calc(100vw - 32px));
+  max-width: none;
+}
+
+.body {
+  padding-top: 0;
+}
+
+.tabs {
+  margin-bottom: 12px;
+}
+
+.panel {
+  min-height: 300px;
+}

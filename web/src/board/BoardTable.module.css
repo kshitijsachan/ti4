@@ -1,0 +1,39 @@
+.table {
+  position: absolute;
+  inset: 0;
+  background: var(--main-bg);
+}
+
+.scroller {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.zoom {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: var(--z-zoom-controls);
+}
+
+/* Set on a map tile (by id) while something asks the table to look at it. */
+:global(.board-focus-tile) [data-map-tile-visual="true"] {
+  animation: boardFocusPulse 1.2s ease-in-out 3;
+  filter: drop-shadow(0 0 10px var(--mantine-color-yellow-4))
+    drop-shadow(0 0 3px var(--mantine-color-yellow-2));
+}
+
+@keyframes boardFocusPulse {
+  50% {
+    filter: drop-shadow(0 0 18px var(--mantine-color-yellow-4))
+      drop-shadow(0 0 5px var(--mantine-color-yellow-2));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.board-focus-tile) [data-map-tile-visual="true"] {
+    animation: none;
+  }
+}

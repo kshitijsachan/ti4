@@ -1,0 +1,23 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--main-bg);
+}
+
+/*
+ * The table. The transform makes it the containing block for the map's
+ * position: fixed tooltips and controls, so they stay on the table instead of
+ * sliding under the header and seats.
+ */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  transform: translateZ(0);
+  --map-viewport-top: 0px;
+  --map-viewport-height: 100%;
+}
