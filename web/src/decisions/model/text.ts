@@ -8,6 +8,17 @@ const EMOJI_WORDS: Record<string, string> = {
   resources: "resources",
   NoSabo: "",
   SpeakerToken: "",
+  warsun: "War Sun",
+  flagship: "Flagship",
+  dreadnought: "Dreadnought",
+  cruiser: "Cruiser",
+  carrier: "Carrier",
+  destroyer: "Destroyer",
+  fighter: "Fighter",
+  mech: "Mech",
+  infantry: "Infantry",
+  pds: "PDS",
+  spacedock: "Space Dock",
 };
 
 type Names = {
@@ -44,7 +55,7 @@ export function cleanText(content: string, names: Names): string {
     return ` ${n} ${name === "tg" ? "TG" : "commodities"} `;
   });
   s = s.replace(/<a?:(\w+):\d+>/g, (_m, name: string) => {
-    const word = EMOJI_WORDS[name];
+    const word = EMOJI_WORDS[name] ?? EMOJI_WORDS[name.toLowerCase()];
     return word === undefined ? "" : word ? ` ${word} ` : "";
   });
   s = s.replace(/<@!?(\d+)>/g, (_m, id: string) => names.user(id) ?? "a player");

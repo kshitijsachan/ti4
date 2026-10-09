@@ -95,7 +95,11 @@ function UnitMoveRows({ choices, data, onPress, pendingKey }: { choices: Choice[
           {list.map((c) => (
             <ChoiceButton
               key={c.key}
-              choice={{ ...c, label: `+${baseId(c.customId).match(UNIT_MOVE)?.[2] ?? ""}${/damaged/i.test(c.label) ? " damaged" : ""}`, style: 2 }}
+              choice={{
+                ...c,
+                label: `${/_reverse$/.test(c.customId ?? "") ? "−" : "+"}${baseId(c.customId).match(UNIT_MOVE)?.[2] ?? ""}${/damaged/i.test(c.label) ? " damaged" : ""}`,
+                style: /_reverse$/.test(c.customId ?? "") ? 4 : 2,
+              }}
               onPress={onPress}
               pending={pendingKey === c.key}
               busy={!!pendingKey}
@@ -121,7 +125,8 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   const choosingSystem = !movingFrom && (systems.length > 0 || rest.some((c) => /^ring_/.test(baseId(c.customId))));
   let text = d.text;
   if (choosingSystem) text = "Choose the system to activate. Not listed? Open the ring it sits in — ring 1 surrounds Mecatol Rex.";
-  if (movingFrom) text = "Pick a system to move ships out of, choose the ships, then press Done moving.";
+  const moved = movingFrom && /\bmoved\b/i.test(d.text) ? d.text.replace(/^\*\*Tactical Action in system[^\n]*\n*/i, "") : "";
+  if (movingFrom) text = moved ? "" : "Pick a system to move ships out of, choose the ships, then press Done moving.";
   return (
     <div className={classes.stack}>
       <ResourceStrip me={data.me} show={["tactic", "fleet", "strategy"]} />
@@ -135,7 +140,12 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
           </span>
         </div>
       )}
-      <Prose text={text} clamp={4} muted={choosingSystem} />
+      {moved && (
+        <Section label="Moving in so far">
+          <Prose text={moved} clamp={8} />
+        </Section>
+      )}
+      {text && <Prose text={text} clamp={4} muted={choosingSystem} />}
       {unitMoves.length > 0 && (
         <Section label="Ships and forces to move">
           <UnitMoveRows choices={unitMoves} data={data} onPress={onPress} pendingKey={pendingKey} />
