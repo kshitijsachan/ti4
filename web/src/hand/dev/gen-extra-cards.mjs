@@ -1,5 +1,5 @@
-// Regenerates src/hand/data/extraCards.ts: cards the bot knows that web/src/entities/data lacks
-// (it was generated from an older bot). From web/:  node src/hand/dev/gen-extra-cards.mjs [botResourcesDataDir]
+// Regenerates src/hand/data/extraCards.ts: cards the bot knows that web/src/entities/data lacks or words
+// differently (it was generated from an older bot; the bot's current text wins). From web/:  npx tsx src/hand/dev/gen-extra-cards.mjs [botResourcesDataDir]
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,25 +10,27 @@ const botData =
   process.argv[2] ?? "/home/user/asyncti4/ti4_map_generator_bot/src/main/resources/data";
 
 const kinds = [
-  { key: "ac", dir: "action_cards", web: "actionCards.ts", fields: ["name", "phase", "window", "text", "flavorText"] },
-  { key: "so", dir: "secret_objectives", web: "secretObjectives.ts", fields: ["name", "phase", "text", "points"] },
-  { key: "pn", dir: "promissory_notes", web: "promissoryNotes.ts", fields: ["name", "faction", "color", "playArea", "text"] },
-  { key: "relic", dir: "relics", web: "relics.ts", fields: ["name", "text", "flavourText", "imageURL"] },
+  { key: "ac", dir: "action_cards", web: "actionCards.ts", export: "actionCards", fields: ["name", "phase", "window", "text", "flavorText"] },
+  { key: "so", dir: "secret_objectives", web: "secretObjectives.ts", export: "secretObjectives", fields: ["name", "phase", "text", "points"] },
+  { key: "pn", dir: "promissory_notes", web: "promissoryNotes.ts", export: "promissoryNotes", fields: ["name", "faction", "color", "playArea", "text"] },
+  { key: "relic", dir: "relics", web: "relics.ts", export: "relics", fields: ["name", "text", "flavourText", "imageURL"] },
 ];
 
 const out = {};
 for (const kind of kinds) {
   const web = readFileSync(join(src, "entities/data", kind.web), "utf8");
-  const known = new Set([...web.matchAll(/alias: "([^"]+)"/g)].map((m) => m[1]));
+  const { [kind.export]: webCards } = await import(join(src, "entities/data", kind.web));
+  const known = new Map(webCards.map((card) => [card.alias, card]));
   const dir = join(botData, kind.dir);
   const items = readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
     .flatMap((f) => JSON.parse(readFileSync(join(dir, f), "utf8")));
   out[kind.key] = {};
   for (const item of items) {
-    if (known.has(item.alias)) continue;
     const slim = {};
     for (const field of kind.fields) if (item[field] !== undefined && item[field] !== null) slim[field] = item[field];
+    const old = known.get(item.alias);
+    if (old && kind.fields.every((field) => (old[field] ?? null) === (slim[field] ?? null))) continue;
     out[kind.key][item.alias] = slim;
   }
   console.log(kind.key, Object.keys(out[kind.key]).length, "added");

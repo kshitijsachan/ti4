@@ -61,8 +61,8 @@ export class SoloGames {
   }
 
   /** Creates the game and returns once it exists; setup continues in the background. */
-  start(userId: string, botCount: number, expansion: Expansion): Promise<SoloJob> {
-    return this.queue(() => this.create(userId, { botCount, others: [] }, expansion));
+  start(userId: string, botCount: number, expansion: Expansion, factions: string[] = []): Promise<SoloJob> {
+    return this.queue(() => this.create(userId, { botCount, others: [] }, expansion, factions));
   }
 
   /**
@@ -79,7 +79,7 @@ export class SoloGames {
     return run;
   }
 
-  private async create(userId: string, seats: { botCount: number; others: string[] }, expansion: Expansion): Promise<SoloJob> {
+  private async create(userId: string, seats: { botCount: number; others: string[] }, expansion: Expansion, factions: string[] = []): Promise<SoloJob> {
     const now = new Date().toISOString();
     const kind = seats.botCount > 0 ? "solo" : "table";
     const job: SoloJob = { kind, user_id: userId, bots: [], others: [], state: "creating", step: "Starting", started_at: now, updated_at: now, log: [] };
@@ -139,7 +139,7 @@ export class SoloGames {
       job.game = /^([a-z]+\d+)-actions$/i.exec(actions.name)![1];
       this.jobs.set(job.game, job);
       this.note(job, `Game ${job.game} created`, "setting_up");
-      void this.setup(job, p, actions.id, expansion)
+      void this.setup(job, p, actions.id, expansion, factions)
         .finally(() => p.close())
         .then(() => (job.state === "drafting" ? this.steward(job, actions.id) : undefined))
         .catch((e) => log.warn(`solo ${job.game}: steward stopped: ${(e as Error).message}`));
@@ -151,7 +151,7 @@ export class SoloGames {
     }
   }
 
-  private async setup(job: SoloJob, p: Player, actionsId: string, expansion: Expansion) {
+  private async setup(job: SoloJob, p: Player, actionsId: string, expansion: Expansion, factions: string[] = []) {
     const userId = job.user_id;
     const find = (id: RegExp) => this.store.messages(actionsId).filter((m) => visible(m, userId) && hasControl(m, id)).pop();
     try {
@@ -172,6 +172,21 @@ export class SoloGames {
       const settings = await this.waitFor(job, "the draft settings", 60 * SECOND, () =>
         this.newer(actionsId, sinceMilty, userId).find((m) => hasControl(m, /^jmfA_main_startMilty$/)),
       );
+      if (factions.length) {
+        // Prioritised factions (test games for particular factions): the settings menu's "Prioritize faction" list,
+        // answered as its selection box would be.
+        this.note(job, `Prioritising ${factions.join(", ")}`);
+        const err = await p.op({
+          op: "select",
+          channel_id: actionsId,
+          message_id: settings.id,
+          custom_id: "jmfA_main.players_includePriFactions_0",
+          values: factions,
+          component_type: 3,
+        });
+        if (err) this.note(job, `Prioritising factions: ${err}`);
+        await sleep(1500);
+      }
       this.note(job, "Starting the draft with default settings");
       await this.retry(job, "Start Draft", () => p.click(settings, "jmfA_main_startMilty"));
 

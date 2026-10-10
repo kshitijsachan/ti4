@@ -8,9 +8,10 @@ import type { ActionCard, PromissoryNote, Relic, SecretObjective } from "@/entit
 
 /**
  * Card text lookups. The generated data in entities/data predates newer bot
- * content (Thunder's Edge and others); `data/extraCards.ts` carries the
- * rest, straight from the bot's resources (`dev/gen-extra-cards.mjs`). It is
- * loaded on first use so the tray does not weigh down the page bundle.
+ * content (Thunder's Edge and others) and errata; `data/extraCards.ts` carries
+ * every card the bot words differently or that is missing, straight from the
+ * bot's resources (`dev/gen-extra-cards.mjs`), and wins over the old data. It
+ * is loaded on first use so the tray does not weigh down the page bundle.
  */
 type Extra = {
   ac: Record<string, Partial<ActionCard>>;
@@ -48,18 +49,23 @@ const pnMap = indexBy(
   (note) => note.alias,
 );
 
+function merged<T>(base: T | undefined, newer: Partial<T> | undefined): Partial<T> | undefined {
+  if (!newer) return base;
+  return base ? { ...base, ...newer } : newer;
+}
+
 export function actionCardData(alias: string): Partial<ActionCard> | undefined {
-  return getActionCard(alias) ?? extra?.ac[alias];
+  return merged(getActionCard(alias), extra?.ac[alias]);
 }
 
 export function secretData(alias: string): Partial<SecretObjective> | undefined {
-  return getSecretObjectiveData(alias) ?? extra?.so[alias];
+  return merged(getSecretObjectiveData(alias), extra?.so[alias]);
 }
 
 export function promissoryData(alias: string): Partial<PromissoryNote> | undefined {
-  return pnMap.get(alias) ?? extra?.pn[alias];
+  return merged(pnMap.get(alias), extra?.pn[alias]);
 }
 
 export function relicData(alias: string): Partial<Relic> | undefined {
-  return getRelicData(alias) ?? extra?.relic[alias];
+  return merged(getRelicData(alias), extra?.relic[alias]);
 }

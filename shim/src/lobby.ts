@@ -120,7 +120,7 @@ export class Lobby {
       const bots = Math.min(7, Math.max(2, Math.round(Number(body.bots ?? 3)) || 3));
       const expansion: Expansion = ["te", "newPoK", "oldPoK"].includes(body.expansion) ? body.expansion : "te";
       try {
-        const job = await this.solo.start(userId, bots, expansion);
+        const job = await this.solo.start(userId, bots, expansion, Array.isArray(body.factions) ? body.factions.map(String).slice(0, 8) : []);
         return sendJson(res, 200, { game: job.game, url: `/game/${job.game}`, status: job });
       } catch (e) {
         return discordError(res, 502, 0, (e as Error).message);

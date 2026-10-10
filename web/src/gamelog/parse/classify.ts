@@ -199,7 +199,9 @@ const PLAIN_NOISE: [RegExp, string][] = [
   [/^You currently have \d+ command tokens in your strategy pool/, "token reminder"],
   [/^Image of /, "image"],
   [/has units in the system\.?$/, "activation note"],
-  [/Ping (jazz|bothelper)/, "help text"],
+  [/Ping (jazz|bothelper)|ping a bothelper/i, "help text"],
+  [/^## Generating nucleus and slices/, "draft setup"],
+  [/should receive a reminder ping as well/, "combat reminder"],
   [/^🛑/, "bot warning"],
   [/^Added \d+ trade goods? to \*\*\w+\*\*\. There (is|are) now/, "unpicked card bonus"],
   [/^Secret objective shown to player/, "secret shown"],
@@ -212,6 +214,23 @@ const PLAIN_NOISE: [RegExp, string][] = [
   [/^## Which expansion are you using/, "setup prompt"],
   [/^\*\*__(Slices|Factions|Speaker Order):__\*\*/, "draft board"],
 ];
+
+/**
+ * A slash command the bot echoes (`/add_units tile_name: 101 unit_names: 2 dd, ca`) as words a player reads
+ * ("add units: 101, 2 dd, ca") — there is no command line here, so the `/command option:` syntax means nothing.
+ */
+export function commandText(cmd: string): string {
+  const s = cmd.trim().replace(/^\//, "");
+  const firstOpt = s.search(/\b\w+: /);
+  const name = (firstOpt < 0 ? s : s.slice(0, firstOpt)).trim().replace(/_/g, " ");
+  if (firstOpt < 0) return name;
+  const values = s
+    .slice(firstOpt)
+    .split(/\b\w+: /)
+    .map((v) => v.trim())
+    .filter(Boolean);
+  return `${name}: ${values.join(", ")}`;
+}
 
 const rules: Rule[] = [
   // Phase markers -----------------------------------------------------------------------------------------
@@ -245,7 +264,7 @@ const rules: Rule[] = [
   (m) => {
     const c = m.content.match(/^```(?:sus|notSus)?\n?(.+?) used (\/[^\n`]+)\n?```/s);
     if (!c) return null;
-    return ev({ kind: "edit", importance: 1, actor: { name: c[1].trim() }, summary: [txt("used "), b(c[2].trim())] });
+    return ev({ kind: "edit", importance: 1, actor: { name: c[1].trim() }, summary: [txt("edited the game: "), b(commandText(c[2]))] });
   },
 
   // Setup / draft ----------------------------------------------------------------------------------------
