@@ -68,9 +68,9 @@ export function spendable(board: Board, me: PlayerView, kind: "res" | "inf" = "r
   return n;
 }
 
-/** Tactic tokens kept back (for defence) from round 3 on. */
+/** Tactic tokens kept back (for defence) from round 5 on. */
 export function reserve(board: Board) {
-  return board.round >= 3 ? 1 : 0;
+  return board.round >= 5 ? 1 : 0;
 }
 
 type Carrier = { origin: string; unit: string; move: number; capacity: number };

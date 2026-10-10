@@ -90,7 +90,14 @@ class TechJob implements Job {
   private chosen: string | undefined;
   private picked = false;
 
-  constructor(seat: Seat, game: string, since: string | undefined, owned: string[]) {
+  constructor(
+    seat: Seat,
+    game: string,
+    since: string | undefined,
+    owned: string[],
+    /** What the research costs: 0 for Technology's first (primary), 4 resources when following. */
+    private cost: number,
+  ) {
     this.steps = new Steps(seat, game, since);
     this.chosen = nextTech(owned);
   }
@@ -131,10 +138,98 @@ class TechJob implements Job {
     }
     const bill = s.find(faction, (b) => /^spend_/.test(b) || /^reduceTG_/.test(b));
     if (bill) {
-      const r = await payStep(s.seat, bill.p, board, me, "res", s.pressed);
+      const r = await payStep(s.seat, bill.p, board, me, "res", s.pressed, this.cost);
       return r === "done" ? "done" : r === "wait" ? "wait" : "acted";
     }
     return Date.now() - s.lastPress > 10000 ? "done" : "wait";
+  }
+}
+
+/** Status phase: gain the round's command tokens (2, +1 Versatile, +1 Hyper Metabolism) through the bot's buttons. */
+class StatusTokensJob implements Job {
+  name = "Status command tokens";
+  started = Date.now();
+  private steps: Steps;
+  private gained = 0;
+
+  constructor(seat: Seat, game: string, since: string | undefined) {
+    this.steps = new Steps(seat, game, since);
+  }
+
+  owns(p: Prompt) {
+    return p.controls.some((c) => /^(redistributeCCButtons|increase_(tactic|fleet|strategy)_cc|decrease_(tactic|fleet|strategy)_cc|resetCCs)$/.test(baseId(c.custom_id)));
+  }
+
+  async tick(board: Board | null, me: PlayerView | undefined, faction: string): Promise<JobResult> {
+    if (!board || !me) return "wait";
+    const s = this.steps;
+    const gain = s.find(faction, (b) => /^increase_(tactic|fleet|strategy)_cc$/.test(b));
+    if (!gain) return Date.now() - this.started > 30000 ? "done" : "wait";
+    const abilities: string[] = me.raw.abilities ?? [];
+    const total = 2 + (abilities.includes("versatile") ? 1 : 0) + (me.techs.includes("hm") ? 1 : 0);
+    const p = gain.p;
+    if (this.gained < total) {
+      const kind = this.gained === 1 && me.fleetCC < 3 ? "fleet" : this.gained === 2 && me.strategicCC < 2 ? "strategy" : "tactic";
+      const c = p.controls.find((x) => baseId(x.custom_id) === `increase_${kind}_cc`);
+      if (c && (await s.press(p, c, `status: gain a ${kind} token (${this.gained + 1}/${total})`, true))) {
+        this.gained++;
+        return "acted";
+      }
+      return "wait";
+    }
+    const done = p.controls.find((c) => baseId(c.custom_id) === "deleteButtons" && /^done/i.test(c.label));
+    if (done) {
+      await s.press(p, done, `done gaining ${total} command tokens`);
+      return "done";
+    }
+    return "wait";
+  }
+}
+
+/** Paying for a "spend" objective just scored: the trade goods (the bot exhausts planets itself), then Done. */
+class ScoreBillJob implements Job {
+  name = "Objective payment";
+  started = Date.now();
+  private steps: Steps;
+  private tgPaid = 0;
+
+  constructor(
+    seat: Seat,
+    game: string,
+    since: string | undefined,
+    private need: { res: number; inf: number; tg: number },
+  ) {
+    this.steps = new Steps(seat, game, since);
+  }
+
+  owns(p: Prompt) {
+    return /to score the objective/i.test(String(p.m.content ?? ""));
+  }
+
+  async tick(board: Board | null, me: PlayerView | undefined, faction: string): Promise<JobResult> {
+    const s = this.steps;
+    const bill = s.find(faction, (b) => /^reduceTG_|^spend_|^deleteButtons$/.test(b));
+    if (!bill || !/to score the objective/i.test(String(bill.p.m.content ?? ""))) return Date.now() - this.started > 20000 ? "done" : "wait";
+    const p = bill.p;
+    const left = this.need.tg - this.tgPaid;
+    if (left > 0) {
+      const tg = p.controls
+        .map((c) => ({ c, n: Number(/^reduceTG_(\d+)/.exec(baseId(c.custom_id))?.[1] ?? NaN) }))
+        .filter((x) => !Number.isNaN(x.n) && x.n <= left)
+        .sort((a, b) => b.n - a.n)[0];
+      if (tg && (await s.press(p, tg.c, `pay ${tg.n} trade goods for the objective`, true))) {
+        this.tgPaid += tg.n;
+        return "acted";
+      }
+    }
+    const done = p.controls.find((c) => baseId(c.custom_id) === "deleteButtons" && /done/i.test(c.label));
+    if (done) {
+      await s.press(p, done, "done paying for the objective");
+      return "done";
+    }
+    void board;
+    void me;
+    return "wait";
   }
 }
 
@@ -182,8 +277,43 @@ class ConstructionJob implements Job {
 }
 
 /** Score one public objective from a prompt of po_scoring_ buttons (Imperial, status phase). */
+/** Objectives scored by spending: what they cost (resources, influence, trade goods). Others that spend tokens are skipped. */
+const SPEND: Record<string, { res: number; inf: number; tg: number } | null> = {
+  "amass wealth": { res: 3, inf: 3, tg: 3 },
+  "negotiate trade routes": { res: 0, inf: 0, tg: 5 },
+  "erect a monument": { res: 8, inf: 0, tg: 0 },
+  "sway the council": { res: 0, inf: 8, tg: 0 },
+  "found a golden age": { res: 16, inf: 0, tg: 0 },
+  "manipulate galactic law": { res: 0, inf: 16, tg: 0 },
+  "centralize galactic trade": { res: 0, inf: 0, tg: 10 },
+  "hold vast reserves": { res: 6, inf: 6, tg: 6 },
+  "lead from the front": null,
+  "galvanize the people": null,
+};
+
+function canPay(board: Board, me: PlayerView, need: { res: number; inf: number; tg: number }) {
+  if (me.tg < need.tg) return false;
+  // Planets go to one side each: greedy by what each side lacks.
+  let res = 0;
+  let inf = 0;
+  const planets = me.planets
+    .filter((id) => !me.exhaustedPlanets.has(id))
+    .map((id) => board.systems.get(board.planetSystem.get(id) ?? "")?.planets.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => !!p)
+    .sort((a, b) => b.resources + b.influence - (a.resources + a.influence));
+  for (const p of planets) {
+    if (res < need.res && (inf >= need.inf || p.resources >= p.influence)) res += p.resources;
+    else if (inf < need.inf) inf += p.influence;
+  }
+  return res >= need.res && inf >= need.inf;
+}
+
 function scorablePublics(board: Board, me: PlayerView): { key: string; name: string }[] {
   return board.objectives
+    .filter((o) => {
+      const spend = SPEND[String(o.name).toLowerCase()];
+      return spend === undefined || (spend !== null && canPay(board, me, spend));
+    })
     .filter((o) => o.revealed && !(o.scoredFactions ?? []).includes(me.faction) && Number(o.progressThreshold) > 0 && Number(o.factionProgress?.[me.faction] ?? 0) >= Number(o.progressThreshold))
     .sort((a, b) => Number(b.pointValue) - Number(a.pointValue))
     .map((o) => ({ key: String(o.key), name: String(o.name) }));
@@ -230,6 +360,7 @@ export class CardPlanner {
       if (await this.primary(game, faction, p)) return true;
       if (await this.follow(game, faction, p)) return true;
       if (await this.scoring(game, faction, p)) return true;
+      if (await this.statusTokens(game, p)) return true;
     }
     return false;
   }
@@ -270,7 +401,7 @@ export class CardPlanner {
       return press("leadershipGenerateCCButtons", "Leadership — gain command tokens");
     }
     if (ids.includes("acquireATechWithSC_first")) {
-      this.add(game, new TechJob(this.seat, game, p.m.id, me.techs));
+      this.add(game, new TechJob(this.seat, game, p.m.id, me.techs, 0));
       return press("acquireATechWithSC_first", `Technology — research ${nextTech(me.techs) ?? "?"}`);
     }
     if (ids.includes("constructionPrimary_produce")) {
@@ -307,10 +438,25 @@ export class CardPlanner {
     if (!board || !me) return false;
     const tech = nextTech(me.techs);
     if (!tech || me.strategicCC < 1 || spendable(board, me) < 6) return false;
-    this.add(game, new TechJob(this.seat, game, p.m.id, me.techs));
+    this.add(game, new TechJob(this.seat, game, p.m.id, me.techs, 4));
     this.seat.log(`following Technology: research ${tech} for 4 resources and a strategy token`);
     await this.seat.press(p, get, "follow Technology");
     void faction;
+    return true;
+  }
+
+  /** Status homework: press "Redistribute, Gain, & Confirm Command Tokens" once, then gain the tokens. */
+  private async statusTokens(game: string, p: Prompt): Promise<boolean> {
+    const c = p.controls.find((x) => baseId(x.custom_id) === "redistributeCCButtons");
+    if (!c || p.m._presses?.[this.seat.userId] || Date.now() - Date.parse(p.m.timestamp) > 15 * 60000) return false;
+    if (!this.once(`cc:${p.m.id}`)) return false;
+    const board = await this.seat.board(game, true);
+    if (!board || !/^status/.test(board.phase)) {
+      this.handled.delete(`cc:${p.m.id}`);
+      return false;
+    }
+    this.add(game, new StatusTokensJob(this.seat, game, p.m.id));
+    await this.seat.press(p, c, "status: gain this round's command tokens");
     return true;
   }
 
@@ -339,6 +485,8 @@ export class CardPlanner {
       const c = pub ? p.controls.find((x) => /^po_scoring_/.test(baseId(x.custom_id)) && x.label.toLowerCase().includes(pub.name.toLowerCase())) : undefined;
       if (c) {
         this.seat.log(`Imperial: score public objective ${pub!.name}`);
+        const spend = SPEND[pub!.name.toLowerCase()];
+        if (spend) this.add(game, new ScoreBillJob(this.seat, game, p.m.id, spend));
         await this.seat.press(p, c, "score a public objective");
         return true;
       }
@@ -357,6 +505,8 @@ export class CardPlanner {
       const c = pub ? p.controls.find((x) => /^po_scoring_/.test(baseId(x.custom_id)) && x.label.toLowerCase().includes(pub.name.toLowerCase())) : undefined;
       if (c) {
         this.seat.log(`status: score public objective ${pub!.name}`);
+        const spend = SPEND[pub!.name.toLowerCase()];
+        if (spend) this.add(game, new ScoreBillJob(this.seat, game, p.m.id, spend));
         await this.seat.press(p, c, "score a public objective");
       } else {
         const no = p.controls.find((x) => baseId(x.custom_id) === "po_no_scoring");
@@ -388,7 +538,7 @@ export class CardPlanner {
       if (before && !snowflakeAfter(before, m.id)) continue;
       if (Date.now() - Date.parse(m.timestamp) > 20 * 60000) break;
       const content = String(m.content ?? "");
-      if (!content.includes(`<@${this.seat.userId}>`) || !/capable of scoring/i.test(content)) continue;
+      if (!content.includes(`<@${this.seat.userId}>`) || !/capable of scoring the following secret/i.test(content)) continue;
       const name = /\n[^\n]*?_([^_\n]{4,60})_/.exec(content)?.[1];
       if (name) return name.trim();
     }
