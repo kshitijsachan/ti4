@@ -236,7 +236,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
   };
 
   if (prompt.reason === "table" || has(choices, /^(deal2SOToAll|startOfGameObjReveal|startOfGameStrategyPhase)$/)) {
-    return { ...base, ...tableSetup(choices), kind: "setup", eyebrow: "Game setup · for the whole table", table: true, setup: true };
+    return { ...base, ...tableSetup(choices), kind: "setup", eyebrow: "Setup · anyone can press", table: true, setup: true };
   }
   if (prompt.reason === "setup" || has(choices, /^(discardSecret_|SODISCARD_)\d+/)) {
     const round1 = !ctx.web?.gameRound || ctx.web.gameRound <= 1;
