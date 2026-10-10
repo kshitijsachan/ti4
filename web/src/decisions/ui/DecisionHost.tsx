@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { UnstyledButton, Tooltip } from "@mantine/core";
-import { IconChevronLeft, IconChevronRight, IconEyeOff, IconMap, IconAlertTriangle } from "@tabler/icons-react";
+import { IconEyeOff, IconMap, IconAlertTriangle } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import cx from "clsx";
 import { usePlay, usePlayConnection } from "@/discord";
@@ -13,6 +13,7 @@ import { findGame } from "../detect/games";
 import { usePendingPrompts } from "../detect/pending";
 import { useSetupWaiting } from "../detect/waiting";
 import { classify, isNoise, type Decision } from "../model/classify";
+import { orderQueue } from "../model/queue";
 import { baseId, type Choice } from "../model/controls";
 import { useDecisionFocus } from "../model/focus";
 import { useDecisionPress } from "../model/usePress";
@@ -83,8 +84,9 @@ function combatOver(d: Decision, web?: PlayerDataResponse) {
 /** The bot often answers one press with a few prompts at once (pay, then gain tokens): keep those in posting order. */
 const BURST_MS = 3000;
 
+/** Oldest first, a burst's prompts in posting order, combat and my strategy card's steps folded together. */
 function inBursts(newestFirst: Decision[]): Decision[] {
-  return foldCombat(bursts(newestFirst).reverse().flatMap(foldSteps));
+  return foldCombat(bursts(newestFirst).flatMap(foldSteps));
 }
 
 /** A combat thread posts several prompts at once (assign hits, roll dice, AFB): one popup per combat. */
@@ -168,13 +170,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     const live = all.filter(
       (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "combat" && combatOver(d, web)),
     );
-    const ordered = inBursts(live);
-    /* My own choices first, then the table-wide steps anyone may take, then the optional ones. */
-    return [
-      ...ordered.filter((d) => !d.optional && !d.table),
-      ...ordered.filter((d) => d.table),
-      ...ordered.filter((d) => d.optional && !d.table),
-    ];
+    return orderQueue(inBursts(live));
   }, [prompts, game, users, channels, messages, web, mePlayer]);
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };
@@ -194,7 +190,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
 }
 
 export type DecisionPopupProps = {
-  /** Newest first. */
+  /** In queue order: the first is the one shown. */
   decisions: Decision[];
   data: DecisionData;
   placement?: DecisionHostProps["placement"];
@@ -227,17 +223,10 @@ function PopupLayer({ children, placement, rightInset, peeking }: {
 }
 
 /** The popup itself over a list of decisions: paging, peeking at the map, presses, map focus. */
-export function DecisionPopup({ decisions, data, placement = "fixed", className, rightInset = 0 }: DecisionPopupProps) {
+export function DecisionPopup({ decisions, data, placement = "fixed", rightInset = 0 }: DecisionPopupProps) {
   const conn = usePlayConnection();
   const press = useDecisionPress();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [peeking, setPeeking] = useState(false);
-  const newest = decisions[0]?.id;
-  const lastNewest = useRef<string | undefined>(newest);
-  useEffect(() => {
-    if (newest && newest !== lastNewest.current) setSelectedId(newest);
-    lastNewest.current = newest;
-  }, [newest]);
   useEffect(() => {
     if (!peeking) return;
     const stop = () => setPeeking(false);
@@ -251,10 +240,9 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className,
     };
   }, [peeking]);
 
-  const index = Math.max(0, decisions.findIndex((d) => d.id === selectedId));
-  const live = decisions[index];
-  const shown = press.held ?? live;
-  const count = decisions.length + (press.held && !decisions.some((d) => d.id === press.held?.id) ? 1 : 0);
+  /* One thing at a time: the head of the queue (or the one whose press is still settling). */
+  const shown = press.held ?? decisions[0];
+  const more = decisions.filter((d) => d.id !== shown?.id).length;
 
   const setFocus = useDecisionFocus((s) => s.set);
   const promptPosition = shown?.position ?? null;
@@ -268,13 +256,8 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className,
     else setFocus(promptPosition, "prompt");
   };
 
-  if (!shown || count === 0) return null;
+  if (!shown) return null;
 
-  const go = (delta: number) => {
-    if (press.held) press.release();
-    const next = decisions[(index + delta + decisions.length) % decisions.length];
-    if (next) setSelectedId(next.id);
-  };
   const hide = () => {
     conn.actions.dismissPrompt(shown.id);
     press.release();
@@ -295,27 +278,19 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className,
               {shown.eyebrow && <span className={classes.eyebrow}>{shown.eyebrow}</span>}
               <h2 className={classes.title}>{shown.title}</h2>
             </div>
-            {count > 1 && (
-              <span className={classes.pager}>
-                <UnstyledButton className={classes.iconBtn} onClick={() => go(-1)} aria-label="Previous decision">
-                  <IconChevronLeft size={15} />
-                </UnstyledButton>
-                <span className={classes.pagerText}>
-                  {index + 1}/{count}
-                </span>
-                <UnstyledButton className={classes.iconBtn} onClick={() => go(1)} aria-label="Next decision">
-                  <IconChevronRight size={15} />
-                </UnstyledButton>
+            {more > 0 && (
+              <span className={classes.pagerText} title="More decisions wait after this one">
+                +{more} next
               </span>
             )}
             <Tooltip label="Hold to look at the map" position="bottom">
               <UnstyledButton
                 className={classes.iconBtn}
-                onPointerDown={(e) => {
+                onPointerDown={(e: PointerEvent) => {
                   e.preventDefault();
                   setPeeking(true);
                 }}
-                onKeyDown={(e) => (e.key === " " || e.key === "Enter") && setPeeking(true)}
+                onKeyDown={(e: KeyboardEvent) => (e.key === " " || e.key === "Enter") && setPeeking(true)}
                 onKeyUp={() => setPeeking(false)}
                 aria-label="Peek at the map (hold)"
               >

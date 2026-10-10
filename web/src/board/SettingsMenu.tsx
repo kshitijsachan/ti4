@@ -62,7 +62,7 @@ export function SettingsMenu({ onRawChannels }: Props) {
     handlers.setMapLens(settings[key] ? null : key);
 
   return (
-    <Menu position="bottom-end" width={264} shadow="md" closeOnItemClick={false} zIndex={3300}>
+    <Menu position="bottom-end" width={264} shadow="md" closeOnItemClick={false} zIndex={3500}>
       <Menu.Target>
         <UnstyledButton className={classes.trigger} aria-label="Settings">
           <IconSettings size={18} />

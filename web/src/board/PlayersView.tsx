@@ -194,7 +194,7 @@ export function PlayersView({ opened, onClose }: Props) {
             width={230}
             shadow="md"
             closeOnItemClick={false}
-            zIndex={3400}
+            zIndex={3500}
           >
             <Menu.Target>
               <UnstyledButton
