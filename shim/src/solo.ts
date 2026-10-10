@@ -267,9 +267,13 @@ export class SoloGames {
     } catch (e) {
       this.note(job, `Prioritising factions failed: ${(e as Error).message}`);
     }
-    const page = this.store.findMessage(actionsId, settings.id) ?? settings;
-    if (hasControl(page, "jmfN_main_0")) await p.click(page, "jmfN_main_0");
-    await this.waitFor(job, "the main settings page", 15 * SECOND, () => hasControl(this.store.findMessage(actionsId, settings.id) ?? settings, "jmfA_main_startMilty") || undefined).catch(() => undefined);
+    // Back to the main page, whose Start Draft button the bot only accepts while it is shown.
+    const current = () => this.store.findMessage(actionsId, settings.id) ?? settings;
+    for (let attempt = 1; attempt <= 4 && !hasControl(current(), "jmfA_main_startMilty"); attempt++) {
+      if (hasControl(current(), "jmfN_main_0")) await p.click(current(), "jmfN_main_0");
+      await this.waitFor(job, "the main settings page", 8 * SECOND, () => hasControl(current(), "jmfA_main_startMilty") || undefined).catch(() => undefined);
+    }
+    if (!hasControl(current(), "jmfA_main_startMilty")) throw new Error("the draft settings did not return to their main page");
   }
 
   /**
@@ -288,6 +292,8 @@ export class SoloGames {
     const pressed = new Map<string, number>();
     let lastNote = "";
     let setupDone = false;
+    /** Setup states (each seat's faction and technology count) in which the bot refused to deal. */
+    const refusedAt = new Set<string>();
     let doneAt = 0;
     const setupDoneAt = () => (doneAt ||= Date.now());
     const say = (text: string, state?: SoloState) => {
@@ -312,7 +318,8 @@ export class SoloGames {
         continue;
       }
       await this.janitor(job, game);
-      const setupMessages = this.gameMessages(game, userId);
+      // Every seat's setup prompts, in their private threads too (the steward is the shim, not a player).
+      const setupMessages = this.gameMessages(game, null);
       const latest = (id: string) => this.store.messages(actionsId).filter((m) => visible(m, userId) && hasControl(m, id)).pop();
       const quietFor = Date.now() - this.lastActivity(game);
       const again = (m: StoredMessage) => {
@@ -332,17 +339,29 @@ export class SoloGames {
             BigInt(m.id) > BigInt(deal.id) - (60n * 1000n << 22n) &&
             !Object.keys(m._presses ?? {}).length &&
             controlIds(m.components).some((id) => !/^(deleteButtons|ultimateUndo|undo)/i.test(id)) &&
-            (/starting tech/i.test(String(m.content ?? "")) || hasControl(m, /(^|_)getTech_.*noPay/)),
+            (/starting tech/i.test(String(m.content ?? "")) || hasControl(m, /(^|_)getTech_.*noPay|^setupStep5_\d+_keleres|(^|_)getKeleresTechOptions$/)),
         );
         if (choosing.length) {
           const who = [...new Set(choosing.map((m) => this.whoIsAsked(web, m)))];
           say(`Waiting for ${who.join(", ")} to choose a starting technology`);
           continue;
         }
-        if (quietFor < 6 * SECOND || !again(deal)) continue;
+        // Never force it: the bot refuses an early press ("Cannot deal secret objectives yet ... press the button
+        // again" / Keleres not set up) and a second press would push it through. After a refusal, press again only
+        // once the table's setup has visibly moved on (someone gained a technology or a faction).
+        const setupState = JSON.stringify(this.realPlayers(web).map((p: Json) => [p.discordId, p.faction, (p.techs ?? []).length]));
+        if (refusedAt.has(setupState)) continue;
+        if (quietFor < 6 * SECOND || pressed.has(deal.id) && refusedAt.size === 0) continue;
         pressed.set(deal.id, Date.now());
         say("Everyone is set up: dealing secret objectives");
         await this.pressAs(job, deal, "deal2SOToAll");
+        await sleep(4 * SECOND);
+        const after = await this.webData(game);
+        const dealtNow = after && this.realPlayers(after).some((p: Json) => Number(p.soCount ?? 0) > 0);
+        if (!dealtNow) {
+          refusedAt.add(setupState);
+          say("The bot did not deal yet (a seat is not set up); waiting for setup to move on");
+        }
         continue;
       }
 
@@ -403,14 +422,14 @@ export class SoloGames {
   }
 
   /** Every bot message of a game the user can see: its actions channel, table talk and threads. */
-  private gameMessages(game: string, userId: string): StoredMessage[] {
+  private gameMessages(game: string, userId: string | null): StoredMessage[] {
     const s = this.store.state;
     const out: StoredMessage[] = [];
     for (const ch of Object.values(s.channels)) {
       const name = String(ch.name ?? "");
       if (!name.startsWith(`${game}-`) && !name.includes(`-${game}-`)) continue;
-      if (!this.store.canView(userId, ch.id)) continue;
-      for (const m of this.store.messages(ch.id)) if (visible(m, userId) && s.users[m.author?.id]?.bot) out.push(m);
+      if (userId && !this.store.canView(userId, ch.id)) continue;
+      for (const m of this.store.messages(ch.id)) if ((!userId || visible(m, userId)) && s.users[m.author?.id]?.bot) out.push(m);
     }
     return out;
   }

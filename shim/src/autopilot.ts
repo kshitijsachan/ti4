@@ -27,6 +27,8 @@ type Choice = {
 type GameState = { phase: string | null; active: string | null; colors: Map<string, string> };
 
 type Ctx = {
+  /** Names this seat and nobody else, carries its faction's buttons, is only visible to it, or is in its own thread. */
+  addressed: boolean;
   /** Addressed to this seat: ephemeral for it, mentions it, its faction's buttons, its threads, replies to it. */
   direct: boolean;
   /**
@@ -51,6 +53,11 @@ type Rule = {
   again?: boolean;
   /** Ranks matching controls (lower first). */
   rank?: (c: Control) => number;
+  /**
+   * Only on prompts that name this seat (or carry its faction's buttons, or only it can see): starting-technology
+   * buttons are not faction-locked, and the bot gives the technology to whoever presses.
+   */
+  addressed?: boolean;
   /** Not a control we chose (by label) in this channel in the last 10 minutes: a second starting technology. */
   distinct?: boolean;
   /**
@@ -80,13 +87,15 @@ const RULES: Rule[] = [
   { id: /^milty_faction_/, score: 91, why: "draft: first faction" },
   { id: /^milty_order_/, score: 90, why: "draft: first speaker order" },
   // Setup: keep the first secret objective, discard the other.
-  { id: /^discardSecret_/, score: 80, last: true, why: "setup: keep the first secret objective" },
+  { id: /^discardSecret_/, score: 80, addressed: true, last: true, why: "setup: keep the first secret objective" },
+  // Setup: Keleres picks its flavor once the draft is over (the player's own setup waits on it).
+  { id: /^setupStep5_\d+_keleres[a-z]_/, score: 84, addressed: true, why: "setup: Keleres flavor" },
   // Setup: starting technology. Most factions get a list of their allowed techs (getTech_<alias>__noPay__comp, once
   // or twice); open choices come as "Get a Technology" → a tech type → a tech; Keleres asks once the others are done.
-  { id: /(^|_)acquireAFreeTech$/, score: 83, why: "setup: get a starting technology" },
-  { id: /(^|_)getAllTechOfType_/, score: 82, why: "setup: first technology type" },
-  { id: /(^|_)getTech_.+__noPay/, score: 81, distinct: true, why: "setup: first starting technology" },
-  { id: /(^|_)getKeleresTechOptions$/, score: 60, why: "setup: Keleres technology options" },
+  { id: /(^|_)acquireAFreeTech$/, score: 83, addressed: true, why: "setup: get a starting technology" },
+  { id: /(^|_)getAllTechOfType_/, score: 82, addressed: true, why: "setup: first technology type" },
+  { id: /(^|_)getTech_.+__noPay/, score: 81, addressed: true, distinct: true, why: "setup: first starting technology" },
+  { id: /(^|_)getKeleresTechOptions$/, score: 60, addressed: true, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
     id: /_scPick_\d+$/,
@@ -140,6 +149,10 @@ const RULES: Rule[] = [
     why: "decline / move on",
   },
 ];
+
+/** Optional ability offers: never the fallback answer (a rule must score them explicitly). */
+const OPTIONAL_LABEL = /\b(use|using|agent|commander|hero|promissory|exhaust|play|purge|spend|pay|ability|on someone else|activate|trigger|steal|swap)\b/i;
+const OPTIONAL_ID = /(agent|commander|hero|leader|^play|^use|getAgentSelection|^pn_|_pn_|resolvePNPlay|steal)/i;
 
 /** Confirmations that offer a way to take the choice back: their lone button is not a question for us. */
 const TAKE_BACK_TEXT = /change your mind|if this was an accident|can change (that|your decision)|to undo|remove the preset|be asked (again|to decide)/i;
@@ -483,7 +496,9 @@ class SeatPilot {
       return !!n && content.includes(`${n} <:`);
     };
     const namesOther = !mentionsMe && !named(me) && Object.values(s.seats).some((seat) => seat.user_id !== me && named(seat.user_id));
-    const mentionsOther = namesOther || (!mentionsMe && (m.mentions ?? []).some((u: Json) => u.id !== me && !s.users[u.id]?.bot));
+    // Another seated player pinged in the text ("<@id>"): the shim's messages do not always carry `mentions`.
+    const pingsOther = [...content.matchAll(/<@!?(\d+)>/g)].some(([, id]) => id !== me && s.users[id] && !s.users[id].bot);
+    const mentionsOther = namesOther || (!mentionsMe && (pingsOther || (m.mentions ?? []).some((u: Json) => u.id !== me && !s.users[u.id]?.bot)));
     const ffcc = (c: Control) => family(/^FFCC_([^_]+)_/.exec(c.custom_id)?.[1]);
     const ffccMine = !!faction && controls.some((c) => ffcc(c) === faction);
     // Only we are named in an actions-channel post ("@Bot Beta, as Speaker, please decide a winner").
@@ -506,8 +521,12 @@ class SeatPilot {
 
     const myThread = ch.type === 12 && (s.thread_members[ch.id] ?? []).includes(me);
     const factionThread = !!faction && ch.type === 11 && String(ch.name).toLowerCase().includes(faction);
-    const strong = m._ephemeral_for === me || ffccMine || (m._prompted_for === me && !mentionsOther);
+    // Our own private thread (cards info) naming only us: e.g. Keleres' "choose a flavor of keleres", prompted by
+    // whoever's press finished the draft.
+    const ownThread = ch.type === 12 && myThreadOwner(ch, s, me);
+    const strong = m._ephemeral_for === me || ffccMine || (m._prompted_for === me && !mentionsOther) || (ownThread && mentionsMe && !mentionsOther);
     const ctx: Ctx = {
+      addressed: m._ephemeral_for === me || ffccMine || ((mentionsMe || ownThread) && !mentionsOther),
       strong,
       direct: strong || calledOut || (mentionsMe && !/is up to draft/.test(content)) || ((myThread || factionThread) && !mentionsOther),
       faction,
@@ -521,8 +540,9 @@ class SeatPilot {
     let phase: string | null | undefined;
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
+      if (rule.addressed && !ctx.addressed) continue;
       if (rule.retry && lost && (await this.myTurn(game))) {
-        const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")));
+        const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && (rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id)));
         if (again.length && !BLOCKED_ID.test(again[0].custom_id.replace(/^FFCC_[^_]+_/, ""))) {
           this.retries.set(m.id, (this.retries.get(m.id) ?? 0) + 1);
           return { msg: m, control: again[0], score: rule.score, why: `${rule.why}; again, the first press was lost` };
@@ -546,6 +566,10 @@ class SeatPilot {
     if (!ctx.strong || answered || TAKE_BACK_TEXT.test(content)) return null;
     // A prompt certainly waiting on us that no rule covers: its first control (not one we just chose in a
     // similar prompt here, e.g. a second "choose a technology").
+    // Optional abilities offered "just in case" (agents, commanders, promissory notes, "use X?") are not questions
+    // we must answer: never pressed only because they are the first or only button.
+    controls = controls.filter((c) => !OPTIONAL_LABEL.test(c.label) && !OPTIONAL_ID.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")));
+    if (!controls.length) return null;
     const fresh = controls.filter((c) => sibling || Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= REPOST_MS);
     if (!fresh.length) return null;
     controls = fresh;
@@ -767,6 +791,14 @@ function gameOf(ch: Json, channels: Record<string, Json>): string | null {
   if (!c.parent_id) return null; // game channels live in a category
   const m = /^([a-z]+\d+)-/i.exec(String(c.name ?? ""));
   return m ? m[1] : null;
+}
+
+/** A private thread that belongs to this seat ("Cards Info-pbd7-<name>"): only it and the bot are members. */
+function myThreadOwner(ch: Json, s: Json, me: string): boolean {
+  const members: string[] = s.thread_members[ch.id] ?? [];
+  if (!members.includes(me)) return false;
+  const name = String(s.users[me]?.global_name ?? "");
+  return !!name && String(ch.name ?? "").endsWith(`-${name}`);
 }
 
 function controlsOf(components: Json[] | undefined): Control[] {
