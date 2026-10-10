@@ -16,6 +16,31 @@ function pickNumber(c: Choice) {
 
 type Tile = { initiative: number; choice?: Choice; tradeGoods: number; takenBy?: string };
 
+function CardTexts({ initiative, web, which }: {
+  initiative: number;
+  web: RendererProps["data"]["web"];
+  which: ("primary" | "secondary")[];
+}) {
+  const def = scDefinition(initiative, web);
+  if (!def) return null;
+  return (
+    <>
+      {which.includes("primary") &&
+        def.primaryTexts.map((t) => (
+          <p key={`p${t}`} className={classes.cardText}>
+            {t}
+          </p>
+        ))}
+      {which.includes("secondary") && def.secondaryTexts.length > 0 && (
+        <p className={classes.cardText}>
+          <b>Others may: </b>
+          {def.secondaryTexts.join(" ")}
+        </p>
+      )}
+    </>
+  );
+}
+
 /** Pick a strategy card: all eight cards in a 4×2 grid, taken ones greyed with who has them; the chosen one named. */
 export function ScPickBody({ d, data, onPress, pendingKey }: RendererProps) {
   const byInitiative = new Map<number, Tile>();

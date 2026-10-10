@@ -155,6 +155,7 @@ export class SoloGames {
     const userId = job.user_id;
     const find = (id: RegExp) => this.store.messages(actionsId).filter((m) => visible(m, userId) && hasControl(m, id)).pop();
     try {
+      await this.liveOptions(job, p, actionsId);
       const exp = await this.waitFor(job, "the expansion choice", 90 * SECOND, () => find(new RegExp(`^chooseExp_${expansion}$`)));
       this.note(job, `Choosing ${expansion === "te" ? "Thunder's Edge + PoK" : expansion}`);
       const sinceExp = this.lastId(actionsId);
@@ -183,6 +184,55 @@ export class SoloGames {
       this.note(job, "Drafting", "drafting");
     } catch (e) {
       this.fail(job, e);
+    }
+  }
+
+  /**
+   * Live play, not async: right after the game exists, the creator turns off the bot's async-only machinery with its own
+   * command (`/game setup auto_ping:0 whispers_enabled:false`): no auto-pings / "waiting on you" reminders, no whispers.
+   */
+  private async liveOptions(job: SoloJob, p: Player, actionsId: string) {
+    const err = await p.op({
+      op: "command",
+      channel_id: actionsId,
+      name: "game",
+      options: [{ type: 1, name: "setup", options: [{ type: 4, name: "auto_ping", value: 0 }, { type: 5, name: "whispers_enabled", value: false }] }],
+    });
+    this.note(job, err ? `Live-play options: ${err}` : "Live play: auto-pings and whispers off");
+  }
+
+  /** Message id → when the janitor answered it. */
+  private janitored = new Map<string, number>();
+
+  /**
+   * Async-only questions the bot puts to each person at the table, answered for them the live-play way: the welcome
+   * survey ("No"), the timer for auto-passing on Sabotage ("Decline"), and whether the bot may auto-pass their secret
+   * scoring ("Always manual"; the autopilot seats allow it). Each is a one-off per person or per game.
+   */
+  private async janitor(job: SoloJob, game: string) {
+    const s = this.store.state;
+    const autopilot = new Set(Object.values(s.seats).filter((x) => x.autopilot).map((x) => x.user_id));
+    const people = [job.user_id, ...job.others].filter((id) => !autopilot.has(id));
+    for (const userId of people) {
+      for (const m of this.gameMessages(game, userId)) {
+        if (this.janitored.has(m.id)) continue;
+        const ids = controlIds(m.components);
+        const content = String(m.content ?? "");
+        if (!content.includes(`<@${userId}>`) && m._ephemeral_for !== userId) continue;
+        let press: string | undefined;
+        if (ids.some((id) => id.startsWith("answerSurvey_")) && ids.includes("deleteButtons")) press = "deleteButtons";
+        else if (ids.some((id) => id.startsWith("setAutoPassMedian_")) && ids.includes("deleteButtons")) press = "deleteButtons";
+        else if (ids.includes("sandbagPref_manual")) press = "sandbagPref_manual";
+        if (!press) continue;
+        this.janitored.set(m.id, Date.now());
+        const p = new Player(this.clients, userId);
+        try {
+          const err = await p.click(m, press);
+          log.info(`solo ${game}: answered "${content.replace(/<[^>]+>/g, "").trim().slice(0, 60)}" for ${s.users[userId]?.global_name ?? userId} with ${press}${err ? ` -> ${err}` : ""}`);
+        } finally {
+          p.close();
+        }
+      }
     }
   }
 
@@ -237,6 +287,9 @@ export class SoloGames {
     /** Message id → when we pressed it. */
     const pressed = new Map<string, number>();
     let lastNote = "";
+    let setupDone = false;
+    let doneAt = 0;
+    const setupDoneAt = () => (doneAt ||= Date.now());
     const say = (text: string, state?: SoloState) => {
       if (text !== lastNote || state) this.note(job, text, state);
       lastNote = text;
@@ -249,10 +302,16 @@ export class SoloGames {
       const web = await this.webData(game);
       const phase = String(web?.gameState?.phase ?? "");
       if (!web) continue;
-      if (phase && !phase.startsWith("setup")) {
-        say("Setup done: strategy phase", "playing");
-        return;
+      if (setupDone || (phase && !phase.startsWith("setup"))) {
+        if (!setupDone) say("Setup done: strategy phase", "playing");
+        setupDone = true;
+        // Live play: keep answering the async-only questions the bot asks the people at the table in round 1
+        // (welcome survey, auto-pass timers, ...), then retire.
+        if (Number(web.gameRound ?? 1) >= 2 || Date.now() - setupDoneAt() > 45 * 60 * SECOND) return;
+        await this.janitor(job, game);
+        continue;
       }
+      await this.janitor(job, game);
       const setupMessages = this.gameMessages(game, userId);
       const latest = (id: string) => this.store.messages(actionsId).filter((m) => visible(m, userId) && hasControl(m, id)).pop();
       const quietFor = Date.now() - this.lastActivity(game);

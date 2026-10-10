@@ -39,3 +39,8 @@
   font-weight: 600;
   color: var(--play-ink-bright);
 }
+
+.actorFaction {
+  color: var(--play-ink-muted);
+  font-weight: 400;
+}

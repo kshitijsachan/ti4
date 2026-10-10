@@ -71,7 +71,7 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_)/i;
+  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none)/i;
 const BLOCKED_LABEL = /^(undo|un-|unqueue|spend|exhaust|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -118,6 +118,11 @@ const RULES: Rule[] = [
   { id: /^autoAssign/, score: 76, why: "combat: auto-assign hits" },
   { id: /^combatRoll_/, score: 75, why: "combat: roll dice" },
   { id: /^getDamageButtons_/, score: 50, why: "combat: assign hits" },
+  // Async-only preference questions: let the bot auto-pass our secret-objective scoring.
+  { id: /^sandbagPref_bot$/, score: 40, why: "preferences: let the bot auto-pass secret scoring" },
+  // Status phase: after everyone scored, someone reveals the next public objective (once per game per round; see
+  // revealOnce).
+  { id: /(^|_)reveal_stage_(1|2)(position_\d+)?$/, score: 63, table: true, phase: /^status/, why: "status: reveal the next public objective" },
   // Trades offered to us.
   { id: /^rejectOffer_/, score: 74, why: "reject transaction" },
   // Reaction windows everyone answers.
@@ -219,6 +224,8 @@ export class Autopilot {
   }
 
   private states = new Map<string, { at: number; state: GameState | null }>();
+  /** When an autopilot last revealed a public objective, per game: the bot may post the reveal buttons twice. */
+  readonly lastReveal = new Map<string, number>();
 
   /** A game's phase (`strategy`, `action`, `status.scoring`, `agenda.voting`, ...) and whose turn it is, cached 3s. */
   async stateOf(game: string): Promise<GameState | null> {
@@ -524,6 +531,7 @@ class SeatPilot {
       if (answered && !rule.again) continue;
       // A table window we answered once stays answered, even if the bot edited it since (e.g. after a restart).
       if (rule.table && !rule.again && press) continue;
+      if (rule.why.startsWith("status: reveal") && !this.mayReveal(m, game)) continue;
       if (rule.phase) {
         if (phase === undefined) phase = await this.mgr.phaseOf(game);
         if (phase && !rule.phase.test(phase)) continue;
@@ -542,6 +550,20 @@ class SeatPilot {
     if (!fresh.length) return null;
     controls = fresh;
     return { msg: m, control: controls[0], score: controls.length === 1 ? 25 : 10, why: controls.length === 1 ? "only option" : "first option" };
+  }
+
+  /**
+   * Reveal a public objective at most once per status phase: only the newest reveal prompt, none revealed since it was
+   * posted, and no autopilot revealed one in this game in the last minute.
+   */
+  private mayReveal(m: StoredMessage, game: string) {
+    if (Date.now() - (this.mgr.lastReveal.get(game) ?? 0) < 60000) return false;
+    for (const other of this.store.messages(m.channel_id)) {
+      if (BigInt(other.id) <= BigInt(m.id)) continue;
+      if (/public objective has been revealed/i.test(String(other.content ?? ""))) return false;
+      if (controlsOf(other.components).some((c) => /reveal_stage_/.test(c.custom_id))) return false;
+    }
+    return true;
   }
 
   /** Whether the bot's web data says it is this seat's turn (in the strategy or action phase). */
@@ -685,6 +707,7 @@ class SeatPilot {
     this.pressed.add(key);
     this.answered.set(msg.id, { sig: signature(controlsOf(fresh.components)), at: Date.now() });
     this.recent.set(`${msg.channel_id}:label:${control.label}`, Date.now());
+    if (/reveal_stage_/.test(control.custom_id)) this.mgr.lastReveal.set(gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "", Date.now());
     const rollKind = /^combatRoll_[^_]+_[^_]+_(\w+)/.exec(control.custom_id)?.[1];
     if (rollKind) this.recent.set(`${msg.channel_id}:roll:${rollKind}`, Date.now());
     const key0 = this.promptKey(fresh, controlsOf(fresh.components));

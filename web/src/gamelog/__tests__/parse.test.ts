@@ -76,7 +76,7 @@ void test("tactical action: activation, movement attributed to the activator, ex
   const x = one(fixture("explore-card-embed"));
   assert.equal(x.kind, "explore");
   assert.equal(x.systemPosition, "201");
-  assert.match(x.line, /explored Lazul Rex — Cybernetic Research Facility/);
+  assert.match(x.line, /explored Lazul Rex \(industrial\) → Cybernetic Research Facility: attached — Lazul Rex gains a yellow \(cybernetic\) technology specialty/);
 });
 
 void test("combat: dice roll fixture, hits assigned, thread gives the system", () => {
@@ -166,4 +166,40 @@ void test("live games: at most 5% of bot messages unrecognised", { skip: !hasSta
 
 void test("MENTAK constant parses (guards the representation regex)", () => {
   assert.equal(one(bot(`${MENTAK} has passed.`)).actor?.color, "Gold");
+});
+
+const MUAAT = "<:Muaat:1558154709301329920><@1558180880520970240> <:magma:1558154789794217984>**Magma**";
+const YSSARIL = "<:Yssaril:1558154714279968768><@1558180880525164544> <:verdigris:1558154668885016576>**Verdigris**";
+const MENTAK_GOLD = "<:Mentak:1558154745624002560><@1558155013921046528> <:gold:1558154785268563968>**Gold**";
+const exploreMsg = (who: string, trait: string, planet: string, card: string, text: string, id: string) =>
+  bot(`${who} explored <:${trait}:1558154824728576000>Planet <:${planet.replace(/ /g, "")}:1558154792474378240> ${planet} <:Resources_0:1558154672810885120><:Influence_1:1558154781254615040> in tile 201:`, {
+    id,
+    embeds: [{ title: `<:${trait}:1558154824728576000>__${card}__`, description: text }],
+  });
+
+void test("explores (real bot messages): card, plain effect, and the follow-ups folded in", () => {
+  const msgs = [
+    exploreMsg(YSSARIL, "Hazardous", "Capha", "Core Mine", "If you have at least 1 mech on this planet, or if you remove 1 infantry from this planet, gain 1 trade good.", "100"),
+    bot("<:Yssaril:1558154714279968768> found a _Core Mine_ on Capha (3/0).", { id: "101" }),
+    bot(`${YSSARIL} is removing an infantry to resolve _Core Mine_.  Gained 1 trade good (0 -> 1).`, { id: "102" }),
+    exploreMsg(MENTAK_GOLD, "Industrial", "Lazul Rex", "Cybernetic Research Facility", "This planet has a yellow technology specialty. If this planet already has a technology specialty, this planet's resource and influence values are each increased by 1 instead.", "103"),
+    bot("Attachment _Cybernetic Research Facility_ added to <:LazulRex:1558154754809528320> Lazul Rex <:Resources_2:1558154667840634880><:Influence_2:1558154817292075008><:CyberneticTech:1558154656453099520>.", { id: "104" }),
+    exploreMsg(MUAAT, "Hazardous", "Meer", "Volatile Fuel Source", "If you have at least 1 mech on this planet, or if you remove 1 infantry from this planet, gain 1 command token.", "105"),
+    bot("<:Muaat:1558154709301329920>Kai <:magma:1558154789794217984>**Magma** declined exploration card.", { id: "106" }),
+    exploreMsg(MUAAT, "Cultural", "Bereg", "Dyson Sphere", "This planet's resource value is increased by 2 and its influence value is increased by 1.", "107"),
+    exploreMsg(MUAAT, "Hazardous", "Arinam", "Hazardous Relic Fragment", "ACTION: Purge 3 of your hazardous relic fragments to gain 1 relic.", "108"),
+    exploreMsg(MUAAT, "Industrial", "Arinam", "Functioning Base", "You may gain 1 commodity, or you may spend 1 trade good or 1 commodity to draw 1 action card.", "109"),
+  ];
+  const { events } = buildTimeline(msgs);
+  const lines = events.filter((e) => e.kind === "explore").map((e) => `${actorLabel(e.actor)} ${segText(e.summary)}`);
+  assert.deepEqual(lines, [
+    "Yssaril explored Capha (hazardous) → Core Mine: gain 1 trade good (needs a mech there, or 1 infantry removed) — removed 1 infantry; gained 1 trade good (0 → 1)",
+    "Mentak explored Lazul Rex (industrial) → Cybernetic Research Facility: attached — Lazul Rex gains a yellow (cybernetic) technology specialty (or +1 resource and +1 influence if it already had one)",
+    "Muaat explored Meer (hazardous) → Volatile Fuel Source: gain 1 command token (needs a mech there, or 1 infantry removed) — declined",
+    "Muaat explored Bereg (cultural) → Dyson Sphere: attached — Bereg gets +2 resources, +1 influence",
+    "Muaat explored Arinam (hazardous) → Hazardous Relic Fragment: gains a hazardous relic fragment",
+    "Muaat explored Arinam (industrial) → Functioning Base: may gain 1 commodity, or you may spend 1 trade good or 1 commodity to draw 1 action card",
+  ]);
+  // The full card text stays one click away.
+  assert.match(segText(events.find((e) => e.kind === "explore")!.details![0]), /If you have at least 1 mech/);
 });

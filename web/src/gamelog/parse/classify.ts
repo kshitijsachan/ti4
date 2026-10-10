@@ -17,6 +17,7 @@ import {
   unmark,
   who,
 } from "./markup.ts";
+import { exploreEffect } from "./explore.ts";
 
 /** The parts of a Discord message the log reads, flattened. */
 export type LogMessage = {
@@ -53,6 +54,8 @@ export type ParseContext = {
   nameOf: (userId: string) => string | undefined;
   agenda?: string;
   lastActivation?: { actor?: Actor; position: string };
+  /** The newest explore, so the bot's follow-ups (attachment, "removing an infantry…", declined) fold into its row. */
+  lastExplore?: { faction?: string; card: string; summary: Seg[]; settled: boolean };
 };
 
 export type Marker = { round?: number; phase?: Phase };
@@ -79,6 +82,8 @@ const ev = (drafts: Draft | Draft[], marker?: Marker): Classified => {
 const noise = (rule: string, marker?: Marker): Classified => ({ cls: { type: "noise", rule }, drafts: [], marker });
 
 /** Embed titles look like `<:Public1alt:id>__**Name**__`. */
+const lowerFirstWord = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
 function embedTitle(t: string | undefined): { name: string; emoji?: { id: string; name: string } } | null {
   if (!t) return null;
   const e = t.match(/<a?:(\w+):(\d+)>/);
@@ -431,24 +436,59 @@ const rules: Rule[] = [
   },
 
   // Explore ----------------------------------------------------------------------------------------------
-  (m) => {
+  (m, ctx) => {
     const hit = actorAt(m.content);
-    const x = hit?.rest.match(/^explored (?:<a?:\w+:\d+>)?Planet (?:<a?:(\w+):(\d+)>)?\s*([^<]+?)\s*(?:<.*)? in tile (\w+):?/);
+    const x = hit?.rest.match(/^explored (?:<a?:(\w+):\d+>)?\s*Planet (?:<a?:\w+:\d+>)?\s*([^<]+?)\s*(?:<.*)? in tile (\w+):?/);
     if (!hit || !x) return null;
+    const planet = x[2].trim();
     const card = embedTitle(m.embeds[0]?.title);
-    const summary: Seg[] = [txt("explored "), b(x[3].trim())];
-    if (card) summary.push(txt(" — "), ...emo(card.emoji), b(card.name));
-    const desc = m.embeds[0]?.description;
-    return ev({ kind: "explore", actor: hit.actor, systemPosition: x[4], summary, details: desc ? [richText(desc)] : undefined });
+    const desc = m.embeds[0]?.description ?? "";
+    const summary: Seg[] = [txt("explored "), b(planet)];
+    if (x[1] && /^(hazardous|industrial|cultural|frontier)$/i.test(x[1])) summary.push(txt(` (${x[1].toLowerCase()})`));
+    if (card) {
+      summary.push(txt(" → "), b(card.name));
+      const effect = exploreEffect(card.name, plain(desc), planet);
+      if (effect) summary.push(txt(`: ${effect}`));
+      ctx.lastExplore = { faction: hit.actor.faction, card: card.name, summary, settled: false };
+    }
+    return ev({ kind: "explore", actor: hit.actor, systemPosition: x[3], summary, details: desc ? [richText(desc)] : undefined });
   },
-  (m) => {
+  (m, ctx) => {
     const hit = actorAt(m.content);
     const x = hit?.rest.match(/^explored the frontier token in (.+?)(?:[:.]|$)/s);
     if (!hit || !x) return null;
     const card = embedTitle(m.embeds[0]?.title);
+    const desc = m.embeds[0]?.description ?? "";
     const summary: Seg[] = [txt("explored the frontier in "), b(plain(x[1]))];
-    if (card) summary.push(txt(" — "), b(card.name));
-    return ev({ kind: "explore", actor: hit.actor, summary });
+    if (card) {
+      summary.push(txt(" → "), b(card.name));
+      const effect = exploreEffect(card.name, plain(desc));
+      if (effect) summary.push(txt(`: ${effect}`));
+      ctx.lastExplore = { faction: hit.actor.faction, card: card.name, summary, settled: false };
+    }
+    return ev({ kind: "explore", actor: hit.actor, summary, details: desc ? [richText(desc)] : undefined });
+  },
+  // The bot's follow-ups to an explore fold into its row.
+  (m, ctx) => {
+    const last = ctx.lastExplore;
+    if (!last || last.settled) return null;
+    const a = m.content.match(/^Attachment _([^_]+)_ added to /);
+    if (a && a[1] === last.card) return noise("explore attachment (folded)");
+    const hit = actorAt(m.content, true);
+    if (!hit || (last.faction && hit.actor.faction !== last.faction)) return null;
+    if (/^declined exploration card/.test(hit.rest)) {
+      last.settled = true;
+      last.summary.push(txt(" — declined"));
+      return noise("explore declined (folded)");
+    }
+    const r = hit.rest.match(/^is removing an infantry to resolve _([^_]+)_\.?\s*(.*)$/s);
+    if (r && r[1] === last.card) {
+      last.settled = true;
+      const gained = plain(r[2]).replace(/\s*->\s*/g, " → ").replace(/\.$/, "");
+      last.summary.push(txt(` — removed 1 infantry${gained ? `; ${lowerFirstWord(gained)}` : ""}`));
+      return noise("explore resolved (folded)");
+    }
+    return null;
   },
   (m) => {
     const a = m.content.match(/^Attachment _([^_]+)_ added to (.+?)\.?$/s);

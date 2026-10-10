@@ -81,6 +81,11 @@ export type Decision = {
   steps?: Decision[];
   /** Can be answered ahead of time but nothing waits on it yet (pre-declining a card): listed last. */
   optional?: boolean;
+  /**
+   * An ability the game offers but does not wait on ("you may use these buttons to resolve your agent"): kept out of
+   * the must-answer queue, listed under "Available now".
+   */
+  offer?: boolean;
   /** A table-wide step anyone may take (deal secret objectives, start round 1): listed after my own choices. */
   table?: boolean;
   /** Part of setting the game up (starting technology, which secret objective to keep). */
@@ -294,6 +299,15 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       optional: true,
     };
   }
+  if (has(choices, /^editRoundSummary_/)) {
+    return {
+      ...base,
+      eyebrow: "Status phase · optional",
+      title: "Write a note about this round?",
+      text: "Jot down your plans or how things stand with your neighbours. The notes are shown to everyone when the game ends. Nothing waits on this.",
+      optional: true,
+    };
+  }
   if (has(choices, /^(playerPref|setAutoPass|answerSurvey)/)) {
     return { ...base, text: generic.rest, eyebrow: "Preference · optional", optional: true };
   }
@@ -467,7 +481,15 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
   if (has(choices, ID.status)) {
     return { ...base, kind: "status", eyebrow: "", title: "Status phase — tidy up" };
   }
-  return { ...base, text: generic.rest };
+  return { ...base, text: generic.rest, offer: isOffer(text) };
+}
+
+const OFFER = /\b(you (?:can|may)(?: choose to)? (?:use|resolve|exhaust|play|purge|spend)|if you (?:wish|want|would like)|use these buttons to resolve (?:the |your )?\S+(?: \S+)?,? the \S+ (?:agent|commander|hero))\b/i;
+const MUST = /\b(must|please (?:choose|select|pick|decide|assign|resolve the secondary))\b/i;
+
+/** Prompts that offer an optional ability rather than ask for something the game waits on. */
+function isOffer(text: string) {
+  return OFFER.test(text) && !MUST.test(text);
 }
 
 /** The bot's newest word in my hand thread on whether I can score a secret objective this status phase. */
