@@ -24,7 +24,7 @@ type Choice = {
   why: string;
 };
 
-type GameState = { phase: string | null; active: string | null; colors: Map<string, string> };
+type GameState = { phase: string | null; active: string | null; colors: Map<string, string>; combat: boolean };
 
 type Ctx = {
   /** Names this seat and nobody else, carries its faction's buttons, is only visible to it, or is in its own thread. */
@@ -125,8 +125,19 @@ const RULES: Rule[] = [
   { label: /^(?!pre-).*\babstain\b/i, score: 77, why: "agenda: abstain" },
   // Combat: auto-assign hits, roll dice.
   { id: /^autoAssign/, score: 76, why: "combat: auto-assign hits" },
-  { id: /^combatRoll_/, score: 75, why: "combat: roll dice" },
+  // The same combat message offers the combat roll for every round, plus one-off rolls (anti-fighter barrage,
+  // bombardment, space cannon): roll the combat round first, the extras once each (mayRoll decides).
+  {
+    id: /^combatRoll_/,
+    score: 75,
+    again: true,
+    why: "combat: roll dice",
+    rank: (c) => (/^combatRoll_[^_]+_[^_]+$/.test(c.custom_id) ? 0 : 1),
+  },
   { id: /^getDamageButtons_/, score: 50, why: "combat: assign hits" },
+  // Async-only preference question (auto-pass on Sabotage after N hours): the shortest timer, once; it stops the
+  // question for this seat in later games. The autopilot answers Sabotage windows itself anyway.
+  { id: /^setAutoPassMedian_1$/, score: 40, why: "preferences: auto-pass on Sabotage" },
   // Async-only preference questions: let the bot auto-pass our secret-objective scoring.
   { id: /^sandbagPref_bot$/, score: 40, why: "preferences: let the bot auto-pass secret scoring" },
   // Status phase: after everyone scored, someone reveals the next public objective (once per game per round; see
@@ -251,7 +262,12 @@ export class Autopilot {
         const data = (await res.json()) as Json;
         const colors = new Map<string, string>();
         for (const p of data.playerData ?? []) if (p.discordId && p.color) colors.set(String(p.discordId), String(p.color));
-        state = { phase: String(data.gameState?.phase ?? "") || null, active: data.gameState?.activePlayer ? String(data.gameState.activePlayer) : null, colors };
+        state = {
+          phase: String(data.gameState?.phase ?? "") || null,
+          active: data.gameState?.activePlayer ? String(data.gameState.activePlayer) : null,
+          colors,
+          combat: !!data.gameState?.activeCombat,
+        };
       }
     } catch {
       state = null;
@@ -532,9 +548,11 @@ class SeatPilot {
     // Still there, unchanged, well after we pressed it: for prompts the bot removes once it acts, the press was lost.
     const pressedAt = mine?.sig === sig ? mine.at : press && press.controls === sig ? Date.parse(press.at) : undefined;
     const lost = pressedAt !== undefined && Date.now() - pressedAt > RETRY_MS && (this.retries.get(m.id) ?? 0) < MAX_RETRIES;
-    if (answered && press && !mine && Date.parse(press.at) < this.started && !lost && !this.tableStalled(m, game)) return null;
+    if (answered && press && !mine && Date.parse(press.at) < this.started && !lost && !this.tableStalled(m, game) && !controls.some((c) => /^combatRoll_/.test(c.custom_id))) return null;
     const unpressed = controls;
-    controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`) && (sibling || !this.pressedRecently(m, c)));
+    // Combat rolls are pressed once per combat round on the same message (mayRoll decides).
+    const reusable = (c: Control) => /^combatRoll_/.test(c.custom_id);
+    controls = controls.filter((c) => reusable(c) || (!this.pressed.has(`${m.id}:${c.custom_id}`) && (sibling || !this.pressedRecently(m, c))));
 
     const faction = await this.faction(game, m);
     const content = String(m.content ?? "");
@@ -584,7 +602,12 @@ class SeatPilot {
     if (controls.some((c) => c.custom_id.startsWith("milty_"))) return this.milty(m, controls, game);
     // Combat dice roll for whoever presses: roll once per round (not ahead of the opponent), and each
     // other kind of roll (anti-fighter barrage, bombardment, space cannon) once per combat.
-    controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || this.mayRoll(ch.id, c.custom_id, faction));
+    if (controls.some((c) => /^combatRoll_/.test(c.custom_id))) {
+      // Only while the bot says a combat is on (the roll buttons stay after it ends).
+      const st = await this.mgr.stateOf(game);
+      const fighting = !st || st.combat;
+      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && this.mayRoll(ch.id, c.custom_id, faction)));
+    }
 
     let phase: string | null | undefined;
     for (const rule of RULES) {
@@ -614,7 +637,7 @@ class SeatPilot {
         }
       }
       if (rule.table && !rule.again && press) continue;
-      if (rule.again && press && !mine && Date.parse(press.at) < this.started) continue;
+      if (rule.again && rule.why !== "combat: roll dice" && press && !mine && Date.parse(press.at) < this.started) continue;
       if (rule.why.startsWith("status: reveal") && !this.mayReveal(m, game)) continue;
       if (rule.phase) {
         if (phase === undefined) phase = await this.mgr.phaseOf(game);
@@ -690,6 +713,11 @@ class SeatPilot {
       return !this.recent.has(key);
     }
     if (!faction) return false;
+    // A combat thread ("…-turn-4-letnev-vs-ralnel") is only ours to roll in if our faction fights in it.
+    const chName = String(this.store.channel(channelId)?.name ?? "").toLowerCase();
+    if (/-vs-/.test(chName) && !chName.includes(faction)) return false;
+    // Our roll's result may not have arrived yet.
+    if (Date.now() - (this.recent.get(`${channelId}:roll:combat`) ?? 0) < 15000) return false;
     let mine = 0;
     let theirs = 0;
     for (const m of this.store.messages(channelId)) {
@@ -806,6 +834,7 @@ class SeatPilot {
     if (/reveal_stage_/.test(control.custom_id)) this.mgr.lastReveal.set(gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "", Date.now());
     const rollKind = /^combatRoll_[^_]+_[^_]+_(\w+)/.exec(control.custom_id)?.[1];
     if (rollKind) this.recent.set(`${msg.channel_id}:roll:${rollKind}`, Date.now());
+    else if (/^combatRoll_/.test(control.custom_id)) this.recent.set(`${msg.channel_id}:roll:combat`, Date.now());
     const key0 = this.promptKey(fresh, controlsOf(fresh.components));
     for (const other of this.store.messages(msg.channel_id)) {
       if (other.id !== msg.id && (!other._ephemeral_for || other._ephemeral_for === this.userId) && this.promptKey(other, controlsOf(other.components)) === key0) this.siblings.add(other.id);
