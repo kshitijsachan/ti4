@@ -158,7 +158,8 @@ const ABSTAIN = /abstain/i;
 
 /** Vote on an agenda: the card, my votes, and the outcomes / vote counts. */
 export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
-  if (d.choices.some((c) => baseId(c.customId) === "flip_agenda")) {
+  if (d.choices.some((c) => /^(flip_agenda|proceed_to_strategy)$/.test(baseId(c.customId)))) {
+    const flip = d.choices.some((c) => baseId(c.customId) === "flip_agenda");
     return (
       <div className={classes.stack}>
         <Prose text={d.text} clamp={3} />
@@ -166,14 +167,15 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
           choices={d.choices.map((c) => {
             const id = baseId(c.customId);
             if (id === "flip_agenda") return { ...c, label: "Reveal the agenda", style: 1 };
-            if (id === "proceed_to_strategy") return { ...c, label: "Skip it — end the agenda phase", style: 2 };
+            if (id === "proceed_to_strategy")
+              return flip ? { ...c, label: "Skip it — end the agenda phase", style: 2 } : { ...c, label: "Start the strategy phase", style: 3 };
             return c;
           })}
           onPress={onPress}
           pendingKey={pendingKey}
           channelId={d.prompt.channelId}
           rankOf={(c) =>
-            c.rank === "undo" ? "undo" : baseId(c.customId) === "proceed_to_strategy" ? "more" : c.rank === "more" ? "more" : "primary"
+            c.rank === "undo" ? "undo" : flip && baseId(c.customId) === "proceed_to_strategy" ? "more" : c.rank === "more" ? "more" : "primary"
           }
         />
       </div>
@@ -190,7 +192,7 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
   const outcomes = d.choices.filter((c) => OUTCOME.test(baseId(c.customId)));
   const others = d.choices.filter((c) => !outcomes.includes(c));
   const resolving = d.choices.some((c) => /^agendaResolution_/.test(baseId(c.customId)));
-  const predicting = d.choices.some((c) => /^rider_/.test(baseId(c.customId)));
+  const predicting = d.choices.some((c) => /^(rider_|resolveAgendaVote_outcomeTie)/.test(baseId(c.customId)));
   /* "For a total of 5 votes on the outcome "Winnu". … You may confirm this, or modify this number." */
   const tallied = d.prompt.message.content.match(/total of \*\*(\d+)\*\* votes? on the outcome "([^"]+)"/i);
   const confirming = tallied

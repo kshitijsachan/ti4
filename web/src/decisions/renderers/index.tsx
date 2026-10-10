@@ -25,8 +25,15 @@ export function registerStrategyCardRenderer(initiative: number, renderer: Strat
   strategyCardRenderers[initiative] = { ...strategyCardRenderers[initiative], ...renderer };
 }
 
+/** Bodies for a strategy card's follow-up prompts (Leadership's spend + gain): first non-null wins. */
+export const strategyStepRenderers: ((props: RendererProps) => ReactNode | null)[] = [];
+
 /** The body of a decision popup, by decision kind. */
 export function renderBody(d: Decision, props: RendererProps): ReactNode {
+  for (const step of strategyStepRenderers) {
+    const body = step(props);
+    if (body) return body;
+  }
   const card = d.sc ? strategyCardRenderers[d.sc] : undefined;
   if (d.kind === "scPrimary" && card?.primary) return card.primary(props);
   if (d.kind === "scFollow" && !d.optional && card?.follow) return card.follow(props);

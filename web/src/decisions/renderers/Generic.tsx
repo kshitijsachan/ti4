@@ -193,6 +193,9 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
       )}
       {moved && <p className={classes.hint}>Moving in: {movedSummary(moved)}</p>}
       {explored && !/^Explore /.test(d.title) && <p className={classes.cardText}>Explored — {explored}</p>}
+      {d.title === "Land ground forces" && data.web?.gameState?.activeCombat && data.web.gameState.activeCombat.system === d.position && (
+        <p className={cx(classes.hint, classes.warn)}>The space combat here is not over yet. Ground forces land once it is won.</p>
+      )}
       {/distance exceeds move value/i.test(d.text) && (
         <p className={cx(classes.hint, classes.warn)}>Some of these ships do not have the move value to reach this system. Take them back or use an ability that allows it.</p>
       )}

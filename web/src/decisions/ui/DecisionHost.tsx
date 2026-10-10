@@ -133,9 +133,9 @@ function combatTitle(d: Decision): Decision {
   const hits = all.some((x) => x.choices.some((c) => HIT_ID.test(baseId(c.customId))));
   const step = hits ? "— assign hits" : combatWaitsOnMe(d) ? "— roll dice" : "— opponent's roll";
   /* A thread holds the space combat and then the ground combat: name the one being fought now. */
-  const ground = all.some((x) => x.combat?.kind === "ground" && x.choices.some((c) => /^(combatRoll_[^_]+_(?!space)[^_]+$|autoAssignGroundHits)/.test(baseId(c.customId))));
+  const ground = all.find((x) => x.combat?.kind === "ground" && x.choices.some((c) => /^(combatRoll_[^_]+_(?!space)[^_]+$|autoAssignGroundHits)/.test(baseId(c.customId))));
   const kind = ground ? "Ground combat" : d.title.replace(/ — .*$/, "");
-  return { ...d, title: `${kind} ${step}` };
+  return { ...d, title: `${kind} ${step}`, combat: ground?.combat ?? d.combat };
 }
 
 /** My strategy card's own prompt absorbs the prompts the bot posted with it (choose speaker, draw agendas, …). */

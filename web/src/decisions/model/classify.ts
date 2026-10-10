@@ -625,6 +625,15 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       position: ring.length ? undefined : active,
     };
   }
+  if (has(choices, /^proceed_to_strategy$/) && !has(choices, /^flip_agenda$/)) {
+    return {
+      ...base,
+      kind: "agenda",
+      eyebrow: "Agenda phase · speaker",
+      title: "End the agenda phase",
+      text: "Both agendas are resolved (finish any riders first). Start the strategy phase of the next round; the agenda cleanup runs automatically.",
+    };
+  }
   if (has(choices, /^flip_agenda$/)) {
     const n = choices.find((c) => baseId(c.customId) === "flip_agenda")?.label.match(/#\s*(\d+)/)?.[1];
     return {

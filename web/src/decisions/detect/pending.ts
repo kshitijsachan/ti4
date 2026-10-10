@@ -396,8 +396,35 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
     undefined,
   );
   const turnStart = latestTurnStart(state, game.actions.id, me.id);
+  const flowMarks = laterFlowMarks(state, [...new Set(all.filter(isStep).map((it) => it.channelId))]);
+  const retired = retiredSteps(me.id);
+  const stepRetired = (it: PendingPrompt) => {
+    if (retired.has(it.message.id)) return true;
+    const later = (flowMarks.get(it.channelId) ?? []).some((id) => compareSnowflakes(id, it.message.id) > 0);
+    const stale = later || it.message.id !== newestStep || (!!turnStart && compareSnowflakes(it.message.id, turnStart) < 0);
+    if (stale) retireStep(me.id, it.message.id);
+    return stale;
+  };
+  /* The bot posts a fresh "assign N hits" each time and leaves the old ones: only the newest of a kind counts. */
+  const hitKind = (m: Message) =>
+    choicesOf(m).map((c) => baseId(c.customId).match(/^autoAssign(\w*?)Hits/)?.[1]).find((k) => k !== undefined);
+  const newestHit = new Map<string, string>();
+  for (const it of all) {
+    const data = state.messages[it.channelId];
+    if (!data || newestHit.has(it.channelId)) continue;
+    for (const id of data.ids) {
+      const k = data.byId[id] && hitKind(data.byId[id]);
+      if (k !== undefined) newestHit.set(`${it.channelId}:${k}`, id);
+    }
+    newestHit.set(it.channelId, "scanned");
+  }
+  const staleHit = (it: PendingPrompt) => {
+    const k = hitKind(it.message);
+    return k !== undefined && newestHit.get(`${it.channelId}:${k}`) !== it.message.id;
+  };
   return all
-    .filter((it) => !isStep(it) || (it.message.id === newestStep && (!turnStart || compareSnowflakes(it.message.id, turnStart) > 0)))
+    .filter((it) => !staleHit(it))
+    .filter((it) => !isStep(it) || !stepRetired(it))
     .filter((it) => !roundStart || compareSnowflakes(it.message.id, roundStart) > 0)
     .filter((it) =>
       it.ownCall
@@ -411,6 +438,45 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
 const TURN_MENU = /^(tacticalAction(?!Build)|endOfTurnAbilities|turnEnd)/;
 /** The steps inside one tactical action: pick a system, the ships, land, conclude. */
 const TACTICAL_STEP = /^(ringTile_|ring_|getTilesThisFarAway_|tacticalMoveFrom_|unitTacticalMove_|doneWithOneSystem|concludeMove_|landUnits_|doneLanding_|doneWithTacticalAction)/;
+
+/** Anything that shows a tactical step is behind me: a later step's buttons, a new activation, the end-of-turn menu. */
+const LATER_FLOW = /^(landUnits_|doneLanding_|movedNExplored_|tacticalActionBuild|deleteButtons_tacticalAction|doneWithTacticalAction|endOfTurnAbilities|turnEnd|passForRound|tacticalMoveFrom_|ringTile_)/;
+
+function laterFlowMarks(state: PlayState, channelIds: string[]) {
+  const marks = new Map<string, string[]>();
+  for (const ch of channelIds) {
+    const data = state.messages[ch];
+    if (!data) continue;
+    marks.set(
+      ch,
+      data.ids.filter((id) => {
+        const m = data.byId[id];
+        if (!m?.author.bot) return false;
+        if (/\bactivated \d+\b|\bended turn\b/i.test(m.content)) return true;
+        return choicesOf(m).some((c) => LATER_FLOW.test(baseId(c.customId)));
+      }),
+    );
+  }
+  return marks;
+}
+
+/** Tactical steps once seen superseded stay retired, even when what superseded them is gone (persisted per browser). */
+const retiredByUser = new Map<string, Set<string>>();
+function retiredSteps(meId: string) {
+  let set = retiredByUser.get(meId);
+  if (!set) {
+    set = new Set(Object.keys(readStored<true>(`retiredSteps.${meId}`)));
+    retiredByUser.set(meId, set);
+  }
+  return set;
+}
+function retireStep(meId: string, id: string) {
+  const set = retiredSteps(meId);
+  if (set.has(id)) return;
+  set.add(id);
+  const keep = [...set].sort(compareSnowflakes).slice(-200);
+  writeStored(`retiredSteps.${meId}`, Object.fromEntries(keep.map((k) => [k, true])));
+}
 
 /** The newest "it is now your turn" ping to me in the action log. */
 function latestTurnStart(state: PlayState, actionsId: string, meId: string) {
