@@ -86,6 +86,7 @@ function isRolePrompt(meId: string, m: Message, myRoles: Set<string>, followsRol
  */
 const pressLog = new Map<string, Record<string, number[]>>();
 const SAME_PRESS_MS = 4000;
+const LOADED_AT = Date.now();
 
 function pressCount(meId: string, m: Message, pressedAt: number | undefined) {
   let log = pressLog.get(meId);
@@ -95,6 +96,12 @@ function pressCount(meId: string, m: Message, pressedAt: number | undefined) {
   }
   const seen = log[m.id] ?? [];
   if (pressedAt === undefined || seen.some((t) => Math.abs(t - pressedAt) < SAME_PRESS_MS)) return seen.length;
+  /* A press from before this page loaded that this browser never counted (another tab, a fresh browser): the server
+     only keeps the latest press, so assume the card was finished rather than offer it again. */
+  if (!seen.length && pressedAt < LOADED_AT - SAME_PRESS_MS) {
+    log[m.id] = [0, pressedAt];
+    return 2;
+  }
   log[m.id] = [...seen, pressedAt];
   const keep = Object.keys(log).sort(compareSnowflakes).slice(-50);
   writeStored(`pressLog.${meId}`, Object.fromEntries(keep.map((id) => [id, log[id]])));
@@ -355,7 +362,9 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     /* Only I see an ephemeral prompt or the reply to my own press: someone else's newer prompt never retires it. */
     /* A rider's prediction is mine alone and waits until the vote resolves: other players' voting prompts never retire it. */
     const rider = forwardChoices(m).some((c) => /^rider_/.test(baseId(c.customId)));
-    if (reason !== "role" && reason !== "combat" && reason !== "ephemeral" && reason !== "reply" && !rider && !after(id, newestOtherPrompt)) return;
+    /* Hits I must assign wait on me however much the opponent posts after them in the combat thread. */
+    const myHits = mineByFaction(m) && !otherFaction(m) && forwardChoices(m).some((c) => /^(autoAssign\w*Hits|assignHits|assignDamage)_/.test(baseId(c.customId)));
+    if (reason !== "role" && reason !== "combat" && reason !== "ephemeral" && reason !== "reply" && !rider && !myHits && !after(id, newestOtherPrompt)) return;
     items.push({ message: m, channelId, where, reason });
   });
   return items;

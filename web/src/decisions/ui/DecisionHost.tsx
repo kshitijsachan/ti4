@@ -216,6 +216,8 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     const all = prompts
       .map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }))
       .filter((d) => !isNoise(d))
+      /* My own card with nothing left to press (follow buttons are the other players'): it is done. */
+      .filter((d) => d.kind !== "scPrimary" || !!d.steps?.length || d.choices.some((c) => c.rank !== "undo" && !/^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/.test(baseId(c.customId))))
       /* My turn menus (left live by an undo) only while it is my turn. */
       .filter((d) => d.kind !== "turn" || myTurn)
       /* Scoring is over once the game has moved past it (the bot's summary may still say "waiting"). */
