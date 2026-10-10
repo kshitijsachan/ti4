@@ -2,7 +2,8 @@ import { baseId, type Choice } from "../../model/controls";
 import type { Decision } from "../../model/classify";
 import { ChoiceButton, ChoiceButtons } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
-import { CARDS } from "./cards";
+import { cardSpec } from "./cards";
+import { scDefinition } from "../../ui/parts";
 import { CardHeader, playerLabel } from "./shared";
 import classes from "./strategy.module.css";
 
@@ -21,7 +22,10 @@ const PRIMARY: Record<number, PrimaryAction[]> = {
     { id: /^construction_spacedock$/, label: "Place a space dock" },
     { id: /^constructionPrimary_produce$/, label: "Use PRODUCTION instead" },
   ],
-  6: [{ id: /^(primaryOfWarfare|primaryOfTeWarfare)$/, label: "Remove a command token from the board" }],
+  6: [
+    { id: /^primaryOfWarfare$/, label: "Remove a command token from the board" },
+    { id: /^primaryOfTeWarfare$/, label: "Take the Warfare tactical action" },
+  ],
   7: [{ id: /^acquireATechWithSC(_first)?$/, label: "Research a technology" }],
   8: [
     { id: /^scoreAnObjective$/, label: "Score a public objective" },
@@ -80,7 +84,7 @@ function StepView({ step, props, index }: { step: Decision; props: RendererProps
 export function StrategyPrimaryBody(props: RendererProps) {
   const { d, data, onPress, pendingKey } = props;
   const sc = d.sc!;
-  const spec = CARDS[sc];
+  const spec = cardSpec(sc, scDefinition(sc, data.web)?.id);
   const second = /second structure/.test(d.title);
   const mecatol = controlsMecatol(data);
   const actions = (PRIMARY[sc] ?? [])

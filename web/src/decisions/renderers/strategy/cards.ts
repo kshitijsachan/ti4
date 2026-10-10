@@ -98,6 +98,26 @@ export const CARDS: Record<number, CardSpec> = {
   },
 };
 
+/** Thunder's Edge reprints that play differently (keyed by the game's strategy card id, not the initiative). */
+const TE: Record<string, Partial<CardSpec>> = {
+  te4construction: {
+    primary: "Place 1 structure (PDS or space dock) on a planet you control, or use the PRODUCTION of 1 of your space docks. Then place 1 more structure.",
+    secondary: "Place 1 structure (PDS or space dock) on a planet you control.",
+  },
+  te6warfare: {
+    primary: "Take a tactical action in any system without placing a command token there (even one that already has yours). Redistribute your tokens before and after.",
+    secondary: "Use the PRODUCTION of the units in your home system (no token goes there).",
+  },
+};
+
+/** The card as this game plays it: the base/PoK spec with Thunder's Edge changes applied. */
+export function cardSpec(sc: number, scId?: string): CardSpec | undefined {
+  const base = CARDS[sc];
+  if (!base) return undefined;
+  const te = scId ? TE[scId] : undefined;
+  return te ? { ...base, ...te } : base;
+}
+
 export const DECLINE = /^sc_no_follow_\d+$/;
 export const SPEND_ONLY = /^(sc_follow_\d+|sc_follow_trade)$/;
 

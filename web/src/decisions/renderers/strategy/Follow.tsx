@@ -2,7 +2,8 @@ import cx from "clsx";
 import { baseId, type Choice } from "../../model/controls";
 import { ChoiceButton, ChoiceButtons } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
-import { CARDS, DECLINE, SPEND_ONLY, findChoice } from "./cards";
+import { DECLINE, SPEND_ONLY, cardSpec, findChoice, type FollowAction } from "./cards";
+import { scDefinition } from "../../ui/parts";
 import { CardHeader, FollowStatus, holderOf, playerLabel } from "./shared";
 import classes from "./strategy.module.css";
 
@@ -18,14 +19,14 @@ const TRADE_FREE = /^(sc_refresh|sc_refresh_and_wash)$/;
  */
 export function StrategyFollowBody({ d, data, onPress, pendingKey }: RendererProps) {
   const sc = d.sc!;
-  const spec = CARDS[sc];
+  const spec = cardSpec(sc, scDefinition(sc, data.web)?.id);
   const holder = holderOf(sc, data);
   const strategy = data.me?.strategicCC;
   const busy = !!pendingKey;
 
   const actions = (spec?.follow ?? [])
     .map((a) => ({ a, choice: findChoice(d.choices, a.id) }))
-    .filter((x): x is { a: (typeof spec.follow)[number]; choice: Choice } => !!x.choice);
+    .filter((x): x is { a: FollowAction; choice: Choice } => !!x.choice);
   const spendOnly = findChoice(d.choices, SPEND_ONLY);
   const decline = findChoice(d.choices, DECLINE);
   const free = d.choices.filter((c) => TRADE_FREE.test(baseId(c.customId)) && !c.disabled);
