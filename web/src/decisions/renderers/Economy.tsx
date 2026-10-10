@@ -41,10 +41,12 @@ export function SpendBody({ d, data, onPress, pendingKey }: RendererProps) {
   const pay = rest.filter((c) => PAY.test(baseId(c.customId)));
   const others = rest.filter((c) => !pay.includes(c));
   const total = d.text.match(/total spend of ([^.\n]+)/i)?.[1];
+  const cost = d.text.match(/(?:pay|for) a (?:total )?cost of (\d+)/i)?.[1];
   const ready = what === "resources" ? data.me?.resources : data.me?.influence;
   return (
     <div className={classes.stack}>
       <p className={classes.hint}>
+        {cost && `To pay: ${cost}. `}
         {total ? `Spent so far: ${total}.` : "Nothing spent yet."}
         {ready !== undefined && ` ${ready} ${what === "resources" ? "resources" : "influence"} ready, ${data.me?.tg ?? 0} TG.`}
       </p>

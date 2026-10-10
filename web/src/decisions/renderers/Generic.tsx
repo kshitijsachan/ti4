@@ -150,8 +150,12 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   if (movingFrom) text = moved ? "" : "Pick where your ships come from.";
   if (unitMoves.length) text = d.text.match(/from system [^\n(]+/i)?.[0]?.trim() ?? "";
   if (d.title === "Finish the tactical action") text = "Nothing else to do in this system. Conclude the action to end it.";
-  if (d.choices.some((c) => /^deleteButtons_tacticalAction/.test(baseId(c.customId))))
-    text = "Each press adds a unit (your docks' production limits the total). Press Done, then pay for them.";
+  if (d.choices.some((c) => /^deleteButtons_tacticalAction/.test(baseId(c.customId)))) {
+    const total = d.text.match(/Producing a total of (\d+) units? \(PRODUCTION limit is (\d+)\) for a total cost of (\d+) resources?/i);
+    text = total
+      ? `So far: ${total[1]} unit${total[1] === "1" ? "" : "s"} of ${total[2]}, costing ${total[3]} resources${data.me?.resources !== undefined ? ` (you have ${data.me.resources} ready)` : ""}. Press Done, then pay.`
+      : "Each press adds a unit (your docks' production limits the total). Press Done, then pay for them.";
+  }
   const build = d.choices.find((c) => /^tacticalActionBuild/.test(baseId(c.customId)));
   if (build && d.choices.some((c) => /^doneWithTacticalAction/.test(baseId(c.customId)))) {
     const value = build.label.match(/\((\d+) PRODUCTION/i)?.[1];

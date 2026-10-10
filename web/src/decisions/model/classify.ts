@@ -111,7 +111,7 @@ const ID = {
   sabotage: /^(no_sabotage|sabotage_)/,
   scoring: /^(po_scoring|po_no_scoring|so_no_scoring|get_so_score_buttons|scoreAnObjective|score_imperial|so_score)/,
   status: /^(redistributeCCButtons|pass_on_abilities)/,
-  spend: /^(spend_|reduceTG_|reduceComm_)/,
+  spend: /^(spend_|reduceTG_|reduceComm_|resetSpend_)/,
   gainTokens: /^increase_(tactic|fleet|strategy)_cc/,
 };
 
