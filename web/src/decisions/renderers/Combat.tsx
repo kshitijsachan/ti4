@@ -107,9 +107,12 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
   const byKey = new Map(items.map((it) => [it.c.key, it]));
   const hitPrompt = [d, ...(d.steps ?? [])].find((x) => x.choices.some((c) => AUTO_HITS.test(baseId(c.customId))));
   const wouldDestroy = hitPrompt?.text.match(/would (destroy|sustain)[^\n]*/i)?.[0];
+  const canRoll = items.some((it) => ROLL.test(baseId(it.c.customId)));
   const sentence = hitPrompt
     ? `You must assign hits${wouldDestroy ? ` (auto: ${wouldDestroy.replace(/^would /i, "")})` : ""}.`
-    : "Both sides roll; hits are assigned after.";
+    : canRoll
+      ? "Both sides roll; hits are assigned after."
+      : `You rolled. Waiting for ${enemy?.userName ?? "your opponent"} to roll and assign hits.`;
   return (
     <div className={classes.stack}>
       <div className={classes.combatBoard}>

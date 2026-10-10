@@ -14,7 +14,7 @@ import { findGame } from "../detect/games";
 import { turnMenuFallback, usePendingPrompts } from "../detect/pending";
 import { useSetupWaiting } from "../detect/waiting";
 import { classify, isNoise, type Decision } from "../model/classify";
-import { offersOf, orderQueue } from "../model/queue";
+import { combatWaitsOnMe, offersOf, orderQueue } from "../model/queue";
 import { foldScoring } from "../model/scoring";
 import { baseId, type Choice } from "../model/controls";
 import { useDecisionFocus } from "../model/focus";
@@ -114,7 +114,8 @@ const HIT_ID = /^(autoAssign\w*Hits|getDamageButtons_\w*deleteThis|getDamageButt
 function combatTitle(d: Decision): Decision {
   const all = [d, ...(d.steps ?? [])];
   const hits = all.some((x) => x.choices.some((c) => HIT_ID.test(baseId(c.customId))));
-  return { ...d, title: d.title.replace(/— .*$/, hits ? "— assign hits" : "— roll dice") };
+  const step = hits ? "— assign hits" : combatWaitsOnMe(d) ? "— roll dice" : "— opponent's roll";
+  return { ...d, title: d.title.replace(/— .*$/, step) };
 }
 
 /** My strategy card's own prompt absorbs the prompts the bot posted with it (choose speaker, draw agendas, …). */

@@ -1,4 +1,12 @@
 import type { Decision } from "./classify";
+import { baseId } from "./controls";
+
+/** Rolling dice or assigning hits: a combat waits on me only while one of these is up. */
+const COMBAT_MOVE = /^(combatRoll_\w+_(space|ground)$|autoAssign\w*Hits|getDamageButtons|assignHits|rollForAmbush|bombardConfirm)/;
+
+export function combatWaitsOnMe(d: Decision) {
+  return [d, ...(d.steps ?? [])].some((x) => x.choices.some((c) => !c.disabled && COMBAT_MOVE.test(baseId(c.customId))));
+}
 
 /**
  * The order the game needs answers in, as one queue with exactly one current item.
@@ -19,9 +27,11 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   const continuation = (d: Decision) =>
     !d.setup && (d.prompt.reason === "ephemeral" || d.prompt.reason === "reply" || d.prompt.where === "hand");
   /* A combat comes before anything else in the action (space combat happens before ground forces land). */
-  const combat = owed.filter((d) => d.kind === "combat");
+  const combat = owed.filter((d) => d.kind === "combat" && combatWaitsOnMe(d));
+  const waiting = owed.filter((d) => d.kind === "combat" && !combatWaitsOnMe(d));
   const rest = owed.filter((d) => d.kind !== "combat");
-  return [...combat, ...rest.filter(continuation), ...rest.filter((d) => !continuation(d)), ...turn];
+  /* A combat still being fought (opponent to roll) stays ahead too: ground forces land only once space is won. */
+  return [...combat, ...waiting, ...rest.filter(continuation), ...rest.filter((d) => !continuation(d)), ...turn];
 }
 
 /**
