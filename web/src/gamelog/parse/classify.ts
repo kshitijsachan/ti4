@@ -657,9 +657,11 @@ const rules: Rule[] = [
   (m) => (/(?:two |a )?stage \d public objectives? (?:have|has) been revealed/.test(stripPing(stripHeading(m.content))) ? noise("objective reveal heading") : null),
   (m) => (/^<a?:Public[12]alt:\d+>_[^_]+_ - .+\(\d VP\)/.test(m.content) ? noise("objective progress") : null),
   (m) => {
-    const hit = actorAt(m.content);
-    const s = hit?.rest.match(/^scored (?:(<a?:(\w+):\d+>)\s*)?(?:Custom )?_([^_]+)_/);
+    const hit = actorAt(stripHeading(m.content));
+    /* "# <actor> scored Custodians!" is the Custodians token (1 VP), posted when ground forces land on Mecatol Rex. */
+    const s = hit?.rest.match(/^scored (?:(<a?:(\w+):\d+>)\s*)?(?:Custom )?(?:_([^_]+)_|Custodians!)/);
     if (!hit || !s) return null;
+    const name = s[3] ?? "the Custodians token";
     const emojiName = s[2] ?? "";
     const secret = /Secret/i.test(emojiName);
     const vp = /Public2/.test(emojiName) ? 2 : 1;
@@ -670,8 +672,8 @@ const rules: Rule[] = [
       importance: 3,
       actor: hit.actor,
       vp,
-      dedupe: `scored:${hit.actor.faction}:${s[3]}`,
-      summary: [txt("scored "), ...(emoji ? emo(emojiRef(emoji)) : []), b(s[3]), ...(label ? [txt(` (${label})`)] : [])],
+      dedupe: `scored:${hit.actor.faction}:${name}`,
+      summary: [txt("scored "), ...(emoji ? emo(emojiRef(emoji)) : []), b(name), ...(label ? [txt(` (${label})`)] : [])],
     });
   },
   (m) => {

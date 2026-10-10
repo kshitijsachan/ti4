@@ -1,0 +1,299 @@
+/* Payment and production panels: what it is for, the meter, planets, steppers, toggles. */
+
+.purpose {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.purposeTitle {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--play-ink-bright);
+}
+
+.num {
+  font-family: var(--font-data);
+  color: var(--play-ink-bright);
+}
+
+.stepValue {
+  min-width: 22px;
+  text-align: center;
+  font-family: var(--font-data);
+  font-size: 13px;
+  color: var(--play-ink-bright);
+}
+
+.costRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meterLine {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--play-ink);
+}
+
+.bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: rgba(var(--play-yellow), 0.7);
+  transition: width 0.2s var(--play-ease);
+}
+
+.fill.exact,
+.fill.over {
+  background: rgb(var(--play-green));
+}
+
+.short {
+  color: rgb(var(--play-yellow));
+  font-size: 12px;
+}
+
+.over {
+  color: var(--play-ink-muted);
+  font-size: 12px;
+}
+
+.exact {
+  color: rgb(var(--play-green));
+  font-size: 12px;
+}
+
+.planetGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px;
+}
+
+.planet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--play-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--play-ink-bright);
+  text-align: left;
+}
+
+.planet:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.planet[aria-checked="true"] {
+  border-color: rgba(var(--play-green), 0.6);
+  background: rgba(var(--play-green), 0.08);
+}
+
+.planet[aria-checked="true"] :global(svg) {
+  color: var(--play-ink-bright);
+}
+
+.planet[aria-checked="true"] > span:first-child {
+  background: rgb(var(--play-green));
+  border-color: rgb(var(--play-green));
+}
+
+.exhausted {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.planetName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.value {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-family: var(--font-data);
+  font-size: 12px;
+}
+
+.res {
+  background: rgba(var(--play-yellow), 0.22);
+  color: var(--play-ink-bright);
+  border: 1px solid rgba(var(--play-yellow), 0.55);
+}
+
+.inf {
+  background: rgba(var(--play-blue), 0.22);
+  color: var(--play-ink-bright);
+  border: 1px solid rgba(var(--play-blue), 0.55);
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--play-border);
+  color: var(--play-ink-bright);
+}
+
+.toggle[aria-checked="true"] {
+  border-color: rgba(var(--play-green), 0.6);
+  background: rgba(var(--play-green), 0.08);
+}
+
+.toggle[aria-checked="true"] > span:first-child {
+  background: rgb(var(--play-green));
+  border-color: rgb(var(--play-green));
+}
+
+.toggleLabel {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.suggestRow {
+  display: flex;
+  gap: 14px;
+}
+
+.unitList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.unitRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 52px auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.unitRow:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.unitName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--play-ink-bright);
+  text-transform: capitalize;
+}
+
+.unitWhere {
+  font-size: 11px;
+  color: var(--play-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unitCost {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--play-ink-muted);
+  text-align: right;
+}
+
+.bellum {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 4px 4px;
+  border-top: 1px solid var(--play-border);
+}
+
+.summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--play-ink);
+}
+
+.receipt {
+  position: fixed;
+  top: 104px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-decision-popup, 3450);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 460px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--play-green), 0.55);
+  background: var(--details-card-bg, #0b1020);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  animation: receiptIn 160ms var(--play-ease), receiptOut 400ms ease 7.6s forwards;
+}
+
+.receiptHead {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--play-ink-bright);
+}
+
+.receiptDetail {
+  font-size: 12px;
+  color: var(--play-ink);
+}
+
+@keyframes receiptIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+@keyframes receiptOut {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .receipt {
+    animation: none;
+  }
+}

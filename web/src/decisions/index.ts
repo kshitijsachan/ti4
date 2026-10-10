@@ -11,6 +11,7 @@
  */
 import "./renderers/strategy";
 import "./renderers/counters";
+import "./renderers/payment";
 export { DecisionHost } from "./ui/DecisionHost";
 export type { DecisionHostProps } from "./ui/DecisionHost";
 export { useDecisionFocus, useDecisionRequests, OPEN_TRADE_EVENT } from "./model/focus";
