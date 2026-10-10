@@ -421,7 +421,9 @@ export function MapActionsLayer({
       const reach =
         d === undefined
           ? "no clear path by my count"
-          : `${d} away · fastest ship moves ${fastest}`;
+          : fastest
+            ? `${d} away · fastest ship moves ${fastest}`
+            : `${d} away · no ships here: these need a carrier passing through`;
       return {
         text: `${label} — pick ships to move from here (${reach})`,
         blocked: false,

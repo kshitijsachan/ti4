@@ -55,11 +55,10 @@ export function MoveArt({
   }
   const reach = (origin: string) => {
     const d = distances.get(origin);
-    const fastest = Math.max(
-      0,
-      ...(groups[origin] ?? []).filter((g) => !g.cargo).map((g) => g.move),
-    );
-    return d !== undefined && fastest >= d;
+    const ships = (groups[origin] ?? []).filter((g) => !g.cargo);
+    /* Fighters and ground forces ride in ships from elsewhere: only the distance matters for them. */
+    if (!ships.length) return d !== undefined;
+    return d !== undefined && Math.max(...ships.map((g) => g.move)) >= d;
   };
   return (
     <>
