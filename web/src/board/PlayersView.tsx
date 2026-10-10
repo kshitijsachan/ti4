@@ -231,7 +231,7 @@ export function PlayersView({ opened, onClose }: Props) {
         className={classes.grid}
         style={
           {
-            "--cell-min": sections && sections.length <= 2 ? "330px" : "430px",
+            "--cell-min": sections && sections.length <= 2 ? "320px" : "360px",
           } as CSSProperties
         }
       >
