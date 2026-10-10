@@ -2,6 +2,8 @@ import type { Message, PlayState } from "@/discord";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { getStrategyCardByInitiative } from "@/entities/lookup/strategyCards";
 import { agendas } from "@/entities/data/agendas";
+import { actionCards } from "@/entities/data/actionCards";
+import { compareSnowflakes } from "@/discord/shared/snowflake";
 import type { PendingPrompt } from "../detect/pending";
 import type { GameChannels } from "../detect/games";
 import { baseId, choicesOf, cleanLabel, idFaction, type Choice } from "./controls";
@@ -160,6 +162,27 @@ function agendaInfo(title: string, description?: string): AgendaInfo {
     text1: printed.text1 ?? known?.text1,
     text2: printed.text1 ? printed.text2 : known?.text2,
   };
+}
+
+/** The newest "an agenda has been revealed" post in the action log. */
+function latestAgendaReveal(ctx: ClassifyContext): string | undefined {
+  const data = ctx.state.messages[ctx.game.actions.id];
+  if (!data) return undefined;
+  for (let i = data.ids.length - 1; i >= 0; i--) {
+    const m = data.byId[data.ids[i]];
+    if (m?.embeds?.some((e) => /<:Agenda:\d+>/.test(e.title ?? ""))) return m.id;
+  }
+  return undefined;
+}
+
+/** A when / after prompt the table has moved past: an earlier agenda's, or a window that has closed. */
+function staleWindow(ctx: ClassifyContext, id: string, window: "when" | "after") {
+  const phase = ctx.web?.gameState?.phase ?? "";
+  if (/^agenda\.(voting|resolv)/.test(phase)) return true;
+  if (window === "after" && /^agenda\.whens/.test(phase)) return true;
+  if (window === "when" && /^agenda\.afters/.test(phase)) return true;
+  const reveal = latestAgendaReveal(ctx);
+  return !!reveal && compareSnowflakes(id, reveal) < 0;
 }
 
 /** The agenda currently on the table: the newest "an agenda has been revealed" embed in the action log. */
@@ -424,7 +447,43 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       text: window,
       agenda,
       /* The table moved past this window (the bot keeps an old prompt when a press changed nothing). */
-      optional: /^agenda\.(voting|resolv)/.test(ctx.web?.gameState?.phase ?? "") || undefined,
+      optional: staleWindow(ctx, m.id, after ? "after" : "when") || undefined,
+    };
+  }
+  if (has(choices, /^rider_/)) {
+    const agenda = currentAgenda(ctx);
+    const rider = choices.map((c) => baseId(c.customId).match(/^rider_[^_]*_(.+)$/)?.[1]).find(Boolean) ?? "your rider";
+    const card = actionCards.find((a) => a.name.toLowerCase() === rider.toLowerCase());
+    return {
+      ...base,
+      kind: "agenda",
+      eyebrow: agenda ? `Agenda · ${agenda.name}` : "Agenda phase",
+      title: `${rider}: predict the outcome`,
+      text: `${card?.text.replace(/^.*?:\s*/, "").replace(/predict aloud/i, "Predict") ?? "Predict an outcome of this agenda."} If a Sabotage cancels the card, the prediction is erased.`,
+      agenda,
+    };
+  }
+  if (has(choices, /^agendaResolution_/)) {
+    const agenda = currentAgenda(ctx);
+    const winner = m.content.match(/current winner is "([^"]+)"/i)?.[1];
+    return {
+      ...base,
+      kind: "agenda",
+      eyebrow: agenda ? `Agenda · ${agenda.name} · speaker` : "Agenda phase · speaker",
+      title: winner ? `Resolve: ${winnerName(ctx, winner)} wins` : "Resolve the agenda",
+      text: "Everyone has voted. Once nobody is playing Bribery, Deadly Plot or a Legal Text card, resolve the agenda with the winning outcome.",
+      agenda,
+    };
+  }
+  if (/confirm no _?confusing\/confounding legal texts?/i.test(m.content)) {
+    return {
+      ...base,
+      kind: "reaction",
+      eyebrow: "Agenda · after voting",
+      title: "Playing Confusing or Confounding Legal Text?",
+      text: "These cards change who is elected after the votes are in. Confirm you are not playing them so the speaker can resolve.",
+      agenda: currentAgenda(ctx),
+      optional: true,
     };
   }
   if (has(choices, ID.agendaVote)) {
@@ -540,7 +599,10 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       kind: "agenda",
       eyebrow: "Agenda phase · speaker",
       title: n === "2" ? "Reveal the second agenda" : "Reveal the agenda",
-      text: "Reveal the top card of the agenda deck. Everyone then gets a chance to play “when” and “after” cards before voting.",
+      text:
+        n === "2"
+          ? "The first agenda is resolved (finish any riders first). Reveal the second agenda of this phase."
+          : "Reveal the top card of the agenda deck. Everyone then gets a chance to play “when” and “after” cards before voting.",
     };
   }
   if (has(choices, /^(startStrategyPhase|startAgendaPhase)$/)) {
@@ -632,6 +694,12 @@ function secretHint(ctx: ClassifyContext): string | undefined {
     return names.length ? `The game thinks you meet: ${names.join(", ")}.` : undefined;
   }
   return undefined;
+}
+
+/** "Winnu" → "Bot Alpha (Winnu)"; other outcomes as they are. */
+function winnerName(ctx: ClassifyContext, outcome: string) {
+  const p = ctx.web?.playerData.find((x) => x.faction?.toLowerCase() === outcome.toLowerCase() || x.color?.toLowerCase() === outcome.toLowerCase());
+  return p ? `${p.userName} (${outcome})` : `“${outcome}”`;
 }
 
 /** A status-phase table step left over after the game moved on (an agenda started by command, a new round). */

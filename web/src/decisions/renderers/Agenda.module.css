@@ -76,3 +76,19 @@
   font-size: 13px;
   color: var(--play-ink-bright);
 }
+
+.outcomeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--play-hairline);
+  font-size: 12px;
+  color: var(--play-ink);
+}
+
+.tallySmall {
+  font-family: var(--font-data);
+  color: var(--play-ink-bright);
+}

@@ -108,6 +108,26 @@ function ExhaustForVotes({ d, data, onPress, pendingKey }: Pick<RendererProps, "
   );
 }
 
+/** Votes cast so far on each outcome, most first. */
+function VoteSummary({ data }: Pick<RendererProps, "data">) {
+  const counts = Object.entries(data.web?.gameState?.agenda?.outcomeVoteCounts ?? {}).sort((a, b) => b[1] - a[1]);
+  if (!counts.length) return <p className={classes.hint}>No votes were cast.</p>;
+  return (
+    <div className={local.voteRow}>
+      {counts.map(([outcome, n]) => {
+        const player = data.players.find((p) => p.faction === outcome.toLowerCase() || p.color === outcome.toLowerCase());
+        return (
+          <span key={outcome} className={local.outcomeChip}>
+            {player && <FactionIcon faction={player.faction} size={14} />}
+            {player ? player.userName : (getPlanetData(outcome)?.name ?? outcome)}
+            <b className={local.tallySmall}>{n}</b>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 /** One outcome to vote for: a player (with faction icon), a planet, For / Against, … and the votes on it so far. */
 function OutcomeGrid({ choices, data, onPress, pendingKey }: { choices: Choice[] } & Pick<RendererProps, "data" | "onPress" | "pendingKey">) {
   const counts = data.web?.gameState?.agenda?.outcomeVoteCounts ?? {};
@@ -143,11 +163,18 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
       <div className={classes.stack}>
         <Prose text={d.text} clamp={3} />
         <ChoiceButtons
-          choices={d.choices.map((c) => (baseId(c.customId) === "flip_agenda" ? { ...c, label: "Reveal the agenda", style: 1 } : c))}
+          choices={d.choices.map((c) => {
+            const id = baseId(c.customId);
+            if (id === "flip_agenda") return { ...c, label: "Reveal the agenda", style: 1 };
+            if (id === "proceed_to_strategy") return { ...c, label: "Skip it — end the agenda phase", style: 2 };
+            return c;
+          })}
           onPress={onPress}
           pendingKey={pendingKey}
           channelId={d.prompt.channelId}
-          rankOf={(c) => (c.rank === "undo" || c.rank === "more" ? c.rank : "primary")}
+          rankOf={(c) =>
+            c.rank === "undo" ? "undo" : baseId(c.customId) === "proceed_to_strategy" ? "more" : c.rank === "more" ? "more" : "primary"
+          }
         />
       </div>
     );
@@ -162,15 +189,36 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
   const numeric = d.choices.filter((c) => VOTE_COUNT.test(baseId(c.customId)));
   const outcomes = d.choices.filter((c) => OUTCOME.test(baseId(c.customId)));
   const others = d.choices.filter((c) => !outcomes.includes(c));
+  const resolving = d.choices.some((c) => /^agendaResolution_/.test(baseId(c.customId)));
+  const predicting = d.choices.some((c) => /^rider_/.test(baseId(c.customId)));
+  /* "For a total of 5 votes on the outcome "Winnu". … You may confirm this, or modify this number." */
+  const tallied = d.prompt.message.content.match(/total of \*\*(\d+)\*\* votes? on the outcome "([^"]+)"/i);
+  const confirming = tallied
+    ? {
+        total: Number(tallied[1]),
+        outcome: tallied[2],
+        player: data.players.find((p) => p.faction.toLowerCase() === tallied[2].toLowerCase()),
+      }
+    : undefined;
   const rankOf = (c: Choice) => {
     if (c.rank === "undo" || c.rank === "more") return c.rank;
+    if (/^autoresolve_manual$/.test(baseId(c.customId))) return "more";
     if (ABSTAIN.test(c.label)) return "secondary";
     return "primary";
   };
   return (
     <div className={classes.stack}>
       {d.agenda && <AgendaCard agenda={d.agenda} />}
-      <p className={classes.hint} hidden={outcomes.length > 0}>
+      {confirming && (
+        <p className={local.voteFor}>
+          Voting for {confirming.player && <FactionIcon faction={confirming.player.faction} size={16} />}
+          <b>{confirming.player ? `${confirming.player.userName} (${confirming.outcome})` : confirming.outcome}</b>
+          <span className={local.tally}>{confirming.total} votes</span>
+        </p>
+      )}
+      {resolving && <VoteSummary data={data} />}
+      {predicting && <Prose text={d.text} clamp={3} />}
+      <p className={classes.hint} hidden={outcomes.length > 0 || !!confirming || resolving || predicting}>
         {start !== undefined
           ? `You have ${start} vote${start === 1 ? "" : "s"}${cast ? ` (${cast} cast)` : ""}.`
           : data.me
@@ -187,6 +235,8 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
         choices={others.map((c) => {
           const id = baseId(c.customId);
           if (/^vote$/.test(id)) return { ...c, label: "Vote", style: 3 };
+          if (/^agendaResolution_/.test(id)) return { ...c, label: "Resolve with this result", style: 3 };
+          if (/^autoresolve_manual$/.test(id)) return { ...c, label: "Resolve by hand instead (slash commands)", style: 2 };
           if (/^resolveAgendaVote_0$/.test(id) || /choose to abstain/i.test(c.label)) return { ...c, label: "Abstain", style: 2 };
           return c;
         })}
