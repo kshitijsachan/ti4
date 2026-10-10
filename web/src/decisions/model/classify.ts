@@ -98,6 +98,8 @@ export type Decision = {
    * produce or conclude the tactical action). It waits behind those, so it comes back once they are done.
    */
   hub?: boolean;
+  /** The gravity-rift roll of this tactical action was already taken. */
+  riftRolled?: boolean;
 };
 
 export type ClassifyContext = {
@@ -681,9 +683,9 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       eyebrow: "",
       title: tacticalTitle(choices, text, ring.length > 0),
       position: ring.length ? undefined : active,
-      hub: has(choices, /^doneWithTacticalAction/) && !has(choices, /^(doneLanding|landUnits)/),
+      hub: has(choices, /^(doneWithTacticalAction|doneLanding)/),
     };
-    return has(choices, /^getRiftButtons_/) ? riftFirst(tactical) : tactical;
+    return has(choices, /^getRiftButtons_/) ? riftFirst(tactical, riftRolled(ctx.state, prompt.channelId)) : tactical;
   }
   if (has(choices, /^proceed_to_strategy$/) && !has(choices, /^flip_agenda$/)) {
     return {
@@ -892,27 +894,46 @@ function tableSetup(choices: Choice[]): { title: string; text: string } {
 
 const RIFT_RULE = "Each ship that moved out of or through a gravity rift rolls one die: on 1–3 it is destroyed.";
 
-/** After moving through a rift the bot offers the roll as one button among others: put it first and say why. */
+/**
+ * Whether the gravity-rift roll of the current tactical action was already taken: the bot's rift prompt or a rift die
+ * result posted in this channel since the newest activation. The bot keeps offering the roll button after it.
+ */
+export function riftRolled(state: Pick<PlayState, "messages">, channelId: string): boolean {
+  const data = state.messages[channelId];
+  if (!data) return false;
+  for (let i = data.ids.length - 1; i >= 0; i--) {
+    const m = data.byId[data.ids[i]];
+    if (!m?.author.bot) continue;
+    if (/\bactivated \d+\b/i.test(m.content)) return false;
+    if (/\bis rifting some units\b|\bin tile \w+ rolled a\b/i.test(m.content)) return true;
+  }
+  return false;
+}
+
 /** What the step after moving says about the gravity rift (empty when the bot offers no rift roll). */
 export function riftNote(d: Decision): string {
   if (!d.choices.some((c) => /^getRiftButtons_/.test(baseId(c.customId)))) return "";
-  return d.prompt.message.my_press
-    ? "Rolled for the gravity rift? Then produce units here or conclude the tactical action."
-    : `Your ships may have used a gravity rift on the way. ${RIFT_RULE} Roll for them first, then produce units or conclude.`;
+  const landing = d.choices.some((c) => /^(landUnits_|doneLanding)/.test(baseId(c.customId)));
+  const next = landing ? "land ground forces" : "produce units or conclude";
+  return d.riftRolled
+    ? `Rolled for the gravity rift. Now ${next}.`
+    : `Your ships may have used a gravity rift on the way. ${RIFT_RULE} Roll for them first, then ${next}.`;
 }
 
-function riftFirst(d: Decision): Decision {
+/** After moving through a rift the bot offers the roll as one button among others: put it first (until rolled) and say why. */
+function riftFirst(d: Decision, rolled: boolean): Decision {
   const rift = (c: Choice) => /^getRiftButtons_/.test(baseId(c.customId));
-  const pressed = !!d.prompt.message.my_press;
-  const note = riftNote(d);
+  const marked = { ...d, riftRolled: rolled };
   return {
-    ...d,
-    title: pressed ? d.title : "Roll for the gravity rift",
-    text: [note, d.text].filter(Boolean).join("\n\n"),
-    choices: [
-      ...d.choices.filter(rift).map((c) => ({ ...c, label: "Roll for ships that used the rift", rank: "primary" as const })),
-      ...d.choices.filter((c) => !rift(c)),
-    ],
+    ...marked,
+    title: rolled ? d.title : "Roll for the gravity rift",
+    text: [riftNote(marked), d.text].filter(Boolean).join("\n\n"),
+    choices: rolled
+      ? d.choices.map((c) => (rift(c) ? { ...c, label: "Roll for the gravity rift again", rank: "more" as const } : c))
+      : [
+          ...d.choices.filter(rift).map((c) => ({ ...c, label: "Roll for ships that used the rift", rank: "primary" as const })),
+          ...d.choices.filter((c) => !rift(c)),
+        ],
   };
 }
 
@@ -937,24 +958,25 @@ function riftRolls(prompt: PendingPrompt, ctx: ClassifyContext): string[] {
 /** The bot's rift-roll prompt: one button per ship (or all of them), remove what the lost ships carried, done. */
 function riftStep(base: Decision, choices: Choice[], ctx: ClassifyContext): Decision {
   const wormhole = has(choices, /^(wormholeUnit_|wormholeAllShips_)/);
+  const rolls = riftRolls(base.prompt, ctx);
+  const lost = rolls.some((r) => r.endsWith("destroyed"));
   const relabel = (c: Choice): Choice => {
     const id = baseId(c.customId);
     if (id === "doneRifting") return { ...c, label: wormhole ? "Done rolling" : "Done rolling for the rift", rank: "secondary" };
-    if (/^getDamageButtons_\w+_remove/.test(id)) return { ...c, label: "Remove transported units", rank: "more" };
+    if (/^getDamageButtons_\w+_remove/.test(id)) return { ...c, label: "Remove transported units", rank: lost ? "secondary" : "more" };
     if (/^(riftAllUnits_|wormholeAllShips_)/.test(id)) return { ...c, label: "Roll for all ships here", rank: "primary" };
     if (/^(riftUnit_|wormholeUnit_)/.test(id)) return { ...c, label: c.label.replace(/^(Rift|Wormhole)\b/, "Roll for"), rank: "primary" };
     return c;
   };
-  const rolls = riftRolls(base.prompt, ctx);
   const rules = wormhole
     ? "Roll for each ship that travelled through the weird wormhole, then press Done."
-    : `${RIFT_RULE} Roll only for the ships that used the rift ("all ships here" rolls for every ship in the system). If a lost ship carried fighters or ground forces the rest cannot hold, remove them. Then press Done.`;
+    : "On 1–3 a ship is destroyed. Roll for the ships that left or passed through the rift, remove what lost ships carried beyond the capacity left, then press Done.";
   return {
     ...base,
     kind: "tactical",
     eyebrow: "",
     title: wormhole ? "Weird wormhole — roll for your ships" : "Gravity rift — roll for your ships",
-    text: rolls.length ? `${rules}\n\n**Rolled so far:**\n${rolls.map((r) => `- ${r}`).join("\n")}` : rules,
+    text: rolls.length ? `${rolls.join(" · ")}\n\n${rules}` : rules,
     choices: choices.map(relabel),
     position: ctx.web?.gameState?.activeSystem ?? undefined,
   };
@@ -965,7 +987,7 @@ function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean)
   const placing = choices.map((c) => baseId(c.customId).match(/^place_(\w+?)_/)?.[1]).filter(Boolean);
   if (placing.length && placing.every((u) => u === "pds")) return "Place a PDS — choose a planet";
   if (placing.length && placing.every((u) => u === "sd" || u === "spacedock")) return "Place a space dock — choose a planet";
-  const forward = choices.filter((c) => c.rank !== "undo" && c.rank !== "more");
+  const forward = choices.filter((c) => c.rank !== "undo" && c.rank !== "more" && !/^getRiftButtons_/.test(baseId(c.customId)));
   if (forward.length && forward.every((c) => /^doneWithTacticalAction/.test(baseId(c.customId)))) return "Finish the tactical action";
   if (has(choices, /^placeOneNDone_skipbuild/)) {
     const where = /hope'?s end/i.test(text) ? "Hope's End: " : "";
@@ -973,7 +995,7 @@ function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean)
     return `${where}place 1 mech${ac ? " or draw 1 action card" : ""}`.replace(/^p/, (x) => (where ? x : x.toUpperCase()));
   }
   if (has(choices, /^(tacticalActionBuild|place_|placeOneNDone)/) || /produce/i.test(text)) return "Produce units";
-  if (has(choices, /^(landUnits|doneLanding|planetsTake)/) || /land/i.test(text)) return "Land ground forces";
+  if (has(choices, /^(landUnits|doneLanding|planetsTake)/) || (/land/i.test(text) && !has(choices, /^doneWithTacticalAction/))) return "Land ground forces";
   if (has(choices, /^(unitTactical|tacticalMoveFrom|doneWithOneSystem|doneMoving|concludeMove)/)) return "Move ships into the system";
   if (has(choices, /^doneWithTacticalAction/)) return "Finish the tactical action";
   return "Tactical action";

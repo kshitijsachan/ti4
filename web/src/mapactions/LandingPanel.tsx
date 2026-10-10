@@ -1,11 +1,13 @@
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
-import type { PlayConnection } from "@/discord";
+import { usePlay, type PlayConnection } from "@/discord";
+import { baseId } from "@/decisions/model/controls";
+import { riftRolled } from "@/decisions/model/classify";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { cdnImage } from "@/entities/data/cdnImage";
 import { getColorAlias, getPrimaryColorCSS } from "@/entities/lookup/colors";
 import { getPlanetData } from "@/entities/lookup/planets";
-import type { Scope } from "./driver";
+import { buttonsOf, pressButton, type Scope } from "./driver";
 import { commitLanding, type LandingOffer } from "./landing";
 import { useMapActions } from "./store";
 import classes from "./MapActions.module.css";
@@ -81,6 +83,17 @@ export function LandingPanel({
   setBusy,
   onHandBack,
 }: Props) {
+  const channel = usePlay((s) => s.messages[prompt.channelId]);
+  const riftButton = buttonsOf(channel?.byId[prompt.messageId], scope.faction).find((c) =>
+    /^getRiftButtons_/.test(baseId(c.customId)),
+  );
+  const rolled = !!channel && riftRolled({ messages: { [prompt.channelId]: channel } }, prompt.channelId);
+  const rollRift = () =>
+    run(async () => {
+      if (!riftButton?.customId) return;
+      setBusy("Rolling for the gravity rift…");
+      await pressButton(conn, { ...prompt, customId: riftButton.customId });
+    });
   const plan = useMapActions((s) => s.landing);
   const setLanding = useMapActions((s) => s.setLanding);
   const space = inSpace(target, me, web);
@@ -129,6 +142,12 @@ export function LandingPanel({
           Use the game's buttons
         </button>
       </div>
+      {riftButton && !rolled && (
+        <div className={cx(classes.barText, classes.slow)}>
+          Your ships may have used a gravity rift. Roll for them before landing: on 1–3 a ship is destroyed, with what it
+          carries.
+        </div>
+      )}
       <div className={classes.planets}>
         {offer.planets.map((planet) => {
           const data = getPlanetData(planet);
@@ -223,9 +242,19 @@ export function LandingPanel({
       {busy && <div className={classes.barText}>{busy}</div>}
       {error && <div className={classes.error}>{error}</div>}
       <div className={classes.barActions}>
+        {riftButton && !rolled && (
+          <button
+            type="button"
+            className={cx(classes.button, classes.primary)}
+            onClick={() => void rollRift()}
+            disabled={!!busy}
+          >
+            Roll for the gravity rift
+          </button>
+        )}
         <button
           type="button"
-          className={cx(classes.button, classes.primary)}
+          className={cx(classes.button, !(riftButton && !rolled) && classes.primary)}
           onClick={() => void land()}
           disabled={!!busy}
         >

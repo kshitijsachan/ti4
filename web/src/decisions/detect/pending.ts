@@ -120,12 +120,13 @@ function isMultiPress(m: Message) {
 }
 
 /**
- * The step after moving (roll for the gravity rift, produce, conclude the tactical action): the bot leaves it up while
- * the rift roll or another of its buttons is answered, and deletes it once I produce or conclude.
+ * The steps after moving (land ground forces; roll for the gravity rift, produce, conclude the tactical action): the bot
+ * leaves them up while the rift roll or another of their buttons is answered, and deletes them once I finish landing,
+ * produce or conclude.
  */
 function isTacticalHub(m: Message) {
   const ids = choicesOf(m).map((c) => baseId(c.customId));
-  return ids.includes("doneWithTacticalAction") && !ids.some((id) => /^(doneLanding|landUnits)/.test(id));
+  return ids.includes("doneWithTacticalAction") || ids.some((id) => /^doneLanding/.test(id));
 }
 
 /** How many of the newest messages of a channel a role-wide prompt stays relevant for. */
