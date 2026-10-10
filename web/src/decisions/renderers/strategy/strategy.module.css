@@ -298,3 +298,24 @@
   border-radius: 6px;
   border: 1px solid var(--play-border);
 }
+
+.textLink {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--play-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.textLink:hover:not(:disabled) {
+  color: var(--play-ink-bright);
+}
+
+.confirmBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--play-yellow), 0.5);
+}

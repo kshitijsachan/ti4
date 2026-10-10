@@ -5,6 +5,7 @@ import type { RendererProps } from "../types";
 import { DECLINE, SPEND_ONLY, cardSpec, findChoice, type FollowAction } from "./cards";
 import { scDefinition } from "../../ui/parts";
 import { CardHeader, FollowStatus, holderOf, playerLabel } from "./shared";
+import { TradeDeal } from "./TradeDeal";
 import classes from "./strategy.module.css";
 
 /** Buttons on the played card that only its holder uses, or that are Discord-era helpers. */
@@ -96,25 +97,7 @@ export function StrategyFollowBody({ d, data, onPress, pendingKey }: RendererPro
           )}
         </div>
         {free.length > 0 && (
-          <>
-            <span className={classes.sectionLabel}>Free, if {holder ? playerLabel(holder) : "the Trade holder"} agreed to it</span>
-            <div className={classes.actionRow}>
-              {free.map((c) => (
-                <ChoiceButton
-                  key={c.key}
-                  choice={{
-                    ...c,
-                    style: 2,
-                    label: /wash/.test(baseId(c.customId)) ? "Replenish and wash (to trade goods)" : "Replenish for free",
-                  }}
-                  onPress={onPress}
-                  pending={pendingKey === c.key}
-                  busy={busy}
-                  compact
-                />
-              ))}
-            </div>
-          </>
+          <TradeDeal choices={free} holder={holder} gameName={data.gameName} onPress={onPress} pendingKey={pendingKey} />
         )}
       </div>
       <FollowStatus sc={sc} data={data} />
