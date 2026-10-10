@@ -2537,10 +2537,10 @@ index 0000000..0ff478c
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoService.java b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 new file mode 100644
-index 0000000..31eab30
+index 0000000..61847c0
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoService.java
-@@ -0,0 +1,384 @@
+@@ -0,0 +1,416 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.io.BufferedReader;
@@ -2652,7 +2652,7 @@ index 0000000..31eab30
 +            Game restored = UndoJournal.withContext(
 +                    "rewind", userId, who, targetLabel, () -> GameManager.undo(game, index));
 +            if (restored == null) throw new UndoException(500, "The bot failed to roll back to save " + index + ".");
-+            if (target != null) retirePrompts(restored, target.savedAt(), rollbackStart);
++            retirePrompts(restored, target != null ? target.savedAt() : rollbackStart, rollbackStart);
 +
 +            // Keep the pre-rewind state as the next save, then save the rewound state on top of it: one undo step
 +            // (the UNDO button, /game undo or POST /undo) then brings back everything the rewind threw away.
@@ -2708,7 +2708,7 @@ index 0000000..31eab30
 +            long rollbackStart = System.currentTimeMillis();
 +            Game restored = UndoJournal.withContext("undo", userId, who, undoneLabel, () -> GameManager.undo(game));
 +            if (restored == null) throw new UndoException(500, "The bot failed to undo.");
-+            if (previous != null) retirePrompts(restored, previous.savedAt(), rollbackStart);
++            retirePrompts(restored, previous != null ? previous.savedAt() : rollbackStart, rollbackStart);
 +            MessageHelper.sendMessageToChannel(
 +                    restored.getActionsChannel(),
 +                    REWIND_MARK + " " + me.getRepresentationNoPing() + " undid: **" + undoneLabel + "**.");
@@ -2733,7 +2733,6 @@ index 0000000..31eab30
 +     */
 +    private static void retirePrompts(Game game, long restoredSavedAt, long rollbackStart) {
 +        long from = restoredSavedAt + PROMPT_SLACK_MS;
-+        if (from >= rollbackStart) return;
 +        java.util.concurrent.CompletableFuture.runAsync(() -> {
 +            List<net.dv8tion.jda.api.entities.channel.middleman.MessageChannel> channels = new ArrayList<>();
 +            try {
@@ -2750,34 +2749,67 @@ index 0000000..31eab30
 +                BotLogger.error("Could not list the channels of " + game.getName() + " to retire undone prompts", e);
 +                return;
 +            }
-+            String after = Long.toUnsignedString(net.dv8tion.jda.api.utils.TimeUtil.getDiscordTimestamp(from));
++            Player active = activeTurnPlayer(game);
++            String turnPrefix = active == null ? null : "FFCC_" + active.getFaction() + "_";
++            long turnStart = game.getLastActivePlayerChange() == null ? 0 : game.getLastActivePlayerChange().getTime();
++            boolean activeHasPrompt = false;
 +            for (var channel : channels) {
 +                try {
 +                    long self = channel.getJDA().getSelfUser().getIdLong();
-+                    String cursor = after;
-+                    for (int page = 0; page < 5; page++) {
-+                        List<net.dv8tion.jda.api.entities.Message> batch =
-+                                channel.getHistoryAfter(cursor, 100).complete().getRetrievedHistory();
-+                        if (batch.isEmpty()) break;
-+                        boolean past = false;
-+                        for (var m : batch) {
-+                            long created = m.getTimeCreated().toInstant().toEpochMilli();
-+                            if (created >= rollbackStart) {
-+                                past = true;
-+                                continue;
-+                            }
-+                            if (m.getAuthor().getIdLong() != self || m.getComponents().isEmpty()) continue;
++                    List<net.dv8tion.jda.api.entities.Message> recent =
++                            channel.getHistory().retrievePast(100).complete();
++                    for (var m : recent) {
++                        if (m.getAuthor().getIdLong() != self || m.getComponents().isEmpty()) continue;
++                        long created = m.getTimeCreated().toInstant().toEpochMilli();
++                        if (created >= from && created < rollbackStart) {
 +                            m.editMessageComponents(java.util.Collections.emptyList())
 +                                    .queue(ok -> {}, BotLogger::catchRestError);
++                            continue;
 +                        }
-+                        if (past || batch.size() < 100) break;
-+                        cursor = batch.getFirst().getId(); // newest first
++                        if (turnPrefix != null && created >= turnStart && hasButton(m, turnPrefix)) activeHasPrompt = true;
 +                    }
 +                } catch (Exception e) {
 +                    BotLogger.error("Could not retire undone prompts in " + channel.getName(), e);
 +                }
 +            }
++            if (active != null && !activeHasPrompt) restoreTurnPrompt(game, active);
 +        });
++    }
++
++    private static boolean hasButton(net.dv8tion.jda.api.entities.Message m, String idPrefix) {
++        for (var b : m.getComponentTree().findAll(net.dv8tion.jda.api.components.buttons.Button.class)) {
++            String id = b.getCustomId();
++            if (id != null && id.startsWith(idPrefix)) return true;
++        }
++        return false;
++    }
++
++    /** The player whose action-phase turn it is, when no tactical action is under way (that has its own prompts). */
++    private static Player activeTurnPlayer(Game game) {
++        if (game.isFowMode() || !"action".equalsIgnoreCase(game.getPhaseOfGame())) return null;
++        String system = game.getActiveSystem();
++        if (system != null && !system.isBlank() && !"null".equals(system)) return null;
++        Player p = game.getActivePlayer();
++        return p == null || !p.isRealPlayer() || p.isPassed() ? null : p;
++    }
++
++    /**
++     * A roll-back can land in the middle of a turn whose prompt the bot already deleted (it deletes a prompt once it
++     * is pressed), leaving the active player with nothing to press. Re-post the bot's own turn buttons: the start-of-
++     * turn menu, or "end turn / do another action" when an action was already taken this turn.
++     */
++    private static void restoreTurnPrompt(Game game, Player player) {
++        try {
++            boolean acted = !game.getStoredValue("currentActionSummary" + player.getFaction()).isBlank();
++            var buttons = ti4.service.turn.StartTurnService.getStartOfTurnButtons(player, game, acted, null);
++            if (buttons == null || buttons.isEmpty()) return;
++            String text = player.getRepresentationUnfogged()
++                    + (acted ? ", use buttons to end turn, or do another action." : ", use buttons to do your turn.");
++            var channel = game.getMainGameChannel() != null ? game.getMainGameChannel() : game.getActionsChannel();
++            MessageHelper.sendMessageToChannelWithButtons(channel, text, buttons);
++        } catch (Exception e) {
++            BotLogger.error("Could not restore the turn prompt of " + game.getName(), e);
++        }
 +    }
 +
 +    private static <T> T locked(String gameName, java.util.function.Supplier<T> task) {
