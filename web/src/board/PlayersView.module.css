@@ -1,0 +1,107 @@
+.content {
+  width: calc(100vw - 32px);
+  max-width: none;
+  height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  min-height: 48px;
+  padding-block: 8px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding-top: 0;
+}
+
+/* Two quiet lines of toggles: which plates, which seats. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--mantine-color-dark-5);
+}
+
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.groupLabel {
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: var(--weight-title);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mantine-color-gray-6);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  border: 1px solid var(--mantine-color-dark-4);
+  font-size: 12px;
+  color: var(--mantine-color-gray-5);
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.pill:hover {
+  color: var(--mantine-color-gray-2);
+  border-color: var(--mantine-color-dark-3);
+}
+
+.pillOn {
+  color: var(--mantine-color-gray-0);
+  background: var(--mantine-color-dark-5);
+  border-color: var(--mantine-color-dark-3);
+}
+
+.seatDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--seat);
+  opacity: 0.5;
+}
+
+.pillOn .seatDot {
+  opacity: 1;
+}
+
+.details {
+  margin-left: 8px;
+}
+
+/* The boards side by side; the grid scrolls, the toolbar stays. */
+.grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--cell-min, 430px)), 1fr));
+  align-content: start;
+  gap: 12px;
+  padding-top: 12px;
+  scrollbar-width: thin;
+}
+
+.cell {
+  min-width: 0;
+}

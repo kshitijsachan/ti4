@@ -20,6 +20,11 @@ import {
   TILE_HEIGHT,
   TILE_WIDTH,
 } from "@/entities/geometry/tilePositioning";
+import {
+  HOME_LABEL_HEIGHT,
+  HOME_LABEL_WIDTH,
+  homeLabelAnchors,
+} from "@/domains/map/components/HomeSystemLabels";
 import { useBoardFocus } from "./focus";
 import classes from "./BoardTable.module.css";
 
@@ -123,31 +128,66 @@ const DOCK_RESERVE = 400;
 /** Below this table width the popup is a bottom sheet and nothing is reserved for it. */
 const DOCK_MIN_TABLE = 1000;
 /** Kept clear at the bottom for the hand bar. */
-const HAND_RESERVE = 40;
-const FIT_PAD = 12;
+const HAND_RESERVE = 48;
+const FIT_PAD = 20;
 const FIT_MAX = 1;
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
-/** The painted extent of the board (tiles and the stat tiles around it), unscaled. */
-function usePaintedBounds(): Bounds | null {
+/** Map units kept around the painted extent, for unit stacks and tokens that lean past a tile's rim. */
+const BOUNDS_SLACK = 24;
+/** Where upstream draws the expeditions wheel (when it's on the map at all), relative to the content bottom. */
+const EXPEDITIONS = { left: 100, fromBottom: 400, size: 300 };
+
+/**
+ * The painted extent of the board, unscaled: every tile (off-board ones too), the home-system name labels, or,
+ * with the map's own player stats switched back on, the stat hexes and the expeditions wheel.
+ */
+function usePaintedBounds(contentHeight: number): Bounds | null {
   const gameData = useGameData();
   const tiles = useTilesList(gameData?.tiles);
+  const showStats = useSettingsStore((s) => s.settings.showMapPlayerStats);
   return useMemo(() => {
     if (!tiles.length) return null;
-    const stats = calculateStatTilePositions(
-      Object.values(gameData?.statTilePositions ?? {}).flat(),
-      gameData?.ringCount,
-      gameData?.tilePositions,
-    );
-    const points = [...tiles.map((t) => t.properties), ...stats];
+    const boxes = tiles.map((t) => ({ x: t.properties.x, y: t.properties.y, w: TILE_WIDTH, h: TILE_HEIGHT }));
+    if (showStats) {
+      const stats = calculateStatTilePositions(
+        Object.values(gameData?.statTilePositions ?? {}).flat(),
+        gameData?.ringCount,
+        gameData?.tilePositions,
+      );
+      boxes.push(...stats.map((p) => ({ x: p.x, y: p.y, w: TILE_WIDTH, h: TILE_HEIGHT })));
+      const expeditions = Object.values(gameData?.expeditions ?? {});
+      if (expeditions.some((e) => e.completedBy == null)) {
+        const top = contentHeight - EXPEDITIONS.fromBottom;
+        boxes.push({ x: EXPEDITIONS.left, y: top, w: EXPEDITIONS.size, h: EXPEDITIONS.size });
+      }
+    } else {
+      const anchors = homeLabelAnchors(gameData?.statTilePositions, tiles, gameData?.ringCount, gameData?.tilePositions);
+      boxes.push(
+        ...anchors.map((a) => ({
+          x: a.x - HOME_LABEL_WIDTH / 2,
+          y: a.y - HOME_LABEL_HEIGHT / 2,
+          w: HOME_LABEL_WIDTH,
+          h: HOME_LABEL_HEIGHT,
+        })),
+      );
+    }
     return {
-      minX: Math.min(...points.map((p) => p.x)),
-      minY: Math.min(...points.map((p) => p.y)),
-      maxX: Math.max(...points.map((p) => p.x + TILE_WIDTH)),
-      maxY: Math.max(...points.map((p) => p.y + TILE_HEIGHT)),
+      minX: Math.min(...boxes.map((b) => b.x)) - BOUNDS_SLACK,
+      minY: Math.min(...boxes.map((b) => b.y)) - BOUNDS_SLACK,
+      maxX: Math.max(...boxes.map((b) => b.x + b.w)) + BOUNDS_SLACK,
+      maxY: Math.max(...boxes.map((b) => b.y + b.h)) + BOUNDS_SLACK,
     };
-  }, [tiles, gameData?.statTilePositions, gameData?.ringCount, gameData?.tilePositions]);
+  }, [
+    tiles,
+    showStats,
+    contentHeight,
+    gameData?.statTilePositions,
+    gameData?.ringCount,
+    gameData?.tilePositions,
+    gameData?.expeditions,
+  ]);
 }
 
 function useAreaSize(ref: RefObject<HTMLDivElement | null>) {
@@ -235,7 +275,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
   const contentSize = useMapContentSize("pannable");
   const containerRef = useRef<HTMLDivElement>(null);
   const area = useAreaSize(containerRef);
-  const bounds = usePaintedBounds();
+  const bounds = usePaintedBounds(contentSize.height);
   const fit = fitLayout(bounds, area, docked);
 
   // Fitted until the player zooms past the fit; zooming back down to it (or below) fits again.

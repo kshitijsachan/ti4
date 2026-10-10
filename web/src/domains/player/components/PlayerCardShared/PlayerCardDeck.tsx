@@ -27,8 +27,20 @@ import { useGameData } from "@/state/useGameContext";
 import { useSettingsStore } from "@/state/appStore";
 import styles from "./PlayerCardDeck.module.css";
 
+/** The deck's plates, as a viewer can filter them (e.g. "only techs", side by side across players). */
+export type DeckSection =
+  | "faction"
+  | "status"
+  | "holdings"
+  | "leaders"
+  | "tech"
+  | "units"
+  | "planets";
+
 type Props = {
   playerData: PlayerData;
+  /** Only these plates; all of them when omitted. */
+  sections?: ReadonlySet<DeckSection>;
 };
 
 /** Sockets drawn per tech color, so an unresearched line reads as capacity. */
@@ -42,7 +54,8 @@ const TECH_MIN_SLOTS = 4;
  * not media queries, drive the reflow, so both hosts get the layout their
  * actual width deserves.
  */
-export function PlayerCardDeck({ playerData }: Props) {
+export function PlayerCardDeck({ playerData, sections }: Props) {
+  const show = (section: DeckSection) => !sections || sections.has(section);
   const gameData = useGameData();
   const settings = useSettingsStore((state) => state.settings);
   const player = getPlayerCardLayoutFields(playerData);
@@ -71,8 +84,8 @@ export function PlayerCardDeck({ playerData }: Props) {
       filteredTechs,
       playerData.exhaustedTechs ?? [],
       TECH_MIN_SLOTS,
-      playerData.breakthrough
-    )
+      playerData.breakthrough,
+    ),
   );
 
   const hasLoadout =
@@ -90,7 +103,7 @@ export function PlayerCardDeck({ playerData }: Props) {
           the deck's first plate, subdivided into bays by a hairline lattice.
           Chips wrap inside their bay, so group boundaries hold at any card
           width instead of groups tumbling onto ragged rows. */}
-      {hasLoadout && (
+      {hasLoadout && show("faction") && (
         <Compartment density="flush" className={styles.loadoutSection}>
           <Box className={styles.loadoutRail}>
             <PlayerCardAbilitiesFactionTechsMobile
@@ -107,116 +120,134 @@ export function PlayerCardDeck({ playerData }: Props) {
       )}
 
       <Box className={styles.row}>
-        <Compartment brackets density="flush" className={styles.statusSection}>
-          <LogisticsPlate
-            tg={player.tg}
-            commodities={player.commodities}
-            commoditiesTotal={player.commoditiesTotal}
-            pnCount={player.pnCount}
-            acCount={player.acCount}
-            fragments={player.fragments}
-            debtTokens={player.debtTokens}
-            tacticalCC={player.tacticalCC}
-            fleetCC={player.fleetCC}
-            strategicCC={player.strategicCC}
-            mahactEdict={mahactEdict}
-            showCommandTokens={settings.showPlayerAreaCommandTokens}
-          />
-        </Compartment>
-
-        <Compartment className={styles.holdingsSection}>
-          <ObjectivesRack
-            fluid
-            secretsScored={player.secretsScored}
-            knownUnscoredSecrets={player.knownUnscoredSecrets}
-            soCount={player.soCount}
-            promissoryNotes={promissoryNotes}
-            relics={player.relics}
-            exhaustedRelics={player.exhaustedRelics}
-            minColumns={objectiveColumns}
-            minRows={MIN_RACK_ROWS}
-          />
-        </Compartment>
-
-        <Compartment className={styles.leadersSection}>
-          <Leaders leaders={player.leaders} faction={player.faction} />
-        </Compartment>
-      </Box>
-
-      <Compartment className={styles.techSection}>
-        <Box className={styles.techRack}>
-          {techCategories.map((techType, index) => (
-            <Stack key={techType} gap={4}>
-              {techRackColumns[index].length > 0 ? (
-                techRackColumns[index]
-              ) : (
-                <PhantomTech techType={techType} />
-              )}
-            </Stack>
-          ))}
-        </Box>
-      </Compartment>
-
-      <Box className={styles.row}>
-        <Compartment className={styles.unitsSection}>
-          <PlayerCardUnitsArea
-            playerData={playerData}
-            color={player.color}
-            faction={player.faction}
-            spacing="8px"
-            showUnitUpgrades={settings.showPlayerAreaUnitUpgrades}
-          />
-        </Compartment>
-
-        {hasCapturedUnits && (
-          <Compartment className={styles.nomboxSection}>
-            <Nombox capturedUnits={player.nombox} />
-          </Compartment>
-        )}
-
-        {settings.showPlayerAreaArmyStrength && (
-          <Compartment className={styles.armySection}>
-            <ArmyStats stats={armyStats} rank={rank} />
-          </Compartment>
-        )}
-      </Box>
-
-      <Compartment className={styles.planetsSection}>
-        <PlayerCardPlanetsSection
-          planetEconomics={planetEconomics}
-          gap={4}
-          align="stretch"
-          economyClassName={styles.planetsEconomy}
-          showTotalSpend={settings.showPlayerAreaTotalSpend}
-        >
-          <Group gap={4} align="center" className={styles.planetsFlow}>
-            <PlayerCardPlanetsArea
-              planets={player.planets}
-              exhaustedPlanetAbilities={player.exhaustedPlanetAbilities}
-              exhaustedPlanets={player.exhaustedPlanets}
+        {show("status") && (
+          <Compartment
+            brackets
+            density="flush"
+            className={styles.statusSection}
+          >
+            <LogisticsPlate
+              tg={player.tg}
+              commodities={player.commodities}
+              commoditiesTotal={player.commoditiesTotal}
+              pnCount={player.pnCount}
+              acCount={player.acCount}
+              fragments={player.fragments}
+              debtTokens={player.debtTokens}
+              tacticalCC={player.tacticalCC}
+              fleetCC={player.fleetCC}
+              strategicCC={player.strategicCC}
+              mahactEdict={mahactEdict}
+              showCommandTokens={settings.showPlayerAreaCommandTokens}
             />
-            {settings.showPlayerAreaReinforcements && (
-              <ReinforcementTokensGroup
-                breachTokensReinf={player.breachTokensReinf}
-                sleeperTokensReinf={player.sleeperTokensReinf}
-                ghostWormholesReinf={player.ghostWormholesReinf}
-                galvanizeTokensReinf={player.galvanizeTokensReinf}
-                ml="xs"
-              />
-            )}
-          </Group>
-        </PlayerCardPlanetsSection>
-      </Compartment>
+          </Compartment>
+        )}
 
-      {Array.isArray(player.plotCards) && player.plotCards.length > 0 && (
-        <Compartment className={styles.plotsSection}>
-          <PlotCardsList
-            plotCards={player.plotCards}
-            faction={player.faction}
-            keyPrefix="card-plot"
-          />
+        {show("holdings") && (
+          <Compartment className={styles.holdingsSection}>
+            <ObjectivesRack
+              fluid
+              secretsScored={player.secretsScored}
+              knownUnscoredSecrets={player.knownUnscoredSecrets}
+              soCount={player.soCount}
+              promissoryNotes={promissoryNotes}
+              relics={player.relics}
+              exhaustedRelics={player.exhaustedRelics}
+              minColumns={objectiveColumns}
+              minRows={MIN_RACK_ROWS}
+            />
+          </Compartment>
+        )}
+
+        {show("leaders") && (
+          <Compartment className={styles.leadersSection}>
+            <Leaders leaders={player.leaders} faction={player.faction} />
+          </Compartment>
+        )}
+      </Box>
+
+      {show("tech") && (
+        <Compartment className={styles.techSection}>
+          <Box className={styles.techRack}>
+            {techCategories.map((techType, index) => (
+              <Stack key={techType} gap={4}>
+                {techRackColumns[index].length > 0 ? (
+                  techRackColumns[index]
+                ) : (
+                  <PhantomTech techType={techType} />
+                )}
+              </Stack>
+            ))}
+          </Box>
         </Compartment>
       )}
+
+      {show("units") && (
+        <Box className={styles.row}>
+          <Compartment className={styles.unitsSection}>
+            <PlayerCardUnitsArea
+              playerData={playerData}
+              color={player.color}
+              faction={player.faction}
+              spacing="8px"
+              showUnitUpgrades={settings.showPlayerAreaUnitUpgrades}
+            />
+          </Compartment>
+
+          {hasCapturedUnits && (
+            <Compartment className={styles.nomboxSection}>
+              <Nombox capturedUnits={player.nombox} />
+            </Compartment>
+          )}
+
+          {settings.showPlayerAreaArmyStrength && (
+            <Compartment className={styles.armySection}>
+              <ArmyStats stats={armyStats} rank={rank} />
+            </Compartment>
+          )}
+        </Box>
+      )}
+
+      {show("planets") && (
+        <Compartment className={styles.planetsSection}>
+          <PlayerCardPlanetsSection
+            planetEconomics={planetEconomics}
+            gap={4}
+            align="stretch"
+            economyClassName={styles.planetsEconomy}
+            showTotalSpend={settings.showPlayerAreaTotalSpend}
+          >
+            <Group gap={4} align="center" className={styles.planetsFlow}>
+              <PlayerCardPlanetsArea
+                planets={player.planets}
+                exhaustedPlanetAbilities={player.exhaustedPlanetAbilities}
+                exhaustedPlanets={player.exhaustedPlanets}
+              />
+              {settings.showPlayerAreaReinforcements && (
+                <ReinforcementTokensGroup
+                  breachTokensReinf={player.breachTokensReinf}
+                  sleeperTokensReinf={player.sleeperTokensReinf}
+                  ghostWormholesReinf={player.ghostWormholesReinf}
+                  galvanizeTokensReinf={player.galvanizeTokensReinf}
+                  ml="xs"
+                />
+              )}
+            </Group>
+          </PlayerCardPlanetsSection>
+        </Compartment>
+      )}
+
+      {show("faction") &&
+        Array.isArray(player.plotCards) &&
+        player.plotCards.length > 0 && (
+          <Compartment className={styles.plotsSection}>
+            <PlotCardsList
+              plotCards={player.plotCards}
+              faction={player.faction}
+              keyPrefix="card-plot"
+            />
+          </Compartment>
+        )}
     </Box>
   );
 }

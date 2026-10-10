@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip, UnstyledButton } from "@mantine/core";
-import { IconListDetails, IconMessageCircle, IconTarget, IconTransfer } from "@tabler/icons-react";
+import { IconListDetails, IconMessageCircle, IconTarget, IconTransfer, IconUsers } from "@tabler/icons-react";
 import cx from "clsx";
 import { usePlay } from "@/discord";
 import { UndoButton } from "@/rollback";
@@ -78,6 +78,8 @@ type Props = {
   drawer: DrawerName | null;
   onDrawer: (name: DrawerName | null) => void;
   onObjectives?: () => void;
+  /** All players' boards side by side. */
+  onPlayers?: () => void;
   talkUnread: number;
   incomingTrades: number;
 };
@@ -93,6 +95,7 @@ export function TopBar({
   drawer,
   onDrawer,
   onObjectives,
+  onPlayers,
   talkUnread,
   incomingTrades,
 }: Props) {
@@ -135,6 +138,15 @@ export function TopBar({
             tip={objectives ? `Objectives · ${objectives} revealed` : "Objectives"}
             active={false}
             onClick={onObjectives}
+          />
+        )}
+        {onPlayers && (
+          <BarButton
+            icon={<IconUsers size={18} stroke={1.6} />}
+            label="Players"
+            tip="Players · all boards side by side"
+            active={false}
+            onClick={onPlayers}
           />
         )}
         <BarButton

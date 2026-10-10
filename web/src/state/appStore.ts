@@ -69,6 +69,7 @@ const DEFAULT_SETTINGS: Settings = {
   showPlayerAreaReinforcements: true,
   showPlayerAreaFactionAbilities: true,
   showPlayerAreaNeighborship: true,
+  showMapPlayerStats: false,
 };
 
 /** Legacy settings stored a boolean `showControlTokens` instead of the mode. */
@@ -233,6 +234,8 @@ export type Settings = {
   showPlayerAreaReinforcements: boolean;
   showPlayerAreaFactionAbilities: boolean;
   showPlayerAreaNeighborship: boolean;
+  /** Draw upstream's stat hexes (VP, goods, tokens, speaker…) around each home system. */
+  showMapPlayerStats: boolean;
 };
 
 type BooleanSettingKey = {

@@ -1,13 +1,18 @@
 import { PlayerData } from "@/entities/data/types";
 import { usePlayerCardComputedData } from "@/domains/player/components/PlayerCardShared/usePlayerCardComputedData";
 import { getPlayerCardLayoutFields } from "@/domains/player/components/PlayerCardShared/getPlayerCardLayoutFields";
-import { PlayerCardDeck } from "@/domains/player/components/PlayerCardShared/PlayerCardDeck";
+import {
+  PlayerCardDeck,
+  type DeckSection,
+} from "@/domains/player/components/PlayerCardShared/PlayerCardDeck";
 import { PlayerCardBox } from "@/domains/player/components/PlayerCardBox";
 import { PlayerCardHeaderFull } from "@/domains/player/components/PlayerCardHeader/PlayerCardHeaderCompact";
 import { useSettingsStore } from "@/state/appStore";
 
 type Props = {
   playerData: PlayerData;
+  /** Only these plates of the deck; all of them when omitted. */
+  sections?: ReadonlySet<DeckSection>;
 };
 
 /**
@@ -41,7 +46,7 @@ export default function PlayerCard(props: Props) {
         showNeighbors={settings.showPlayerAreaNeighborship}
       />
 
-      <PlayerCardDeck playerData={props.playerData} />
+      <PlayerCardDeck playerData={props.playerData} sections={props.sections} />
     </PlayerCardBox>
   );
 }

@@ -8,13 +8,17 @@ import { PlayerSeat, PlayerStats } from "./PlayerBoard";
 import { summarizePlayer } from "./playerSummary";
 import classes from "./PlayerRail.module.css";
 
-type Props = { myUserId?: string };
+type Props = {
+  myUserId?: string;
+  /** Opens every player's board side by side. */
+  onAllPlayers?: () => void;
+};
 
 /**
  * Every seat at the table in one slim, non-scrolling row: faction, score, strategy cards and whose turn it is.
  * Hovering a seat (tapping, on touch screens) shows its full readout; clicking opens the player's whole area.
  */
-export function PlayerRail({ myUserId }: Props) {
+export function PlayerRail({ myUserId, onAllPlayers }: Props) {
   const data = useGameData();
   const [openColor, setOpenColor] = useState<string | null>(null);
   const [peekColor, setPeekColor] = useState<string | null>(null);
@@ -55,8 +59,9 @@ export function PlayerRail({ myUserId }: Props) {
             <div role="listitem" key={player.color} className={classes.seat}>
               <HoverCard
                 position="bottom"
-                openDelay={touch ? 0 : 250}
-                closeDelay={80}
+                openDelay={touch ? 0 : 120}
+                closeDelay={60}
+                transitionProps={{ transition: "fade", duration: 90 }}
                 shadow="md"
                 withinPortal
                 zIndex={3200}
@@ -106,6 +111,19 @@ export function PlayerRail({ myUserId }: Props) {
         classNames={{ content: classes.detail, body: classes.detailBody }}
       >
         {opened && <PlayerCard playerData={opened} />}
+        {onAllPlayers && (
+          <div className={classes.detailFoot}>
+            <UnstyledButton
+              className={classes.more}
+              onClick={() => {
+                setOpenColor(null);
+                onAllPlayers();
+              }}
+            >
+              Compare all players side by side
+            </UnstyledButton>
+          </div>
+        )}
       </Modal>
     </>
   );

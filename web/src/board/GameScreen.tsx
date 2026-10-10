@@ -15,6 +15,7 @@ import { DecisionSlot, HandSlot, LogSlot } from "./Mounts";
 import { OPEN_TRADE_EVENT } from "@/decisions";
 import { ObjectivesModal } from "./ObjectivesModal";
 import { PlayerRail } from "./PlayerRail";
+import { PlayersView } from "./PlayersView";
 import { TopBar, type DrawerName } from "./TopBar";
 import { useExternalFocus } from "./useExternalFocus";
 import classes from "./GameScreen.module.css";
@@ -85,6 +86,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
   const [drawer, setDrawer] = useState<DrawerName | null>(null);
   const [rawChannel, setRawChannel] = useState<string | null>(null);
   const [objectivesOpen, setObjectivesOpen] = useState(false);
+  const [playersOpen, setPlayersOpen] = useState(false);
   const stageRef = useRef<HTMLElement>(null);
   const docked = useDocked(stageRef);
   useExternalFocus();
@@ -133,10 +135,11 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
         drawer={drawer}
         onDrawer={setDrawer}
         onObjectives={data && !takeover ? () => setObjectivesOpen(true) : undefined}
+        onPlayers={data && !takeover ? () => setPlayersOpen(true) : undefined}
         talkUnread={talkUnread}
         incomingTrades={incomingTrades}
       />
-      {!takeover && <PlayerRail myUserId={me?.id} />}
+      {!takeover && <PlayerRail myUserId={me?.id} onAllPlayers={() => setPlayersOpen(true)} />}
       <main ref={stageRef} className={classes.stage}>
         {stage}
         {!takeover && (
@@ -160,6 +163,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
         tradeSignal={handSignal}
       />
       <ObjectivesModal opened={objectivesOpen} onClose={() => setObjectivesOpen(false)} />
+      <PlayersView opened={playersOpen} onClose={() => setPlayersOpen(false)} />
     </div>
   );
 }

@@ -1,0 +1,48 @@
+/* Sizes are in map units: the board is scaled down to ~0.4–0.6 on a laptop. */
+.label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 11;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  padding: 8px 20px 8px 16px;
+  border-radius: 999px;
+  background: rgba(10, 12, 18, 0.72);
+  border: 2px solid color-mix(in srgb, var(--seat) 55%, transparent);
+}
+
+.dot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--seat);
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: var(--weight-rail);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.label[data-side="left"] {
+  justify-content: flex-end;
+}
+
+.label[data-side="right"] {
+  justify-content: flex-start;
+}

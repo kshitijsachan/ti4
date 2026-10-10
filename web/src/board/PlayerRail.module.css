@@ -71,3 +71,9 @@
 .detailBody {
   padding-top: 4px;
 }
+
+.detailFoot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+}
