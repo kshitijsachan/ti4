@@ -152,9 +152,11 @@ while (Date.now() < end2 && !done) {
   }
   seen.push(title);
   await shot(`7-decision-${seen.length}`);
-  const options = dialog.locator('[role=option]');
+  const options = dialog.locator('[role=option]:not([aria-disabled=true])');
   if (await options.count()) {
-    await options.first().click();
+    // A repeated prompt (e.g. Argent picks two starting techs) needs a different option than last time.
+    const repeats = seen.filter((t) => t === title).length - 1;
+    await options.nth(repeats % (await options.count())).click();
     await page.waitForTimeout(500);
     await shot(`7-decision-${seen.length}-selected`);
     const confirm = dialog.getByRole("button", { name: /^(Take|Keep|Start with|Research|Discard|Pick)\b/ }).first();
