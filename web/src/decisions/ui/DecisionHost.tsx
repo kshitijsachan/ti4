@@ -79,6 +79,8 @@ function useSetupOpen(gameName: string) {
 function combatOver(d: Decision, web?: PlayerDataResponse) {
   const c = d.combat;
   if (!web) return false;
+  /* Hits are simultaneous: wiping out the other side still leaves me the hits they rolled to assign. */
+  if ([d, ...(d.steps ?? [])].some((x) => x.choices.some((ch) => /^(autoAssign\w*Hits|assignHits|assignDamage)_/.test(baseId(ch.customId))))) return false;
   /* No system, or a system the game has no fight in: a leftover (or a space-cannon prompt), nothing to fight. */
   if (!c?.position) return !web.gameState?.activeCombat;
   const tile = web.tileUnitData?.[c.position];
@@ -124,7 +126,12 @@ function foldCombat(list: Decision[]): Decision[] {
 /** The bot posts a new "assign N hits" prompt each round and leaves the old ones up: keep the newest of each kind. */
 function newestHitPrompts(d: Decision): Decision {
   const hitKind = (x: Decision) =>
-    x.choices.map((c) => baseId(c.customId).match(/^autoAssign(\w*?)Hits/)?.[1]).find((k) => k !== undefined);
+    x.choices
+      .map((c) => {
+        const k = baseId(c.customId).match(/^autoAssign(\w*?)Hits/)?.[1];
+        return k === undefined ? undefined : `${k}:${c.customId?.match(/^FFCC_([^_]+)_/)?.[1] ?? ""}`;
+      })
+      .find((k) => k !== undefined);
   const all = [d, ...(d.steps ?? [])];
   const newest = new Map<string, string>();
   for (const x of all) {
@@ -216,6 +223,8 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     const all = prompts
       .map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }))
       .filter((d) => !isNoise(d))
+      /* Nothing of mine to press (another faction's locked buttons were dropped, only Undo is left): not mine. */
+      .filter((d) => ["combat", "status", "scoring", "agenda"].includes(d.kind) || !!d.steps?.length || d.choices.some((c) => c.rank !== "undo" && c.rank !== "more"))
       /* My own card with nothing left to press (follow buttons are the other players'): it is done. */
       .filter((d) => d.kind !== "scPrimary" || !!d.steps?.length || d.choices.some((c) => c.rank !== "undo" && !/^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/.test(baseId(c.customId))))
       /* My turn menus (left live by an undo) only while it is my turn. */
@@ -230,14 +239,15 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     );
     const oldestFirst = foldExplores(inBursts(live)).filter((d) => !(d.kind === "combat" && combatOver(d, web)));
     const queue = orderQueue(oldestFirst);
-    if (!queue.length && myTurn && phase === "action") {
+    const actionable = queue.filter((d) => d.kind !== "combat" || combatWaitsOnMe(d));
+    if (!actionable.length && myTurn && phase === "action") {
       /* My turn and nothing waits on me: a step got lost; offer my turn menu again so the turn never dead-ends. */
       const fallback = turnMenuFallback(conn.store.getState(), game, mePlayer?.faction);
-      if (fallback) queue.push(classify(fallback, { state: { users, channels, messages }, game, web, me: mePlayer }));
+      if (fallback) queue.unshift(classify(fallback, { state: { users, channels, messages }, game, web, me: mePlayer }));
     }
     return { decisions: queue, offers: offersOf(oldestFirst) };
   }, [prompts, game, users, channels, messages, web, mePlayer, myTurn, phase, conn, movement.active, movement.promptId]);
-  if (import.meta.env.DEV) (window as unknown as { __decisions?: unknown }).__decisions = { decisions, offers, prompts };
+  if (import.meta.env.DEV && mePlayer) (window as unknown as { __decisions?: unknown }).__decisions = { decisions, offers, prompts };
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction" || d.kind === "turn"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };
   const waiting = useSetupWaiting(gameName);
