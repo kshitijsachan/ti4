@@ -21,7 +21,7 @@ import type { Seat } from "./seat.js";
  */
 
 export const REPLENISH_NOTE = /\breplenish/i;
-const OFFER_ID = /^(acceptOffer_|rejectOffer_|resetOffer_)/;
+const OFFER_ID = /^(acceptOffer_|rejectOffer_|resetOffer_|rescindOffer_)/;
 const FORCE_ID = /^forceARefresh_/;
 /** Minimum time between two proposals of one seat in a game. */
 const PROPOSE_GAP_MS = 25000;
@@ -140,7 +140,7 @@ export class TradeDesk {
     private token: () => string | undefined,
   ) {}
 
-  /** Prompts the rule table must leave alone: offers to us, and our Trade card's force-replenish prompt. */
+  /** Prompts the rule table must leave alone: offers to and from us (never Rescind on its own), our force-replenish prompt. */
   owns(_game: string, p: Prompt): boolean {
     if (p.controls.some((c) => OFFER_ID.test(baseId(c.custom_id)))) return true;
     return p.controls.some((c) => FORCE_ID.test(baseId(c.custom_id))) && this.mentionsMe(p);

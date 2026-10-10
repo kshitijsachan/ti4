@@ -45,7 +45,7 @@ Each one is a virtual browser client (`Clients.attachVirtual`): same frames, sam
 bot sees ordinary interactions. Its policy is a heuristic table over button custom ids / labels: first legal Milty
 pick, preferred strategy cards, play the strategy card then pass, decline every reaction window (not following,
 no sabotage, no whens / afters, pre-abstain), no objective scoring, roll combat dice once per round and auto-assign
-hits, reject trades, break agenda ties as speaker, and press the first sensible button of prompts that are
+hits, trade (`botplay/trade.ts`: accept fair offers, reject bad ones and never give away PNs, propose N-1 commodity washes, run the Trade card "free replenish for a wash" deal), break agenda ties as speaker, and press the first sensible button of prompts that are
 certainly its own (ephemeral, its faction's `FFCC_` buttons, replies to its own press). Undo / take-back / admin /
 info / modal buttons are never pressed. Decisions are logged as `autopilot <name>: pressed "<label>" in #channel
 (<why>)`. With `ANTHROPIC_API_KEY` set, prompts no rule covers are put to Claude (`AUTOPILOT_MODEL`, default

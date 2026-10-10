@@ -56,8 +56,8 @@ export function TradeBody({ d, data, onPress, pendingKey }: RendererProps) {
   const note = pending?.items.find((i) => i.kind === "note")?.label;
   const fromApi = pending
     ? {
-        theirs: { who: pending.otherUserName, items: pending.items.filter((i) => i.from === pending.otherFaction).map(itemLabel) },
-        mine: { who: meName ?? "you", items: pending.items.filter((i) => i.from !== pending.otherFaction).map(itemLabel) },
+        theirs: { who: pending.otherUserName, items: pending.items.filter((i) => i.kind !== "note" && i.from === pending.otherFaction).map(itemLabel) },
+        mine: { who: meName ?? "you", items: pending.items.filter((i) => i.kind !== "note" && i.from !== pending.otherFaction).map(itemLabel) },
       }
     : undefined;
   const theirs = fromApi?.theirs ?? trade?.sides.find((s) => s.who !== meName) ?? trade?.sides[0];
