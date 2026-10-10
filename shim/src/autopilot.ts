@@ -413,7 +413,10 @@ class SeatPilot {
     this.busy = true;
     try {
       const choice = await this.decide();
-      if (!choice) return;
+      if (!choice) {
+        await this.recoverTurns();
+        return;
+      }
       await this.mgr.serial(() => this.press(choice));
     } catch (e) {
       log.error(`autopilot ${this.name}: ${(e as Error).stack}`);
@@ -421,6 +424,52 @@ class SeatPilot {
       this.busy = false;
     }
     this.schedule();
+  }
+
+  /** Per game: since when it has been our action-phase turn with no turn buttons of ours anywhere. */
+  private orphanSince = new Map<string, number>();
+  private turnStartAt = new Map<string, number>();
+
+  /**
+   * The bot's "it is now your turn" post (with the turn buttons) can be lost, e.g. when the shim restarts while the
+   * bot posts it; the game then waits on us forever. If it has been our action-phase turn for a while and no prompt
+   * of ours is on the table, ask the bot to start our turn again (`/player turn_start`, as a person would).
+   */
+  private lastRecover = 0;
+
+  private async recoverTurns() {
+    if (Date.now() - this.lastRecover < 15000) return;
+    this.lastRecover = Date.now();
+    const s = this.store.state;
+    for (const ch of Object.values(s.channels)) {
+      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? "")) || !this.store.canView(this.userId, ch.id)) continue;
+      const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
+      // Only live games (something happened in the last hour).
+      const last = this.store.messages(ch.id).at(-1);
+      if (!last || Date.now() - Date.parse(last.timestamp) > 3600000) continue;
+      const st = await this.mgr.stateOf(game);
+      const mine = !!st?.active && st.active === st.colors.get(this.userId) && st.phase === "action";
+      if (!mine) {
+        this.orphanSince.delete(game);
+        continue;
+      }
+      const faction = this.factions.get(game) ?? family(await this.mgr.factionOf(game, this.userId));
+      if (!faction) continue;
+      const hasPrompt = this.store
+        .messages(ch.id)
+        .slice(-WINDOW)
+        .some((m) => controlsOf(m.components).some((c) => family(/^FFCC_([^_]+)_/.exec(c.custom_id)?.[1]) === faction));
+      if (hasPrompt) {
+        this.orphanSince.delete(game);
+        continue;
+      }
+      const since = this.orphanSince.get(game) ?? Date.now();
+      this.orphanSince.set(game, since);
+      if (Date.now() - since < 45000 || Date.now() - (this.turnStartAt.get(game) ?? 0) < 180000) continue;
+      this.turnStartAt.set(game, Date.now());
+      log.info(`autopilot ${this.name}: our turn in ${game} has no turn buttons; asking the bot to start it again`);
+      this.conn.send({ op: "command", nonce: `autopilot-turn-${++this.nonce}`, channel_id: ch.id, name: "player", options: [{ type: 1, name: "turn_start", options: [] }] });
+    }
   }
 
   // ---- deciding ----
@@ -549,8 +598,23 @@ class SeatPilot {
         }
       }
       if (answered && !rule.again) continue;
-      // A table window we answered once stays answered, even if the bot edited it since (e.g. after a restart).
+      // A table window we answered once stays answered, even if the bot edited it since (e.g. after a restart),
+      // unless the whole game has been quiet for a while since: then our answer may have been lost (refused while the
+      // bot was busy, or the bot restarted), and answering again is harmless.
+      if (rule.table && !rule.why.startsWith("status: reveal") && (press || answered) && this.tableStalled(m, game)) {
+        if (rule.phase) {
+          if (phase === undefined) phase = await this.mgr.phaseOf(game);
+          if (phase && !rule.phase.test(phase)) continue;
+        }
+        const hits = unpressed.filter((c) => rule.id!.test(c.custom_id));
+        if (hits.length && (this.retries.get(m.id) ?? 0) < 2) {
+          this.retries.set(m.id, (this.retries.get(m.id) ?? 0) + 1);
+          this.pressed.delete(`${m.id}:${hits[0].custom_id}`);
+          return { msg: m, control: hits[0], score: rule.score, why: `${rule.why}; again, the game has been waiting a while` };
+        }
+      }
       if (rule.table && !rule.again && press) continue;
+      if (rule.again && press && !mine && Date.parse(press.at) < this.started) continue;
       if (rule.why.startsWith("status: reveal") && !this.mayReveal(m, game)) continue;
       if (rule.phase) {
         if (phase === undefined) phase = await this.mgr.phaseOf(game);
@@ -584,10 +648,18 @@ class SeatPilot {
     if (Date.now() - (this.mgr.lastReveal.get(game) ?? 0) < 60000) return false;
     for (const other of this.store.messages(m.channel_id)) {
       if (BigInt(other.id) <= BigInt(m.id)) continue;
-      if (/public objective has been revealed/i.test(String(other.content ?? ""))) return false;
+      if (/public objective has been revealed|already revealed this round/i.test(String(other.content ?? ""))) return false;
       if (controlsOf(other.components).some((c) => /reveal_stage_/.test(c.custom_id))) return false;
     }
     return true;
+  }
+
+  /** The game this table window belongs to has been silent for 75 seconds (nothing new in its actions channel). */
+  private tableStalled(m: StoredMessage, game: string) {
+    const actions = Object.values(this.store.state.channels).find((c) => c.name === `${game}-actions`);
+    const last = actions ? this.store.messages(actions.id).at(-1) : undefined;
+    const lastAt = last ? Date.parse(last.edited_timestamp ?? last.timestamp) : 0;
+    return Date.now() - Math.max(lastAt, Date.parse(m.edited_timestamp ?? m.timestamp)) > 75000;
   }
 
   /** Whether the bot's web data says it is this seat's turn (in the strategy or action phase). */
