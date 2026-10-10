@@ -319,3 +319,48 @@
   border-radius: 6px;
   border: 1px solid rgba(var(--play-yellow), 0.5);
 }
+
+/* Agenda placement (Politics) */
+
+.agendaPair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.agendaCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--play-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segment {
+  padding: 5px 8px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--play-ink);
+}
+
+.segment + .segment {
+  border-left: 1px solid var(--play-border);
+}
+
+.segmentOn {
+  background: rgba(var(--play-green), 0.14);
+  color: var(--play-ink-bright);
+  font-weight: 600;
+}
+
+.firstPick {
+  border: 1px solid var(--play-border);
+  border-radius: 6px;
+}
