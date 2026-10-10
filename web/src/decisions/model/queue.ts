@@ -7,10 +7,11 @@ import type { Decision } from "./classify";
  *    votes, combat steps, trade offers, and the steps of whatever I am in the middle of (pay, gain tokens, …).
  *    The bot asks for these before the turn order moves on ("Please resolve these before doing anything else").
  * 2. Then my own turn's action choice (newest first: only the latest turn prompt counts).
- * Optional prompts (plan-ahead pre-declines, preferences) are not in the queue at all.
+ * Optional prompts (plan-ahead pre-declines, preferences) are not in the queue at all, and ability offers the game
+ * does not wait on are listed apart (`offersOf`).
  */
 export function orderQueue(oldestFirst: Decision[]): Decision[] {
-  const live = oldestFirst.filter((d) => !d.optional);
+  const live = oldestFirst.filter((d) => !d.optional && !d.offer);
   const owed = live.filter((d) => d.kind !== "turn");
   const turn = live.filter((d) => d.kind === "turn").reverse();
   return [...owed, ...turn];
@@ -33,4 +34,9 @@ export type Premove = {
 /** The premove that answers `d`, if any. */
 export function premoveFor(d: Decision, premoves: Premove[]): Premove | undefined {
   return premoves.find((p) => p.matches(d));
+}
+
+/** Abilities on offer right now that nothing waits on, newest first. */
+export function offersOf(oldestFirst: Decision[]): Decision[] {
+  return oldestFirst.filter((d) => d.offer && !d.optional).reverse();
 }

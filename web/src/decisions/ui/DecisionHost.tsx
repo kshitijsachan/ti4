@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { UnstyledButton, Tooltip } from "@mantine/core";
-import { IconEyeOff, IconMap, IconAlertTriangle } from "@tabler/icons-react";
+import { IconBolt, IconEyeOff, IconMap, IconAlertTriangle, IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import cx from "clsx";
 import { usePlay, usePlayConnection } from "@/discord";
@@ -13,7 +13,8 @@ import { findGame } from "../detect/games";
 import { usePendingPrompts } from "../detect/pending";
 import { useSetupWaiting } from "../detect/waiting";
 import { classify, isNoise, type Decision } from "../model/classify";
-import { orderQueue } from "../model/queue";
+import { offersOf, orderQueue } from "../model/queue";
+import { foldScoring } from "../model/scoring";
 import { baseId, type Choice } from "../model/controls";
 import { useDecisionFocus } from "../model/focus";
 import { useDecisionPress } from "../model/usePress";
@@ -86,7 +87,7 @@ const BURST_MS = 3000;
 
 /** Oldest first, a burst's prompts in posting order, combat and my strategy card's steps folded together. */
 function inBursts(newestFirst: Decision[]): Decision[] {
-  return foldCombat(bursts(newestFirst).flatMap(foldSteps));
+  return foldScoring(foldCombat(bursts(newestFirst).flatMap(foldSteps)));
 }
 
 /** A combat thread posts several prompts at once (assign hits, roll dice, AFB): one popup per combat. */
@@ -160,8 +161,8 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
   const prompts = usePendingPrompts(gameName, { myTurn, faction: mePlayer?.faction, setupOpen });
   const game = useMemo(() => findGame(channels, gameName), [channels, gameName]);
 
-  const decisions = useMemo<Decision[]>(() => {
-    if (!game) return [];
+  const { decisions, offers } = useMemo<{ decisions: Decision[]; offers: Decision[] }>(() => {
+    if (!game) return { decisions: [], offers: [] };
     const all = prompts
       .map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }))
       .filter((d) => !isNoise(d));
@@ -170,12 +171,13 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     const live = all.filter(
       (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "combat" && combatOver(d, web)),
     );
-    return orderQueue(inBursts(live));
+    const oldestFirst = inBursts(live);
+    return { decisions: orderQueue(oldestFirst), offers: offersOf(oldestFirst) };
   }, [prompts, game, users, channels, messages, web, mePlayer]);
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };
   const waiting = useSetupWaiting(gameName);
-  if (!decisions.length && setupOpen && waiting && web?.tilePositions.length) {
+  if (!decisions.length && !offers.length && setupOpen && waiting && web?.tilePositions.length) {
     /* Setting up and nothing is mine to do: say who the table waits on, so it never looks stuck. */
     return (
       <div className={cx("ti4play", classes.layer, placement === "contained" ? classes.contained : classes.fixed, className)}>
@@ -186,12 +188,14 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
       </div>
     );
   }
-  return <DecisionPopup decisions={decisions} data={data} placement={placement} className={className} rightInset={rightInset} />;
+  return <DecisionPopup decisions={decisions} offers={offers} data={data} placement={placement} className={className} rightInset={rightInset} />;
 }
 
 export type DecisionPopupProps = {
   /** In queue order: the first is the one shown. */
   decisions: Decision[];
+  /** Optional abilities on offer that nothing waits on: behind the "Available now" pill. */
+  offers?: Decision[];
   data: DecisionData;
   placement?: DecisionHostProps["placement"];
   className?: string;
@@ -223,10 +227,12 @@ function PopupLayer({ children, placement, rightInset, peeking }: {
 }
 
 /** The popup itself over a list of decisions: paging, peeking at the map, presses, map focus. */
-export function DecisionPopup({ decisions, data, placement = "fixed", rightInset = 0 }: DecisionPopupProps) {
+export function DecisionPopup({ decisions, offers = [], data, placement = "fixed", rightInset = 0 }: DecisionPopupProps) {
   const conn = usePlayConnection();
   const press = useDecisionPress();
   const [peeking, setPeeking] = useState(false);
+  const [offerId, setOfferId] = useState<string | null>(null);
+  const [offerList, setOfferList] = useState(false);
   useEffect(() => {
     if (!peeking) return;
     const stop = () => setPeeking(false);
@@ -241,8 +247,38 @@ export function DecisionPopup({ decisions, data, placement = "fixed", rightInset
   }, [peeking]);
 
   /* One thing at a time: the head of the queue (or the one whose press is still settling). */
-  const shown = press.held ?? decisions[0];
+  const openOffer = offers.find((d) => d.id === offerId);
+  const shown = press.held ?? openOffer ?? decisions[0];
   const more = decisions.filter((d) => d.id !== shown?.id).length;
+  const offerPill = offers.length > 0 && (
+    <div className={classes.offers}>
+      {offerList && (
+        <div className={classes.offerList} role="menu" aria-label="Abilities available now">
+          {offers.map((o) => (
+            <UnstyledButton
+              key={o.id}
+              role="menuitem"
+              className={classes.offerItem}
+              onClick={() => {
+                setOfferId(o.id);
+                setOfferList(false);
+              }}
+            >
+              {o.title}
+            </UnstyledButton>
+          ))}
+        </div>
+      )}
+      <UnstyledButton
+        className={classes.offerPill}
+        onClick={() => (offers.length === 1 ? setOfferId(offerId ? null : offers[0].id) : setOfferList((v) => !v))}
+        aria-expanded={offerList}
+      >
+        <IconBolt size={14} />
+        Available now{offers.length > 1 ? ` · ${offers.length}` : ""}
+      </UnstyledButton>
+    </div>
+  );
 
   const setFocus = useDecisionFocus((s) => s.set);
   const promptPosition = shown?.position ?? null;
@@ -256,7 +292,13 @@ export function DecisionPopup({ decisions, data, placement = "fixed", rightInset
     else setFocus(promptPosition, "prompt");
   };
 
-  if (!shown) return null;
+  if (!shown) {
+    return offerPill ? (
+      <PopupLayer placement={placement} rightInset={rightInset}>
+        {offerPill}
+      </PopupLayer>
+    ) : null;
+  }
 
   const hide = () => {
     conn.actions.dismissPrompt(shown.id);
@@ -297,6 +339,13 @@ export function DecisionPopup({ decisions, data, placement = "fixed", rightInset
                 <IconMap size={15} />
               </UnstyledButton>
             </Tooltip>
+            {openOffer && shown === openOffer && (
+              <Tooltip label="Close — the offer stays under “Available now”" position="bottom">
+                <UnstyledButton className={classes.iconBtn} onClick={() => setOfferId(null)} aria-label="Close">
+                  <IconX size={15} />
+                </UnstyledButton>
+              </Tooltip>
+            )}
             {canHide(shown) && (
               <Tooltip label="Not for me — hide this prompt" position="bottom">
                 <UnstyledButton className={classes.iconBtn} onClick={hide} aria-label="Hide this prompt">
@@ -327,6 +376,7 @@ export function DecisionPopup({ decisions, data, placement = "fixed", rightInset
           </div>
         )}
       </section>
+      {offerPill}
     </PopupLayer>
   );
 }

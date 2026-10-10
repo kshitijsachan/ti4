@@ -268,3 +268,57 @@
     animation: none;
   }
 }
+
+/* "Available now": optional abilities the game does not wait on, a quiet pill above the hand bar. */
+.offers {
+  position: absolute;
+  right: calc(12px + var(--decision-right-inset, 0px));
+  bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.offerPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--play-yellow), 0.5);
+  background: var(--details-card-bg, #0b1020);
+  box-shadow: 0 0 0 3px rgba(var(--play-yellow), 0.12), 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--play-ink-bright);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.offerPill:hover {
+  border-color: rgba(var(--play-yellow), 0.85);
+}
+
+.offerList {
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  max-width: 340px;
+  padding: 4px;
+  border-radius: 8px;
+  border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
+  background: var(--details-card-bg, #0b1020);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.offerItem {
+  padding: 7px 10px;
+  border-radius: 5px;
+  color: var(--play-ink);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.offerItem:hover {
+  background: var(--play-hover-strong);
+  color: var(--play-ink-bright);
+}

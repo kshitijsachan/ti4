@@ -198,6 +198,7 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
   let pingAt = -Infinity;
   let otherPingAt = -Infinity;
   let rolePingAt = -Infinity;
+  let scoringClosed = false;
   ids.forEach((id, index) => {
     const m = data.byId[id];
     if (!m) return;
@@ -243,13 +244,18 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
       /* Status-phase scoring has two halves (public, secret): it waits on me until the bot's summary has both. */
       const meUser = state.users[me.id] ?? me;
       const open = scoringOpenFor(m, [meUser.global_name ?? undefined, meUser.username]);
-      if (open === false) return;
+      if (open === false) {
+        scoringClosed = true;
+        return;
+      }
       if (open) {
         items.push({ message: m, channelId, where, reason: "role" });
         return;
       }
     }
     if (answered) return;
+    /* The list of secrets to score, left over after I answered the secret half another way. */
+    if (scoringClosed && forwardChoices(m).some((c) => /^so_score_hand_/.test(baseId(c.customId)))) return;
 
     const role = opts.roleCalls && index >= ids.length - ROLE_WINDOW && isRolePrompt(me.id, m, myRoles, roleFollowUp);
     let reason: PendingReason | null = null;

@@ -199,7 +199,7 @@ export function TradePanel({
       setDraft(emptyDraft());
       setStatus({
         kind: "ok",
-        text: `Offer #${res.offerNumber} sent to ${cp.userName}. They answer with the bot's Accept / Reject buttons.`,
+        text: `Offer #${res.offerNumber} sent to ${cp.userName}. It waits in their trade popup until they accept, reject or counter; you can rescind it below.`,
       });
       void refresh();
       window.setTimeout(() => void refresh(), 1500);

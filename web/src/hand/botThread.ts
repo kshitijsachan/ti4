@@ -212,7 +212,7 @@ export function findNewButton(
 }
 
 const HAND_NOISE =
-  /^(__Action Cards__|__Scored Secret Objectives|#+ __Promissory notes|Click a button below to play an action card|Use these buttons to (score|discard)|You may use these buttons to do various things)|someone refreshed your/;
+  /^(__Action Cards__|__Scored Secret Objectives|#+ __Promissory notes|Click a button below to play an action card|Use these buttons to (score|discard)|You may use these buttons to do various things)|someone refreshed your|If your cards info thread disappears|the bot could auto pass|automatically pass on Sabos|gentle reminder|quick nudge|end of round thoughts/;
 
 const HAND_BUTTON = /^(ac_play_from_hand_|ac_discard_from_hand_|so_score_hand_|discardSecret_|SODISCARD_|getDiscardButtonsACs|get_so_)/;
 

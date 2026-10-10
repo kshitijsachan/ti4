@@ -69,3 +69,16 @@ export function scoringOpenFor(m: Message, names: (string | undefined)[]): boole
   if (!line) return undefined;
   return line.po.kind === "open" || line.so.kind === "open";
 }
+
+type Foldable = { kind: string; scoring?: { secretPick?: boolean }; steps?: Foldable[] };
+
+/**
+ * "Score A Secret Objective" answers with a separate prompt listing my secrets; it belongs inside the scoring
+ * popup (as a step), so the list shows where I pressed rather than queued behind it.
+ */
+export function foldScoring<T extends Foldable>(list: T[]): T[] {
+  const lead = list.find((d) => d.kind === "scoring" && !d.scoring?.secretPick);
+  const picks = list.filter((d) => d.kind === "scoring" && d.scoring?.secretPick);
+  if (!lead || !picks.length) return list;
+  return list.filter((d) => !picks.includes(d)).map((d) => (d === lead ? { ...d, steps: [...(d.steps ?? []), ...picks] } : d));
+}

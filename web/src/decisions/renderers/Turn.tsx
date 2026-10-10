@@ -59,9 +59,6 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
   if (id.startsWith("confirmSecondAction")) {
     return { choice: c, title: "Take another action", sub: "Use your ability to act again", icon: <IconRepeat size={18} stroke={1.6} />, tone: "go" };
   }
-  if (id.startsWith("doAnotherAction")) {
-    return { choice: c, title: "Do another action", sub: "Only if a card or ability gives you one", icon: <IconRepeat size={18} stroke={1.6} />, tone: "go" };
-  }
   return null;
 }
 
@@ -69,7 +66,10 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
 export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
   const actions = d.choices.map((c) => actionOf(c, data)).filter((a): a is Action => !!a);
   const used = new Set(actions.map((a) => a.choice.key));
-  const rest = d.choices.filter((c) => !used.has(c.key));
+  /* One action per turn: "Do another action" is only for abilities that grant one, so it stays a quiet extra. */
+  const rest = d.choices
+    .filter((c) => !used.has(c.key))
+    .map((c) => (/^doAnotherAction/.test(baseId(c.customId)) ? { ...c, label: "I have an ability that grants another action", rank: "more" as const } : c));
   const me = data.me;
   /* The end-of-turn abilities prompt (End Turn / Do an Expedition / …): its abilities are the point, keep them in view. */
   const endOfTurn = /^End of turn/.test(d.title);
@@ -101,7 +101,11 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
         onPress={onPress}
         pendingKey={pendingKey}
         channelId={d.prompt.channelId}
-        rankOf={(c) => (c.rank === "undo" ? c.rank : endOfTurn && c.rank !== "more" ? "secondary" : "more")}
+        rankOf={(c) => {
+          if (c.rank === "undo") return c.rank;
+          if (/^doAnotherAction/.test(baseId(c.customId))) return "more";
+          return endOfTurn && c.rank !== "more" ? "secondary" : "more";
+        }}
       />
     </div>
   );

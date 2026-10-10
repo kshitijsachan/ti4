@@ -441,7 +441,7 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       ...base,
       kind: "turn",
       eyebrow: "",
-      title: fresh ? "Your turn — choose an action" : abilities ? "End of turn — use an ability first?" : "Finish your turn",
+      title: fresh ? "Your turn — choose an action" : abilities ? "End of turn — use an ability first?" : "End your turn",
     };
   }
   if (has(choices, ID.tactical)) {
