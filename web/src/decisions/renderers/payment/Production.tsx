@@ -11,8 +11,9 @@ import strategy from "../strategy/strategy.module.css";
 import { usePaymentIntent } from "./intent";
 import { Toggle } from "./Payment";
 import { buildCost, buildSummary, productionRows, productionValue, type ProduceRow } from "./production";
-import { pressOn, useLiveSequence, type LiveStep } from "./sequence";
-import { actionChoice, Stepper } from "./shared";
+import { pressOn, usePressPlan, type PlanStep } from "../../ui/pressPlan";
+import { Quantity } from "../../ui/Quantity";
+import { actionChoice } from "./shared";
 import classes from "./payment.module.css";
 
 type Counts = Record<string, number>;
@@ -31,17 +32,17 @@ function useRecentTexts(channelId: string, messageId: string) {
 }
 
 /** Presses for `n` units of a row: the bot's 2-unit button where it has one, then single presses. */
-function rowSteps(ch: string, id: string, r: ProduceRow, n: number): LiveStep[] {
-  const steps: LiveStep[] = [];
+function rowSteps(ch: string, messageId: string, r: ProduceRow, n: number): PlanStep[] {
+  const steps: PlanStep[] = [];
   let left = n;
   while (left >= 2 && r.two) {
     const two = r.two;
-    steps.push(pressOn(ch, id, `Placing 2 ${r.name}${r.where === "space" ? "" : ` on ${r.where}`}`, (c) => c.customId === two.customId));
+    steps.push(pressOn(ch, messageId, `Placing 2 ${r.name}${r.where === "space" ? "" : ` on ${r.where}`}`, (id) => id === baseId(two.customId)));
     left -= 2;
   }
   for (; left > 0 && r.one; left--) {
     const one = r.one;
-    steps.push(pressOn(ch, id, `Placing 1 ${r.name}${r.where === "space" ? "" : ` on ${r.where}`}`, (c) => c.customId === one.customId));
+    steps.push(pressOn(ch, messageId, `Placing 1 ${r.name}${r.where === "space" ? "" : ` on ${r.where}`}`, (id) => id === baseId(one.customId)));
   }
   return steps;
 }
@@ -50,7 +51,7 @@ function rowSteps(ch: string, id: string, r: ProduceRow, n: number): LiveStep[] 
  * The bot asks after each ship with capacity whether to use Bellum Gloriosum. The panel already asked (its toggle),
  * so the run answers each of those prompts with its Decline: the extra units were part of this build.
  */
-function declineBellum(since: string, answered: Set<string>): LiveStep {
+function declineBellum(since: string, answered: Set<string>): PlanStep {
   return {
     label: "Answering Bellum Gloriosum",
     optional: true,
@@ -87,14 +88,16 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
   const rows = useMemo(() => productionRows(d.choices, me), [d.choices, me]);
   const recent = useRecentTexts(d.prompt.channelId, d.id);
   const capacity = productionValue([live.content ?? "", ...recent]);
-  const run = useLiveSequence();
+  const run = usePressPlan();
   const runner = useRunner();
   const busy = !!runner.running;
 
   const [counts, setCounts] = useState<Counts>({});
   const [bg, setBg] = useState<Counts>({});
   const hasSarween = !!me?.techs?.some((t) => t === "st" || t === "absol_st") && !me?.exhaustedTechs?.includes("absol_st");
-  const [sarween, setSarween] = useState(hasSarween);
+  /* Unset until I touch it: on by default once the game data says I have it. */
+  const [sarweenPick, setSarween] = useState<boolean | null>(null);
+  const sarween = hasSarween && (sarweenPick ?? true);
   const hasBellum = me?.breakthrough?.breakthroughId === "solbt" && me.breakthrough.unlocked;
   const [bellum, setBellum] = useState(true);
 
@@ -122,15 +125,15 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
   const build = () => {
     if (!done) return;
     const ch = d.prompt.channelId;
-    const steps: LiveStep[] = [];
-    if (started && reset) steps.push(pressOn(ch, d.id, "Clearing the earlier build", (c) => c.customId === reset.customId));
+    const steps: PlanStep[] = [];
+    if (started && reset) steps.push(pressOn(ch, d.id, "Clearing the earlier build", (id) => id === baseId(reset.customId)));
     for (const r of rows) steps.push(...rowSteps(ch, d.id, r, total[r.key] ?? 0));
     const capacityShips = shipRows.reduce((n, r) => n + (total[r.key] ?? 0), 0);
     if (hasBellum) {
       const answered = new Set<string>();
       for (let i = 0; i < capacityShips; i++) steps.push(declineBellum(d.id, answered));
     }
-    steps.push(pressOn(ch, d.id, "Done producing", (c) => c.customId === done.customId));
+    steps.push(pressOn(ch, d.id, "Done producing", (id) => id === baseId(done.customId)));
     usePaymentIntent.getState().setBuild({ at: Date.now(), units: summary || "nothing", where, cost, sarween: discount > 0 });
     void run(`build:${d.id}`, steps);
   };
@@ -159,18 +162,19 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
       {started && <span className={strategy.sub}>Units placed earlier in this build are cleared and placed again from this list.</span>}
       <div className={classes.unitList}>
         {rows.map((r) => (
-          <div key={r.key} className={classes.unitRow}>
-            <span className={classes.unitName}>{r.name}</span>
-            <span className={classes.unitWhere}>{r.where === "space" ? "space" : r.where}</span>
-            <span className={classes.unitCost}>{r.unit === "fighter" || r.unit === "infantry" ? "1 per 2" : `${r.cost}`}</span>
-            <Stepper
-              value={counts[r.key] ?? 0}
-              max={r.left ?? 20}
-              onChange={(n) => setCount(r, r.one ? n : (counts[r.key] ?? 0) + (n > (counts[r.key] ?? 0) ? 2 : -2))}
-              label={r.name}
-              disabled={busy}
-            />
-          </div>
+          <Quantity
+            key={r.key}
+            label={r.name}
+            hint={`${r.where === "space" ? "in space" : `on ${r.where}`} · ${r.unit === "fighter" || r.unit === "infantry" ? "2 for 1" : `costs ${r.cost}`}${r.left !== undefined ? ` · ${r.left} left` : ""}`}
+            value={counts[r.key] ?? 0}
+            max={r.left ?? 20}
+            allowed={r.one ? undefined : Array.from({ length: 11 }, (_, i) => i * 2)}
+            onChange={(n) => setCount(r, n)}
+            maxReason={r.left !== undefined ? "None left in reinforcements" : undefined}
+            maxShortcut={false}
+            busy={busy}
+            dense
+          />
         ))}
       </div>
       {(hasSarween || hasBellum) && (
@@ -193,18 +197,18 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
             Bellum Gloriosum · {bgUsed} of {bellumLimit} · these do not count against PRODUCTION (they still cost)
           </span>
           {bgRows.map((r) => (
-            <div key={r.key} className={classes.unitRow}>
-              <span className={classes.unitName}>{r.name}</span>
-              <span className={classes.unitWhere}>{r.where}</span>
-              <span className={classes.unitCost} />
-              <Stepper
-                value={bg[r.key] ?? 0}
-                max={(bg[r.key] ?? 0) + Math.max(0, bellumLimit - sum(bg))}
-                onChange={(n) => setBgCount(r, n)}
-                label={`${r.name} with Bellum Gloriosum`}
-                disabled={busy}
-              />
-            </div>
+            <Quantity
+              key={r.key}
+              label={`${r.name} (Bellum Gloriosum)`}
+              hint={r.where === "space" ? "in space" : `on ${r.where}`}
+              value={bg[r.key] ?? 0}
+              max={(bg[r.key] ?? 0) + Math.max(0, bellumLimit - sum(bg))}
+              onChange={(n) => setBgCount(r, n)}
+              maxReason={`Bellum Gloriosum allows ${bellumLimit} (the capacity of the ships built)`}
+              maxShortcut={false}
+              busy={busy}
+              dense
+            />
           ))}
         </div>
       )}

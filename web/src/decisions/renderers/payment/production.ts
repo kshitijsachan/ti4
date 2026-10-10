@@ -71,7 +71,7 @@ function parsePlace(id: string) {
 
 function whereFromLabel(label: string) {
   const on = label.match(/\bon (.+?)(?:\s*\(\d+\))?$/i)?.[1];
-  if (on) return cleanLabel(on);
+  if (on) return cleanLabel(on).replace(/\s*\(\d+\/\d+\)\s*$/, "");
   return "space";
 }
 

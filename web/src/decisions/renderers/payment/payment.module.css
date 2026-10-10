@@ -18,19 +18,7 @@
   color: var(--play-ink-bright);
 }
 
-.stepValue {
-  min-width: 22px;
-  text-align: center;
-  font-family: var(--font-data);
-  font-size: 13px;
-  color: var(--play-ink-bright);
-}
 
-.costRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 
 .meter {
   display: flex;
@@ -190,47 +178,11 @@
   gap: 14px;
 }
 
-.unitList {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
 
-.unitRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 52px auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
 
-.unitRow:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.025);
-}
 
-.unitName {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--play-ink-bright);
-  text-transform: capitalize;
-}
 
-.unitWhere {
-  font-size: 11px;
-  color: var(--play-ink-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.unitCost {
-  font-family: var(--font-data);
-  font-size: 11px;
-  color: var(--play-ink-muted);
-  text-align: right;
-}
 
 .bellum {
   display: flex;
@@ -296,4 +248,10 @@
   .receipt {
     animation: none;
   }
+}
+
+.unitList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }

@@ -30,8 +30,9 @@ import {
   type PayKind,
 } from "./model";
 import { showReceipt } from "./receipt";
-import { pressOn, useLiveSequence, type LiveStep } from "./sequence";
-import { actionChoice, Meter, plural, Stepper } from "./shared";
+import { pressOn, usePressPlan, type PlanStep } from "../../ui/pressPlan";
+import { Quantity } from "../../ui/Quantity";
+import { actionChoice, Meter, plural } from "./shared";
 import classes from "./payment.module.css";
 
 type Purpose = {
@@ -112,7 +113,7 @@ export function PaymentBody(props: RendererProps) {
   const offers = discounts(d.choices);
   const spent = alreadySpent(content);
   const build = freshBuild(usePaymentIntent((s) => s.build));
-  const run = useLiveSequence();
+  const run = usePressPlan();
   const runner = useRunner();
 
   const [costOverride, setCost] = useState<number | undefined>(undefined);
@@ -162,20 +163,20 @@ export function PaymentBody(props: RendererProps) {
 
   const pay = () => {
     const ch = d.prompt.channelId;
-    const steps: LiveStep[] = [];
+    const steps: PlanStep[] = [];
     for (const o of offers.filter((x) => on.has(x.key))) {
-      steps.push(pressOn(ch, d.id, `Using ${o.label}`, (c) => c.customId === o.choice.customId));
+      steps.push(pressOn(ch, d.id, `Using ${o.label}`, (id) => id === baseId(o.choice.customId)));
     }
     for (const p of planets.filter((x) => pick.planets.has(x.id) && x.choice)) {
-      steps.push(pressOn(ch, d.id, `Exhausting ${p.name}`, (c) => c.customId === p.choice!.customId));
+      steps.push(pressOn(ch, d.id, `Exhausting ${p.name}`, (id) => id === baseId(p.choice!.customId)));
     }
     for (const k of tgChunks(pick.tg)) {
-      steps.push(pressOn(ch, d.id, `Spending ${plural(k, "trade good")}`, (c) => new RegExp(`^reduceTG_${k}_`).test(baseId(c.customId))));
+      steps.push(pressOn(ch, d.id, `Spending ${plural(k, "trade good")}`, (id) => new RegExp(`^reduceTG_${k}_`).test(id)));
     }
     for (const k of tgChunks(pick.comm).flatMap((n) => (n === 3 ? [2, 1] : [n]))) {
-      steps.push(pressOn(ch, d.id, `Spending ${plural(k, "commodity", "commodities")}`, (c) => new RegExp(`^reduceComm_${k}_`).test(baseId(c.customId))));
+      steps.push(pressOn(ch, d.id, `Spending ${plural(k, "commodity", "commodities")}`, (id) => new RegExp(`^reduceComm_${k}_`).test(id)));
     }
-    if (done) steps.push(pressOn(ch, d.id, "Done", (c) => c.customId === done.customId));
+    if (done) steps.push(pressOn(ch, d.id, "Done", (id) => id === baseId(done.customId)));
     const names = planets.filter((x) => pick.planets.has(x.id)).map((p) => p.name);
     if (pick.tg) names.push(plural(pick.tg, "TG", "TG"));
     if (pick.comm) names.push(plural(pick.comm, "commodity", "commodities"));
@@ -198,21 +199,29 @@ export function PaymentBody(props: RendererProps) {
     );
   }
 
+  const spending = paid - spent - discount;
+  const withDiscount = discount ? ` + ${offers.filter((o) => on.has(o.key)).map((o) => o.label).join(", ")}` : "";
   const payLabel = free
     ? "Free — Done"
     : purpose.key === "custodians"
-      ? `Pay ${paid} influence and take the Custodians`
-      : cost === undefined
-        ? `Pay ${paid} ${unit}`
-        : `Pay ${paid} ${unit}`;
+      ? `Pay ${spending} influence and take the Custodians`
+      : spending === 0 && !discount
+        ? "Done — pay nothing more"
+        : `Pay ${spending} ${unit}${withDiscount}`;
   return (
     <div className={strategy.panel}>
       <PurposeHead purpose={purpose} />
-      <div className={classes.costRow}>
-        <span className={strategy.sectionLabel}>To pay</span>
-        <Stepper value={cost ?? 0} max={99} onChange={(n) => setCost(Math.max(0, n))} label="cost" disabled={busy} />
-        <span className={strategy.sub}>{unit}{cost === undefined ? " — the game did not say; set it" : ""}</span>
-      </div>
+      <Quantity
+        label="To pay"
+        value={cost ?? 0}
+        max={99}
+        onChange={setCost}
+        unit={unit === "influence" ? "inf" : "res"}
+        hint={cost === undefined ? "The game did not say — set it" : purpose.key === "other" ? "From the game's message; adjust if needed" : undefined}
+        maxShortcut={false}
+        busy={busy}
+        dense
+      />
       <Meter paid={paid} need={cost} unit={unit} />
       {spent > 0 && (
         <span className={strategy.sub}>
@@ -254,25 +263,39 @@ export function PaymentBody(props: RendererProps) {
         </div>
       )}
       {tgMax > 0 && (
-        <div className={strategy.inlineRow}>
-          <span className={strategy.checkName}>Trade goods{worth > 1 ? " (×2, Mirror Computing)" : ""}</span>
-          <Stepper value={pick.tg} max={tgMax} onChange={(n) => setPick((s) => ({ ...s, tg: n }))} label="trade good" disabled={busy} />
-          <span className={strategy.checkMeta}>of {tgMax}</span>
-          <UnstyledButton
-            className={strategy.textLink}
-            onClick={() => setPick((s) => ({ ...s, tg: maxTgNeeded + s.tg > tgMax ? tgMax : maxTgNeeded + s.tg }))}
-            disabled={busy || maxTgNeeded === 0}
-          >
-            Max needed
-          </UnstyledButton>
-        </div>
+        <Quantity
+          label="Trade goods"
+          value={pick.tg}
+          max={tgMax}
+          onChange={(n) => setPick((s) => ({ ...s, tg: n }))}
+          unit="TG"
+          maxShortcut={false}
+          busy={busy}
+          hint={
+            <>
+              you have {tgMax}
+              {worth > 1 ? " · worth 2 each (Mirror Computing)" : ""}
+              {maxTgNeeded > 0 && (
+                <>
+                  {" · "}
+                  <UnstyledButton className={strategy.textLink} onClick={() => setPick((s) => ({ ...s, tg: Math.min(tgMax, s.tg + maxTgNeeded) }))} disabled={busy}>
+                    +{maxTgNeeded} to cover the rest
+                  </UnstyledButton>
+                </>
+              )}
+            </>
+          }
+        />
       )}
       {commMax > 0 && (
-        <div className={strategy.inlineRow}>
-          <span className={strategy.checkName}>Commodities</span>
-          <Stepper value={pick.comm} max={Math.min(2, commMax)} onChange={(n) => setPick((s) => ({ ...s, comm: n }))} label="commodity" disabled={busy} />
-          <span className={strategy.checkMeta}>of {commMax}</span>
-        </div>
+        <Quantity
+          label="Commodities"
+          value={pick.comm}
+          max={Math.min(2, commMax)}
+          onChange={(n) => setPick((s) => ({ ...s, comm: n }))}
+          hint={`you have ${commMax}`}
+          busy={busy}
+        />
       )}
       <div className={classes.suggestRow}>
         <UnstyledButton className={strategy.textLink} onClick={applySuggest} disabled={busy}>
