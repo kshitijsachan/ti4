@@ -150,7 +150,7 @@ export function declaredReady(after: (Message | undefined)[], faction: string) {
       const n = name.toLowerCase();
       return n === f || f.startsWith(n) || n.startsWith(f);
     });
-  return after.some((m) => !!m?.author.bot && /\bis ready for strategy phase\b/i.test(m.content) && mine(m));
+  return after.some((m) => !!m?.author.bot && /\bis ready for (?:strategy|agenda) phase\b/i.test(m.content) && mine(m));
 }
 
 /** The bot marks who has answered a table-wide prompt with that faction's emoji as a reaction. */

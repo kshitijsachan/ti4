@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { usePlay } from "@/discord";
 import { useGameEvents } from "@/gamelog";
 import { segText } from "@/gamelog/parse/markup";
 import type { GameEvent } from "@/gamelog";
+import { useReservedArea } from "@/state/reservedArea";
 import classes from "./OutcomeToast.module.css";
 
 /** How long after my press the bot's reply still counts as its outcome. */
@@ -36,16 +37,24 @@ export function OutcomeToast({ gameName, faction, rightInset }: { gameName: stri
   /* The last few outcomes, newest last; each leaves after a few seconds. */
   const [shown, setShown] = useState<{ key: string; text: string }[]>([]);
   const [seen, setSeen] = useState<string | null>(null);
+  const timers = useRef<number[]>([]);
+  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
   useEffect(() => {
     if (!outcome || outcome.key === seen) return;
     setSeen(outcome.key);
     setShown((list) => [...list.filter((x) => x.key !== outcome.key), outcome].slice(-3));
-    const timer = window.setTimeout(() => setShown((list) => list.filter((x) => x.key !== outcome.key)), SHOW_MS);
-    return () => window.clearTimeout(timer);
+    /* Each note leaves on its own clock, whatever arrives after it. */
+    timers.current.push(window.setTimeout(() => setShown((list) => list.filter((x) => x.key !== outcome.key)), SHOW_MS));
   }, [outcome, seen]);
 
+  /* Under the decision card when it is up (inside its column), else top-right under the top bar: never over tiles. */
+  const card = useReservedArea((s) => s.rects["decision-card"]);
   if (!shown.length || typeof document === "undefined") return null;
-  const style = { "--decision-right-inset": `${rightInset}px` } as CSSProperties;
+  const style = (
+    card
+      ? { top: `${card.bottom + 8}px`, right: `${window.innerWidth - card.right}px`, width: `${card.right - card.left}px` }
+      : { top: "100px", right: `${12 + rightInset}px` }
+  ) as CSSProperties;
   return createPortal(
     <div className={`ti4play ${classes.stack}`} style={style} role="status" aria-live="polite">
       {shown.map((o) => (
