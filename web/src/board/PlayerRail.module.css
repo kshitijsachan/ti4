@@ -77,3 +77,14 @@
   justify-content: flex-end;
   padding-top: 10px;
 }
+
+.hintRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detailTabs {
+  margin-bottom: 10px;
+}
