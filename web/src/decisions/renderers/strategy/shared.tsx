@@ -44,7 +44,7 @@ export function CardHeader({ sc, data, sub, children }: { sc: number; data: Deci
 /** Every other player's answer to a played card: followed / waiting. */
 export function FollowStatus({ sc, data }: { sc: number; data: DecisionData }) {
   const holder = holderOf(sc, data);
-  const others = data.players.filter((p) => p.faction !== holder?.faction && !(p as { eliminated?: boolean }).eliminated);
+  const others = data.players.filter((p) => p.faction !== holder?.faction && p.faction !== "neutral" && !(p as { eliminated?: boolean }).eliminated);
   if (!others.length) return null;
   return (
     <div className={classes.followRow} aria-label="Who has answered">
