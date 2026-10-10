@@ -2,7 +2,7 @@ import type { Decision } from "./classify";
 import { baseId } from "./controls";
 
 /** Rolling dice or assigning hits: a combat waits on me only while one of these is up. */
-const COMBAT_MOVE = /^(combatRoll_\w+_(space|ground)$|autoAssign\w*Hits|getDamageButtons|assignHits|rollForAmbush|bombardConfirm)/;
+const COMBAT_MOVE = /^(combatRoll_\w+_(space|ground)$|autoAssign\w*Hits|getDamageButtons|assignHits|rollForAmbush)/;
 
 export function combatWaitsOnMe(d: Decision) {
   return [d, ...(d.steps ?? [])].some((x) => x.choices.some((c) => !c.disabled && COMBAT_MOVE.test(baseId(c.customId))));
