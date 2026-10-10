@@ -12,6 +12,7 @@ type RunnerState = {
   total: number;
   label: string;
   error: string | null;
+  startedAt: number;
   set: (s: Partial<RunnerState>) => void;
 };
 
@@ -25,6 +26,7 @@ export const useRunner = create<RunnerState>((set) => ({
   total: 0,
   label: "",
   error: null,
+  startedAt: 0,
   set: (s) => set(s),
 }));
 
@@ -63,13 +65,14 @@ export function useRunSequence() {
   const conn = usePlayConnection();
   return async (key: string, presses: Press[], after?: (dismiss: (id: string) => void) => void) => {
     const runner = useRunner.getState();
-    if (runner.running) return;
-    runner.set({ running: key, step: 0, total: presses.length, label: "", error: null });
+    /* A run whose promise was lost (socket swap, hot reload) must not block the panels for good. */
+    if (runner.running && Date.now() - runner.startedAt < 60_000) return;
+    runner.set({ running: key, step: 0, total: presses.length, label: "", error: null, startedAt: Date.now() });
     for (const [i, p] of presses.entries()) {
       useRunner.getState().set({ step: i + 1, label: p.label });
       const before = stamp(conn, p);
       const result = await press(p.channelId, p.messageId, p.customId);
-      if (!result.error) await settled(conn, p, before);
+      if (!result.error && i < presses.length - 1) await settled(conn, p, before);
       if (result.error) {
         useRunner.getState().set({ running: null, error: result.error });
         return;

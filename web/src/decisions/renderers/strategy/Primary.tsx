@@ -5,6 +5,7 @@ import type { RendererProps } from "../types";
 import { cardSpec } from "./cards";
 import { scDefinition } from "../../ui/parts";
 import { CardHeader, playerLabel } from "./shared";
+import { useRunner, useRunSequence } from "./runner";
 import classes from "./strategy.module.css";
 
 type PrimaryAction = { id: RegExp; label: string | ((data: RendererProps["data"]) => string); hint?: string };
@@ -85,7 +86,7 @@ function StepView({ step, props, index }: { step: Decision; props: RendererProps
  * "request all resolve now" nudge are never shown to the holder.
  */
 export function StrategyPrimaryBody(props: RendererProps) {
-  const { d, data, onPress, pendingKey } = props;
+  const { d, data, pendingKey } = props;
   const sc = d.sc!;
   const spec = cardSpec(sc, scDefinition(sc, data.web)?.id);
   const second = /second structure/.test(d.title);
@@ -95,9 +96,17 @@ export function StrategyPrimaryBody(props: RendererProps) {
     .map((a) => ({ a, choice: d.choices.find((c) => a.id.test(baseId(c.customId)) && !c.disabled) }))
     .filter((x): x is { a: PrimaryAction; choice: Choice } => !!x.choice)
     .filter((x) => !pressed.has(`${d.id}:${baseId(x.choice.customId)}`));
-  const press = (c: Choice, values?: string[]) => {
+  const run = useRunSequence();
+  const runner = useRunner();
+  const busy = !!runner.running || !!pendingKey;
+  /*
+   * The card's own buttons go through the strategy runner rather than the popup's press: a press still settling on a
+   * step (an agenda peek, the speaker) must never leave these silently dead.
+   */
+  const press = (c: Choice) => {
+    if (!c.customId) return;
     if (sc === 2) pressed.add(`${d.id}:${baseId(c.customId)}`);
-    onPress(c, values);
+    void run(`primary:${d.id}:${c.key}`, [{ channelId: d.prompt.channelId, messageId: d.id, customId: c.customId, label: c.label }]);
   };
   const steps = (d.steps ?? []).filter((s) => s.choices.some((c) => !FOLLOWERS.test(baseId(c.customId)) && c.rank !== "more" && c.rank !== "undo"));
 
@@ -118,14 +127,15 @@ export function StrategyPrimaryBody(props: RendererProps) {
                 key={choice.key}
                 choice={{ ...choice, label: typeof a.label === "string" ? a.label : a.label(data), style: 3 }}
                 onPress={press}
-                pending={pendingKey === choice.key}
-                busy={!!pendingKey}
+                pending={runner.running === `primary:${d.id}:${choice.key}`}
+                busy={busy}
                 emphasis
               />
             ))}
           </div>
         </div>
       )}
+      {runner.error && <span className={classes.error}>Did not go through: {runner.error}</span>}
       {sc === 8 && <p className={classes.sub}>{mecatol ? "You control Mecatol Rex: the point is yours." : "You do not control Mecatol Rex, so you draw a secret objective instead of the point."}</p>}
     </div>
   );
