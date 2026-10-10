@@ -101,7 +101,7 @@ export function AgendaPlacementBody({ d, data }: RendererProps) {
       <div className={classes.agendaPair}>
         {peeks.map((p) => (
           <div key={p.id} className={classes.agendaCol}>
-            <AgendaCard agenda={p.agenda} compact />
+            <AgendaCard agenda={p.agenda} />
             <div className={classes.segmented} role="radiogroup" aria-label={`${p.agenda.name}: top or bottom`}>
               {(["top", "bottom"] as const).map((w) => (
                 <UnstyledButton
