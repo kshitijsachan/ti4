@@ -107,6 +107,11 @@ function pressesNeeded(m: Message) {
   return choicesOf(m).some((c) => TWO_PRESS_PRIMARY.test(baseId(c.customId))) ? 2 : 1;
 }
 
+function isMultiPress(m: Message) {
+  const ids = choicesOf(m).map((c) => baseId(c.customId));
+  return ids.some((id) => /^place_/.test(id)) && ids.some((id) => /^(deleteButtons_tacticalAction|deleteButtons_construction|resetProducedThings)/.test(id));
+}
+
 /** How many of the newest messages of a channel a role-wide prompt stays relevant for. */
 const ROLE_WINDOW = 40;
 /** Messages the bot posts right after pinging someone belong to the same prompt. */
@@ -123,7 +128,8 @@ const COMBAT_ID = /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbu
 /** The bot marks who has answered a table-wide prompt with that faction's emoji as a reaction. */
 export function reactedBy(m: Message, faction: string) {
   const f = faction.toLowerCase();
-  return (m.reactions ?? []).some((r) => {
+  const reactions = (m as Message & { reactions?: { emoji?: { name?: string | null } }[] }).reactions ?? [];
+  return reactions.some((r) => {
     const name = (r.emoji?.name ?? "").toLowerCase();
     return !!name && (name === f || f.startsWith(name) || name.startsWith(f));
   });
@@ -204,7 +210,7 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
   const newestTurnMenu = [...ids].reverse().find((id) => {
     const m = data.byId[id];
     if (/\bit is now your turn\b/i.test(m.content) && mentionsMe(m)) return true;
-    return choicesOf(m).some((c) => /^tacticalAction/.test(baseId(c.customId)) && idFaction(c.customId) === opts.faction);
+    return choicesOf(m).some((c) => /^tacticalAction(?!Build)/.test(baseId(c.customId)) && idFaction(c.customId) === opts.faction);
   });
   const newestCombat = opts.combat
     ? [...ids].reverse().find((id) => choicesOf(data.byId[id]).some((c) => COMBAT_ID.test(c.customId ?? "")))
@@ -239,6 +245,8 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     // ready (shim/src/solo.ts steward), so they are never a decision for a person.
     if (tableSetup) return;
     let answered = answeredState(state, m, ping);
+    /* Production takes many presses on one message (a unit each) and ends with its Done button, which removes it. */
+    if (answered && isMultiPress(m)) answered = false;
     if (tableSetup) {
       /*
        * Addressed to nobody, so nobody else's prompt retires it: the bot deletes it once a press goes through. One
@@ -285,7 +293,9 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
       const midway = ping && thisTurn && pressesNeeded(m) > 1 && pressCount(me.id, m, pressedAt) === 1;
       if (!midway) return;
     }
-    if (answered) return;
+    /* The when / after queue prompt stays until the bot deletes it (it keeps it when I asked to play but have no card). */
+    const queuePrompt = forwardChoices(m).some((c) => /^declineToQueueA(When|nAfter)$/.test(baseId(c.customId)));
+    if (answered && !queuePrompt) return;
     /* The list of secrets to score, left over after I answered the secret half another way. */
     if (scoringClosed && forwardChoices(m).some((c) => /^so_score_hand_/.test(baseId(c.customId)))) return;
 
@@ -307,7 +317,8 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     else if (ping || at - pingAt <= FOLLOW_UP_MS) reason = null;
     else if (role) reason = "role";
     if (!reason) return;
-    if (reason !== "role" && reason !== "combat" && !after(id, newestOtherPrompt)) return;
+    /* Only I see an ephemeral prompt or the reply to my own press: someone else's newer prompt never retires it. */
+    if (reason !== "role" && reason !== "combat" && reason !== "ephemeral" && reason !== "reply" && !after(id, newestOtherPrompt)) return;
     items.push({ message: m, channelId, where, reason });
   });
   return items;
@@ -374,7 +385,7 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
     .sort((a, b) => compareSnowflakes(b.message.id, a.message.id));
 }
 
-const TURN_MENU = /^(tacticalAction|endOfTurnAbilities|turnEnd)/;
+const TURN_MENU = /^(tacticalAction(?!Build)|endOfTurnAbilities|turnEnd)/;
 
 /**
  * My turn, yet nothing waits on me: a step got lost (an "only you can see this" prompt dropped by a reconnect, a press

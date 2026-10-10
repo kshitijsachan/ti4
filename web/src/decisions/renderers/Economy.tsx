@@ -123,9 +123,13 @@ const POOLS = [
 /** Gaining command tokens: the three pools with a "+1" under each, Done. */
 export function GainTokensBody({ d, data, onPress, pendingKey }: RendererProps) {
   const fromText = [...d.text.matchAll(/(\d+)\/(\d+)\/(\d+)/g)].pop();
-  const values = fromText
-    ? [Number(fromText[1]), Number(fromText[2]), Number(fromText[3])]
-    : [data.me?.tacticalCC, data.me?.fleetCC, data.me?.strategicCC];
+  /* The game's own numbers first: the message's "3/3/2" is a snapshot and goes stale as tokens are gained. */
+  const values =
+    data.me?.tacticalCC !== undefined
+      ? [data.me.tacticalCC, data.me.fleetCC, data.me.strategicCC]
+      : fromText
+        ? [Number(fromText[1]), Number(fromText[2]), Number(fromText[3])]
+        : [undefined, undefined, undefined];
   const done = d.choices.find((c) => DONE.test(baseId(c.customId)) || /^done/i.test(c.label));
   const rest = d.choices.filter((c) => !POOLS.some((p) => p.id.test(c.customId ?? "")) && c !== done);
   const note = d.text.replace(/^.*command tokens are [\d/]+\.?\s*(use buttons to gain command tokens\.?)?/i, "").trim();

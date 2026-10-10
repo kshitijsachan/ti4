@@ -14,7 +14,11 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   const live = oldestFirst.filter((d) => !d.optional && !d.offer);
   const owed = live.filter((d) => d.kind !== "turn");
   const turn = live.filter((d) => d.kind === "turn").reverse();
-  return [...owed, ...turn];
+  /* The next step of something I just pressed (only-you prompts, replies to my press, my hand thread) comes first:
+     Leadership's pay-then-gain must finish before the next card's follow, which may need the token it buys. */
+  const continuation = (d: Decision) =>
+    !d.setup && (d.prompt.reason === "ephemeral" || d.prompt.reason === "reply" || d.prompt.where === "hand");
+  return [...owed.filter(continuation), ...owed.filter((d) => !continuation(d)), ...turn];
 }
 
 /**

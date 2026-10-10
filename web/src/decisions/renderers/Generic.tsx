@@ -25,7 +25,7 @@ export function GenericBody({ d, onPress, pendingKey, onHoverChoice }: RendererP
 }
 
 const SYSTEM = /^(?:ringTile|tacticalMoveFrom)_(\w+)/;
-const DONE = /^(concludeMove|doneLanding|doneWithOneSystem|doneWithTacticalAction|tacticalActionBuild)/;
+const DONE = /^(concludeMove|doneLanding|doneWithOneSystem|doneWithTacticalAction|tacticalActionBuild|deleteButtons_tacticalAction)/;
 
 /** Tile id at a ring position, from web-data's "pos:tileId" list. */
 function tileAt(data: DecisionData, position: string) {
@@ -119,6 +119,14 @@ function movedSummary(text: string) {
   return parts.length ? parts.join(", ") : "nothing yet";
 }
 
+/** "Produce Dreadnought (4)" → "Dreadnought · 4 left"; "Produce 2 Infantry on Arc Prime (4/0)" → "2 Infantry on Arc Prime". */
+function produceLabel(c: Choice): Choice {
+  if (!/^Produce /.test(c.label)) return c;
+  const left = c.label.match(/^Produce (.+?) \((\d+)\)$/);
+  if (left) return { ...c, label: `${left[1]} · ${left[2]} left`, style: 2 };
+  return { ...c, label: c.label.replace(/^Produce /, "").replace(/\s*\(\d+\/\d+\)$/, ""), style: 2 };
+}
+
 /** A step of a tactical action: the system / unit choices the bot offers, with my fleet numbers. */
 export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: RendererProps) {
   const systems = d.choices.filter((c) => SYSTEM.test(baseId(c.customId)));
@@ -126,8 +134,14 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   const unitMoves = d.choices.filter((c) => UNIT_MOVE.test(baseId(c.customId)));
   const movingFrom = systems.some((c) => /^tacticalMoveFrom_/.test(baseId(c.customId)));
   const active = d.position ? tileAt(data, d.position) : undefined;
+  /* BOMBARDMENT only matters when someone else has ground forces on a planet here. */
+  const planets = d.position ? Object.values(data.web?.tileUnitData?.[d.position]?.planets ?? {}) : [];
+  const enemyOnPlanets = planets.some((p) =>
+    Object.entries(p?.entities ?? {}).some(([f, units]) => f !== data.me?.faction && units.some((u) => u.entityType === "unit")),
+  );
   const rest = d.choices
     .filter((c) => !systems.includes(c) && !done.includes(c) && !unitMoves.includes(c))
+    .map(produceLabel)
     .map((c) => (/^(ring_|ChooseDifferentDestination|getTilesThisFarAway_)/.test(baseId(c.customId)) ? { ...c, style: 2 } : c));
   const choosingSystem = !movingFrom && (systems.length > 0 || rest.some((c) => /^ring_/.test(baseId(c.customId))));
   let text = d.text;
@@ -136,6 +150,13 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   if (movingFrom) text = moved ? "" : "Pick where your ships come from.";
   if (unitMoves.length) text = d.text.match(/from system [^\n(]+/i)?.[0]?.trim() ?? "";
   if (d.title === "Finish the tactical action") text = "Nothing else to do in this system. Conclude the action to end it.";
+  if (d.choices.some((c) => /^deleteButtons_tacticalAction/.test(baseId(c.customId))))
+    text = "Each press adds a unit (your docks' production limits the total). Press Done, then pay for them.";
+  const build = d.choices.find((c) => /^tacticalActionBuild/.test(baseId(c.customId)));
+  if (build && d.choices.some((c) => /^doneWithTacticalAction/.test(baseId(c.customId)))) {
+    const value = build.label.match(/\((\d+) PRODUCTION/i)?.[1];
+    text = `Produce units here${value ? ` (production ${value})` : ""}, or conclude the action.`;
+  }
   return (
     <div className={classes.stack}>
       {active && d.position && !choosingSystem && (
@@ -162,7 +183,10 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
         channelId={d.prompt.channelId}
         onHover={onHoverChoice}
         gridAbove={4}
-        rankOf={(c) => (choosingSystem && c.rank === "primary" ? "secondary" : c.rank)}
+        rankOf={(c) => {
+          if (/^bombardConfirm/.test(baseId(c.customId)) && !enemyOnPlanets) return "more";
+          return choosingSystem && c.rank === "primary" ? "secondary" : c.rank;
+        }}
         trailing={done.map((c) => (
           <ChoiceButton key={c.key} choice={{ ...c, style: 3 }} onPress={onPress} pending={pendingKey === c.key} busy={!!pendingKey} emphasis />
         ))}

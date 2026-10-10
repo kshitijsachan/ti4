@@ -13,7 +13,7 @@ type Action = { choice: Choice; title: string; sub: string; icon: ReactNode; ton
 function actionOf(c: Choice, data: DecisionData): Action | null {
   const id = baseId(c.customId);
   const me = data.me;
-  if (id.startsWith("tacticalAction")) {
+  if (/^tacticalAction(?!Build)/.test(id)) {
     const n = me?.tacticalCC ?? Number(c.label.match(/\((\d+)\)/)?.[1] ?? NaN);
     return {
       choice: c,

@@ -4,7 +4,7 @@ import { getStrategyCardByInitiative } from "@/entities/lookup/strategyCards";
 import { agendas } from "@/entities/data/agendas";
 import type { PendingPrompt } from "../detect/pending";
 import type { GameChannels } from "../detect/games";
-import { baseId, choicesOf, cleanLabel, type Choice } from "./controls";
+import { baseId, choicesOf, cleanLabel, idFaction, type Choice } from "./controls";
 import { cleanText, firstLine, namesFrom } from "./text";
 import { isScoringSummary, myScoringLine, scoringSummary, type ScoringLine } from "./scoring";
 
@@ -102,7 +102,7 @@ export type ClassifyContext = {
 const ID = {
   scPick: /^scPick_(\d+)/,
   scFollow: /^(sc_follow_|sc_no_follow_|sc_\w+_follow|preDeclineSC_|leadershipGenerateCCButtons|diploRefresh|construction_|acquireATechWithSC|warfareTeBuild|primaryOfTeWarfare|sendTradeHolder)/,
-  turn: /^(tacticalAction|componentAction|passingAbilities|endOfTurnAbilities|turnEnd|doAnotherAction|confirmSecondAction|strategicAction_)/,
+  turn: /^(tacticalAction(?!Build)|componentAction|passingAbilities|endOfTurnAbilities|turnEnd|doAnotherAction|confirmSecondAction|strategicAction_)/,
   tactical: /^(ringTile_|getTilesThisFarAway_|ring_|unitTactical|tacticalMoveFrom|doneWithOneSystem|doneMoving|doneLanding|landUnits|tacticalActionBuild|doneWithTacticalAction|concludeMove|planetsTake|place_|placeOneNDone|startCombat|getRaid)/i,
   combat: /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign)/,
   agendaVote: /^(resolveAgendaVote|vote$|planetOutcomes|outcome|agendaResolution|preVote|exhaustForVotes|abstain|distinguished|planetRider|rider_)/,
@@ -251,7 +251,12 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
 
 function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   const m = prompt.message;
-  const choices = choicesOf(m);
+  /* Another faction's locked buttons (FFCC_<them>_…) are never mine to press. */
+  const mine = ctx.me?.faction;
+  const choices = choicesOf(m).filter((c) => {
+    const f = idFaction(c.customId);
+    return !f || !mine || f === mine;
+  });
   const names = namesFrom(ctx.state, (n) => scName(ctx, n));
   const embedText = (m.embeds ?? [])
     .map((e) => [e.title, e.description].filter(Boolean).join("\n"))
@@ -307,6 +312,30 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
     /* "You have declined to queue a when. You can change your mind with this button." — a take-back, not a question. */
     return { ...base, eyebrow: "Optional", title: "Changed your mind?", text: generic.rest || text, optional: true };
   }
+  if (has(choices, /^(preVote|resolvePreassignment_)/)) {
+    /* "Preset your vote / pre-pass on shenanigans": a shortcut for async play; the real prompt comes in turn. */
+    const shenanigans = has(choices, /Shenanigans/i);
+    return {
+      ...base,
+      kind: "agenda",
+      eyebrow: "Agenda · optional",
+      title: shenanigans ? "Pass on agenda shenanigans ahead of time?" : "Vote or abstain ahead of time?",
+      text: shenanigans
+        ? "Bribery, Confusing / Confounding Legal Text and Deadly Plot can be played during voting. Pre-passing just saves the table a wait."
+        : "Optional: preset your vote now; the game will cast it when your turn to vote comes. It is erased if someone plays an “after”.",
+      agenda: currentAgenda(ctx),
+      optional: true,
+    };
+  }
+  if (has(choices, /^lockAftersIn$/) && choices.filter((c) => c.rank !== "undo").length === 1) {
+    return {
+      ...base,
+      eyebrow: "Agenda · optional",
+      title: "Lock in your “after”?",
+      text: "Your queued “after” is cancelled if a player before you in speaker order plays one. Lock it in to play it regardless.",
+      optional: true,
+    };
+  }
   if (has(choices, /^editRoundSummary_/)) {
     return {
       ...base,
@@ -336,7 +365,9 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
     const trade = tradeOf(text);
     return { ...base, kind: "transaction", eyebrow: "", title: `${trade.from} offers a trade`, trade };
   }
-  if (has(choices, ID.combat) || prompt.reason === "combat") {
+  /* The landing step offers "Roll BOMBARDMENT" alongside "Done Landing Troops": it is a tactical step, not a combat. */
+  const landingStep = has(choices, /^(doneLanding|landUnits)/);
+  if ((has(choices, ID.combat) && !landingStep) || prompt.reason === "combat") {
     const combat = combatOf(ctx, prompt, choices);
     const step = has(choices, /^(assignHits|getDamageButtons|autoAssign|assignDamage)/) && !has(choices, /^combatRoll/)
       ? "assign hits"
@@ -353,6 +384,11 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   }
   if (has(choices, ID.sabotage)) {
     const card = m.embeds?.[0]?.title ? cleanLabel(m.embeds[0].title).replace(/[_*]/g, "") : undefined;
+    const mine = !!ctx.me && text.toLowerCase().startsWith(`${ctx.me.userName.toLowerCase()} played`);
+    if (mine) {
+      /* My own card: the others get the Sabotage window; nothing for me to answer. */
+      return { ...base, kind: "reaction", eyebrow: "", title: `${card ?? "Your card"}: waiting on Sabotage`, optional: true };
+    }
     return {
       ...base,
       kind: "reaction",
@@ -360,8 +396,12 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       title: card ? `Sabotage ${card}?` : "Sabotage?",
     };
   }
+  const leadership = has(choices, /^deleteButtons_leadership$/);
   if (has(choices, ID.gainTokens)) {
-    return { ...base, kind: "gainTokens", title: "Gain command tokens", text };
+    return { ...base, kind: "gainTokens", title: leadership ? "Leadership: gain command tokens" : "Gain command tokens", text };
+  }
+  if (leadership || (has(choices, ID.spend) && /leadership/i.test(text))) {
+    return { ...base, kind: "spend", title: "Leadership: spend influence (3 = 1 token)", text };
   }
   if (has(choices, ID.spend)) {
     const inf = has(choices, /_inf(_|$)/);
@@ -373,18 +413,18 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
     const agenda = currentAgenda(ctx);
     const after = has(choices, /after/i) && !has(choices, /when/i);
     const what = after ? "“after”" : has(choices, /after/i) ? "“when” or “after”" : "“when”";
-    const count = m.content.match(/you may currently play (\d+)/i)?.[1];
     const window = after
       ? "After the agenda is revealed and before voting, players may play “after” cards (riders and the like) in speaker order."
       : "Before anything else, players may play “when” cards (like Veto) in speaker order.";
-    const yours = count === undefined ? "" : count === "0" ? " You hold none that fit." : ` You hold ${count} that fit${count === "1" ? "s" : ""}.`;
     return {
       ...base,
       kind: "reaction",
       eyebrow: agenda ? `Agenda · ${agenda.name}` : "Agenda phase",
       title: `Play ${after ? "an" : "a"} ${what} card?`,
-      text: `${window}${yours}`,
+      text: window,
       agenda,
+      /* The table moved past this window (the bot keeps an old prompt when a press changed nothing). */
+      optional: /^agenda\.(voting|resolv)/.test(ctx.web?.gameState?.phase ?? "") || undefined,
     };
   }
   if (has(choices, ID.agendaVote)) {
@@ -449,7 +489,7 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
     };
   }
   if (has(choices, ID.turn)) {
-    const fresh = has(choices, /^tacticalAction/);
+    const fresh = has(choices, /^tacticalAction(?!Build)/);
     const abilities = has(choices, /^turnEnd/) && !has(choices, /^(endOfTurnAbilities|doAnotherAction)/) && choices.some((c) => c.rank !== "undo" && !/^turnEnd/.test(baseId(c.customId)));
     return {
       ...base,
@@ -550,6 +590,10 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       text: "",
       scoring: { lines, mine, soHint: secretHint(ctx) },
     };
+  }
+  if (has(choices, /^redistributeCCButtons/) && ctx.web?.gameState?.phase?.startsWith("action")) {
+    /* Warfare's "redistribute your command tokens" (before or after its tactical action): optional, nothing waits. */
+    return { ...base, kind: "generic", title: "Redistribute your command tokens", text: "Optional, from Warfare.", offer: true };
   }
   if (has(choices, ID.status)) {
     return {
