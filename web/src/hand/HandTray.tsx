@@ -59,13 +59,16 @@ function fanBudgets(groups: CardGroup[], viewport: number): Map<string, number> 
     for (const g of shown) out.set(g.id, need(g));
     return out;
   }
-  const big = shown.filter((g) => g.cards.length >= 3);
-  const fixed = shown.filter((g) => g.cards.length < 3).reduce((sum, g) => sum + need(g), 0);
-  const bigCards = big.reduce((sum, g) => sum + g.cards.length, 0);
-  for (const g of shown) {
-    if (g.cards.length < 3) out.set(g.id, need(g));
-    else out.set(g.id, Math.max(CARD_W, ((available - fixed) * g.cards.length) / bigCards));
-  }
+  // Small fans keep their room; the big ones share the rest, the smaller of them lying flat when it fits
+  // so only the largest fan overlaps.
+  const big = shown.filter((g) => g.cards.length >= 3).sort((a, b) => need(a) - need(b));
+  for (const g of shown) if (g.cards.length < 3) out.set(g.id, need(g));
+  let left = available - shown.filter((g) => g.cards.length < 3).reduce((sum, g) => sum + need(g), 0);
+  big.forEach((g, i) => {
+    const share = Math.max(CARD_W, Math.min(need(g), left / (big.length - i)));
+    out.set(g.id, share);
+    left -= share;
+  });
   return out;
 }
 

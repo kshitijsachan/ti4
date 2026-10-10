@@ -216,7 +216,7 @@ export function findNewButton(
 }
 
 const HAND_NOISE =
-  /^(__Action Cards__|__Scored Secret Objectives|#+ __Promissory notes|Click a button below to play an action card|Use these buttons to (score|discard)|You may use these buttons to do various things)|someone refreshed your|If your cards info thread disappears|the bot could auto pass|automatically pass on Sabos|gentle reminder|quick nudge|end of round thoughts/;
+  /^(__Action Cards__|__Scored Secret Objectives|#+ __Promissory notes|Click a button below to play an action card|Use these buttons to (score|discard)|You may use these buttons to do various things)|someone refreshed your|^You pressed: |If your cards info thread disappears|the bot could auto pass|automatically pass on Sabos|gentle reminder|quick nudge|end of round thoughts/;
 
 const HAND_BUTTON = /^(ac_play_from_hand_|ac_discard_from_hand_|so_score_hand_|discardSecret_|SODISCARD_|getDiscardButtonsACs|get_so_)/;
 
@@ -267,7 +267,7 @@ export function botReplies(
   ].sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
 }
 
-const REFUSAL = /denied|cannot|can't|not able|unable|not allowed|will not allow|over the limit|no such|does not think|please retry|something went wrong/i;
+const REFUSAL = /denied|cannot|can't|not able|unable|not allowed|will not allow|over the limit|try again|rebooting|no such|does not think|please retry|something went wrong/i;
 
 /** True when a bot reply reads as a refusal. */
 export function isRefusal(message: Message): boolean {
