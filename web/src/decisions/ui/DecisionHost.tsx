@@ -10,6 +10,7 @@ import type { PlayerDataResponse } from "@/entities/data/types";
 import { getToken } from "@/play/session";
 import { findGame } from "../detect/games";
 import { usePendingPrompts } from "../detect/pending";
+import { useSetupWaiting } from "../detect/waiting";
 import { classify, type Decision } from "../model/classify";
 import { baseId, type Choice } from "../model/controls";
 import { useDecisionFocus } from "../model/focus";
@@ -44,6 +45,26 @@ function useHandAliases(gameName: string, enabled: boolean) {
     },
   });
   return query.data?.actionCards;
+}
+
+/**
+ * Whether the setup draft is over (or the game never had one): the bot's draft state, polled while it runs. Until
+ * then the draft view owns the screen and the table-wide setup steps stay hidden.
+ */
+function useSetupOpen(gameName: string) {
+  const query = useQuery({
+    queryKey: ["decisions", "draft", gameName],
+    staleTime: 4_000,
+    retry: false,
+    refetchInterval: (q) => (q.state.data === "finished" || q.state.data === "none" ? 60_000 : 5_000),
+    queryFn: async () => {
+      const res = await fetch(`/bot/api/public/game/${encodeURIComponent(gameName)}/draft`);
+      if (!res.ok) return "none" as const;
+      const body = (await res.json()) as { status?: string };
+      return body.status === "drafting" ? ("drafting" as const) : body.status === "finished" ? ("finished" as const) : ("none" as const);
+    },
+  });
+  return query.data === "finished" || query.data === "none";
 }
 
 /** A space combat is over once one side has no ships left there (the bot leaves its buttons up). */
@@ -130,7 +151,8 @@ export function DecisionHost({ gameName, placement = "fixed", className }: Decis
   const mePlayer = useMemo(() => web?.playerData.find((p) => p.discordId === me?.id), [web, me]);
   const phase = web?.gameState?.phase?.split(".")[0];
   const myTurn = !!mePlayer?.active && (phase === "strategy" || phase === "action");
-  const prompts = usePendingPrompts(gameName, { myTurn, faction: mePlayer?.faction });
+  const setupOpen = useSetupOpen(gameName);
+  const prompts = usePendingPrompts(gameName, { myTurn, faction: mePlayer?.faction, setupOpen });
   const game = useMemo(() => findGame(channels, gameName), [channels, gameName]);
 
   const decisions = useMemo<Decision[]>(() => {
@@ -142,10 +164,27 @@ export function DecisionHost({ gameName, placement = "fixed", className }: Decis
       (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "combat" && combatOver(d, web)),
     );
     const ordered = inBursts(live);
-    return [...ordered.filter((d) => !d.optional), ...ordered.filter((d) => d.optional)];
+    /* My own choices first, then the table-wide steps anyone may take, then the optional ones. */
+    return [
+      ...ordered.filter((d) => !d.optional && !d.table),
+      ...ordered.filter((d) => d.table),
+      ...ordered.filter((d) => d.optional && !d.table),
+    ];
   }, [prompts, game, users, channels, messages, web, mePlayer]);
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };
+  const waiting = useSetupWaiting(gameName);
+  if (!decisions.length && setupOpen && waiting && web?.tilePositions.length) {
+    /* Setting up and nothing is mine to do: say who the table waits on, so it never looks stuck. */
+    return (
+      <div className={cx("ti4play", classes.layer, placement === "contained" ? classes.contained : classes.fixed, className)}>
+        <div className={cx(classes.pill, classes.waitingPill)} role="status">
+          <span className={classes.waitingDot} />
+          <span className={classes.pillText}>{waiting.text}</span>
+        </div>
+      </div>
+    );
+  }
   return <DecisionPopup decisions={decisions} data={data} placement={placement} className={className} />;
 }
 

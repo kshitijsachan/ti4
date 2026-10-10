@@ -3,7 +3,18 @@ import { usePlay, usePlayConnection, type Message, type PlayState } from "@/disc
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { readStored, writeStored } from "@/discord/client/lastRead";
 import { controlSignature } from "@/discord/client/store";
-import { baseId, buttonSignature, choicesOf, forwardChoices, idFaction, isDraftPrompt, isHandMenu, needsAnswer } from "../model/controls";
+import {
+  baseId,
+  buttonSignature,
+  choicesOf,
+  forwardChoices,
+  idFaction,
+  isDraftPrompt,
+  isHandMenu,
+  isSecretDiscardPrompt,
+  isTableSetupPrompt,
+  needsAnswer,
+} from "../model/controls";
 import { findGame, type GameChannels } from "./games";
 
 /** Why a prompt is considered mine. */
@@ -15,7 +26,11 @@ export type PendingReason =
   | "follow-up"
   | "own"
   | "faction"
-  | "combat";
+  | "combat"
+  /** A table-wide setup step addressed to nobody (deal secret objectives, start round 1): anyone may press it. */
+  | "table"
+  /** A setup choice in my hand thread (which secret objective to keep). */
+  | "setup";
 
 /** One bot prompt that waits on me. */
 export type PendingPrompt = {
@@ -34,6 +49,11 @@ export type PendingContext = {
   myTurn: boolean;
   /** My faction (lower case, as in `FFCC_<faction>_` button ids). */
   faction?: string;
+  /**
+   * The setup draft is over (or there was none): the table-wide setup steps that follow it are live. While the
+   * draft runs the draft view owns the screen and those stay hidden.
+   */
+  setupOpen?: boolean;
 };
 
 /**
@@ -62,6 +82,8 @@ const ROLE_WINDOW = 40;
 const FOLLOW_UP_MS = 5000;
 /** How soon after my press an edit of that message counts as the bot's answer to it. */
 const EDIT_ANSWER_MS = 15000;
+/** A table-wide setup button I pressed that is still there after this long can be pressed again. */
+const TABLE_RETRY_MS = 20000;
 /** Combat-thread buttons: rolling dice, assigning hits, retreating. */
 const FOLLOW_ID = /^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/;
 const COMBAT_ID = /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign)/;
@@ -81,7 +103,16 @@ function isMyCombatThread(name: string, faction?: string) {
   return sides.includes(faction);
 }
 
-type ScanOptions = { roleCalls: boolean; combat: boolean; faction?: string };
+type ScanOptions = {
+  roleCalls: boolean;
+  combat: boolean;
+  faction?: string;
+  /** Table-wide setup buttons posted here are everyone's (the action log and table talk). */
+  tableSetup: boolean;
+  /** This is my hand thread. */
+  hand: boolean;
+  setupOpen: boolean;
+};
 
 /** When I pressed something on a message, and whether the bot's edit since made it a new step. */
 function answeredState(state: PlayState, m: Message, ping: boolean) {
@@ -153,7 +184,19 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     const roleFollowUp = !ping && !pingsOther && at - rolePingAt <= FOLLOW_UP_MS;
     const forOther = pingsOther || (!ping && at - otherPingAt <= FOLLOW_UP_MS) || otherFaction(m);
     if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || isHandMenu(m)) return;
+    const tableSetup = isTableSetupPrompt(m);
+    if (tableSetup && (!opts.setupOpen || !opts.tableSetup)) return;
     let answered = answeredState(state, m, ping);
+    if (tableSetup) {
+      /*
+       * Addressed to nobody, so nobody else's prompt retires it: the bot deletes it once a press goes through. One
+       * still here a while after my press was refused ("not everyone has discarded yet"): offer it again.
+       */
+      const pressedAt = m.my_press ? Date.parse(m.my_press.at) : state.pressed[m.id];
+      if (pressedAt !== undefined && Date.now() - pressedAt < TABLE_RETRY_MS) return;
+      items.push({ message: m, channelId, where, reason: "table" });
+      return;
+    }
     if (m.prompted_user_id === me.id && ping && (m.mention_roles ?? []).some((r) => myRoles.has(r))) {
       /* Only the card's own buttons are mine; the follow buttons are the other players'. */
       if (!forwardChoices(m).some((c) => !FOLLOW_ID.test(baseId(c.customId)))) answered = true;
@@ -165,6 +208,10 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
 
     const role = opts.roleCalls && index >= ids.length - ROLE_WINDOW && isRolePrompt(me.id, m, myRoles, roleFollowUp);
     let reason: PendingReason | null = null;
+    if (opts.hand && isSecretDiscardPrompt(m)) {
+      items.push({ message: m, channelId, where, reason: "setup" });
+      return;
+    }
     if (m.ephemeral) reason = "ephemeral";
     else if (!forOther && (m.interaction_metadata?.user?.id === me.id || m.prompted_user_id === me.id)) reason = "reply";
     else if (id === newestCombat) reason = "combat";
@@ -213,6 +260,9 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
       roleCalls: id !== game.tableTalk?.id,
       combat: isMyCombatThread(name, ctx.faction),
       faction: ctx.faction,
+      tableSetup: id === game.actions.id || id === game.tableTalk?.id,
+      hand: id === game.hand?.id,
+      setupOpen: !!ctx.setupOpen,
     });
   });
   const ownCalls = all.filter((it) => it.ownCall);
@@ -261,11 +311,11 @@ export function usePendingPrompts(gameName: string, ctx: PendingContext): Pendin
   const dismissed = usePlay((s) => s.dismissedPrompts);
   const pressed = usePlay((s) => s.pressed);
   const me = usePlay((s) => s.me);
-  const { myTurn, faction } = ctx;
+  const { myTurn, faction, setupOpen } = ctx;
 
   return useMemo(() => {
     if (!game || !me) return [];
-    return selectPending(conn.store.getState(), game, { myTurn, faction });
+    return selectPending(conn.store.getState(), game, { myTurn, faction, setupOpen });
     // The store slices below are what the scan reads.
-  }, [game, me, myTurn, faction, messages, dismissed, pressed, conn]);
+  }, [game, me, myTurn, faction, setupOpen, messages, dismissed, pressed, conn]);
 }

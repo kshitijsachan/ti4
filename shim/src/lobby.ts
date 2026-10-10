@@ -127,7 +127,31 @@ export class Lobby {
       }
     }
 
-    if (method === "GET" && path === "/solo-game/status") {
+    /**
+     * A game for picked players without the lobby: {token (the creator's seat), players: [user ids], expansion?}. The
+     * shim runs the slash command, presses Launch Game, picks the expansion and starts the Milty draft as the creator;
+     * progress is at GET /app/solo-game/status?game= (or /app/new-game/status).
+     */
+    if (method === "POST" && path === "/new-game") {
+      const userId = this.clients.userForToken(String(body.token ?? query.get("token") ?? ""));
+      if (!userId || !this.solo) return discordError(res, 401, 0, "unknown link");
+      const s = this.store.state;
+      const players: string[] = (Array.isArray(body.players) ? body.players : []).map((id: unknown) => String(id));
+      const unknown = players.filter((id) => !s.users[id] || s.users[id].bot);
+      if (unknown.length) return discordError(res, 400, 0, `unknown players: ${unknown.join(", ")}`);
+      const others = [...new Set(players.filter((id) => id !== userId))];
+      if (others.length < 1) return discordError(res, 400, 0, "pick at least one other player");
+      if (others.length > 7) return discordError(res, 400, 0, "at most 8 players");
+      const expansion: Expansion = ["te", "newPoK", "oldPoK"].includes(body.expansion) ? body.expansion : "te";
+      try {
+        const job = await this.solo.startTable(userId, others, expansion);
+        return sendJson(res, 200, { game: job.game, url: `/game/${job.game}`, status: job });
+      } catch (e) {
+        return discordError(res, 502, 0, (e as Error).message);
+      }
+    }
+
+    if (method === "GET" && (path === "/solo-game/status" || path === "/new-game/status")) {
       const job = this.solo?.status(String(query.get("game") ?? ""));
       if (!job) return discordError(res, 404, 0, "no solo game setup known for that game");
       return sendJson(res, 200, job);

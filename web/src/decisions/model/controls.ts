@@ -39,9 +39,18 @@ const UTILITY_LABEL = /^(show |refresh|ping |pause timer|\(for others\)|request 
 /** The hand tray's card menus (play / discard / score a card): the hand module answers those itself. */
 const HAND_ID = /^(ac_play_from_hand_|ac_discard_from_hand_|so_score_hand_|discardSecret_|get_so_score_buttons|get_so_discard_buttons|getDiscardButtonsACs)/;
 
-/** Draft and setup prompts: the draft view owns those. */
+/** Draft and pre-draft configuration prompts: the draft view (and the game's creator) own those. */
 const DRAFT_ID =
-  /^(milty|queueMilyPick|jwds|draftPreset|setupStep|restartMiltyQueue|showMiltyDraft|miltyFactionInfo|startTFDraft|jmf[A-Z]|chooseExp|startDraftSystem|frankenSetup|setupBaseGameMode|startTFGame|toggleTfHomebrew|editTFHomebrew|getHomebrewButtons|offerGameOptionButtons|offerTEOptionButtons|miltySetup|addMapString|startOfGameObjReveal|deal2SOToAll|drawSpecificSO)/;
+  /^(milty|queueMilyPick|jwds|draftPreset|setupStep|restartMiltyQueue|showMiltyDraft|miltyFactionInfo|startTFDraft|jmf[A-Z]|chooseExp|startDraftSystem|frankenSetup|setupBaseGameMode|startTFGame|toggleTfHomebrew|editTFHomebrew|getHomebrewButtons|offerGameOptionButtons|offerTEOptionButtons|miltySetup|addMapString|drawSpecificSO)/;
+
+/**
+ * Table-wide steps that move the game from setup into round 1. The bot posts them in the action log addressed to
+ * nobody ("Press this button after every player is setup."): anyone at the table may press them.
+ */
+const TABLE_SETUP_ID = /^(deal2SOToAll|startOfGameObjReveal|startOfGameStrategyPhase)$/;
+
+/** Round-one "keep one of the two secret objectives you were dealt" buttons in my hand thread. */
+const SO_DISCARD_ID = /^(discardSecret_|SODISCARD_)\d+/;
 
 /** Strips the `FFCC_<faction>_` prefix the bot uses to lock a button to one faction. */
 export function baseId(customId: string | undefined): string {
@@ -134,8 +143,21 @@ export function isDraftPrompt(m: Message): boolean {
   return ids.length > 0 && ids.every((id) => DRAFT_ID.test(id));
 }
 
+/** A table-wide setup step anyone may press (deal secret objectives, reveal objectives and start round 1). */
+export function isTableSetupPrompt(m: Message): boolean {
+  const ids = forwardChoices(m).map((c) => baseId(c.customId));
+  return ids.length > 0 && ids.some((id) => TABLE_SETUP_ID.test(id)) && ids.every((id) => TABLE_SETUP_ID.test(id));
+}
+
+/** "Use these buttons to discard a secret objective." with one button per secret: a real decision, not a menu. */
+export function isSecretDiscardPrompt(m: Message): boolean {
+  const ids = forwardChoices(m).map((c) => baseId(c.customId));
+  return ids.length > 0 && ids.every((id) => SO_DISCARD_ID.test(id)) && /discard a secret objective/i.test(m.content);
+}
+
 /** A transient card menu from the hand thread, which the hand tray handles. */
 export function isHandMenu(m: Message): boolean {
+  if (isSecretDiscardPrompt(m)) return false;
   const ids = forwardChoices(m).map((c) => baseId(c.customId));
   return ids.length > 0 && ids.every((id) => HAND_ID.test(id));
 }

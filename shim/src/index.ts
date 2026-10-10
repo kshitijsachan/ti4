@@ -48,6 +48,7 @@ const lobby = new Lobby(hub, clients);
 lobby.autopilot = new Autopilot(hub, clients, BOT_API);
 // One-click solo test games (autopilot opponents, set up as the human).
 lobby.solo = new SoloGames(hub, clients, lobby, BOT_API);
+void lobby.solo.resumeStewards();
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",

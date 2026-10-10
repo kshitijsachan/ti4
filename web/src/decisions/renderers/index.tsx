@@ -6,6 +6,7 @@ import { GainTokensBody, SpendBody } from "./Economy";
 import { GenericBody, TacticalBody } from "./Generic";
 import { ReactionBody } from "./Reaction";
 import { ScFollowBody, ScPickBody, ScPrimaryBody } from "./Strategy";
+import { SecretDiscardBody } from "./SecretDiscard";
 import { TechBody } from "./Tech";
 import { TradeBody } from "./Trade";
 import { TurnBody } from "./Turn";
@@ -40,6 +41,8 @@ export function renderBody(d: Decision, props: RendererProps): ReactNode {
       return <GainTokensBody {...props} />;
     case "reaction":
       return <ReactionBody {...props} />;
+    case "secretDiscard":
+      return <SecretDiscardBody {...props} />;
     default:
       return <GenericBody {...props} />;
   }

@@ -775,3 +775,67 @@
   font-size: 13px;
   color: var(--play-ink-bright);
 }
+
+/* Secret objective to keep */
+
+.soList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.soCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+}
+
+.soCard:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.soCardSelected {
+  border-color: rgba(var(--play-yellow), 0.6);
+  background: rgba(var(--play-yellow), 0.06);
+}
+
+.soHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-right: 56px;
+}
+
+.soName {
+  color: var(--play-ink-bright);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.soPhase {
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.soText {
+  color: var(--play-ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.soMark {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(var(--play-yellow));
+}

@@ -14,12 +14,16 @@ import { log } from "./log.js";
 
 export type Expansion = "te" | "newPoK" | "oldPoK";
 
-export type SoloState = "creating" | "setting_up" | "drafting" | "error";
+export type SoloState = "creating" | "setting_up" | "drafting" | "playing" | "error";
 
 export type SoloJob = {
   game?: string;
+  /** "solo": the human against fresh autopilot seats; "table": a game for the players the creator picked. */
+  kind: "solo" | "table";
   user_id: string;
   bots: { name: string; user_id: string }[];
+  /** Everyone else seated (the bots of a solo game, the picked players of a table game). */
+  others: string[];
   state: SoloState;
   step: string;
   error?: string;
@@ -58,31 +62,49 @@ export class SoloGames {
 
   /** Creates the game and returns once it exists; setup continues in the background. */
   start(userId: string, botCount: number, expansion: Expansion): Promise<SoloJob> {
-    const run = this.chain.then(() => this.create(userId, botCount, expansion));
+    return this.queue(() => this.create(userId, { botCount, others: [] }, expansion));
+  }
+
+  /**
+   * A game for players the creator picked (people and/or autopilot seats): same orchestration as a solo game minus
+   * making bots, so the creator never sees the lobby: create, launch, expansion, Milty settings, start the draft.
+   */
+  startTable(userId: string, others: string[], expansion: Expansion): Promise<SoloJob> {
+    return this.queue(() => this.create(userId, { botCount: 0, others }, expansion));
+  }
+
+  private queue(fn: () => Promise<SoloJob>): Promise<SoloJob> {
+    const run = this.chain.then(fn);
     this.chain = run.catch(() => undefined);
     return run;
   }
 
-  private async create(userId: string, botCount: number, expansion: Expansion): Promise<SoloJob> {
+  private async create(userId: string, seats: { botCount: number; others: string[] }, expansion: Expansion): Promise<SoloJob> {
     const now = new Date().toISOString();
-    const job: SoloJob = { user_id: userId, bots: [], state: "creating", step: "Starting", started_at: now, updated_at: now, log: [] };
+    const kind = seats.botCount > 0 ? "solo" : "table";
+    const job: SoloJob = { kind, user_id: userId, bots: [], others: [], state: "creating", step: "Starting", started_at: now, updated_at: now, log: [] };
     const p = new Player(this.clients, userId);
     try {
       await this.waitForBot(job);
-      // Reuse existing autopilot seats (the bot's per-player limits are patched off when self-hosted), so test
-      // games don't pile up new bot players; create only the shortfall.
-      const reused = this.existingBots().slice(0, botCount);
-      const names = this.botNames(botCount - reused.length);
-      if (names.length) this.note(job, `Adding ${names.join(", ")}`);
-      job.bots = [
-        ...reused,
-        ...names.map((n) => {
-          const seat = this.lobby.createSeat(n, true);
-          return { name: n, user_id: seat.user_id };
-        }),
-      ];
-      // Let the bot learn about the new members before they are named in a command.
-      await sleep(1500);
+      if (kind === "solo") {
+        // Reuse existing autopilot seats (the bot's per-player limits are patched off when self-hosted), so test
+        // games don't pile up new bot players; create only the shortfall.
+        const reused = this.existingBots().slice(0, seats.botCount);
+        const names = this.botNames(seats.botCount - reused.length);
+        if (names.length) this.note(job, `Adding ${names.join(", ")}`);
+        job.bots = [
+          ...reused,
+          ...names.map((n) => {
+            const seat = this.lobby.createSeat(n, true);
+            return { name: n, user_id: seat.user_id };
+          }),
+        ];
+        job.others = job.bots.map((b) => b.user_id);
+        // Let the bot learn about the new members before they are named in a command.
+        await sleep(1500);
+      } else {
+        job.others = [...new Set(seats.others.filter((id) => id !== userId && this.store.state.users[id] && !this.store.state.users[id].bot))];
+      }
 
       const lobbyId = this.lobby.ensureLobbyChannel().id;
       const since = this.lastId(lobbyId);
@@ -90,7 +112,7 @@ export class SoloGames {
       const options: Json[] = [
         { type: 3, name: "game_fun_name", value: "_" },
         { type: 6, name: "player1", value: userId },
-        ...job.bots.map((b, i) => ({ type: 6, name: `player${i + 2}`, value: b.user_id })),
+        ...job.others.map((id, i) => ({ type: 6, name: `player${i + 2}`, value: id })),
       ];
       await this.retry(job, "/game create_game_button", () =>
         p.op({ op: "command", channel_id: lobbyId, name: "game", options: [{ type: 1, name: "create_game_button", options }] }),
@@ -101,7 +123,7 @@ export class SoloGames {
         30 * SECOND,
         () =>
           this.newer(lobbyId, since, userId).find(
-            (m) => hasControl(m, "launchGame") && job.bots.every((b) => String(m.content ?? "").includes(b.user_id)),
+            (m) => hasControl(m, "launchGame") && job.others.every((id) => String(m.content ?? "").includes(id)),
           ),
       );
 
@@ -117,7 +139,10 @@ export class SoloGames {
       job.game = /^([a-z]+\d+)-actions$/i.exec(actions.name)![1];
       this.jobs.set(job.game, job);
       this.note(job, `Game ${job.game} created`, "setting_up");
-      void this.setup(job, p, actions.id, expansion).finally(() => p.close());
+      void this.setup(job, p, actions.id, expansion)
+        .finally(() => p.close())
+        .then(() => (job.kind === "solo" && job.state === "drafting" ? this.steward(job, actions.id) : undefined))
+        .catch((e) => log.warn(`solo ${job.game}: steward stopped: ${(e as Error).message}`));
       return job;
     } catch (e) {
       p.close();
@@ -157,6 +182,157 @@ export class SoloGames {
       this.note(job, "Drafting", "drafting");
     } catch (e) {
       this.fail(job, e);
+    }
+  }
+
+  /**
+   * Solo games: once the draft is over, take the table-wide setup steps nobody is addressed by, as the human,
+   * as soon as the table is ready for them, so the game flows from the draft into the strategy phase with the human
+   * only making their own choices (starting technology, which secret objective to keep, a strategy card):
+   *   1. "Deal 2 Secret Objectives To All" once no starting-technology prompt is left and the table has settled;
+   *   2. "Reveal Objectives and Start Strategy Phase" once every player kept one secret objective.
+   * The bot checks both itself (and refuses with a message), so a press that comes early does no harm.
+   */
+  private async steward(job: SoloJob, actionsId: string) {
+    const game = job.game!;
+    const userId = job.user_id;
+    const end = Date.now() + 12 * 3600 * SECOND;
+    /** Message id → when we pressed it. */
+    const pressed = new Map<string, number>();
+    let lastNote = "";
+    const say = (text: string, state?: SoloState) => {
+      if (text !== lastNote || state) this.note(job, text, state);
+      lastNote = text;
+    };
+    while (Date.now() < end) {
+      await sleep(3 * SECOND);
+      if (!this.hub.gateway.botReady) continue;
+      const draft = await this.draft(game);
+      if (draft && draft.status === "drafting") continue;
+      const web = await this.webData(game);
+      const phase = String(web?.gameState?.phase ?? "");
+      if (!web) continue;
+      if (phase && !phase.startsWith("setup")) {
+        say("Setup done: strategy phase", "playing");
+        return;
+      }
+      const setupMessages = this.gameMessages(game, userId);
+      const latest = (id: string) => this.store.messages(actionsId).filter((m) => visible(m, userId) && hasControl(m, id)).pop();
+      const quietFor = Date.now() - this.lastActivity(game);
+      const again = (m: StoredMessage) => {
+        const at = pressed.get(m.id);
+        return at === undefined || Date.now() - at > 45 * SECOND;
+      };
+
+      const deal = latest("deal2SOToAll");
+      if (deal) {
+        const choosing = setupMessages.filter((m) => /starting tech/i.test(String(m.content ?? "")) && hasControl(m, /(^|_)(getTech_|getKeleresTechOptions)/));
+        if (choosing.length) {
+          const who = [...new Set(choosing.map((m) => this.factionName(web, /FFCC_([^_]+)_/.exec(controlIds(m.components)[0] ?? "")?.[1])))];
+          say(`Waiting for ${who.join(", ")} to choose a starting technology`);
+          continue;
+        }
+        if (quietFor < 6 * SECOND || !again(deal)) continue;
+        pressed.set(deal.id, Date.now());
+        say("Everyone is set up: dealing secret objectives");
+        await this.pressAs(job, deal, "deal2SOToAll");
+        continue;
+      }
+
+      const reveal = latest("startOfGameObjReveal");
+      if (reveal) {
+        const players = this.realPlayers(web);
+        const keeping = players.filter((p: Json) => Number(p.soCount ?? 0) > 1);
+        if (keeping.length) {
+          say(`Waiting for ${keeping.map((p: Json) => p.userName).join(", ")} to keep a secret objective`);
+          continue;
+        }
+        if (quietFor < 4 * SECOND || !again(reveal)) continue;
+        pressed.set(reveal.id, Date.now());
+        say("Everyone kept a secret objective: revealing objectives and starting the strategy phase");
+        await this.pressAs(job, reveal, "startOfGameObjReveal");
+      }
+    }
+  }
+
+  /**
+   * After a restart: solo games (one person, the other seats autopilot) still being set up get their steward back.
+   */
+  async resumeStewards() {
+    await this.waitFor({ kind: "solo", user_id: "", bots: [], others: [], state: "setting_up", step: "", started_at: "", updated_at: "", log: [] }, "the game server", 30 * 60 * SECOND, () => this.hub.gateway.botReady || undefined).catch(() => undefined);
+    const seats = Object.values(this.store.state.seats);
+    const autopilot = new Set(seats.filter((x) => x.autopilot).map((x) => x.user_id));
+    for (const ch of this.actionsChannels()) {
+      const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
+      if (this.jobs.has(game)) continue;
+      const web = await this.webData(game);
+      if (!web || !String(web.gameState?.phase ?? "").startsWith("setup")) continue;
+      const draft = await this.draft(game);
+      if (!draft || draft.status !== "finished") continue;
+      const ids = this.realPlayers(web).map((p: Json) => String(p.discordId));
+      const humans = ids.filter((id: string) => !autopilot.has(id));
+      if (humans.length !== 1 || ids.length < 2) continue;
+      const now = new Date().toISOString();
+      const job: SoloJob = { game, kind: "solo", user_id: humans[0], bots: [], others: ids.filter((id: string) => id !== humans[0]), state: "drafting", step: "Resuming setup", started_at: now, updated_at: now, log: [] };
+      this.jobs.set(game, job);
+      this.note(job, "Resuming setup after a restart");
+      void this.steward(job, ch.id).catch((e) => log.warn(`solo ${game}: steward stopped: ${(e as Error).message}`));
+    }
+  }
+
+  /** Presses a button as the job's human through a short-lived virtual client of their seat. */
+  private async pressAs(job: SoloJob, msg: StoredMessage, customId: string) {
+    const p = new Player(this.clients, job.user_id);
+    try {
+      const err = await p.click(msg, customId);
+      if (err) this.note(job, `${customId}: ${err}`);
+    } finally {
+      p.close();
+    }
+  }
+
+  /** Every bot message of a game the user can see: its actions channel, table talk and threads. */
+  private gameMessages(game: string, userId: string): StoredMessage[] {
+    const s = this.store.state;
+    const out: StoredMessage[] = [];
+    for (const ch of Object.values(s.channels)) {
+      const name = String(ch.name ?? "");
+      if (!name.startsWith(`${game}-`) && !name.includes(`-${game}-`)) continue;
+      if (!this.store.canView(userId, ch.id)) continue;
+      for (const m of this.store.messages(ch.id)) if (visible(m, userId) && s.users[m.author?.id]?.bot) out.push(m);
+    }
+    return out;
+  }
+
+  /** When the newest message in any of the game's channels was posted (or edited). */
+  private lastActivity(game: string): number {
+    let last = 0;
+    for (const ch of Object.values(this.store.state.channels)) {
+      const name = String(ch.name ?? "");
+      if (!name.startsWith(`${game}-`) && !name.includes(`-${game}-`)) continue;
+      const list = this.store.messages(ch.id);
+      const m = list[list.length - 1];
+      if (!m) continue;
+      last = Math.max(last, Date.parse(m.edited_timestamp ?? m.timestamp) || 0, Date.parse(m.timestamp) || 0);
+    }
+    return last;
+  }
+
+  private realPlayers(web: Json): Json[] {
+    return (web.playerData ?? []).filter((p: Json) => p.discordId && p.faction && p.faction !== "null" && p.faction !== "neutral");
+  }
+
+  private factionName(web: Json, faction: string | undefined) {
+    const p = this.realPlayers(web).find((x: Json) => x.faction === faction || (faction === "keleres" && String(x.faction).startsWith("keleres")));
+    return String(p?.userName ?? faction ?? "a player");
+  }
+
+  private async webData(game: string): Promise<Json | null> {
+    try {
+      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`);
+      return res.ok ? ((await res.json()) as Json) : null;
+    } catch {
+      return null;
     }
   }
 

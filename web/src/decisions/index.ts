@@ -17,3 +17,5 @@ export { usePendingPrompts, selectPending } from "./detect/pending";
 export type { PendingPrompt, PendingReason } from "./detect/pending";
 export { classify } from "./model/classify";
 export type { Decision, DecisionKind } from "./model/classify";
+export { useSetupWaiting, setupWaiting } from "./detect/waiting";
+export type { SetupWaiting } from "./detect/waiting";

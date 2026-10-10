@@ -23,6 +23,8 @@ export type DecisionKind =
   | "reaction"
   | "scoring"
   | "status"
+  | "setup"
+  | "secretDiscard"
   | "generic";
 
 export type AgendaInfo = {
@@ -67,6 +69,10 @@ export type Decision = {
   steps?: Decision[];
   /** Can be answered ahead of time but nothing waits on it yet (pre-declining a card): listed last. */
   optional?: boolean;
+  /** A table-wide step anyone may take (deal secret objectives, start round 1): listed after my own choices. */
+  table?: boolean;
+  /** Part of setting the game up (starting technology, which secret objective to keep). */
+  setup?: boolean;
 };
 
 export type ClassifyContext = {
@@ -229,6 +235,22 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     choices,
   };
 
+  if (prompt.reason === "table" || has(choices, /^(deal2SOToAll|startOfGameObjReveal|startOfGameStrategyPhase)$/)) {
+    return { ...base, ...tableSetup(choices), kind: "setup", eyebrow: "Game setup · for the whole table", table: true, setup: true };
+  }
+  if (prompt.reason === "setup" || has(choices, /^(discardSecret_|SODISCARD_)\d+/)) {
+    const round1 = !ctx.web?.gameRound || ctx.web.gameRound <= 1;
+    return {
+      ...base,
+      kind: "secretDiscard",
+      eyebrow: round1 ? "Game setup" : "",
+      title: choices.filter((c) => /^(discardSecret_|SODISCARD_)/.test(baseId(c.customId))).length === 2 ? "Keep one secret objective" : "Discard a secret objective",
+      text: round1
+        ? "You were dealt two secret objectives. Keep one — it stays hidden in your hand until you score it — and discard the other."
+        : "You hold more secret objectives than you may keep. Choose one to discard.",
+      setup: round1,
+    };
+  }
   if (has(choices, /^sandbagPref_/)) {
     return {
       ...base,
@@ -315,6 +337,17 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     };
   }
   if (has(choices, /^getTech_/)) {
+    const freeAtStart = has(choices, /__noPay__comp$/) && !ctx.web?.strategyCards?.some((sc) => sc.played) && (ctx.web?.gameRound ?? 1) <= 1;
+    if (/starting tech/i.test(m.content) || freeAtStart) {
+      return {
+        ...base,
+        kind: "tech",
+        eyebrow: "Game setup",
+        title: "Choose your starting technology",
+        text: "Your faction starts the game with one of these technologies, for free.",
+        setup: true,
+      };
+    }
     return { ...base, kind: "tech", title: "Research a technology" };
   }
   if (prompt.ownCall && has(choices, ID.scFollow)) {
@@ -378,6 +411,23 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     return { ...base, kind: "status", eyebrow: "", title: "Status phase — tidy up" };
   }
   return { ...base, text: generic.rest };
+}
+
+/** Friendly copy for the table-wide setup buttons the bot addresses to nobody. */
+function tableSetup(choices: Choice[]): { title: string; text: string } {
+  if (has(choices, /^deal2SOToAll$/)) {
+    return {
+      title: "Everyone's set up — deal secret objectives",
+      text: "Once every player has their starting technology, deal everyone two secret objectives. Anyone at the table can press this; it only needs pressing once.",
+    };
+  }
+  if (has(choices, /^startOfGameObjReveal$/)) {
+    return {
+      title: "Start the game",
+      text: "When everyone has kept one secret objective, reveal the first public objectives and begin the strategy phase. Anyone at the table can press this.",
+    };
+  }
+  return { title: "Start the strategy phase", text: "Setup is done: begin round 1. Anyone at the table can press this." };
 }
 
 function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean) {

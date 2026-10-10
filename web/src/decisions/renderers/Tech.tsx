@@ -38,7 +38,7 @@ export function TechBody({ d, data, onPress, pendingKey }: RendererProps) {
   return (
     <div className={classes.stack}>
       <p className={classes.hint}>
-        {data.me ? `${data.me.resources} resources ready, ${data.me.tg} TG. ` : ""}Pick one to read it.
+        {d.setup ? `${d.text} ` : data.me ? `${data.me.resources} resources ready, ${data.me.tg} TG. ` : ""}Pick one to read it.
       </p>
       <div className={classes.techList} role="listbox" aria-label="Technologies">
         {offered.map(({ c, tech }) => (
@@ -68,7 +68,7 @@ export function TechBody({ d, data, onPress, pendingKey }: RendererProps) {
           </p>
           <UnstyledButton className={classes.bigConfirm} disabled={!!pendingKey} onClick={() => onPress(current.c)}>
             {pendingKey === current.c.key ? <Loader size={16} color="currentColor" /> : null}
-            Research {current.tech?.name ?? current.c.label}
+            {d.setup ? "Start with" : "Research"} {current.tech?.name ?? current.c.label}
           </UnstyledButton>
         </>
       )}

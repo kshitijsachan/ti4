@@ -224,3 +224,35 @@
   font-size: 12px;
   font-weight: 500;
 }
+
+/* "Waiting for Bot Beta to choose a starting technology…" while the table is set up. */
+.waitingPill {
+  border-color: rgba(255, 255, 255, 0.16);
+  font-weight: 500;
+  color: var(--play-ink);
+}
+
+.waitingPill:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.waitingDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--play-ink-muted);
+  animation: waitingPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes waitingPulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waitingDot {
+    animation: none;
+  }
+}
