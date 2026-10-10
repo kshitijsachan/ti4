@@ -28,9 +28,21 @@ export function liveIntervals(rewinds: readonly Rewind[], now = Number.POSITIVE_
       break;
     }
     out.push([r.at, x]);
-    x = Math.min(r.toSavedAt + SLACK_MS, r.at - 1);
+    x = Math.min(liveUntil(r), r.at - 1);
   }
   return out.reverse();
+}
+
+/**
+ * The last moment whose events still belong to a roll-back's target save. Late messages of the target action
+ * (`SLACK_MS`) do, and so do messages that came after it but long before the next (deleted) save, such as the bot's
+ * "X started turn N" right after an End Turn: `saveAfter` maps those to the target save, so rewinding "to just after"
+ * them must not grey them out. Without the deleted save times (older journal lines) only the slack applies.
+ */
+function liveUntil(r: Rewind): number {
+  const next = Math.min(...(r.lostSavedAt ?? []).filter((t) => t > r.toSavedAt));
+  const quiet = Number.isFinite(next) ? next - ATTACH_MS - 1 : Number.NEGATIVE_INFINITY;
+  return Math.max(r.toSavedAt + SLACK_MS, quiet);
 }
 
 function latestAtOrBefore(sorted: readonly Rewind[], x: number): Rewind | undefined {

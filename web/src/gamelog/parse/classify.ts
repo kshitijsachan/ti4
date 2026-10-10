@@ -256,7 +256,12 @@ const rules: Rule[] = [
     const rw = rest.match(/rewound the game to just after: \*\*(.+?)\*\*/);
     if (rw) return ev({ kind: "edit", importance: 3, actor: hit?.actor, summary: [txt("rewound the game to just after "), b(rw[1])] });
     const un = rest.match(/undid: \*\*(.+?)\*\*/);
-    if (un) return ev({ kind: "edit", importance: 2, actor: hit?.actor, summary: [txt("undid "), b(un[1])] });
+    if (un) {
+      // Undoing a rewind: the undone step is the rewind notice itself ("⏪ Solo rewound the game to: …").
+      const rewind = un[1].match(/rewound the game to(?: just after)?:?\s*(.+)$/);
+      if (rewind) return ev({ kind: "edit", importance: 2, actor: hit?.actor, summary: [txt("undid the rewind to "), b(rewind[1])] });
+      return ev({ kind: "edit", importance: 2, actor: hit?.actor, summary: [txt("undid "), b(un[1])] });
+    }
     return null;
   },
 

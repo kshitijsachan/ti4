@@ -27,7 +27,20 @@ const shot = (name) =>
 const t0 = Date.now();
 const say = (s) => console.log(`[${tag} +${((Date.now() - t0) / 1000).toFixed(0)}s] ${s}`);
 
-const me = await (await fetch(`${base}/app/me?token=${token}`)).json();
+// The shim restarts while other work lands; retry JSON fetches through a restart instead of failing the run.
+const getJson = async (url) => {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (r.ok || i >= 30) return await r.json();
+    } catch (e) {
+      if (i >= 30) throw e;
+    }
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+};
+
+const me = await getJson(`${base}/app/me?token=${token}`);
 const myId = me.user.id;
 
 await page.goto(`${base}/play?t=${token}`, { waitUntil: "domcontentloaded" });
@@ -60,7 +73,7 @@ await page.waitForTimeout(5000);
 await shot("3-draft");
 
 const draft = async () =>
-  (await fetch(`${base}/bot/api/public/game/${game}/draft`)).json();
+  getJson(`${base}/bot/api/public/game/${game}/draft`);
 
 let picks = 0;
 const deadline = Date.now() + 15 * 60000;
@@ -106,7 +119,7 @@ await shot("5-after-draft");
 
 // After the draft: answer only the decisions that are the human's own; the table-wide setup steps are the
 // orchestrator's. Stop once the human picked a strategy card (or the action phase began).
-const web = async () => (await fetch(`${base}/bot/api/public/game/${game}/web-data`)).json();
+const web = () => getJson(`${base}/bot/api/public/game/${game}/web-data`);
 const seen = [];
 let n = 0;
 const end2 = Date.now() + 20 * 60000;
@@ -161,5 +174,10 @@ while (Date.now() < end2 && !done) {
 await shot("8-end");
 const w = await web();
 const factions = w.playerData.map((p) => `${p.userName}:${p.faction}`).join(", ");
-console.log(JSON.stringify({ game, picks, phase: w.gameState?.phase, done, decisions: seen, factions, problems: problems.slice(0, 10) }));
+const noTech = w.playerData.filter((p) => p.faction && !(p.techs?.length)).map((p) => p.userName);
+console.log(JSON.stringify({ game, picks, phase: w.gameState?.phase, done, decisions: seen, factions, noTech, problems: problems.slice(0, 10) }));
 await browser.close();
+if (!done || noTech.length) {
+  console.error(`REGRESSION FAILED: ${!done ? "never reached the strategy phase" : `no starting technology: ${noTech.join(", ")}`}`);
+  process.exit(1);
+}

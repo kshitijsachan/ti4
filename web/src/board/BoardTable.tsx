@@ -12,7 +12,8 @@ import { shouldHideZoomControls, computeMapZoom } from "@/utils/zoom";
 import { useMapTooltips } from "@/domains/map/components/hooks/useMapTooltips";
 import { ReconnectButton } from "@/domains/map/components/renderer/ReconnectButton";
 import { getMapLayoutConfig } from "@/domains/map/components/mapLayout";
-import { useMapKeyboardShortcuts } from "@/domains/map/components/hooks/useMapKeyboardShortcuts";
+import { useBoardShortcuts } from "@/domains/map/components/hooks/useBoardShortcuts";
+import { MapLensChip } from "@/domains/map/components/MapLensChip";
 import { useScrollToReplayHighlight } from "@/hooks/useScrollToReplayHighlight";
 import {
   calculateStatTilePositions,
@@ -259,8 +260,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
   const gameDataState = useGameDataState();
   useDragScroll();
 
-  const { selectedArea, tooltipUnit, handleAreaSelect, handleMouseEnter, handleMouseLeave, handleMouseDown } =
-    useTabsAndTooltips();
+  const { tooltipUnit, handleMouseEnter, handleMouseLeave, handleMouseDown } = useTabsAndTooltips();
   const { tooltipPlanet, handlePlanetMouseEnter, handlePlanetMouseLeave, handleUnitMouseEnter, handleUnitMouseLeave } =
     useMapTooltips(handleMouseEnter, handleMouseLeave);
 
@@ -268,8 +268,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
   const handleZoomIn = useAppStore((s) => s.handleZoomIn);
   const handleZoomOut = useAppStore((s) => s.handleZoomOut);
   const handleZoomFitToWidth = useAppStore((s) => s.handleZoomFitToWidth);
-  const settings = useSettingsStore((s) => s.settings);
-  const handlers = useSettingsStore((s) => s.handlers);
+  const isFirefox = useSettingsStore((s) => s.settings.isFirefox);
 
   const mapLayout = getMapLayoutConfig("pannable");
   const contentSize = useMapContentSize("pannable");
@@ -324,12 +323,16 @@ export function BoardTable({ gameName, docked = false }: Props) {
       });
     });
   };
+  /** Down the ladder; the step that would reach (or can't go below) the fit returns to the fitted view. */
   const zoomOut = () => {
     if (useFit) return;
     handleZoomOut();
+    const next = useAppStore.getState().zoomLevel;
+    if (next === storeZoom || next <= fitZoom) setFitted(true);
   };
+  const fitBoard = () => setFitted(true);
 
-  useMapKeyboardShortcuts({ handlers, settings, handleZoomIn, handleZoomOut, handleAreaSelect, selectedArea });
+  useBoardShortcuts({ zoomIn, zoomOut, fit: fitBoard });
   useScrollToReplayHighlight(containerRef);
   useFocusReveal(containerRef);
 
@@ -340,7 +343,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
           <InteractiveMapRenderer
             mapLayoutConfig={mapLayout}
             zoom={zoom}
-            isFirefox={settings.isFirefox}
+            isFirefox={isFirefox}
             contentSize={contentSize}
             layoutWidthOverride={placement.width}
             layoutHeightOverride={placement.height}
@@ -359,15 +362,16 @@ export function BoardTable({ gameName, docked = false }: Props) {
           />
         )}
       </div>
+      <MapLensChip />
       {!shouldHideZoomControls() && (
         <div className={classes.zoom}>
-          <ZoomButton label="Zoom in" onClick={zoomIn} disabled={!useFit && storeZoom >= 2}>
+          <ZoomButton label="Zoom in (+)" onClick={zoomIn} disabled={!useFit && storeZoom >= 2}>
             <IconPlus size={14} stroke={1.8} />
           </ZoomButton>
-          <ZoomButton label="Zoom out" onClick={zoomOut} disabled={useFit}>
+          <ZoomButton label="Zoom out (−)" onClick={zoomOut} disabled={useFit}>
             <IconMinus size={14} stroke={1.8} />
           </ZoomButton>
-          <ZoomButton label="Fit the board" onClick={() => setFitted(true)} disabled={useFit}>
+          <ZoomButton label="Fit the board (0)" onClick={fitBoard} disabled={useFit}>
             <IconArrowsMinimize size={14} stroke={1.8} />
           </ZoomButton>
         </div>

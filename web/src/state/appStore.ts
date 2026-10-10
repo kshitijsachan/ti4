@@ -84,8 +84,39 @@ function resolveControlTokenDisplayMode(
   return stored.showControlTokens ? "always" : "empty";
 }
 
+/** The map highlights: each dims every system that lacks the thing, so only one is on at a time. */
+export const MAP_LENSES = [
+  { key: "planetTypesMode", label: "Planet types", shortcut: "y" },
+  { key: "techSkipsMode", label: "Tech skips", shortcut: "t" },
+  { key: "attachmentsMode", label: "Attachments", shortcut: "a" },
+  { key: "showPDSLayer", label: "PDS coverage", shortcut: "p" },
+] as const;
+
+export type MapLensKey = (typeof MAP_LENSES)[number]["key"];
+
+const ALL_LENSES_OFF = Object.fromEntries(
+  MAP_LENSES.map((lens) => [lens.key, false]),
+) as Record<MapLensKey, false>;
+
+/** The highlight currently dimming the map, if any. */
+export function activeMapLens(settings: Settings) {
+  return MAP_LENSES.find((lens) => settings[lens.key]) ?? null;
+}
+
+/**
+ * Not remembered across reloads: open dialogs, the browser sniff, and the map highlights (a highlight
+ * left on dims most of the board, and a fresh visit should show the board as it is).
+ */
+const TRANSIENT_KEYS: (keyof Settings)[] = [
+  "isFirefox",
+  "settingsModalOpened",
+  "keyboardShortcutsModalOpened",
+  ...MAP_LENSES.map((lens) => lens.key),
+];
+
 function loadSettingsFromStorage(): Settings {
   const stored = readStoredObject(STORAGE_KEY);
+  for (const key of TRANSIENT_KEYS) delete stored?.[key];
   return {
     ...mergeStoredSettings(stored, DEFAULT_SETTINGS),
     controlTokenDisplayMode: resolveControlTokenDisplayMode(stored),
@@ -93,7 +124,9 @@ function loadSettingsFromStorage(): Settings {
 }
 
 function saveSettingsToStorage(settings: Settings) {
-  saveJsonSettings<Settings>(STORAGE_KEY, settings);
+  const kept: Partial<Settings> = { ...settings };
+  for (const key of TRANSIENT_KEYS) delete kept[key];
+  saveJsonSettings(STORAGE_KEY, kept);
 }
 
 function loadThemeFromStorage(): ThemeName {
@@ -253,6 +286,8 @@ type SettingsHandlers = {
   toggleTechSkipsMode: () => void;
   toggleAttachmentsMode: () => void;
   togglePdsMode: () => void;
+  /** Turns one highlight on (and every other off), or all off with null. */
+  setMapLens: (lens: MapLensKey | null) => void;
   toggleShowControlLayer: () => void;
   toggleShowExhaustedPlanets: () => void;
   setThemeName: (name: Settings["themeName"]) => void;
@@ -279,6 +314,14 @@ export const useSettingsStore = create<SettingsStore>((set) => {
   const toggle = (key: BooleanSettingKey) => () =>
     persist((current) => ({ [key]: !current[key] }));
 
+  const setMapLens = (lens: MapLensKey | null) =>
+    persist(() => (lens ? { ...ALL_LENSES_OFF, [lens]: true } : ALL_LENSES_OFF));
+
+  const toggleLens = (lens: MapLensKey) => () =>
+    persist((current) =>
+      current[lens] ? { [lens]: false } : { ...ALL_LENSES_OFF, [lens]: true },
+    );
+
   return {
     settings: {
       ...loadSettingsFromStorage(),
@@ -298,10 +341,11 @@ export const useSettingsStore = create<SettingsStore>((set) => {
       toggleLeftPanelCollapsed: toggle("leftPanelCollapsed"),
       toggleRightPanelCollapsed: toggle("rightPanelCollapsed"),
       toggleOverlays: toggle("overlaysEnabled"),
-      togglePlanetTypesMode: toggle("planetTypesMode"),
-      toggleTechSkipsMode: toggle("techSkipsMode"),
-      toggleAttachmentsMode: toggle("attachmentsMode"),
-      togglePdsMode: toggle("showPDSLayer"),
+      togglePlanetTypesMode: toggleLens("planetTypesMode"),
+      toggleTechSkipsMode: toggleLens("techSkipsMode"),
+      toggleAttachmentsMode: toggleLens("attachmentsMode"),
+      togglePdsMode: toggleLens("showPDSLayer"),
+      setMapLens,
       toggleShowControlLayer: toggle("showControlLayer"),
       toggleShowExhaustedPlanets: toggle("showExhaustedPlanets"),
       setThemeName: (name) => {

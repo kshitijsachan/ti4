@@ -91,16 +91,17 @@ export const MapTile = React.memo<Props>(
 
     const controllingFaction = mapTile.controlledBy;
 
+    const anyTile = (match: (tile: TileType) => boolean) =>
+      Object.values(gameData?.tiles ?? {}).some(match);
+
     const getTileOpacity = () => {
-      if (techSkipsMode && attachmentsMode) {
-        return mapTile.hasTechSkips && mapTile.hasAttachments ? 1 : 0.2;
-      }
-      if (techSkipsMode) return mapTile.hasTechSkips ? 1 : 0.2;
-      if (attachmentsMode) return mapTile.hasAttachments ? 1 : 0.2;
+      // A highlight with nothing to show leaves the board alone (the lens chip says "none on the map").
+      if (techSkipsMode && anyTile((t) => t.hasTechSkips)) return mapTile.hasTechSkips ? 1 : 0.2;
+      if (attachmentsMode && anyTile((t) => t.hasAttachments)) return mapTile.hasAttachments ? 1 : 0.2;
       if (planetTypesMode) {
         return Object.values(mapTile.planets).length > 0 ? 1 : 0.2;
       }
-      if (pdsMode && gameData?.tilesWithPds) {
+      if (pdsMode && gameData?.tilesWithPds?.size) {
         return gameData.tilesWithPds.has(ringPosition) ? 1 : 0.2;
       }
       if (overlaysEnabled && !controllingFaction) return 0.7;

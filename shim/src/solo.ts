@@ -172,21 +172,7 @@ export class SoloGames {
       const settings = await this.waitFor(job, "the draft settings", 60 * SECOND, () =>
         this.newer(actionsId, sinceMilty, userId).find((m) => hasControl(m, /^jmfA_main_startMilty$/)),
       );
-      if (factions.length) {
-        // Prioritised factions (test games for particular factions): the settings menu's "Prioritize faction" list,
-        // answered as its selection box would be.
-        this.note(job, `Prioritising ${factions.join(", ")}`);
-        const err = await p.op({
-          op: "select",
-          channel_id: actionsId,
-          message_id: settings.id,
-          custom_id: "jmfA_main.players_includePriFactions_0",
-          values: factions,
-          component_type: 3,
-        });
-        if (err) this.note(job, `Prioritising factions: ${err}`);
-        await sleep(1500);
-      }
+      if (factions.length) await this.prioritise(job, p, actionsId, settings, factions);
       this.note(job, "Starting the draft with default settings");
       await this.retry(job, "Start Draft", () => p.click(settings, "jmfA_main_startMilty"));
 
@@ -198,6 +184,42 @@ export class SoloGames {
     } catch (e) {
       this.fail(job, e);
     }
+  }
+
+  /**
+   * Test games for particular factions: puts them on the Milty settings' "Prioritized factions" list the way a person
+   * would (Players and Factions page → "Prioritize faction" → the selection boxes it offers), then returns to the main
+   * page. The bot only accepts selections from selection boxes it posted, hence the round trip.
+   */
+  private async prioritise(job: SoloJob, p: Player, actionsId: string, settings: StoredMessage, factions: string[]) {
+    this.note(job, `Prioritising ${factions.join(", ")}`);
+    const left = new Set(factions);
+    try {
+      await this.retry(job, "the Players and Factions settings", () => p.click(settings, "jmfN_main.players_0"));
+      await this.waitFor(job, "the Players and Factions page", 15 * SECOND, () => hasControl(this.store.findMessage(actionsId, settings.id) ?? settings, "jmfA_main.players_includePriFactions") || undefined);
+      for (let round = 0; left.size && round < 4; round++) {
+        const since = this.lastId(actionsId);
+        const page = this.store.findMessage(actionsId, settings.id) ?? settings;
+        const err = await p.click(page, "jmfA_main.players_includePriFactions");
+        if (err) throw new Error(err);
+        const boxes = await this.waitFor(job, "the faction selection boxes", 15 * SECOND, () =>
+          this.newer(actionsId, since, job.user_id).find((m) => m._ephemeral_for === job.user_id && selects(m).length),
+        );
+        const box = selects(boxes).find((x) => x.values.some((v) => left.has(v)));
+        if (!box) break;
+        const values = box.values.filter((v) => left.has(v));
+        const e2 = await p.op({ op: "select", channel_id: actionsId, message_id: boxes.id, custom_id: box.custom_id, values, component_type: 3 });
+        if (e2) throw new Error(e2);
+        values.forEach((v) => left.delete(v));
+        await sleep(800);
+      }
+      if (left.size) this.note(job, `Not offered by the settings: ${[...left].join(", ")}`);
+    } catch (e) {
+      this.note(job, `Prioritising factions failed: ${(e as Error).message}`);
+    }
+    const page = this.store.findMessage(actionsId, settings.id) ?? settings;
+    if (hasControl(page, "jmfN_main_0")) await p.click(page, "jmfN_main_0");
+    await this.waitFor(job, "the main settings page", 15 * SECOND, () => hasControl(this.store.findMessage(actionsId, settings.id) ?? settings, "jmfA_main_startMilty") || undefined).catch(() => undefined);
   }
 
   /**
@@ -290,9 +312,11 @@ export class SoloGames {
       if (this.jobs.has(game)) continue;
       const web = await this.webData(game);
       if (!web || !String(web.gameState?.phase ?? "").startsWith("setup")) continue;
+      // Games still drafting too: a restart mid-draft must not leave the game without its steward.
       const draft = await this.draft(game);
-      if (!draft || draft.status !== "finished") continue;
-      const ids = this.realPlayers(web).map((p: Json) => String(p.discordId));
+      if (!draft || (draft.status !== "finished" && draft.status !== "drafting")) continue;
+      let ids: string[] = this.realPlayers(web).map((p: Json) => String(p.discordId));
+      if (!ids.length) ids = (draft.players ?? []).map((p: Json) => String(p.userId)).filter((id: string) => id && id !== "null");
       const humans = ids.filter((id: string) => !autopilot.has(id));
       // Every game in setup gets a steward (solo or with friends): it presses the table-wide steps as a person seated
       // at the table once everyone is ready, so nobody has to.
@@ -522,6 +546,20 @@ function controlIds(components: Json[] | undefined): string[] {
   };
   walk(components);
   return ids;
+}
+
+/** A message's string selection boxes and their option values. */
+function selects(m: StoredMessage): { custom_id: string; values: string[] }[] {
+  const out: { custom_id: string; values: string[] }[] = [];
+  const walk = (list: Json[] | undefined) => {
+    for (const c of list ?? []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.type === 3 && c.custom_id && !c.disabled) out.push({ custom_id: String(c.custom_id), values: (c.options ?? []).map((o: Json) => String(o.value)) });
+      walk(c.components);
+    }
+  };
+  walk(m.components);
+  return out;
 }
 
 function hasControl(m: StoredMessage, id: string | RegExp) {

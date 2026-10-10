@@ -27,7 +27,7 @@
   padding: 2px;
   border-radius: 8px;
   background: var(--panel-field-strip);
-  opacity: 0.55;
+  opacity: 0.8;
   transition: opacity 0.15s ease;
 }
 

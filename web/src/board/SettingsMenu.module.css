@@ -21,3 +21,59 @@
 .swatches > * {
   margin: 0 !important;
 }
+
+.subLabel {
+  padding-top: 2px;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.radio {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin: 1px;
+  border: 1.5px solid var(--mantine-color-gray-6);
+  border-radius: 50%;
+}
+
+.radio[data-on] {
+  border-color: var(--mantine-color-blue-4);
+  background: radial-gradient(circle, var(--mantine-color-blue-4) 0 3px, transparent 3.5px);
+}
+
+.right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.count {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--mantine-color-gray-6);
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--mantine-color-dark-4);
+  border-radius: 4px;
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--mantine-color-gray-5);
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--mantine-color-gray-6);
+}
+
+.advanced {
+  color: var(--mantine-color-gray-5);
+}

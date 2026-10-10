@@ -1,18 +1,19 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Menu, UnstyledButton } from "@mantine/core";
 import {
   IconAdjustments,
-  IconBell,
-  IconBellOff,
   IconCheck,
+  IconChevronDown,
+  IconChevronRight,
   IconHash,
   IconKeyboard,
   IconLayoutGrid,
   IconSettings,
 } from "@tabler/icons-react";
 import { ThemeSwatches } from "@/domains/game-shell/components/TabsControls/ThemeSwatches";
-import { useSettingsStore } from "@/state/appStore";
+import { useMapLensCounts } from "@/domains/map/components/hooks/useMapLensCounts";
+import { MAP_LENSES, useSettingsStore } from "@/state/appStore";
 import { alertsEnabled, disableAlerts, enableAlerts } from "@/play/turn";
 import classes from "./SettingsMenu.module.css";
 
@@ -22,32 +23,46 @@ function Check({ on }: { on: boolean }) {
   return <IconCheck size={14} style={{ visibility: on ? "visible" : "hidden" }} />;
 }
 
-/** Everything that isn't part of playing: look and feel, map layers, the raw bot view. */
+function Radio({ on }: { on: boolean }) {
+  return <span className={classes.radio} data-on={on || undefined} />;
+}
+
+function Key({ children }: { children: ReactNode }) {
+  return <kbd className={classes.key}>{children}</kbd>;
+}
+
+type AlertState = "on" | "off" | "blocked" | "unsupported";
+
+function readAlertState(): AlertState {
+  if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+  if (Notification.permission === "denied") return "blocked";
+  return alertsEnabled() ? "on" : "off";
+}
+
+/** Look and feel, map layers and highlights, turn alerts; the raw bot view and finer display options under Advanced. */
 export function SettingsMenu({ onRawChannels }: Props) {
   const navigate = useNavigate();
   const settings = useSettingsStore((s) => s.settings);
   const handlers = useSettingsStore((s) => s.handlers);
-  const [alerts, setAlerts] = useState(alertsEnabled);
-
-  const layers = [
-    { label: "Control overlays", on: settings.overlaysEnabled, toggle: handlers.toggleOverlays },
-    { label: "Planet types", on: settings.planetTypesMode, toggle: handlers.togglePlanetTypesMode },
-    { label: "Tech skips", on: settings.techSkipsMode, toggle: handlers.toggleTechSkipsMode },
-    { label: "Attachments", on: settings.attachmentsMode, toggle: handlers.toggleAttachmentsMode },
-    { label: "PDS coverage", on: settings.showPDSLayer, toggle: handlers.togglePdsMode },
-  ];
+  const lensCounts = useMapLensCounts();
+  const [alerts, setAlerts] = useState(readAlertState);
+  const [advanced, setAdvanced] = useState(false);
 
   const toggleAlerts = async () => {
-    if (alerts) {
+    if (alerts === "on") {
       disableAlerts();
-      setAlerts(false);
+      setAlerts("off");
       return;
     }
-    setAlerts(await enableAlerts());
+    await enableAlerts();
+    setAlerts(readAlertState());
   };
 
+  const toggleLens = (key: (typeof MAP_LENSES)[number]["key"]) =>
+    handlers.setMapLens(settings[key] ? null : key);
+
   return (
-    <Menu position="bottom-end" width={250} shadow="md" closeOnItemClick={false} zIndex={3300}>
+    <Menu position="bottom-end" width={264} shadow="md" closeOnItemClick={false} zIndex={3300}>
       <Menu.Target>
         <UnstyledButton className={classes.trigger} aria-label="Settings">
           <IconSettings size={18} />
@@ -59,19 +74,50 @@ export function SettingsMenu({ onRawChannels }: Props) {
           <ThemeSwatches />
         </div>
         <Menu.Divider />
-        <Menu.Label>Map layers</Menu.Label>
-        {layers.map((layer) => (
-          <Menu.Item key={layer.label} leftSection={<Check on={layer.on} />} onClick={layer.toggle}>
-            {layer.label}
-          </Menu.Item>
-        ))}
+        <Menu.Label>Map</Menu.Label>
         <Menu.Item
-          leftSection={<IconAdjustments size={14} />}
-          onClick={() => handlers.setSettingsModalOpened(true)}
-          closeMenuOnClick
+          leftSection={<Check on={settings.overlaysEnabled} />}
+          rightSection={<Key>O</Key>}
+          onClick={handlers.toggleOverlays}
         >
-          More display settings…
+          Control overlays
         </Menu.Item>
+        <Menu.Label className={classes.subLabel}>Highlight · one at a time</Menu.Label>
+        {MAP_LENSES.map((lens) => {
+          const count = lensCounts[lens.key];
+          const on = settings[lens.key];
+          return (
+            <Menu.Item
+              key={lens.key}
+              leftSection={<Radio on={on} />}
+              rightSection={
+                <span className={classes.right}>
+                  <span className={classes.count}>{count || "none"}</span>
+                  <Key>{lens.shortcut.toUpperCase()}</Key>
+                </span>
+              }
+              disabled={!count && !on}
+              onClick={() => toggleLens(lens.key)}
+            >
+              {lens.label}
+            </Menu.Item>
+          );
+        })}
+        <Menu.Divider />
+        {alerts !== "unsupported" && (
+          <Menu.Item
+            leftSection={<Check on={alerts === "on"} />}
+            disabled={alerts === "blocked"}
+            onClick={() => void toggleAlerts()}
+          >
+            Turn alerts
+            <div className={classes.hint}>
+              {alerts === "blocked"
+                ? "Blocked in this browser's site settings"
+                : "Notify me when it's my move and this tab is hidden"}
+            </div>
+          </Menu.Item>
+        )}
         <Menu.Item
           leftSection={<IconKeyboard size={14} />}
           onClick={() => handlers.setKeyboardShortcutsModalOpened(true)}
@@ -79,20 +125,32 @@ export function SettingsMenu({ onRawChannels }: Props) {
         >
           Keyboard shortcuts
         </Menu.Item>
-        <Menu.Divider />
-        <Menu.Item
-          leftSection={alerts ? <IconBell size={14} /> : <IconBellOff size={14} />}
-          onClick={() => void toggleAlerts()}
-        >
-          {alerts ? "Turn alerts on" : "Turn alerts off"}
-        </Menu.Item>
         <Menu.Item leftSection={<IconLayoutGrid size={14} />} onClick={() => navigate("/play")} closeMenuOnClick>
           All my games
         </Menu.Item>
         <Menu.Divider />
-        <Menu.Item leftSection={<IconHash size={14} />} onClick={onRawChannels} closeMenuOnClick>
-          Advanced: raw bot channels
+        <Menu.Item
+          leftSection={advanced ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+          onClick={() => setAdvanced((v) => !v)}
+          aria-expanded={advanced}
+          className={classes.advanced}
+        >
+          Advanced
         </Menu.Item>
+        {advanced && (
+          <>
+            <Menu.Item
+              leftSection={<IconAdjustments size={14} />}
+              onClick={() => handlers.setSettingsModalOpened(true)}
+              closeMenuOnClick
+            >
+              Display options…
+            </Menu.Item>
+            <Menu.Item leftSection={<IconHash size={14} />} onClick={onRawChannels} closeMenuOnClick>
+              Raw bot channels
+            </Menu.Item>
+          </>
+        )}
       </Menu.Dropdown>
     </Menu>
   );

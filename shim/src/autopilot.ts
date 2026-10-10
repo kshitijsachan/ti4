@@ -49,6 +49,12 @@ type Rule = {
   again?: boolean;
   /** Ranks matching controls (lower first). */
   rank?: (c: Control) => number;
+  /**
+   * Only while the game is in a matching phase (the bot's web-data phase, e.g. `status.homework`). Table windows stay
+   * on the table after their phase ends, and the bot acts on a late press anyway: a "Ready For Strategy Phase" pressed
+   * in the next action phase ends that round on the spot.
+   */
+  phase?: RegExp;
 };
 
 /** Strategy cards an autopilot likes, best first (1 Leadership, 7 Technology, 8 Imperial, 6 Warfare, ...). */
@@ -56,7 +62,7 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow)|^score|_score|^po_scoring|^get_so_)/i;
+  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_)/i;
 const BLOCKED_LABEL = /^(undo|un-|unqueue|spend|exhaust|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -87,6 +93,8 @@ const RULES: Rule[] = [
   { id: /_turnEnd$/, score: 88, why: "end turn" },
   { id: /_endOfTurnAbilities$/, score: 87, why: "end turn" },
   { id: /_strategicAction_\d+$/, score: 86, why: "play strategy card" },
+  // Politics primary: someone must get the speaker token before the bot moves on.
+  { id: /^sc_3_assign_speaker_to_/, score: 64, why: "Politics: assign the speaker token" },
   { id: /_passForRound$/, score: 85, why: "pass" },
   { id: /_passingAbilities$/, score: 84, why: "pass" },
   // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
@@ -105,11 +113,11 @@ const RULES: Rule[] = [
   // Reaction windows everyone answers.
   { id: /^sc_no_follow_\d+$/, score: 70, table: true, why: "strategy card: not following" },
   { id: /^no_sabotage$/, score: 70, table: true, why: "no sabotage" },
-  { id: /^no_when$/, score: 70, table: true, why: "agenda: no whens" },
-  { id: /^no_after$/, score: 70, table: true, why: "agenda: no afters" },
-  { id: /^po_no_scoring$/, score: 66, table: true, again: true, why: "status: no public objective" },
-  { id: /^so_no_scoring$/, score: 65, table: true, again: true, why: "status: no secret objective" },
-  { id: /^pass_on_abilities$/, score: 60, table: true, why: "status: ready for strategy phase" },
+  { id: /^no_when(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no whens" },
+  { id: /^no_after(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no afters" },
+  { id: /^po_no_scoring$/, score: 66, table: true, again: true, phase: /^status/, why: "status: no public objective" },
+  { id: /^so_no_scoring$/, score: 65, table: true, again: true, phase: /^status/, why: "status: no secret objective" },
+  { id: /^pass_on_abilities$/, score: 60, table: true, phase: /^status/, why: "status: ready for strategy phase" },
   // Prompts addressed to us: move on.
   {
     label: /^(done|confirm|ready|no\b|decline|skip|pass\b|not following|end turn|continue|finish|none|no thanks)/i,
@@ -196,6 +204,23 @@ export class Autopilot {
     for (const [game, hit] of this.drafts) if (hit.data?.status !== "finished") this.drafts.delete(game);
   }
 
+  private phases = new Map<string, { at: number; phase: string | null }>();
+
+  /** A game's phase from the bot's web data (`strategy`, `action`, `status.scoring`, `agenda.voting`, ...), cached 3s. */
+  async phaseOf(game: string): Promise<string | null> {
+    const hit = this.phases.get(game);
+    if (hit && Date.now() - hit.at < 3000) return hit.phase;
+    let phase: string | null = null;
+    try {
+      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) phase = String(((await res.json()) as Json).gameState?.phase ?? "") || null;
+    } catch {
+      phase = null;
+    }
+    this.phases.set(game, { at: Date.now(), phase });
+    return phase;
+  }
+
   /** Each seat's faction in a game, from the bot's web data (cached; refetched at most every 20s while unknown). */
   async factionOf(game: string, userId: string): Promise<string | undefined> {
     const hit = this.webFactions.get(game);
@@ -255,6 +280,12 @@ class SeatPilot {
   private nudges = new Map<string, number>();
   /** Prompts we reported as having nothing safe to press. */
   private skipped = new Set<string>();
+  /**
+   * Identical prompts that were on the table together when we answered one of them (a faction choosing two starting
+   * technologies gets the same "choose your starting technology" message twice): each is a question of its own, not a
+   * re-post of the one we answered.
+   */
+  private siblings = new Set<string>();
 
   constructor(
     private mgr: Autopilot,
@@ -386,7 +417,8 @@ class SeatPilot {
     const sig = signature(controls);
     const mine = this.answered.get(m.id);
     const press = m._presses?.[me];
-    const repost = this.recent.get(this.promptKey(m, controls));
+    const sibling = this.siblings.has(m.id);
+    const repost = sibling ? undefined : this.recent.get(this.promptKey(m, controls));
     const answeredAt =
       mine?.sig === sig
         ? mine.at
@@ -398,7 +430,7 @@ class SeatPilot {
     // A later nudge in this channel says the bot still waits on us: look at the prompt again.
     const answered = answeredAt !== undefined && !((this.nudges.get(m.channel_id) ?? 0) > answeredAt);
     if (answered && press && !mine && Date.parse(press.at) < this.started) return null;
-    controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`) && !this.pressedRecently(m, c));
+    controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`) && (sibling || !this.pressedRecently(m, c)));
 
     const faction = await this.faction(game, m);
     const content = String(m.content ?? "");
@@ -444,9 +476,16 @@ class SeatPilot {
     // other kind of roll (anti-fighter barrage, bombardment, space cannon) once per combat.
     controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || this.mayRoll(ch.id, c.custom_id, faction));
 
+    let phase: string | null | undefined;
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
       if (answered && !rule.again) continue;
+      // A table window we answered once stays answered, even if the bot edited it since (e.g. after a restart).
+      if (rule.table && !rule.again && press) continue;
+      if (rule.phase) {
+        if (phase === undefined) phase = await this.mgr.phaseOf(game);
+        if (phase && !rule.phase.test(phase)) continue;
+      }
       let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true));
       if (!hits.length) continue;
       if (rule.rank) hits = [...hits].sort((a, b) => rule.rank!(a) - rule.rank!(b));
@@ -456,7 +495,7 @@ class SeatPilot {
     if (!ctx.strong || answered || TAKE_BACK_TEXT.test(content)) return null;
     // A prompt certainly waiting on us that no rule covers: its first control (not one we just chose in a
     // similar prompt here, e.g. a second "choose a technology").
-    const fresh = controls.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= REPOST_MS);
+    const fresh = controls.filter((c) => sibling || Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= REPOST_MS);
     if (!fresh.length) return null;
     controls = fresh;
     return { msg: m, control: controls[0], score: controls.length === 1 ? 25 : 10, why: controls.length === 1 ? "only option" : "first option" };
@@ -590,12 +629,20 @@ class SeatPilot {
     if (!fresh || !controlsOf(fresh.components).some((c) => c.custom_id === control.custom_id)) return;
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
+    if (this.siblings.has(msg.id)) {
+      // Answering the second copy of a prompt starts its follow-ups afresh: they are not re-posts of the first's.
+      for (const k of [...this.recent.keys()]) if (k.startsWith(`${msg.channel_id}:`) && !k.includes(":roll:")) this.recent.delete(k);
+    }
     this.pressed.add(key);
     this.answered.set(msg.id, { sig: signature(controlsOf(fresh.components)), at: Date.now() });
     this.recent.set(`${msg.channel_id}:label:${control.label}`, Date.now());
     const rollKind = /^combatRoll_[^_]+_[^_]+_(\w+)/.exec(control.custom_id)?.[1];
     if (rollKind) this.recent.set(`${msg.channel_id}:roll:${rollKind}`, Date.now());
-    this.recent.set(this.promptKey(fresh, controlsOf(fresh.components)), Date.now());
+    const key0 = this.promptKey(fresh, controlsOf(fresh.components));
+    for (const other of this.store.messages(msg.channel_id)) {
+      if (other.id !== msg.id && (!other._ephemeral_for || other._ephemeral_for === this.userId) && this.promptKey(other, controlsOf(other.components)) === key0) this.siblings.add(other.id);
+    }
+    this.recent.set(key0, Date.now());
     this.recent.set(this.repostKey(msg, control), Date.now());
     this.lastPressed = msg.id;
     const nonce = `autopilot-${++this.nonce}`;

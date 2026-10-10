@@ -42,6 +42,8 @@ export type PendingPrompt = {
   reason: PendingReason;
   /** A table-wide call I made myself (my strategy card): shown once. */
   ownCall?: boolean;
+  /** Presses I made on this prompt so far (own calls whose primary takes more than one press). */
+  presses?: number;
   answered?: boolean;
 };
 
@@ -75,6 +77,33 @@ function isRolePrompt(meId: string, m: Message, myRoles: Set<string>, followsRol
   const keep = [...seen].sort(compareSnowflakes).slice(-200);
   writeStored(`rolePrompts.${meId}`, Object.fromEntries(keep.map((id) => [id, true])));
   return true;
+}
+
+/**
+ * Presses seen per message (distinct press times, persisted per browser). Construction's primary is two presses on
+ * the card's own message (one structure, then another), and the bot posts no second prompt for it.
+ */
+const pressLog = new Map<string, Record<string, number[]>>();
+const SAME_PRESS_MS = 4000;
+
+function pressCount(meId: string, m: Message, pressedAt: number | undefined) {
+  let log = pressLog.get(meId);
+  if (!log) {
+    log = readStored<number[]>(`pressLog.${meId}`);
+    pressLog.set(meId, log);
+  }
+  const seen = log[m.id] ?? [];
+  if (pressedAt === undefined || seen.some((t) => Math.abs(t - pressedAt) < SAME_PRESS_MS)) return seen.length;
+  log[m.id] = [...seen, pressedAt];
+  const keep = Object.keys(log).sort(compareSnowflakes).slice(-50);
+  writeStored(`pressLog.${meId}`, Object.fromEntries(keep.map((id) => [id, log[id]])));
+  return log[m.id].length;
+}
+
+/** How many presses my own strategy card's message takes before its primary is resolved. */
+const TWO_PRESS_PRIMARY = /^(construction_|constructionPrimary_produce)/;
+function pressesNeeded(m: Message) {
+  return choicesOf(m).some((c) => TWO_PRESS_PRIMARY.test(baseId(c.customId))) ? 2 : 1;
 }
 
 /** How many of the newest messages of a channel a role-wide prompt stays relevant for. */
@@ -204,7 +233,9 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
       /* Only the card's own buttons are mine; the follow buttons are the other players'. */
       if (!forwardChoices(m).some((c) => !FOLLOW_ID.test(baseId(c.customId)))) answered = true;
       const stale = index < ids.length - ROLE_WINDOW;
-      items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale });
+      const presses = pressCount(me.id, m, m.my_press ? Date.parse(m.my_press.at) : state.pressed[m.id]);
+      if (answered && presses > 0 && presses < pressesNeeded(m)) answered = false;
+      items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale, presses });
       return;
     }
     if (answered) return;
@@ -218,9 +249,11 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     if (m.ephemeral) reason = "ephemeral";
     else if (!forOther && (m.interaction_metadata?.user?.id === me.id || m.prompted_user_id === me.id)) reason = "reply";
     else if (id === newestCombat) reason = "combat";
-    else if (ping) reason = id === newestMention ? "mention" : null;
-    else if (at - pingAt <= FOLLOW_UP_MS) reason = after(id, newestMention) ? "follow-up" : null;
+    else if (ping && id === newestMention) reason = "mention";
+    else if (!ping && at - pingAt <= FOLLOW_UP_MS && after(id, newestMention)) reason = "follow-up";
+    /* An older ping or follow-up that carries my faction's own buttons (choose the speaker, draw agendas) is still mine. */
     else if (mineByFaction(m) && !otherFaction(m)) reason = "faction";
+    else if (ping || at - pingAt <= FOLLOW_UP_MS) reason = null;
     else if (role) reason = "role";
     if (!reason) return;
     if (reason !== "role" && reason !== "combat" && !after(id, newestOtherPrompt)) return;

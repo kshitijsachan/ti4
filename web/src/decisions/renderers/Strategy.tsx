@@ -189,8 +189,9 @@ export function ScPrimaryBody({ d, data, onPress, pendingKey, pressOn }: Rendere
           />
         </div>
       ))}
+      {d.text && /second structure/.test(d.title) && <p className={classes.hint}>{d.text}</p>}
       <ChoiceButtons
-        choices={d.choices}
+        choices={d.choices.map((c) => ({ ...c, label: c.label.replace(/^\[Primary\]\s*/i, "") }))}
         onPress={onPress}
         pendingKey={pendingKey}
         channelId={d.prompt.channelId}

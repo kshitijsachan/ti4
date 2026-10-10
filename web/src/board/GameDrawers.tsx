@@ -5,6 +5,7 @@ import { ChannelList, ChannelView, usePlay } from "@/discord";
 import { TradePanel } from "@/trade";
 import { getToken } from "@/play/session";
 import { usePressButton } from "@/play/usePressButton";
+import type { Message } from "@/discord/types";
 import type { GameChannels } from "@/play/games";
 import { LogSlot } from "./Mounts";
 import type { DrawerName } from "./TopBar";
@@ -59,6 +60,13 @@ type Props = {
   tradeSignal?: string;
 };
 
+/**
+ * The bot's Discord-only welcome post in table talk ("This channel is for typical over the table conversation…
+ * you can create private threads off this channel"): channels, threads and bot commands mean nothing here.
+ */
+const TALK_INTRO = /^(<@&\d+>\s*)?-\s*table talk channel\b/i;
+const notTalkIntro = (m: Message) => !(m.author?.bot && TALK_INTRO.test(m.content ?? ""));
+
 /** The side drawers: everything off the table that you only look at sometimes. */
 export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, tradeSignal }: Props) {
   const status = usePlay((s) => s.status);
@@ -80,6 +88,7 @@ export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, t
           <ChannelView
             channelId={game.tableTalk.id}
             header={false}
+            filter={notTalkIntro}
             empty={<Empty>Say hello to the table.</Empty>}
             className={classes.fill}
           />

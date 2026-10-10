@@ -362,11 +362,14 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
   if (prompt.ownCall && has(choices, ID.scFollow)) {
     const sc = scOfFollow(m, choices);
     const name = sc ? scName(ctx, sc) : undefined;
+    const second = (prompt.presses ?? 0) >= 1 && has(choices, /^construction_/);
     return {
       ...base,
       kind: "scPrimary",
       eyebrow: "",
-      title: name ? `Resolve ${name}` : "Resolve your strategy card",
+      title: second ? `${name ?? "Construction"} — place your second structure` : name ? `Resolve ${name}` : "Resolve your strategy card",
+      text: second ? "The card's primary places one more structure (PDS or space dock) on a planet you control." : text,
+      choices: second ? choices.filter((c) => !/^constructionPrimary_produce/.test(baseId(c.customId))) : choices,
       sc,
     };
   }
@@ -441,6 +444,9 @@ function tableSetup(choices: Choice[]): { title: string; text: string } {
 
 function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean) {
   if (choosingSystem || has(choices, /^(getTilesThisFarAway_|ring_)/)) return "Tactical action — choose a system";
+  const placing = choices.map((c) => baseId(c.customId).match(/^place_(\w+?)_/)?.[1]).filter(Boolean);
+  if (placing.length && placing.every((u) => u === "pds")) return "Place a PDS — choose a planet";
+  if (placing.length && placing.every((u) => u === "sd" || u === "spacedock")) return "Place a space dock — choose a planet";
   if (has(choices, /^(tacticalActionBuild|place_|placeOneNDone)/) || /produce/i.test(text)) return "Produce units";
   if (has(choices, /^(landUnits|doneLanding|planetsTake)/) || /land/i.test(text)) return "Land ground forces";
   if (has(choices, /^(unitTactical|tacticalMoveFrom|doneWithOneSystem|doneMoving|concludeMove)/)) return "Move ships into the system";

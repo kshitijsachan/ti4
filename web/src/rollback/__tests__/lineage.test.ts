@@ -42,6 +42,17 @@ void test("a rewind greys the stretch between the target save and the rewind", (
   assert.ok(isLive(10_500, iv));
 });
 
+void test("a message long after the target save but well before the next (deleted) save stays live", () => {
+  // End Turn saved @2s, "started turn" posted @3s, next action saved @30s (deleted by the rewind @40s).
+  const r = { ...rw(40_000, 2_000), lostSavedAt: [30_000] };
+  const iv = liveIntervals([r]);
+  assert.ok(isLive(3_000, iv), "the turn-start message belongs to the target save");
+  assert.ok(!isLive(16_000, iv), "within ATTACH_MS of the deleted save: that save's action, undone");
+  assert.ok(!isLive(30_000, iv));
+  const idx = buildRewindIndex([{ id: "s", time: new Date(3_000).toISOString() }], [pt(1, 2_000), pt(2, 40_000, true)], [r]);
+  assert.equal(idx.rows.get("s")?.status, "live");
+});
+
 void test("undoing a rewind brings the undone stretch back", () => {
   // rewind at 10s back to save@2s (pre-rewind state saved @9s), then undo at 20s back to save@9s
   const iv = liveIntervals([rw(10_000, 2_000), rw(20_000, 9_000)]);
