@@ -664,7 +664,10 @@ class SeatPilot {
       // Only in a combat we fight, and the combat round from the bot's own state.
       const fighting = !st || (st.combat && (!myColor || !st.combatColors.length || st.combatColors.includes(myColor)));
       const round = st?.combatRound ?? null;
-      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && this.mayRoll(ch.id, c.custom_id, faction, round)));
+      // An extra roll (anti-fighter barrage, space cannon) whose button we pressed on this message is done, also across
+      // restarts (the shim keeps who pressed what).
+      const extraDone = (c: Control) => /^combatRoll_[^_]+_[^_]+_\w+/.test(c.custom_id) && !!m._presses?.[me];
+      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && !extraDone(c) && this.mayRoll(ch.id, c.custom_id, faction, round)));
     }
 
     let phase: string | null | undefined;
@@ -844,23 +847,21 @@ class SeatPilot {
     if (/-vs-/.test(chName) && !chName.includes(faction)) return false;
     // Our roll's result may not have arrived yet.
     if (Date.now() - (this.recent.get(`${channelId}:roll:combat`) ?? 0) < 15000) return false;
-    let mine = 0;
-    let theirs = 0;
     const myRounds = new Set<number>();
     for (const m of this.store.messages(channelId)) {
       const r = /rolls for .*combat \(round #(\d+)\)/i.exec(String(m.content ?? ""))?.[1];
       const w = /^<a?:(\w+):\d+>\s*rolls for /i.exec(String(m.content ?? ""))?.[1]?.toLowerCase();
       if (r && w && (faction.startsWith(w) || w.startsWith(faction))) myRounds.add(Number(r));
     }
-    // Once per combat round: the bot says which round it is; we roll it unless we already did.
-    if (round) return !myRounds.has(round);
+    // Once per combat round. The round under way is the newest one anybody started ("Start of Combat Round #N", or a
+    // roll for round N; the bot's web data does not advance it): roll it unless we already did.
+    let current = round ?? 1;
     for (const m of this.store.messages(channelId)) {
-      const who = /^<a?:(\w+):\d+>\s*rolls for .*combat/i.exec(String(m.content ?? ""))?.[1]?.toLowerCase();
-      if (!who) continue;
-      if (faction.startsWith(who) || who.startsWith(faction)) mine++;
-      else theirs++;
+      const c = String(m.content ?? "");
+      const n = Number(/Start of Combat Round #(\d+)/i.exec(c)?.[1] ?? /rolls for .*combat \(round #(\d+)\)/i.exec(c)?.[1] ?? 0);
+      if (n > current) current = n;
     }
-    return mine <= theirs;
+    return !myRounds.has(current);
   }
 
   /** Milty draft: when it is our pick, the first option of a category we have not drafted yet. */
