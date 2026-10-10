@@ -74,6 +74,8 @@ type Rule = {
    * pressed, the press was lost (e.g. refused while the bot was busy with the game) and we press it again.
    */
   retry?: boolean;
+  /** Retry only while the game phase matches (setup prompts: never once the game is under way). */
+  retryIn?: RegExp;
   /**
    * Only while the game is in a matching phase (the bot's web-data phase, e.g. `status.homework`). Table windows stay
    * on the table after their phase ends, and the bot acts on a late press anyway: a "Ready For Strategy Phase" pressed
@@ -96,14 +98,14 @@ const RULES: Rule[] = [
   { id: /^milty_faction_/, score: 91, why: "draft: first faction" },
   { id: /^milty_order_/, score: 90, why: "draft: first speaker order" },
   // Setup: keep the first secret objective, discard the other.
-  { id: /^discardSecret_/, score: 80, retry: true, addressed: true, last: true, why: "setup: keep the first secret objective" },
+  { id: /^discardSecret_/, score: 80, retry: true, retryIn: /^setup/, addressed: true, last: true, why: "setup: keep the first secret objective" },
   // Setup: Keleres picks its flavor once the draft is over (the player's own setup waits on it).
   { id: /^setupStep5_\d+_keleres[a-z]_/, score: 84, addressed: true, why: "setup: Keleres flavor" },
   // Setup: starting technology. Most factions get a list of their allowed techs (getTech_<alias>__noPay__comp, once
   // or twice); open choices come as "Get a Technology" → a tech type → a tech; Keleres asks once the others are done.
-  { id: /(^|_)acquireAFreeTech$/, score: 83, addressed: true, retry: true, why: "setup: get a starting technology" },
-  { id: /(^|_)getAllTechOfType_/, score: 82, addressed: true, retry: true, why: "setup: first technology type" },
-  { id: /(^|_)getTech_.+__noPay/, score: 81, addressed: true, retry: true, distinct: true, why: "setup: first starting technology" },
+  { id: /(^|_)acquireAFreeTech$/, score: 83, addressed: true, retry: true, retryIn: /^setup/, why: "setup: get a starting technology" },
+  { id: /(^|_)getAllTechOfType_/, score: 82, addressed: true, retry: true, retryIn: /^setup/, why: "setup: first technology type" },
+  { id: /(^|_)getTech_.+__noPay/, score: 81, addressed: true, retry: true, retryIn: /^setup/, distinct: true, why: "setup: first starting technology" },
   { id: /(^|_)getKeleresTechOptions$/, score: 60, addressed: true, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
@@ -653,7 +655,12 @@ class SeatPilot {
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
       if (rule.addressed && !ctx.addressed) continue;
-      if (rule.retry && lost && (this.tableStalled(m, game) || (await this.myTurn(game)) || String((await this.mgr.phaseOf(game)) ?? "").startsWith("setup"))) {
+      const retryPhase = rule.retry && lost ? String((await this.mgr.phaseOf(game)) ?? "") : "";
+      if (
+        rule.retry &&
+        lost &&
+        (rule.retryIn ? rule.retryIn.test(retryPhase) : this.tableStalled(m, game) || (await this.myTurn(game)))
+      ) {
         const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && (rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id)));
         const techAlias = /(?:^|_)getTech_(.+?)__noPay/.exec(again[0]?.custom_id ?? "")?.[1];
         if (techAlias) {

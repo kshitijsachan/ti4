@@ -6,7 +6,8 @@ Decision (user, 2026-10-10): code-only bots for now; smarter (Claude-assisted) b
 1. **Baseline play** (in progress): legal, never-stalling turns — play the strategy card, tactical actions that expand to
    nearby planets (move, land, explore, produce), pass; score objectives; vote; follow cards when cheap.
 2. **Combat simulator**: exact win odds from both fleets (hits, sustain, AFB, PDS, defending planets) before any
-   attack; attack only at clearly good odds; sensible retreats.
+   attack; attack only at clearly good odds; sensible retreats. Bombard before an invasion when it helps (today the
+   autopilot never rolls bombardment: legal, but weak play).
 3. **Objective-driven planner**: each round pick the cheapest reachable VP (public + secret), value strategy cards by
    need (Imperial with Mecatol, Technology for tech objectives, Leadership when short of tokens), plan tactical
    actions toward those objectives.
