@@ -61,8 +61,8 @@ export function setupWaiting(
     const m = log[i];
     if (!m.author.bot || !isTableSetupPrompt(m)) continue;
     const ids = forwardChoices(m).map((c) => baseId(c.customId));
-    if (ids.includes("deal2SOToAll")) return { text: "Everyone is set up — waiting for someone to deal the secret objectives…", me: true };
-    return { text: "Waiting for someone to reveal the objectives and start the game…", me: true };
+    if (ids.includes("deal2SOToAll")) return { text: "Everyone is set up — dealing secret objectives…", me: false };
+    return { text: "Revealing objectives and starting the game…", me: false };
   }
 
   /* The newest prompt addressed to someone. */

@@ -185,7 +185,9 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     const forOther = pingsOther || (!ping && at - otherPingAt <= FOLLOW_UP_MS) || otherFaction(m);
     if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || isHandMenu(m)) return;
     const tableSetup = isTableSetupPrompt(m);
-    if (tableSetup && (!opts.setupOpen || !opts.tableSetup)) return;
+    // Table-wide setup steps (deal secret objectives, start the game) are pressed by the server once everyone is
+    // ready (shim/src/solo.ts steward), so they are never a decision for a person.
+    if (tableSetup) return;
     let answered = answeredState(state, m, ping);
     if (tableSetup) {
       /*

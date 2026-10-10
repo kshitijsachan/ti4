@@ -119,8 +119,14 @@ const TAKE_BACK_TEXT = /change your mind|if this was an accident|can change (tha
 const NUDGE = /this is a nudge|currently waiting on you/i;
 
 const BUSY_WRONG = /these buttons are for someone else/i;
-const MIN_DELAY = 1500;
-const MAX_DELAY = 3000;
+/** Pause before each autopilot action so humans can follow along (override with AUTOPILOT_MIN/MAX_DELAY_MS). */
+const MIN_DELAY = Number(process.env.AUTOPILOT_MIN_DELAY_MS ?? 700);
+const MAX_DELAY = Number(process.env.AUTOPILOT_MAX_DELAY_MS ?? 1400);
+/** During a draft nobody needs to follow the bots' picks: keep it snappy. */
+const DRAFT_MIN_DELAY = 200;
+const DRAFT_MAX_DELAY = 450;
+/** A seat counts as drafting for this long after it last saw its game's draft in progress. */
+const DRAFTING_WINDOW_MS = 15000;
 /** Messages per channel an autopilot looks at (newest). */
 const WINDOW = 30;
 /** A message whose presses failed this often is ignored. */
@@ -294,7 +300,18 @@ class SeatPilot {
     }
   }
 
-  private schedule(delay = MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY)) {
+  /** When this seat last saw one of its games mid-draft (draft picks get short delays). */
+  private draftingSeenAt = 0;
+
+  private get drafting() {
+    return Date.now() - this.draftingSeenAt < DRAFTING_WINDOW_MS;
+  }
+
+  private schedule(
+    delay = this.drafting
+      ? DRAFT_MIN_DELAY + Math.random() * (DRAFT_MAX_DELAY - DRAFT_MIN_DELAY)
+      : MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY),
+  ) {
     if (this.stopped || this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = null;
@@ -474,7 +491,9 @@ class SeatPilot {
 
   /** Milty draft: when it is our pick, the first option of a category we have not drafted yet. */
   private async milty(m: StoredMessage, controls: Control[], game: string): Promise<Choice | null> {
-    const draft = await this.mgr.draft(game);
+    // Always read the draft fresh: a stale copy makes us miss our turn until the next poll.
+    const draft = await this.mgr.draft(game, 0);
+    if (draft?.status === "drafting") this.draftingSeenAt = Date.now();
     if (!draft || draft.status !== "drafting" || String(draft.currentPlayer) !== this.userId) return null;
     const mine = (draft.players ?? []).find((p: Json) => String(p.userId) === this.userId);
     const have = new Set<string>((mine?.picks ?? []).map((p: Json) => (p.type === "speakerOrder" ? "order" : p.type)));
@@ -603,7 +622,7 @@ class SeatPilot {
       }
     } else this.streak = 0;
     // Let the bot's answer land before deciding again.
-    await sleep(800);
+    await sleep(this.drafting ? 250 : 600);
   }
 }
 

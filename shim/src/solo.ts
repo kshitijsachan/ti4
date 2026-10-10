@@ -141,7 +141,7 @@ export class SoloGames {
       this.note(job, `Game ${job.game} created`, "setting_up");
       void this.setup(job, p, actions.id, expansion)
         .finally(() => p.close())
-        .then(() => (job.kind === "solo" && job.state === "drafting" ? this.steward(job, actions.id) : undefined))
+        .then(() => (job.state === "drafting" ? this.steward(job, actions.id) : undefined))
         .catch((e) => log.warn(`solo ${job.game}: steward stopped: ${(e as Error).message}`));
       return job;
     } catch (e) {
@@ -186,7 +186,7 @@ export class SoloGames {
   }
 
   /**
-   * Solo games: once the draft is over, take the table-wide setup steps nobody is addressed by, as the human,
+   * Every game: once the draft is over, take the table-wide setup steps nobody is addressed by, as a seated person,
    * as soon as the table is ready for them, so the game flows from the draft into the strategy phase with the human
    * only making their own choices (starting technology, which secret objective to keep, a strategy card):
    *   1. "Deal 2 Secret Objectives To All" once no starting-technology prompt is left and the table has settled;
@@ -264,7 +264,7 @@ export class SoloGames {
   }
 
   /**
-   * After a restart: solo games (one person, the other seats autopilot) still being set up get their steward back.
+   * After a restart: games still being set up get their steward back.
    */
   async resumeStewards() {
     await this.waitFor({ kind: "solo", user_id: "", bots: [], others: [], state: "setting_up", step: "", started_at: "", updated_at: "", log: [] }, "the game server", 30 * 60 * SECOND, () => this.hub.gateway.botReady || undefined).catch(() => undefined);
@@ -279,7 +279,9 @@ export class SoloGames {
       if (!draft || draft.status !== "finished") continue;
       const ids = this.realPlayers(web).map((p: Json) => String(p.discordId));
       const humans = ids.filter((id: string) => !autopilot.has(id));
-      if (humans.length !== 1 || ids.length < 2) continue;
+      // Every game in setup gets a steward (solo or with friends): it presses the table-wide steps as a person seated
+      // at the table once everyone is ready, so nobody has to.
+      if (!humans.length || ids.length < 2) continue;
       const now = new Date().toISOString();
       const job: SoloJob = { game, kind: "solo", user_id: humans[0], bots: [], others: ids.filter((id: string) => id !== humans[0]), state: "drafting", step: "Resuming setup", started_at: now, updated_at: now, log: [] };
       this.jobs.set(game, job);
