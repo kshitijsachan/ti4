@@ -458,6 +458,30 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       title: fresh ? "Your turn — choose an action" : abilities ? "End of turn — use an ability first?" : "End your turn",
     };
   }
+  if (has(choices, /^beginTacticalTeWarfare/)) {
+    return {
+      ...base,
+      kind: "tactical",
+      eyebrow: "Warfare",
+      title: "Warfare — take a tactical action",
+      text: "Activate any system without placing a command token (even one that already has yours). You may redistribute your command tokens before and after.",
+    };
+  }
+  if (has(choices, /^movedNExplored_/)) {
+    const trait = choices.map((c) => baseId(c.customId).match(/_(cultural|industrial|hazardous|frontier)$/)?.[1]).find(Boolean);
+    const planet = choices
+      .find((c) => /^movedNExplored_/.test(baseId(c.customId)))
+      ?.label.replace(/^Explore\s+/i, "")
+      .replace(/\s*\(\d+\/\d+\)$/, "");
+    return {
+      ...base,
+      kind: "tactical",
+      eyebrow: "",
+      title: planet ? `Explore ${planet}` : "Explore the planet",
+      text: `You took ${planet ?? "a planet"} — draw ${trait ? `a ${trait}` : "an"} exploration card for it.`,
+      position: ctx.web?.gameState?.activeSystem ?? undefined,
+    };
+  }
   if (has(choices, ID.tactical)) {
     const ring = choices.map((c) => baseId(c.customId).match(/^ringTile_(\w+)/)?.[1]).filter(Boolean);
     const active = ctx.web?.gameState?.activeSystem ?? undefined;
