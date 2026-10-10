@@ -163,6 +163,7 @@ export function TokensBody({ d, data }: RendererProps) {
         ))}
       </div>
       {left > 0 && <p className={classes.sub}>Place every token to continue.</p>}
+      {left === 0 && <p className={classes.sub}>{plusReason}.</p>}
       {left < 0 && <p className={cx(classes.sub, classes.warn)}>That is {-left} more than you may have — take some back.</p>}
       <ChoiceButton
         choice={{ key: "tokens-confirm", kind: "button", customId: "tokens-confirm", label: "Confirm tokens", style: 3, disabled: left !== 0, rank: "primary", component: { type: 2 } }}

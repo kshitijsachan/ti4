@@ -4,6 +4,7 @@ import { reactedBy } from "../detect/pending";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { FactionIcon, Prose, ResourceStrip, Section } from "../ui/parts";
 import { GainTokensBody } from "./Economy";
+import { TokensBody, isTokenStep } from "./strategy/Tokens";
 import type { RendererProps } from "./types";
 import classes from "./Objectives.module.css";
 
@@ -37,7 +38,7 @@ export function StatusBody(props: RendererProps) {
     <div className={classes.stack}>
       <Section label="1 · Command tokens">
         {gain ? (
-          <GainTokensBody {...props} d={gain} onPress={pressOn(gain)} />
+          isTokenStep(gain.choices) ? <TokensBody {...props} d={gain} onPress={pressOn(gain)} /> : <GainTokensBody {...props} d={gain} onPress={pressOn(gain)} />
         ) : (
           <>
             {data.me && <ResourceStrip me={data.me} show={["tactic", "fleet", "strategy"]} />}
