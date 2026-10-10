@@ -86,7 +86,7 @@ function StepView({ step, props, index }: { step: Decision; props: RendererProps
  * "request all resolve now" nudge are never shown to the holder.
  */
 export function StrategyPrimaryBody(props: RendererProps) {
-  const { d, data, pendingKey } = props;
+  const { d, data } = props;
   const sc = d.sc!;
   const spec = cardSpec(sc, scDefinition(sc, data.web)?.id);
   const second = /second structure/.test(d.title);
@@ -98,13 +98,16 @@ export function StrategyPrimaryBody(props: RendererProps) {
     .filter((x) => !pressed.has(`${d.id}:${baseId(x.choice.customId)}`));
   const run = useRunSequence();
   const runner = useRunner();
-  const busy = !!runner.running || !!pendingKey;
+  const busy = !!runner.running;
   /*
    * The card's own buttons go through the strategy runner rather than the popup's press: a press still settling on a
    * step (an agenda peek, the speaker) must never leave these silently dead.
    */
   const press = (c: Choice) => {
-    if (!c.customId) return;
+    if (!c.customId) {
+      useRunner.getState().set({ error: "This button has no action." });
+      return;
+    }
     if (sc === 2) pressed.add(`${d.id}:${baseId(c.customId)}`);
     void run(`primary:${d.id}:${c.key}`, [{ channelId: d.prompt.channelId, messageId: d.id, customId: c.customId, label: c.label }]);
   };

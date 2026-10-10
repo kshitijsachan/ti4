@@ -66,11 +66,15 @@ export function useRunSequence() {
   return async (key: string, presses: Press[], after?: (dismiss: (id: string) => void) => void) => {
     const runner = useRunner.getState();
     /* A run whose promise was lost (socket swap, hot reload) must not block the panels for good. */
-    if (runner.running && Date.now() - runner.startedAt < 60_000) return;
+    if (runner.running && Date.now() - runner.startedAt < 60_000) {
+      runner.set({ error: `Still pressing “${runner.label}” — try again in a moment.` });
+      return;
+    }
     runner.set({ running: key, step: 0, total: presses.length, label: "", error: null, startedAt: Date.now() });
     for (const [i, p] of presses.entries()) {
       useRunner.getState().set({ step: i + 1, label: p.label });
       const before = stamp(conn, p);
+      console.info("[strategy] press", p.customId, "on", p.messageId);
       const result = await press(p.channelId, p.messageId, p.customId);
       if (!result.error && i < presses.length - 1) await settled(conn, p, before);
       if (result.error) {
