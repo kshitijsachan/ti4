@@ -612,6 +612,19 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       text: "Pick the card, technology, leader or ability whose ACTION you use. “Generic” is for anything not listed (you then resolve it by hand).",
     };
   }
+  if (has(choices, /^rollFracture_/)) {
+    const spawn = choices.some((c) => /spawn/i.test(c.label));
+    return {
+      ...base,
+      kind: "tactical",
+      eyebrow: (ctx.web?.gameState?.phase ?? "").startsWith("setup") ? "Game setup" : "Breakthrough",
+      title: spawn ? "Spawn The Fracture?" : "Roll for The Fracture",
+      text: spawn
+        ? "Your breakthrough can bring The Fracture into play. You may roll for other breakthroughs first."
+        : "A breakthrough was unlocked while The Fracture is not in play: roll one die. On a 1 or a 0 (10), The Fracture appears.",
+      setup: (ctx.web?.gameState?.phase ?? "").startsWith("setup"),
+    };
+  }
   if (has(choices, /^beginTacticalTeWarfare/)) {
     return {
       ...base,

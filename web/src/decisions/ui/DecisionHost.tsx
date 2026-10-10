@@ -73,24 +73,24 @@ function useSetupOpen(gameName: string) {
   return query.data === "finished" || query.data === "none";
 }
 
-/** A space combat is over once one side has no ships left there (the bot leaves its buttons up). */
+/** A combat is over (or never was) once fewer than two players have units fighting there; the bot leaves its buttons up. */
 function combatOver(d: Decision, web?: PlayerDataResponse) {
   const c = d.combat;
-  if (!c?.position || c.factions.length < 2 || !web) return false;
+  if (!web) return false;
+  /* No system, or a system the game has no fight in: a leftover (or a space-cannon prompt), nothing to fight. */
+  if (!c?.position) return !web.gameState?.activeCombat;
   const tile = web.tileUnitData?.[c.position];
   if (!tile) return false;
   const unit = (u: { entityType: string; count: number }) => u.entityType === "unit" && u.count > 0;
+  const ground = ["gf", "mf"];
   if (c.kind === "ground") {
-    /* A ground combat is over once one side has no ground forces left on the planet. */
-    const planet = c.planet ? tile.planets?.[c.planet] : undefined;
-    if (!planet) return false;
-    const forces = (f: string) => (planet.entities?.[f] ?? []).some((u) => unit(u) && ["gf", "mf"].includes(u.entityId));
-    return c.factions.some((f) => !forces(f));
+    /* A ground combat is over once fewer than two players have ground forces on the planet. */
+    const planets = c.planet ? [tile.planets?.[c.planet]] : Object.values(tile.planets ?? {});
+    return !planets.some((p) => Object.values(p?.entities ?? {}).filter((us) => us.some((u) => unit(u) && ground.includes(u.entityId))).length >= 2);
   }
-  const space = tile.space;
-  if (!space) return false;
-  const ships = (f: string) => (space[f] ?? []).some((u) => unit(u) && !["gf", "mf"].includes(u.entityId));
-  return c.factions.some((f) => !ships(f));
+  /* A space combat is over once fewer than two players have ships here. */
+  const sides = Object.values(tile.space ?? {}).filter((us) => us.some((u) => unit(u) && !ground.includes(u.entityId)));
+  return sides.length < 2;
 }
 
 /** The bot often answers one press with a few prompts at once (pay, then gain tokens): keep those in posting order. */
