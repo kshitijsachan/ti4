@@ -26,6 +26,11 @@ export type ThreadIndex = {
   openSoScore?: BotButton;
   openSoDiscard?: BotButton;
   refresh?: BotButton;
+  /**
+   * The bot's newest word on which secrets I meet this status phase (lower-cased names); empty when it says none,
+   * undefined when it has not said.
+   */
+  soMet?: string[];
   /** The action card hand limit, from the bot's newest hand listing (`__Action Cards__ (9/7)`). */
   acLimit?: number;
   /** Lower-cased card name → numbers, from the newest listing of each kind. */
@@ -102,12 +107,26 @@ export function indexThread(channel: ChannelMessages | undefined): ThreadIndex {
   let acSeen = false;
   let soSeen = false;
   let pnSeen = false;
+  let metSeen = false;
 
   for (let i = channel.ids.length - 1; i >= 0; i--) {
     const message = channel.byId[channel.ids[i]];
     if (!message || !message.author?.bot) continue;
     const content = message.content ?? "";
 
+    if (!metSeen && /does not believe that you can score any of your secret/i.test(content)) {
+      metSeen = true;
+      index.soMet = [];
+    }
+    const able = metSeen ? undefined : /capable of scoring the following secret objectives?:\s*([\s\S]*)$/i.exec(content)?.[1];
+    if (able) {
+      metSeen = true;
+      index.soMet = able
+        .split("\n")
+        .map((l) => l.replace(/<a?:\w+:\d+>/g, "").replace(/[_*`]/g, "").replace(/\(\s*\d+\)/, "").trim())
+        .filter(Boolean)
+        .map((l) => l.split(/\s+[-–—:]\s+/)[0].replace(/^\d+\\?\.\s*/, "").toLowerCase());
+    }
     if (!acSeen && content.startsWith("__Action Cards__")) {
       acSeen = true;
       index.acNumbers = numbersIn(content);
@@ -216,7 +235,7 @@ export function findNewButton(
 }
 
 const HAND_NOISE =
-  /^(__Action Cards__|__Scored Secret Objectives|#+ __Promissory notes|Click a button below to play an action card|Use these buttons to (score|discard)|You may use these buttons to do various things)|someone refreshed your|^You pressed: |If your cards info thread disappears|the bot could auto pass|automatically pass on Sabos|gentle reminder|quick nudge|end of round thoughts/;
+  /^(__Action Cards__|__Scored Secret Objectives|#+ __Promissory notes|Click a button below to play an action card|Use these buttons to (score|discard)|You may use these buttons to do various things)|someone refreshed your|^You pressed: |If your cards info thread disappears|the bot could auto pass|automatically pass on Sabos|gentle reminder|quick nudge|end of round thoughts|This is a nudge that|is currently waiting on \d+ players?|These buttons can help with bugs|now is the time to decide whether or not you will play|placed the agendas in this order|^#*\s*Vote Count/;
 
 const HAND_BUTTON = /^(ac_play_from_hand_|ac_discard_from_hand_|so_score_hand_|discardSecret_|SODISCARD_|getDiscardButtonsACs|get_so_)/;
 
@@ -295,4 +314,23 @@ export function actionTakenThisTurn(actions: ChannelMessages | undefined): boole
     if (end) return true;
   }
   return false;
+}
+
+/**
+ * The open Sabotage window: the newest "Cancel Action Card With Sabotage" prompt for another player's card that
+ * the bot has not closed yet ("all players have indicated No Sabotage").
+ */
+export function sabotageWindow(actions: ChannelMessages | undefined, myFaction: string | undefined): BotButton | undefined {
+  if (!actions || !myFaction) return undefined;
+  const stop = Math.max(0, actions.ids.length - 25);
+  for (let i = actions.ids.length - 1; i >= stop; i--) {
+    const message = actions.byId[actions.ids[i]];
+    if (!message?.author?.bot) continue;
+    if (/all players have indicated "?No Sabotage"?/i.test(message.content ?? "")) return undefined;
+    const button = buttonsOf(message).find((b) => /^sabotage_ac_/.test(b.custom_id ?? ""));
+    if (!button) continue;
+    if ((button.custom_id ?? "").endsWith(`_${myFaction}`)) return undefined;
+    return { channelId: message.channel_id, messageId: message.id, customId: button.custom_id!, label: button.label ?? "" };
+  }
+  return undefined;
 }

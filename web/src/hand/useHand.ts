@@ -8,7 +8,7 @@ import { config } from "@/config";
 import { getToken } from "@/play/session";
 import type { PlayerDataResponse } from "@/entities/data/types";
 import { buildHand, type CardGroup, type HandResponse } from "./model";
-import { actionTakenThisTurn, assignNumbers, indexThread, type ThreadIndex } from "./botThread";
+import { actionTakenThisTurn, assignNumbers, indexThread, sabotageWindow, type BotButton, type ThreadIndex } from "./botThread";
 import { useCardData } from "./cardData";
 
 const POLL_MS = 45_000;
@@ -46,6 +46,8 @@ export type HandState = {
   acLimit: number;
   /** This turn's action is spent, so "Action:" cards wait for the next turn. */
   actionTaken: boolean;
+  /** Another player's action card waiting on Sabotage answers: the bot's cancel button for it. */
+  sabotage?: BotButton;
 };
 
 /**
@@ -126,6 +128,7 @@ export function useHand(gameName: string, token?: string): HandState {
     .filter((c) => !numbers.has(c.key)).length;
 
   const actionTaken = useMemo(() => actionTakenThisTurn(actionsChannel), [actionsChannel]);
+  const sabotage = useMemo(() => sabotageWindow(actionsChannel, me?.faction), [actionsChannel, me?.faction]);
   const acHeld = groups.find((g) => g.id === "ac")?.cards.length ?? 0;
 
   return {
@@ -144,5 +147,6 @@ export function useHand(gameName: string, token?: string): HandState {
     acHeld,
     acLimit: index.acLimit ?? 7,
     actionTaken,
+    sabotage,
   };
 }

@@ -49,6 +49,7 @@ function timingLine(card: HandCard, timing: Timing, hasPlay: boolean, overBy: nu
     return card.owner ? "Give it to another player in a trade, or hold it." : "Held in your hand.";
   if (card.kind === "relic" || card.kind === "fragment")
     return "The bot offers relic actions on your turn when they apply.";
+  if (timing === "now" && card.kind === "so") return "Scoring is open now — score it if you meet it.";
   if (timing === "now") return "Its timing window is open right now.";
   if (card.kind === "so")
     return `Score it in the ${card.window?.toLowerCase() ?? "matching phase"} once you meet it.`;
@@ -63,9 +64,10 @@ export function CardPopup(props: Props) {
   const [picking, setPicking] = useState<CardAction | null>(null);
   const thread = useChannelMessages(threadId);
   const actionsChannel = useChannelMessages(actionsId);
-  const replies = botReplies(thread, actionsChannel, sent?.baseline, meId).filter(
-    (m) => cleanReply(m.content ?? "") || replyButtons(m, meId, threadId).length > 0,
-  );
+  // The card's own answers come first; later table chatter (the next window opening) is not this card's business.
+  const replies = botReplies(thread, actionsChannel, sent?.baseline, meId)
+    .filter((m) => cleanReply(m.content ?? "") || replyButtons(m, meId, threadId).length > 0)
+    .slice(0, 8);
   const refused = replies.some(isRefusal);
   const press = usePressButton();
 

@@ -205,8 +205,10 @@ export function buildHand(
   players: PlayerData[],
 ): CardGroup[] {
   const acs = (hand?.actionCards ?? []).map(actionCard);
-  const unscored = (hand?.secretObjectives ?? []).map((a) => secretObjective(a, false));
-  const scored = Object.keys(me?.secretsScored ?? {}).map((a) => secretObjective(a, true));
+  // The hand endpoint can lag a fresh score by a poll; the public scored list wins.
+  const scoredIds = Object.keys(me?.secretsScored ?? {});
+  const unscored = (hand?.secretObjectives ?? []).filter((a) => !scoredIds.includes(a)).map((a) => secretObjective(a, false));
+  const scored = scoredIds.map((a) => secretObjective(a, true));
   const playArea = new Set(me?.promissoryNotesInPlayArea ?? []);
   const handPns = (hand?.promissoryNotes ?? []).filter((a) => !playArea.has(a));
   // Notes from other players first (those are the ones you can play), then those in play, then your own.

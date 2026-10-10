@@ -29,6 +29,8 @@ export type ActionOutcome = PressResult & {
 
 const exact = (id: string) => (customId: string) => customId === id;
 
+export const isSabotage = (card: HandCard) => card.kind === "ac" && /^sabotage/i.test(card.name);
+
 /** The bot buttons behind each thing the player can do with a card. */
 export function actionsFor(card: HandCard, hand: HandState): CardAction[] {
   const { index } = hand;
@@ -46,10 +48,14 @@ export function actionsFor(card: HandCard, hand: HandState): CardAction[] {
       : [];
 
   if (card.kind === "ac") {
-    if (n === undefined) return sync();
+    // Sabotage answers the bot's open window for another player's card, not the hand's own play button.
+    if (isSabotage(card) && hand.sabotage)
+      out.push({ id: "play", label: "Sabotage it", tone: "go", hint: hand.sabotage.label, step: { type: "press", button: hand.sabotage } });
+    if (n === undefined) return out.length ? out : sync();
     const play = index.acPlay.get(n);
-    if (play) out.push({ id: "play", label: "Play", tone: "go", step: { type: "press", button: play } });
-    else if (index.refresh)
+    const answered = out.some((a) => a.id === "play");
+    if (!answered && play) out.push({ id: "play", label: "Play", tone: "go", step: { type: "press", button: play } });
+    else if (!answered && index.refresh)
       out.push({ id: "play", label: "Play", tone: "go",
         step: { type: "chain", opener: index.refresh, match: exact(`ac_play_from_hand_${n}`) } });
     const discard = index.acDiscard.get(n);

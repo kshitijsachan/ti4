@@ -86,7 +86,7 @@ export function CardFace({ card, size, number, timing, actionable }: Props) {
         {card.owner && size === "large" && <span className={classes.owner}>{card.owner.name}</span>}
       </div>
       {card.scored && <span className={classes.stamp}>Scored</span>}
-      {live && <span className={classes.livePip} aria-label="Playable now" />}
+      {live && <span className={classes.livePip} aria-label={card.kind === "so" ? "Scoring open" : "Playable now"} />}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { CardFace } from "./CardFace";
 import { CardPopup } from "./CardPopup";
 import { timingOf, type CardGroup, type HandCard, type Timing } from "./model";
 import { useHand, type HandState } from "./useHand";
-import { actionsFor, useRunCardAction } from "./useHandActions";
+import { actionsFor, isSabotage, useRunCardAction } from "./useHandActions";
 import classes from "./HandTray.module.css";
 
 type Props = {
@@ -72,10 +72,22 @@ function fanBudgets(groups: CardGroup[], viewport: number): Map<string, number> 
   return out;
 }
 
+/** Status-phase secrets the bot can check (its objective thresholds); it names those you meet at scoring time. */
+const BOT_CHECKS = new Set(
+  "pem sai syc sb otf mtm hrm eh dhw dfat te ose mrm mlp mp lsc fwm fsn gamf ans btgk ctr csl eap faa fc dagw".split(" "),
+);
+
+function botJudges(card: HandCard, hand: HandState) {
+  return card.kind === "so" && hand.gameState?.phase === "status.scoring" && !!hand.index.soMet && BOT_CHECKS.has(card.alias);
+}
+
 /** Over the hand limit the bot refuses every action card until you discard down. */
 function cardTiming(card: HandCard, hand: HandState): Timing {
   if (card.kind === "ac" && hand.acHeld > hand.acLimit) return "blocked";
+  if (isSabotage(card)) return hand.sabotage ? "now" : "reaction";
   const timing = timingOf(card, hand.gameState, hand.myColor);
+  // At status scoring the bot says which secrets it thinks you meet; the others are not scorable now.
+  if (timing === "now" && botJudges(card, hand) && !hand.index.soMet!.includes(card.name.toLowerCase())) return "later";
   // One action per turn: once it is spent, "Action:" cards wait for your next turn.
   if (timing === "now" && card.kind !== "so" && card.window === "Action" && hand.actionTaken) return "later";
   return timing;
@@ -121,8 +133,13 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
   const allCards = hand.groups.flatMap((g) => g.cards);
   // The popup outlives the card (played, discarded, scored) so the player sees the outcome.
   const liveCard = selected && allCards.find((c) => c.key === selected.key && c.scored === selected.scored);
-  const selectedCard = liveCard ?? selected;
-  const playableCount = allCards.filter((c) => isPlayableNow(c, hand)).length;
+  // A secret just scored stays on screen as scored, not as "left your hand".
+  const scoredNow = selected && !liveCard ? allCards.find((c) => c.key === selected.key && c.scored) : undefined;
+  const selectedCard = liveCard ?? scoredNow ?? selected;
+  // Secrets the bot vouches for count as playable; without its word they only say scoring is open.
+  const vouched = (c: HandCard) => c.kind !== "so" || botJudges(c, hand);
+  const playableCount = allCards.filter((c) => vouched(c) && isPlayableNow(c, hand)).length;
+  const scoringOpen = allCards.some((c) => !vouched(c) && isPlayableNow(c, hand));
   const overBy = Math.max(0, hand.acHeld - hand.acLimit);
   const total = allCards.length;
   const budgets = fanBudgets(hand.groups, useViewportWidth());
@@ -158,7 +175,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
 
       <button
         type="button"
-        className={`${classes.bar} ${playableCount > 0 ? classes.barPlayable : ""}`}
+        className={`${classes.bar} ${playableCount > 0 || scoringOpen ? classes.barPlayable : ""}`}
         onClick={() => setPinned((p) => !p)}
         aria-expanded={open}
         title={pinned ? "Put your hand away" : "Keep your hand open"}
@@ -168,6 +185,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
           <BarCount key={group.id} group={group} />
         ))}
         {overBy > 0 && <span className={classes.barLimit}>Discard {overBy}</span>}
+        {scoringOpen && <span className={classes.barScoring}>Secret scoring open</span>}
         {playableCount > 0 && (
           <span className={classes.barLive}>
             <span className={classes.liveDot} />
@@ -185,7 +203,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
           timing={cardTiming(selectedCard, hand)}
           overBy={selectedCard.kind === "ac" ? Math.max(0, hand.acHeld - hand.acLimit) : 0}
           actions={liveCard ? actionsFor(selectedCard, hand) : []}
-          gone={!liveCard}
+          gone={!liveCard && !scoredNow}
           players={hand.players}
           myColor={hand.myColor}
           threadId={hand.threadId}
