@@ -145,7 +145,7 @@
   opacity: 0;
   visibility: hidden;
   width: max-content;
-  max-width: min(1280px, calc(100vw - 24px));
+  max-width: min(1440px, calc(100vw - 24px));
   padding: 14px 18px 12px;
   border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.28));
   border-radius: 10px;
@@ -190,6 +190,20 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+
+.fold {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 10px;
+  color: var(--hand-ink-muted);
+  cursor: pointer;
+}
+
+.fold:hover {
+  color: var(--accent);
 }
 
 .groupLabel {
@@ -240,7 +254,7 @@
 
 /* Spread each fan over its --budget (its share of the shelf): no overlap for a few cards, up to 60px for a big hand. */
 .slot + .slot {
-  margin-left: max(-72px, min(8px, calc((var(--budget, 520px) - var(--n) * var(--hand-card-w)) / max(1, var(--n) - 1))));
+  margin-left: max(-86px, min(8px, calc((var(--budget, 520px) - var(--n) * var(--hand-card-w)) / max(1, var(--n) - 1))));
 }
 
 /* Overlapping cards lie straight: a tilted, stacked fan reads as clutter. */

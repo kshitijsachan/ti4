@@ -26,7 +26,7 @@ const CLOSE_DELAY_MS = 280;
 const CARD_W = 112;
 const CARD_STEP = CARD_W + 8;
 const GROUP_GAP = 53;
-const SHELF_MAX = 1280;
+const SHELF_MAX = 1440;
 const SHELF_CHROME = 36 + 24;
 
 function useViewportWidth() {
@@ -81,6 +81,28 @@ function botJudges(card: HandCard, hand: HandState) {
   return card.kind === "so" && hand.gameState?.phase === "status.scoring" && !!hand.index.soMet && BOT_CHECKS.has(card.alias);
 }
 
+const OWN_STACK = "pn-own-stack";
+
+/**
+ * Your own promissory notes only matter when you trade them away, so they fold into one stack card and the
+ * notes you can actually play keep the room.
+ */
+function foldOwnNotes(group: CardGroup, myColor: string | undefined): CardGroup {
+  const own = group.cards.filter((c) => !c.inPlayArea && !!myColor && c.owner?.color === myColor);
+  if (own.length < 2) return group;
+  const stack: HandCard = {
+    key: OWN_STACK,
+    kind: "pn",
+    alias: "",
+    name: "Your own notes",
+    typeLabel: "Promissory notes",
+    text: own.map((c) => c.name).join(" · "),
+    owner: own[0].owner,
+    count: own.length,
+  };
+  return { ...group, cards: [...group.cards.filter((c) => !own.includes(c)), stack] };
+}
+
 /** Over the hand limit the bot refuses every action card until you discard down. */
 function cardTiming(card: HandCard, hand: HandState): Timing {
   if (card.kind === "ac" && hand.acHeld > hand.acLimit) return "blocked";
@@ -110,6 +132,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
   const [pinned, setPinned] = useState(defaultOpen);
   const [hovered, setHovered] = useState(false);
   const [selected, setSelected] = useState<HandCard | null>(null);
+  const [ownOpen, setOwnOpen] = useState(false);
   const closeTimer = useRef<number | undefined>(undefined);
   const open = pinned || hovered;
 
@@ -142,7 +165,9 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
   const scoringOpen = allCards.some((c) => !vouched(c) && isPlayableNow(c, hand));
   const overBy = Math.max(0, hand.acHeld - hand.acLimit);
   const total = allCards.length;
-  const budgets = fanBudgets(hand.groups, useViewportWidth());
+  const shownGroups = hand.groups.map((g) => (g.id === "pn" && !ownOpen ? foldOwnNotes(g, hand.myColor) : g));
+  const budgets = fanBudgets(shownGroups, useViewportWidth());
+  const pick = (card: HandCard) => (card.key === OWN_STACK ? setOwnOpen(true) : setSelected(card));
 
   return (
     <div
@@ -152,13 +177,14 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
     >
       <div className={classes.shelf} aria-hidden={!open}>
         <div className={classes.groups}>
-          {hand.groups.map((group) => (
+          {shownGroups.map((group) => (
             <GroupFan
               key={group.id}
               group={group}
               hand={hand}
               budget={budgets.get(group.id) ?? 520}
-              onPick={setSelected}
+              onPick={pick}
+              onFold={group.id === "pn" && ownOpen ? () => setOwnOpen(false) : undefined}
             />
           ))}
         </div>
@@ -236,15 +262,22 @@ type GroupFanProps = {
   hand: HandState;
   budget: number;
   onPick: (card: HandCard) => void;
+  /** Fold your own notes back into their stack. */
+  onFold?: () => void;
 };
 
-function GroupFan({ group, hand, budget, onPick }: GroupFanProps) {
+function GroupFan({ group, hand, budget, onPick, onFold }: GroupFanProps) {
   if (group.cards.length === 0 && group.id === "relic") return null;
   return (
     <section className={`${classes.group} ${classes[`group_${group.id}`]}`}>
       <header className={classes.groupHead}>
         <span className={classes.groupLabel}>{group.label}</span>
-        <span className={classes.groupCount}>{group.cards.length}</span>
+        <span className={classes.groupCount}>{group.cards.reduce((n, c) => n + (c.count ?? 1), 0)}</span>
+        {onFold && (
+          <button type="button" className={classes.fold} onClick={onFold}>
+            Fold yours
+          </button>
+        )}
       </header>
       {group.cards.length === 0 ? (
         <div className={classes.emptyFan}>None</div>

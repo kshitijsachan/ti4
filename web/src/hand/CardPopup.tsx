@@ -211,6 +211,8 @@ function statusOf(sent: Sent | null, refused: boolean, replyCount: number) {
   if (sent.busy) return { kind: "busy", text: `${sent.action.label.replace("…", "")}…` };
   if (sent.error) return { kind: "error", text: sent.error };
   if (refused) return { kind: "error", text: "The bot did not allow it — see its reply below." };
+  // A show answers privately to the other player; the command's own acknowledgement is the outcome.
+  if (sent.action.id === "show") return { kind: "ok", text: DONE_TEXT.show };
   if (replyCount === 0) return { kind: "busy", text: "Sent. Waiting for the bot…" };
   return { kind: "ok", text: DONE_TEXT[sent.action.id] ?? "Done." };
 }
