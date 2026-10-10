@@ -95,7 +95,7 @@ export function productionRows(choices: Choice[], me?: PlayerData): ProduceRow[]
     rows.set(key, {
       key,
       unit: p.unit,
-      name: NAMES[p.unit]?.[0] ?? p.unit,
+      name: (NAMES[p.unit]?.[0] ?? p.unit).replace(/^[a-z]/, (x) => x.toUpperCase()),
       where: whereFromLabel(cleanLabel(c.label)),
       one: p.two ? undefined : c,
       two: p.two ? c : undefined,

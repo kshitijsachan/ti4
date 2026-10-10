@@ -16,9 +16,28 @@ type IntentState = {
   setBuild: (b: BuildIntent | null) => void;
 };
 
+const KEY = "ti4.payment.build";
+
+function stored(): BuildIntent | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(KEY) ?? "null") as BuildIntent | null;
+  } catch {
+    return null;
+  }
+}
+
+/** Kept in session storage too, so a reload between Build and Pay keeps what was built and the toggles. */
 export const usePaymentIntent = create<IntentState>((set) => ({
-  build: null,
-  setBuild: (build) => set({ build }),
+  build: stored(),
+  setBuild: (build) => {
+    try {
+      if (build) sessionStorage.setItem(KEY, JSON.stringify(build));
+      else sessionStorage.removeItem(KEY);
+    } catch {
+      /* storage blocked: memory only */
+    }
+    set({ build });
+  },
 }));
 
 /** A build intent still worth applying to a payment prompt (the bot posts it within seconds). */

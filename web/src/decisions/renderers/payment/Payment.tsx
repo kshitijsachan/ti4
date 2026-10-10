@@ -159,7 +159,8 @@ export function PaymentBody(props: RendererProps) {
     const s = auto();
     setPick({ planets: new Set(s.planets), tg: s.tg, comm: s.comm });
   };
-  const maxTgNeeded = Math.min(tgMax, Math.max(0, Math.ceil(((cost ?? 0) - spent - discount - planetPaid - pick.comm * worth) / worth)));
+  /* Trade goods still needed on top of what is picked. */
+  const maxTgNeeded = cost === undefined ? 0 : Math.min(tgMax - pick.tg, Math.max(0, Math.ceil((cost - paid) / worth)));
 
   const pay = () => {
     const ch = d.prompt.channelId;
@@ -180,9 +181,10 @@ export function PaymentBody(props: RendererProps) {
     const names = planets.filter((x) => pick.planets.has(x.id)).map((p) => p.name);
     if (pick.tg) names.push(plural(pick.tg, "TG", "TG"));
     if (pick.comm) names.push(plural(pick.comm, "commodity", "commodities"));
-    for (const o of offers.filter((x) => on.has(x.key))) names.push(o.label);
+    const used = offers.filter((x) => on.has(x.key)).map((o) => `${o.label} −${o.amount}`);
     void run(`pay:${d.id}`, steps, () => {
-      const detail = names.length ? `${paid} ${unit} (${names.join(", ")})` : `nothing`;
+      const spentNow = paid - spent - discount;
+      const detail = [names.length ? `${spentNow} ${unit} (${names.join(", ")})` : spentNow ? `${spentNow} ${unit}` : "nothing", ...used].join(" · ");
       showReceipt(purpose.done, `Paid ${detail}`);
       if (purpose.key === "build") usePaymentIntent.getState().setBuild(null);
     });
