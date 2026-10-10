@@ -24,6 +24,8 @@ export function promptForMe(seat: Seat, p: Prompt, faction: string) {
 export class Steps {
   /** `${message id}:${custom id}` → the message's controls when pressed. */
   readonly pressed = new Map<string, string>();
+  /** Messages the shim says no longer exist (a stale copy may linger in a remote view): never pressed again. */
+  readonly gone = new Set<string>();
   lastPress = 0;
 
   constructor(
@@ -38,7 +40,7 @@ export class Steps {
     for (let i = prompts.length - 1; i >= 0; i--) {
       const p = prompts[i];
       if (!snowflakeAfter(p.m.id, after ?? this.since)) break;
-      if (!promptForMe(this.seat, p, faction)) continue;
+      if (this.gone.has(p.m.id) || !promptForMe(this.seat, p, faction)) continue;
       const c = p.controls.find((x) => (!lockOf(x.custom_id) || lockOf(x.custom_id) === faction) && match(baseId(x.custom_id), x));
       if (c) return { p, c };
     }
@@ -52,7 +54,13 @@ export class Steps {
     this.pressed.set(key, sig(p));
     this.lastPress = Date.now();
     const err = await this.seat.press(p, c, `plan: ${why}`);
-    if (err) this.seat.log(`plan step "${c.label}" failed: ${err}`);
+    if (err) {
+      this.seat.log(`plan step "${c.label}" failed: ${err}`);
+      if (/no longer exists|is gone/i.test(err)) {
+        this.gone.add(p.m.id);
+        return false;
+      }
+    }
     return true;
   }
 

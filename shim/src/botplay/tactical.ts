@@ -55,6 +55,8 @@ const sig = (p: Prompt) =>
 
 export class TacticalExecutor {
   plan: PlanState | null = null;
+  /** Messages the shim says no longer exist. */
+  private gone = new Set<string>();
 
   constructor(private seat: Seat) {}
 
@@ -109,7 +111,7 @@ export class TacticalExecutor {
     for (let i = prompts.length - 1; i >= 0; i--) {
       const p = prompts[i];
       if (!snowflakeAfter(p.m.id, after ?? plan.since)) break;
-      if (!this.forMe(p, faction)) continue;
+      if (this.gone.has(p.m.id) || !this.forMe(p, faction)) continue;
       const c = p.controls.find((x) => (!lockOf(x.custom_id) || lockOf(x.custom_id) === faction) && match(baseId(x.custom_id), x));
       if (c) return { p, c };
     }
@@ -130,6 +132,10 @@ export class TacticalExecutor {
     const err = await this.seat.press(p, c, `plan: ${why}`);
     if (err) {
       this.seat.log(`plan step "${c.label}" failed: ${err}`);
+      if (/no longer exists|is gone/i.test(err)) {
+        this.gone.add(p.m.id);
+        return false;
+      }
       return true;
     }
     return true;
