@@ -90,6 +90,21 @@ const numberedId = (prefix: RegExp, id: string) => {
   return m ? Number(m[1]) : undefined;
 };
 
+/**
+ * A hand listing with the chunks Discord's 2000-character limit split off: the bot posts the rest as the
+ * next messages, which go on with a numbered line or a quoted card text.
+ */
+function listingAt(channel: ChannelMessages, at: number): string {
+  let text = channel.byId[channel.ids[at]]?.content ?? "";
+  for (let j = at + 1; j < channel.ids.length; j++) {
+    const next = channel.byId[channel.ids[j]];
+    const content = next?.content ?? "";
+    if (!next?.author?.bot || !/^(>|\d+\\?\.\s)/.test(content)) break;
+    text += `\n${content}`;
+  }
+  return text;
+}
+
 /** Indexes the thread newest → oldest, so the newest offer of each button wins. */
 export function indexThread(channel: ChannelMessages | undefined): ThreadIndex {
   const index: ThreadIndex = {
@@ -129,18 +144,18 @@ export function indexThread(channel: ChannelMessages | undefined): ThreadIndex {
     }
     if (!acSeen && content.startsWith("__Action Cards__")) {
       acSeen = true;
-      index.acNumbers = numbersIn(content);
+      index.acNumbers = numbersIn(listingAt(channel, i));
       const limit = /^__Action Cards__ \((\d+)\/(\d+)\)/.exec(content);
       if (limit) index.acLimit = Number(limit[2]);
     }
     if (!soSeen && content.includes("__Unscored Secret Objectives")) {
       soSeen = true;
-      index.soNumbers = numbersIn(section(content, /__Unscored Secret Objectives/));
+      index.soNumbers = numbersIn(section(listingAt(channel, i), /__Unscored Secret Objectives/));
     }
     if (!pnSeen && content.includes("Promissory notes in your hand")) {
       pnSeen = true;
       index.pnNumbers = numbersIn(
-        section(content, /Promissory notes in your hand/, /Promissory notes in your play area/),
+        section(listingAt(channel, i), /Promissory notes in your hand/, /Promissory notes in your play area/),
       );
     }
 
@@ -246,6 +261,8 @@ const HAND_BUTTON = /^(ac_play_from_hand_|ac_discard_from_hand_|so_score_hand_|d
 function isHandNoise(message: Message): boolean {
   const content = message.content ?? "";
   if (HAND_NOISE.test(content) || content.startsWith("```notSus")) return true;
+  // The rest of a hand listing split over several messages.
+  if (/^(>|\d+\\?\.\s)/.test(content) && /`\(\s*\d+\)`/.test(content)) return true;
   const buttons = buttonsOf(message);
   return buttons.length > 0 && buttons.every((b) => HAND_BUTTON.test(b.custom_id ?? ""));
 }

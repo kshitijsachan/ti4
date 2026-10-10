@@ -4,6 +4,7 @@ import { CardPopup } from "./CardPopup";
 import { timingOf, type CardGroup, type HandCard, type Timing } from "./model";
 import { useHand, type HandState } from "./useHand";
 import { actionsFor, isSabotage, useRunCardAction } from "./useHandActions";
+import { useNewCards } from "./useNewCards";
 import classes from "./HandTray.module.css";
 
 type Props = {
@@ -168,6 +169,17 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
   const shownGroups = hand.groups.map((g) => (g.id === "pn" && !ownOpen ? foldOwnNotes(g, hand.myColor) : g));
   const budgets = fanBudgets(shownGroups, useViewportWidth());
   const pick = (card: HandCard) => (card.key === OWN_STACK ? setOwnOpen(true) : setSelected(card));
+  const arrivals = useNewCards(hand.groups, !hand.loading && !!hand.myColor);
+  // Silent draws leave the new cards unlisted by the bot (no number, so no Play): ask it to relist once.
+  const synced = useRef("");
+  const refresh = hand.index.refresh;
+  const unlisted = arrivals.fresh.filter((c) => (c.kind === "ac" || c.kind === "so") && !hand.numbers.has(c.key));
+  const unlistedKey = unlisted.map((c) => c.key).join(",");
+  useEffect(() => {
+    if (!unlistedKey || !refresh || synced.current === unlistedKey) return;
+    synced.current = unlistedKey;
+    void run({ id: "sync", label: "Sync with bot", tone: "neutral", step: { type: "press", button: refresh } });
+  }, [unlistedKey, refresh, run]);
 
   return (
     <div
@@ -185,6 +197,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
               budget={budgets.get(group.id) ?? 520}
               onPick={pick}
               onFold={group.id === "pn" && ownOpen ? () => setOwnOpen(false) : undefined}
+              newKeys={arrivals.newKeys}
             />
           ))}
         </div>
@@ -198,6 +211,10 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
           <div className={classes.syncNote}>Some cards are not listed by the bot yet — open one and press Sync with bot.</div>
         )}
       </div>
+
+      {arrivals.fresh.length > 0 && !open && !selected && (
+        <DrawNotice cards={arrivals.fresh} onPick={setSelected} onClose={arrivals.dismiss} />
+      )}
 
       <button
         type="button"
@@ -264,9 +281,48 @@ type GroupFanProps = {
   onPick: (card: HandCard) => void;
   /** Fold your own notes back into their stack. */
   onFold?: () => void;
+  /** Cards that just arrived, highlighted for a few seconds. */
+  newKeys: Set<string>;
 };
 
-function GroupFan({ group, hand, budget, onPick, onFold }: GroupFanProps) {
+const KIND_WORD: Record<HandCard["kind"], string> = {
+  ac: "Action card",
+  so: "Secret objective",
+  pn: "Promissory note",
+  relic: "Relic",
+  fragment: "Relic fragment",
+};
+
+/** "You drew …": the cards that just arrived (silent draws included), each opening its popup. */
+function DrawNotice({ cards, onPick, onClose }: { cards: HandCard[]; onPick: (card: HandCard) => void; onClose: () => void }) {
+  return (
+    <div className={classes.drawNotice} role="status">
+      <div className={classes.drawHead}>
+        <span>{cards.length === 1 ? "New card in your hand" : `${cards.length} new cards in your hand`}</span>
+        <button type="button" className={classes.drawClose} onClick={onClose} aria-label="Dismiss">
+          ×
+        </button>
+      </div>
+      {cards.map((card) => (
+        <button
+          type="button"
+          key={card.key}
+          className={`${classes.drawItem} ${classes[`group_${card.kind === "fragment" ? "relic" : card.kind}`]}`}
+          onClick={() => onPick(card)}
+        >
+          <span className={classes.drawName}>{card.name}</span>
+          <span className={classes.drawKind}>
+            {KIND_WORD[card.kind]}
+            {card.window ? ` · ${card.window}` : ""}
+          </span>
+          {card.text && <span className={classes.drawText}>{card.text}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function GroupFan({ group, hand, budget, onPick, onFold, newKeys }: GroupFanProps) {
   if (group.cards.length === 0 && group.id === "relic") return null;
   return (
     <section className={`${classes.group} ${classes[`group_${group.id}`]}`}>
@@ -296,6 +352,7 @@ function GroupFan({ group, hand, budget, onPick, onFold }: GroupFanProps) {
                 type="button"
                 key={card.key}
                 className={classes.slot}
+                data-new={newKeys.has(card.key) || undefined}
                 style={{ ["--i" as string]: i }}
                 onClick={() => onPick(card)}
                 title={card.name}
