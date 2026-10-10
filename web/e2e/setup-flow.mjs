@@ -31,22 +31,29 @@ const me = await (await fetch(`${base}/app/me?token=${token}`)).json();
 const myId = me.user.id;
 
 await page.goto(`${base}/play?t=${token}`, { waitUntil: "domcontentloaded" });
-await page.waitForSelector("text=Quick solo game", { timeout: 30000 });
-// Set the bot count with the stepper (default 3).
-for (let n = 3; n < bots; n++) await page.getByLabel("More opponents").click();
-for (let n = 3; n > bots; n--) await page.getByLabel("Fewer opponents").click();
-await page.waitForTimeout(800);
-await shot("1-play");
-await page.getByRole("button", { name: "Play solo" }).click();
-say("pressed Play solo");
-await page.waitForTimeout(2500);
-await shot("2-progress");
+if (process.env.GAME) {
+  // Resume an existing game (e.g. one stuck after its draft) instead of starting a new one.
+  await page.waitForTimeout(1500);
+  await page.goto(`${base}/game/${process.env.GAME}`);
+} else {
 
-await page.waitForURL(/\/game\/[a-z]+\d+/, { timeout: 300000 }).catch(async () => {
-  await shot("error");
-  const err = await page.locator("text=/Timed out|refused|failed/i").allTextContents();
-  throw new Error(`never reached the game page: ${err.join(" | ")}`);
-});
+  await page.waitForSelector("text=Quick solo game", { timeout: 30000 });
+  // Set the bot count with the stepper (default 3).
+  for (let n = 3; n < bots; n++) await page.getByLabel("More opponents").click();
+  for (let n = 3; n > bots; n--) await page.getByLabel("Fewer opponents").click();
+  await page.waitForTimeout(800);
+  await shot("1-play");
+  await page.getByRole("button", { name: "Play solo" }).click();
+  say("pressed Play solo");
+  await page.waitForTimeout(2500);
+  await shot("2-progress");
+  
+  await page.waitForURL(/\/game\/[a-z]+\d+/, { timeout: 300000 }).catch(async () => {
+    await shot("error");
+    const err = await page.locator("text=/Timed out|refused|failed/i").allTextContents();
+    throw new Error(`never reached the game page: ${err.join(" | ")}`);
+  });
+  }
 const game = /\/game\/([a-z]+\d+)/.exec(page.url())[1];
 say(`landed on /game/${game}`);
 await page.waitForTimeout(5000);
@@ -137,11 +144,16 @@ while (Date.now() < end2 && !done) {
     await options.first().click();
     await page.waitForTimeout(500);
     await shot(`7-decision-${seen.length}-selected`);
-    const confirm = dialog.locator('[class*=bigConfirm]').first();
+    const confirm = dialog.getByRole("button", { name: /^(Take|Keep|Start with|Research|Discard|Pick)\b/ }).first();
     say(`my decision: ${title} -> ${(await confirm.textContent())?.trim()}`);
     await confirm.click();
+  } else if (await dialog.getByRole("button", { name: "Get a Technology" }).count()) {
+    say(`my decision: ${title} -> Get a Technology`);
+    await dialog.getByRole("button", { name: "Get a Technology" }).click();
   } else {
-    say(`unrecognised decision for the script: ${title}`);
+    say(`not mine to script (left alone): ${title}`);
+    const next = dialog.getByLabel("Next decision");
+    if (await next.count()) await next.click();
     await page.waitForTimeout(3000);
   }
   await page.waitForTimeout(4000);
