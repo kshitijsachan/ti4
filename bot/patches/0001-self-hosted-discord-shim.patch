@@ -2446,10 +2446,10 @@ index 0000000..0ff478c
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoService.java b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 new file mode 100644
-index 0000000..75e9203
+index 0000000..31eab30
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoService.java
-@@ -0,0 +1,287 @@
+@@ -0,0 +1,384 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.io.BufferedReader;
@@ -2513,11 +2513,13 @@ index 0000000..75e9203
 +    public UndoPointsResponse list(String gameName) {
 +        List<Integer> numbers = GameUndoNameService.getSortedUndoNumbers(gameName);
 +        int latest = numbers.isEmpty() ? -1 : numbers.getLast();
++        ManagedGame managed = GameManager.getManagedGame(gameName);
++        Map<String, String> names = managed == null || managed.getGame() == null ? Map.of() : names(managed.getGame());
 +        List<UndoPoint> points = new ArrayList<>();
 +        for (int i = numbers.size() - 1; i >= 0; i--) {
 +            int index = numbers.get(i);
 +            UndoPoint p = readPoint(gameName, index, index == latest);
-+            if (p != null) points.add(p);
++            if (p != null) points.add(humanize(p, names));
 +        }
 +        List<Rewind> rewinds = UndoJournal.read(gameName).stream()
 +                .map(e -> new Rewind(e.at(), e.fromIndex(), e.toIndex(), e.fromSavedAt(), e.toSavedAt(), e.kind(),
@@ -2541,8 +2543,9 @@ index 0000000..75e9203
 +            if (!numbers.contains(index) || index <= 0 || index > latest)
 +                throw new UndoException(404, "Save " + index + " no longer exists (only the last ~100 are kept).");
 +
-+            UndoPoint target = readPoint(gameName, index, false);
-+            UndoPoint undone = readPoint(gameName, latest, true);
++            Map<String, String> names = names(game);
++            UndoPoint target = humanize(readPoint(gameName, index, false), names);
++            UndoPoint undone = humanize(readPoint(gameName, latest, true), names);
 +            String targetLabel = target == null ? "save " + index : target.label();
 +            String who = displayName(me);
 +
@@ -2554,9 +2557,11 @@ index 0000000..75e9203
 +                throw new UndoException(500, "Could not read the current game file.");
 +            }
 +
++            long rollbackStart = System.currentTimeMillis();
 +            Game restored = UndoJournal.withContext(
 +                    "rewind", userId, who, targetLabel, () -> GameManager.undo(game, index));
 +            if (restored == null) throw new UndoException(500, "The bot failed to roll back to save " + index + ".");
++            if (target != null) retirePrompts(restored, target.savedAt(), rollbackStart);
 +
 +            // Keep the pre-rewind state as the next save, then save the rewound state on top of it: one undo step
 +            // (the UNDO button, /game undo or POST /undo) then brings back everything the rewind threw away.
@@ -2590,8 +2595,9 @@ index 0000000..75e9203
 +            List<Integer> numbers = GameUndoNameService.getSortedUndoNumbers(gameName);
 +            int latest = numbers.isEmpty() ? -1 : numbers.getLast();
 +            if (latest <= 1 || !numbers.contains(latest - 1)) throw new UndoException(409, "There is nothing to undo.");
-+            UndoPoint undone = readPoint(gameName, latest, true);
-+            UndoPoint previous = readPoint(gameName, latest - 1, false);
++            Map<String, String> names = names(game);
++            UndoPoint undone = humanize(readPoint(gameName, latest, true), names);
++            UndoPoint previous = humanize(readPoint(gameName, latest - 1, false), names);
 +            String undoneLabel = undone == null ? "the last action" : undone.label();
 +            boolean lastWasRewind = undone != null && undone.command().startsWith(REWIND_MARK);
 +
@@ -2608,8 +2614,10 @@ index 0000000..75e9203
 +            }
 +
 +            String who = displayName(me);
++            long rollbackStart = System.currentTimeMillis();
 +            Game restored = UndoJournal.withContext("undo", userId, who, undoneLabel, () -> GameManager.undo(game));
 +            if (restored == null) throw new UndoException(500, "The bot failed to undo.");
++            if (previous != null) retirePrompts(restored, previous.savedAt(), rollbackStart);
 +            MessageHelper.sendMessageToChannel(
 +                    restored.getActionsChannel(),
 +                    REWIND_MARK + " " + me.getRepresentationNoPing() + " undid: **" + undoneLabel + "**.");
@@ -2619,6 +2627,65 @@ index 0000000..75e9203
 +                    previous == null ? "" : previous.label(),
 +                    undoneLabel,
 +                    GameUndoNameService.getLatestUndoNumber(gameName));
++        });
++    }
++
++    /** A prompt posted up to this long after a save belongs to that save's action (and is still valid). */
++    private static final long PROMPT_SLACK_MS = 1500;
++
++    /**
++     * The Discord UNDO button deletes the prompt it was pressed on; a web undo / rewind has no such message, so the
++     * prompts of the undone actions would stay pressable (and show up as decisions) although the game state they were
++     * made for is gone. Strip the buttons of every bot message posted after the restored save and before the roll-back
++     * (the bot re-posts the restored state's own prompt after that) in the game's actions channel, table-talk channel
++     * and the players' cards-info threads. The text stays, so the game log can still show what was undone.
++     */
++    private static void retirePrompts(Game game, long restoredSavedAt, long rollbackStart) {
++        long from = restoredSavedAt + PROMPT_SLACK_MS;
++        if (from >= rollbackStart) return;
++        java.util.concurrent.CompletableFuture.runAsync(() -> {
++            List<net.dv8tion.jda.api.entities.channel.middleman.MessageChannel> channels = new ArrayList<>();
++            try {
++                if (game.getActionsChannel() != null) channels.add(game.getActionsChannel());
++                if (game.getMainGameChannel() != null) channels.add(game.getMainGameChannel());
++                for (Player p : game.getRealPlayers()) {
++                    try {
++                        if (p.getCardsInfoThread() != null) channels.add(p.getCardsInfoThread());
++                    } catch (Exception ignored) {
++                        // a player without a cards-info thread has no prompts there
++                    }
++                }
++            } catch (Exception e) {
++                BotLogger.error("Could not list the channels of " + game.getName() + " to retire undone prompts", e);
++                return;
++            }
++            String after = Long.toUnsignedString(net.dv8tion.jda.api.utils.TimeUtil.getDiscordTimestamp(from));
++            for (var channel : channels) {
++                try {
++                    long self = channel.getJDA().getSelfUser().getIdLong();
++                    String cursor = after;
++                    for (int page = 0; page < 5; page++) {
++                        List<net.dv8tion.jda.api.entities.Message> batch =
++                                channel.getHistoryAfter(cursor, 100).complete().getRetrievedHistory();
++                        if (batch.isEmpty()) break;
++                        boolean past = false;
++                        for (var m : batch) {
++                            long created = m.getTimeCreated().toInstant().toEpochMilli();
++                            if (created >= rollbackStart) {
++                                past = true;
++                                continue;
++                            }
++                            if (m.getAuthor().getIdLong() != self || m.getComponents().isEmpty()) continue;
++                            m.editMessageComponents(java.util.Collections.emptyList())
++                                    .queue(ok -> {}, BotLogger::catchRestError);
++                        }
++                        if (past || batch.size() < 100) break;
++                        cursor = batch.getFirst().getId(); // newest first
++                    }
++                } catch (Exception e) {
++                    BotLogger.error("Could not retire undone prompts in " + channel.getName(), e);
++                }
++            }
 +        });
 +    }
 +
@@ -2642,6 +2709,36 @@ index 0000000..75e9203
 +        Player p = game.getPlayer(userId);
 +        if (p == null) throw new UndoException(403, "You are not a player in this game.");
 +        return p;
++    }
++
++    /**
++     * Saved commands name the Discord user ("traderann pressed …"); the web shows players by their display name.
++     * Maps each player's user name (and its lower-case, space-free form, for a user JDA no longer caches) to it.
++     */
++    private static Map<String, String> names(Game game) {
++        Map<String, String> out = new java.util.HashMap<>();
++        for (Player p : game.getPlayers().values()) {
++            String shown = displayName(p);
++            if (shown == null || shown.isBlank()) continue;
++            out.putIfAbsent(shown.toLowerCase().replaceAll("\\s+", ""), shown);
++            try {
++                net.dv8tion.jda.api.entities.User u = p.getUser();
++                if (u != null) out.put(u.getName(), shown);
++            } catch (Exception ignored) {
++                // no JDA user: the normalised name above still applies
++            }
++        }
++        return out;
++    }
++
++    private static UndoPoint humanize(UndoPoint p, Map<String, String> names) {
++        if (p == null || p.actor() == null || p.actor().isBlank()) return p;
++        String shown = names.get(p.actor());
++        if (shown == null) shown = names.get(p.actor().toLowerCase().replaceAll("\\s+", ""));
++        if (shown == null || shown.equals(p.actor())) return p;
++        String label = p.label().startsWith(p.actor() + " ") ? shown + p.label().substring(p.actor().length()) : p.label();
++        return new UndoPoint(p.index(), p.savedAt(), p.fileTime(), p.command(), shown, label, p.round(), p.phase(),
++                p.current());
 +    }
 +
 +    private static String displayName(Player p) {
