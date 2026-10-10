@@ -32,7 +32,8 @@ export function RewindProvider({ gameName, events, children }: ProviderProps) {
   const ask = useCallback(
     (eventLabel: string, point: UndoPoint) => {
       const undoCount = index.livePoints.filter((p) => p.savedAt > point.savedAt).length;
-      setRequest({ eventLabel, point, undoCount });
+      const before = [...index.livePoints].reverse().find((p) => p.savedAt < point.savedAt);
+      setRequest({ eventLabel, point, undoCount, before });
     },
     [index],
   );

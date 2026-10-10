@@ -1,4 +1,6 @@
-export { UndoButton } from "./UndoButton";
+export { UndoButton, UNDO_REQUEST_EVENT } from "./UndoButton";
+export { planUndo, isMine } from "./plan";
+export type { UndoPlan, Me } from "./plan";
 export type { UndoButtonProps } from "./UndoButton";
 export { RewindProvider, useRewindRow, useRewindIndex } from "./RewindProvider";
 export type { RewindRow } from "./RewindProvider";

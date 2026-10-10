@@ -10,6 +10,8 @@ export type RewindRequest = {
   point: UndoPoint;
   /** How many saved actions after `point` will be undone. */
   undoCount: number;
+  /** The save just before this event, to undo the event itself too ("Rewind to before it"). */
+  before?: UndoPoint;
 };
 
 type Props = {
@@ -30,12 +32,12 @@ export function RewindDialog({ request, onCancel, onConfirm }: Props) {
     onCancel();
   };
 
-  const confirm = async () => {
+  const confirm = async (point: UndoPoint) => {
     if (!request) return;
     setBusy(true);
     setError(null);
     try {
-      await onConfirm(request.point);
+      await onConfirm(point);
       onCancel();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -49,9 +51,11 @@ export function RewindDialog({ request, onCancel, onConfirm }: Props) {
       {request && (
         <div className={classes.dialogBody}>
           <p className={classes.question}>
-            Rewind the game to just after: <b>{request.eventLabel}</b>?
+            Rewind the game to <b>{request.eventLabel}</b>?
           </p>
-          <p className={classes.warning}>Everything after this will be undone for everyone.</p>
+          <p className={classes.warning}>
+            “Before it” also undoes this event; “just after it” keeps it. Everything later is undone for everyone.
+          </p>
           {error && (
             <p className={classes.error} role="alert">
               {error}
@@ -61,9 +65,21 @@ export function RewindDialog({ request, onCancel, onConfirm }: Props) {
             <button type="button" className={classes.secondary} onClick={close} disabled={busy}>
               Cancel
             </button>
-            <button type="button" className={classes.danger} onClick={() => void confirm()} disabled={busy} data-autofocus>
-              <IconPlayerTrackPrev size={14} stroke={2} aria-hidden />
-              {busy ? "Rewinding…" : "Rewind"}
+            {request.before && (
+              <button type="button" className={classes.danger} onClick={() => void confirm(request.before!)} disabled={busy} data-autofocus>
+                <IconPlayerTrackPrev size={14} stroke={2} aria-hidden />
+                {busy ? "Rewinding…" : "Before it"}
+              </button>
+            )}
+            <button
+              type="button"
+              className={request.before ? classes.secondary : classes.danger}
+              onClick={() => void confirm(request.point)}
+              disabled={busy}
+              data-autofocus={!request.before || undefined}
+            >
+              {!request.before && <IconPlayerTrackPrev size={14} stroke={2} aria-hidden />}
+              {busy && !request.before ? "Rewinding…" : "Just after it"}
             </button>
           </div>
         </div>

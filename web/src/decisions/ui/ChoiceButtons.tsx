@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { UNDO_REQUEST_EVENT } from "@/rollback";
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconChevronUp, IconArrowBackUp, IconExternalLink } from "@tabler/icons-react";
 import cx from "clsx";
@@ -211,7 +212,8 @@ export function ChoiceButtons(props: Props) {
               key={c.key}
               className={classes.undo}
               disabled={!!props.pendingKey || c.disabled}
-              onClick={() => props.onPress(c)}
+              // The bot's UNDO refuses silently once anyone acted after me; the top bar's Undo finds my last action.
+              onClick={() => (/^ultimateUndo_/.test(c.customId ?? "") ? window.dispatchEvent(new Event(UNDO_REQUEST_EVENT)) : props.onPress(c))}
               title={c.label}
             >
               {props.pendingKey === c.key ? <Loader size={10} color="currentColor" /> : <IconArrowBackUp size={12} />}

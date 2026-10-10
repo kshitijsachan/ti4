@@ -83,6 +83,23 @@ index d91d9d5..50e3842 100644
              GameWebStatePipeline.queue(loadedGame);
  
              generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
+diff --git a/src/main/java/ti4/helpers/ButtonHelper.java b/src/main/java/ti4/helpers/ButtonHelper.java
+index d4c34fb..351bbd1 100644
+--- a/src/main/java/ti4/helpers/ButtonHelper.java
++++ b/src/main/java/ti4/helpers/ButtonHelper.java
+@@ -5052,7 +5052,11 @@ public class ButtonHelper {
+         // Expeditions
+         String expeditionText = game.getExpeditions().getTopLevelExpeditionButtonText();
+         boolean thundersEdgeOnBoard = game.getTileFromPlanet("thundersedge") != null;
+-        if (expeditionText != null && !thundersEdgeOnBoard && game.isThundersEdge() && !game.isTwilightsFallMode()) {
++        if (expeditionText != null
++                && !thundersEdgeOnBoard
++                && game.isThundersEdge()
++                && !game.isTwilightsFallMode()
++                && ti4.selfhost.ExpeditionGate.offer(player, game)) {
+             endButtons.add(Buttons.gray(player.factionButtonChecker() + "expeditionInfoAndButtons", expeditionText));
+         }
+ 
 diff --git a/src/main/java/ti4/helpers/TransactionHelper.java b/src/main/java/ti4/helpers/TransactionHelper.java
 index 22ecac6..6d15e7d 100644
 --- a/src/main/java/ti4/helpers/TransactionHelper.java
@@ -141,6 +158,58 @@ index 69ff42e..9b14938 100644
          if (logToConsole()) {
              if (severity.isErrorOrHigher()) {
                  System.err.println(severity.name() + ": " + compiledMessage + "\n" + err);
+diff --git a/src/main/java/ti4/selfhost/ExpeditionGate.java b/src/main/java/ti4/selfhost/ExpeditionGate.java
+new file mode 100644
+index 0000000..a451361
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/ExpeditionGate.java
+@@ -0,0 +1,46 @@
++package ti4.selfhost;
++
++import java.util.Map;
++import ti4.game.Game;
++import ti4.game.Planet;
++import ti4.game.Player;
++import ti4.helpers.Helper;
++
++/**
++ * Self-hosted: the end-of-turn / pass "Do an Expedition" offer only when the player can pay for an expedition that is
++ * still open. Upstream offers it every turn regardless, which at a live table is a prompt to wave away each turn.
++ */
++public final class ExpeditionGate {
++    private ExpeditionGate() {}
++
++    public static boolean offer(Player player, Game game) {
++        if (!SelfHosted.isEnabled()) return true;
++        for (Map.Entry<String, String> exp :
++                game.getExpeditions().getExpeditionFactions().entrySet()) {
++            if (exp.getValue() == null && canPay(exp.getKey(), player, game)) return true;
++        }
++        return false;
++    }
++
++    private static boolean canPay(String expedition, Player player, Game game) {
++        int tg = player.getTg();
++        return switch (expedition) {
++            case "techSkip" -> player.getReadiedPlanets().stream().anyMatch(p -> hasSpecialty(p, game));
++            case "tradeGoods" -> tg >= 3;
++            case "fiveRes" -> orZero(Helper.getPlayerResourcesAvailable(player, game)) + tg >= 5;
++            case "fiveInf" -> orZero(Helper.getPlayerInfluenceAvailable(player, game)) + tg >= 5;
++            case "secret" -> !player.getSecretsUnscored().isEmpty();
++            case "actionCards" -> player.getAcCount() >= 2;
++            default -> true;
++        };
++    }
++
++    private static boolean hasSpecialty(String planet, Game game) {
++        Planet p = game.getPlanetsInfo().get(planet);
++        return p != null && !p.getTechSpecialities().isEmpty();
++    }
++
++    private static int orZero(Integer n) {
++        return n == null ? 0 : n;
++    }
++}
 diff --git a/src/main/java/ti4/selfhost/SelfHosted.java b/src/main/java/ti4/selfhost/SelfHosted.java
 new file mode 100644
 index 0000000..e03efb2
@@ -2480,10 +2549,10 @@ index 0000000..4f512c6
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoModels.java b/src/main/java/ti4/spring/api/selfhost/UndoModels.java
 new file mode 100644
-index 0000000..0ff478c
+index 0000000..70d71c1
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoModels.java
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,55 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.util.List;
@@ -2507,7 +2576,11 @@ index 0000000..0ff478c
 +            String label,
 +            int round,
 +            String phase,
-+            boolean current) {}
++            boolean current,
++            /* faction or color of the player whose button press made this save (the bot's saved_buttons) */
++            String actorFaction,
++            /* that player's user id, resolved against the game */
++            String actorUserId) {}
 +
 +    /**
 +     * A roll-back from the bot's own undo code (any path). See {@link UndoJournal}. {@code lostSavedAt}: save times of
@@ -2537,10 +2610,10 @@ index 0000000..0ff478c
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoService.java b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 new file mode 100644
-index 0000000..518cbf8
+index 0000000..6a3ff03
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoService.java
-@@ -0,0 +1,421 @@
+@@ -0,0 +1,450 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.io.BufferedReader;
@@ -2605,7 +2678,7 @@ index 0000000..518cbf8
 +        List<Integer> numbers = GameUndoNameService.getSortedUndoNumbers(gameName);
 +        int latest = numbers.isEmpty() ? -1 : numbers.getLast();
 +        ManagedGame managed = GameManager.getManagedGame(gameName);
-+        Map<String, String> names = managed == null || managed.getGame() == null ? Map.of() : names(managed.getGame());
++        Names names = managed == null || managed.getGame() == null ? null : names(managed.getGame());
 +        List<UndoPoint> points = new ArrayList<>();
 +        for (int i = numbers.size() - 1; i >= 0; i--) {
 +            int index = numbers.get(i);
@@ -2634,7 +2707,7 @@ index 0000000..518cbf8
 +            if (!numbers.contains(index) || index <= 0 || index > latest)
 +                throw new UndoException(404, "Save " + index + " no longer exists (only the last ~100 are kept).");
 +
-+            Map<String, String> names = names(game);
++            Names names = names(game);
 +            UndoPoint target = humanize(readPoint(gameName, index, false), names);
 +            UndoPoint undone = humanize(readPoint(gameName, latest, true), names);
 +            String targetLabel = target == null ? "save " + index : target.label();
@@ -2686,7 +2759,7 @@ index 0000000..518cbf8
 +            List<Integer> numbers = GameUndoNameService.getSortedUndoNumbers(gameName);
 +            int latest = numbers.isEmpty() ? -1 : numbers.getLast();
 +            if (latest <= 1 || !numbers.contains(latest - 1)) throw new UndoException(409, "There is nothing to undo.");
-+            Map<String, String> names = names(game);
++            Names names = names(game);
 +            UndoPoint undone = humanize(readPoint(gameName, latest, true), names);
 +            UndoPoint previous = humanize(readPoint(gameName, latest - 1, false), names);
 +            String undoneLabel = undone == null ? "the last action" : undone.label();
@@ -2839,34 +2912,55 @@ index 0000000..518cbf8
 +        return p;
 +    }
 +
++    /** The game, for naming the players in saves (by user name, display name or faction). */
++    private record Names(Game game, Map<String, Player> byName) {}
++
 +    /**
 +     * Saved commands name the Discord user ("traderann pressed …"); the web shows players by their display name.
-+     * Maps each player's user name (and its lower-case, space-free form, for a user JDA no longer caches) to it.
++     * Maps each player's user name (and its lower-case, space-free form, for a user JDA no longer caches) to them.
 +     */
-+    private static Map<String, String> names(Game game) {
-+        Map<String, String> out = new java.util.HashMap<>();
++    private static Names names(Game game) {
++        Map<String, Player> out = new java.util.HashMap<>();
 +        for (Player p : game.getPlayers().values()) {
 +            String shown = displayName(p);
 +            if (shown == null || shown.isBlank()) continue;
-+            out.putIfAbsent(shown.toLowerCase().replaceAll("\\s+", ""), shown);
++            out.putIfAbsent(shown.toLowerCase().replaceAll("\\s+", ""), p);
 +            try {
 +                net.dv8tion.jda.api.entities.User u = p.getUser();
-+                if (u != null) out.put(u.getName(), shown);
++                if (u != null) out.put(u.getName(), p);
 +            } catch (Exception ignored) {
 +                // no JDA user: the normalised name above still applies
 +            }
 +        }
-+        return out;
++        return new Names(game, out);
 +    }
 +
-+    private static UndoPoint humanize(UndoPoint p, Map<String, String> names) {
-+        if (p == null || p.actor() == null || p.actor().isBlank()) return p;
-+        String shown = names.get(p.actor());
-+        if (shown == null) shown = names.get(p.actor().toLowerCase().replaceAll("\\s+", ""));
-+        if (shown == null || shown.equals(p.actor())) return p;
-+        String label = p.label().startsWith(p.actor() + " ") ? shown + p.label().substring(p.actor().length()) : p.label();
++    /**
++     * Names the player who made a save by display name, with their user id. A hidden press ("someone pressed button:
++     * [CLASSIFIED]", e.g. anything in a hand thread) is attributed through the save's saved_buttons, which start with
++     * the presser's faction, so a player can still find their own last action.
++     */
++    private static UndoPoint humanize(UndoPoint p, Names names) {
++        if (p == null || names == null || p.command().startsWith(REWIND_MARK)) return p;
++        Player who = null;
++        String actor = p.actor() == null ? "" : p.actor();
++        if (!actor.isBlank() && !"someone".equals(actor)) {
++            who = names.byName().get(actor);
++            if (who == null) who = names.byName().get(actor.toLowerCase().replaceAll("\\s+", ""));
++        }
++        if (who == null && p.actorFaction() != null && !p.actorFaction().isBlank() && !"-".equals(p.actorFaction())) {
++            Player byFaction = names.game().getPlayerFromColorOrFaction(p.actorFaction());
++            // saved_buttons can belong to another player's prompt only when the actor is unknown; trust it then
++            if (byFaction != null && (actor.isBlank() || "someone".equals(actor))) who = byFaction;
++        }
++        if (who == null) return p;
++        String shown = displayName(who);
++        String label = p.label();
++        if ("someone".equals(actor) && label.startsWith("someone took a hidden action"))
++            label = shown + " made a private choice";
++        else if (!actor.isBlank() && label.startsWith(actor + " ")) label = shown + label.substring(actor.length());
 +        return new UndoPoint(p.index(), p.savedAt(), p.fileTime(), p.command(), shown, label, p.round(), p.phase(),
-+                p.current());
++                p.current(), p.actorFaction(), who.getUserID());
 +    }
 +
 +    private static String displayName(Player p) {
@@ -2888,10 +2982,17 @@ index 0000000..518cbf8
 +        long savedAt = 0;
 +        int round = 0;
 +        String phase = "";
++        String actorFaction = "";
 +        try (BufferedReader r = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
 +            String line;
 +            int found = 0;
-+            while ((line = r.readLine()) != null && found < 4) {
++            while ((line = r.readLine()) != null && found < 5) {
++                if (line.startsWith("saved_buttons ") && actorFaction.isEmpty()) {
++                    String first = line.substring("saved_buttons ".length()).split(";", 2)[0].trim();
++                    actorFaction = "null".equals(first) ? "-" : first.isEmpty() ? "-" : first;
++                    found++;
++                    continue;
++                }
 +                if (line.startsWith("latest_command ") && command.isEmpty()) {
 +                    command = line.substring("latest_command ".length());
 +                    found++;
@@ -2912,7 +3013,8 @@ index 0000000..518cbf8
 +        }
 +        if (savedAt == 0) savedAt = f.lastModified();
 +        String[] label = describe(command);
-+        UndoPoint p = new UndoPoint(index, savedAt, f.lastModified(), command, label[0], label[1], round, phase, current);
++        UndoPoint p = new UndoPoint(
++                index, savedAt, f.lastModified(), command, label[0], label[1], round, phase, current, actorFaction, null);
 +        cache.put(key, new CachedPoint(f.lastModified(), f.length(), p));
 +        if (cache.size() > 5000) cache.clear();
 +        return p;
@@ -2920,7 +3022,7 @@ index 0000000..518cbf8
 +
 +    private static UndoPoint withCurrent(UndoPoint p, boolean current) {
 +        return new UndoPoint(p.index(), p.savedAt(), p.fileTime(), p.command(), p.actor(), p.label(), p.round(),
-+                p.phase(), current);
++                p.phase(), current, p.actorFaction(), p.actorUserId());
 +    }
 +
 +    private static long parseLong(String s) {

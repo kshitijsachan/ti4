@@ -6,8 +6,10 @@ export type UndoPoint = {
   fileTime: number;
   /** The bot's `latest_command`: the action that produced this state. */
   command: string;
-  /** Discord username from the command (`tess`), if any. */
+  /** Who acted: the player's display name (older bots: the Discord user name), "someone" for hidden presses. */
   actor: string;
+  /** The acting player's user id, when the bot could tell (newer bots). */
+  actorUserId?: string;
   /** Readable version of `command` ("tess pressed “Play Politics”"). */
   label: string;
   round: number;

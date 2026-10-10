@@ -42,6 +42,13 @@
   overflow-wrap: anywhere;
 }
 
+.note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--play-ink-muted);
+}
+
 /* Dialog */
 .dialog {
   background: var(--play-ground);
