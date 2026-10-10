@@ -38,7 +38,8 @@ function useLastRoll(channelId: string) {
 
 const AUTO_HITS = /^autoAssign\w*Hits/;
 const MANUAL_HITS = /^getDamageButtons/;
-const ROLL = /^(combatRoll_\w+_(space|ground)$|rollForAmbush|bombardConfirm)/;
+/** combatRoll_<position>_<space | planet>: the round's roll (not _afb / _bombardment / space cannon). */
+const ROLL = /^(combatRoll_[^_]+_[^_]+$|rollForAmbush)/;
 
 function Side({ player, units }: { player?: PlayerData; units: EntityData[] }) {
   return (
@@ -89,7 +90,8 @@ function relabel(c: Choice, hitText?: string): Choice {
     const afb = /AFB/i.test(id) ? " anti-fighter" : "";
     return { ...c, style: 3, label: hitText ?? `Assign ${n || ""}${afb} hit${n === 1 ? "" : "s"}`.replace("  ", " ") };
   }
-  if (/^combatRoll_\w+_(space|ground)$/.test(id)) return { ...c, style: 3, label: "Roll dice" };
+  if (/^combatRoll_[^_]+_[^_]+$/.test(id)) return { ...c, style: 3, label: "Roll dice" };
+  if (/^automateGroundCombat_/.test(id)) return { ...c, label: "Automate the whole ground combat (opponent must agree)" };
   if (MANUAL_HITS.test(id)) return { ...c, label: "Choose which units take hits" };
   return c;
 }

@@ -106,7 +106,24 @@ function foldCombat(list: Decision[]): Decision[] {
     }
     out[lead] = { ...out[lead], steps: [...(out[lead].steps ?? []), d] };
   }
-  return out.map((d) => (d.kind === "combat" ? combatTitle(d) : d));
+  return out.map((d) => (d.kind === "combat" ? combatTitle(newestHitPrompts(d)) : d));
+}
+
+/** The bot posts a new "assign N hits" prompt each round and leaves the old ones up: keep the newest of each kind. */
+function newestHitPrompts(d: Decision): Decision {
+  const hitKind = (x: Decision) =>
+    x.choices.map((c) => baseId(c.customId).match(/^autoAssign(\w*?)Hits/)?.[1]).find((k) => k !== undefined);
+  const all = [d, ...(d.steps ?? [])];
+  const newest = new Map<string, string>();
+  for (const x of all) {
+    const k = hitKind(x);
+    if (k !== undefined && (!newest.get(k) || snowflakeTime(x.id) > snowflakeTime(newest.get(k) ?? "0"))) newest.set(k, x.id);
+  }
+  const keep = (x: Decision) => {
+    const k = hitKind(x);
+    return k === undefined || newest.get(k) === x.id;
+  };
+  return { ...d, steps: (d.steps ?? []).filter(keep) };
 }
 
 const HIT_ID = /^(autoAssign\w*Hits|getDamageButtons_\w*deleteThis|getDamageButtons_\w+_afb)/;
@@ -115,7 +132,10 @@ function combatTitle(d: Decision): Decision {
   const all = [d, ...(d.steps ?? [])];
   const hits = all.some((x) => x.choices.some((c) => HIT_ID.test(baseId(c.customId))));
   const step = hits ? "— assign hits" : combatWaitsOnMe(d) ? "— roll dice" : "— opponent's roll";
-  return { ...d, title: d.title.replace(/— .*$/, step) };
+  /* A thread holds the space combat and then the ground combat: name the one being fought now. */
+  const ground = all.some((x) => x.combat?.kind === "ground" && x.choices.some((c) => /^(combatRoll_[^_]+_(?!space)[^_]+$|autoAssignGroundHits)/.test(baseId(c.customId))));
+  const kind = ground ? "Ground combat" : d.title.replace(/ — .*$/, "");
+  return { ...d, title: `${kind} ${step}` };
 }
 
 /** My strategy card's own prompt absorbs the prompts the bot posted with it (choose speaker, draw agendas, …). */
@@ -177,7 +197,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     /* "Decide now whether to follow X" is moot once X has been played. */
     const played = new Set((web?.strategyCards ?? []).filter((sc) => sc.played).map((sc) => sc.initiative));
     const live = all.filter(
-      (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "scFollow" && !d.optional && d.sc && mePlayer?.followedSCs?.includes(d.sc)) && !(d.kind === "combat" && combatOver(d, web)) &&
+      (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "scFollow" && !d.optional && d.sc && (!mePlayer || mePlayer.followedSCs?.includes(d.sc))) && !(d.kind === "combat" && combatOver(d, web)) &&
         !(movement.active && (d.id === movement.promptId || (d.kind === "tactical" && MAP_STEP.test(d.choices.map((c) => baseId(c.customId)).join(" "))))),
     );
     const oldestFirst = inBursts(live);

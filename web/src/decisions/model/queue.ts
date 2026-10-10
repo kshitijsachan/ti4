@@ -2,7 +2,7 @@ import type { Decision } from "./classify";
 import { baseId } from "./controls";
 
 /** Rolling dice or assigning hits: a combat waits on me only while one of these is up. */
-const COMBAT_MOVE = /^(combatRoll_\w+_(space|ground)$|autoAssign\w*Hits|getDamageButtons|assignHits|rollForAmbush)/;
+const COMBAT_MOVE = /^(combatRoll_[^_]+_[^_]+$|autoAssign\w*Hits|getDamageButtons|assignHits|rollForAmbush)/;
 
 export function combatWaitsOnMe(d: Decision) {
   return [d, ...(d.steps ?? [])].some((x) => x.choices.some((c) => !c.disabled && COMBAT_MOVE.test(baseId(c.customId))));
@@ -25,13 +25,14 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   /* The next step of something I just pressed (only-you prompts, replies to my press, my hand thread) comes first:
      Leadership's pay-then-gain must finish before the next card's follow, which may need the token it buys. */
   const continuation = (d: Decision) =>
-    !d.setup && (d.prompt.reason === "ephemeral" || d.prompt.reason === "reply" || d.prompt.where === "hand");
+    !d.setup &&
+    (d.prompt.reason === "ephemeral" || d.prompt.reason === "reply" || d.prompt.reason === "faction" || d.prompt.where === "hand");
   /* A combat comes before anything else in the action (space combat happens before ground forces land). */
   const combat = owed.filter((d) => d.kind === "combat" && combatWaitsOnMe(d));
   const waiting = owed.filter((d) => d.kind === "combat" && !combatWaitsOnMe(d));
   const rest = owed.filter((d) => d.kind !== "combat");
-  /* A combat still being fought (opponent to roll) stays ahead too: ground forces land only once space is won. */
-  return [...combat, ...waiting, ...rest.filter(continuation), ...rest.filter((d) => !continuation(d)), ...turn];
+  /* A combat that waits on the opponent never blocks what I can do (the landing card warns while it is unresolved). */
+  return [...combat, ...rest.filter(continuation), ...rest.filter((d) => !continuation(d)), ...waiting, ...turn];
 }
 
 /**

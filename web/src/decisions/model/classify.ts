@@ -104,9 +104,9 @@ export type ClassifyContext = {
 const ID = {
   scPick: /^scPick_(\d+)/,
   scFollow: /^(sc_follow_|sc_no_follow_|sc_\w+_follow|preDeclineSC_|leadershipGenerateCCButtons|diploRefresh|construction_|acquireATechWithSC|warfareTeBuild|primaryOfTeWarfare|sendTradeHolder)/,
-  turn: /^(tacticalAction(?!Build)|componentAction|passingAbilities|endOfTurnAbilities|turnEnd|doAnotherAction|confirmSecondAction|strategicAction_)/,
+  turn: /^(tacticalAction(?!Build)|componentAction|passingAbilities|passForRound|endOfTurnAbilities|turnEnd|doAnotherAction|confirmSecondAction|strategicAction_)/,
   tactical: /^(ringTile_|getTilesThisFarAway_|ring_|unitTactical|tacticalMoveFrom|doneWithOneSystem|doneMoving|doneLanding|landUnits|tacticalActionBuild|doneWithTacticalAction|concludeMove|planetsTake|place_|placeOneNDone|startCombat|getRaid)/i,
-  combat: /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign)/,
+  combat: /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign|automateGroundCombat_)/,
   agendaVote: /^(resolveAgendaVote|vote$|planetOutcomes|outcome|agendaResolution|preVote|exhaustForVotes|abstain|distinguished|planetRider|rider_)/,
   whensAfters: /^(queueAWhen|queueAnAfter|declineToQueueAWhen|declineToQueueAnAfter|no_when|no_after|play_when|play_after|passOnEverythingWhensNAfters|queueWhen_|queueAfter_|lockAftersIn)/,
   transaction: /^(acceptOffer|rejectOffer|resetOffer)/,
@@ -201,10 +201,12 @@ export function currentAgenda(ctx: ClassifyContext): AgendaInfo | undefined {
 /** Parses "<faction> pbd8-round-3-system-301-turn-1-sol-vs-keleresa" style combat threads. */
 function combatOf(ctx: ClassifyContext, prompt: PendingPrompt, choices: Choice[]): CombatInfo {
   const name = ctx.state.channels[prompt.channelId]?.name ?? "";
-  const roll = choices.map((c) => baseId(c.customId)).find((id) => /^combatRoll_/.test(id));
+  const ids = choices.map((c) => baseId(c.customId));
+  const roll = ids.find((id) => /^combatRoll_[^_]+_[^_]+$/.test(id)) ?? ids.find((id) => /^combatRoll_/.test(id));
   const parts = roll?.split("_") ?? [];
   const position = parts[1] ?? name.match(/system-(\w+)-turn/)?.[1];
-  const kind = /ground/i.test(parts[2] ?? "") || /ground/i.test(prompt.message.content) ? "ground" : "space";
+  const holder = parts[2] ?? "";
+  const kind = /ground/i.test(holder) || (!!holder && holder !== "space") || /ground/i.test(prompt.message.content) ? "ground" : "space";
   const factions = (name.split("-turn-")[1] ?? "").replace(/^\d+-/, "").split("-vs-").filter(Boolean);
   const active = ctx.web?.gameState?.activeCombat;
   const round = active && (!position || active.system === position) ? (active.round ?? undefined) : undefined;
@@ -276,10 +278,14 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   const m = prompt.message;
   /* Another faction's locked buttons (FFCC_<them>_…) are never mine to press. */
   const mine = ctx.me?.faction;
-  const choices = choicesOf(m).filter((c) => {
-    const f = idFaction(c.customId);
-    return !f || !mine || f === mine;
-  });
+  const choices = choicesOf(m)
+    .filter((c) => {
+      const f = idFaction(c.customId);
+      return !f || !mine || f === mine;
+    })
+    /* Discord conveniences with no meaning here (the map and player areas are always on screen). */
+    .filter((c) => !/^(showMap|showPlayerAreas|refreshViewOfSystem|refreshInfoButtons|cardsInfo)$|^showMap|^refreshViewOfSystem_/.test(baseId(c.customId)))
+    .map((c) => (baseId(c.customId) === "getModifyTiles" ? { ...c, label: "Edit units (manual fix)" } : c));
   const names = namesFrom(ctx.state, (n) => scName(ctx, n));
   const embedText = (m.embeds ?? [])
     .map((e) => [e.title, e.description].filter(Boolean).join("\n"))
@@ -430,6 +436,16 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
     const inf = has(choices, /_inf(_|$)/);
     const res = has(choices, /_(res\w*|\w*tech|build\w*)$/);
     const what = inf && !res ? "influence" : res && !inf ? "resources" : "resources or influence";
+    if (has(choices, /tech$/)) {
+      const tech = lastTechAcquired(ctx, m.id);
+      const primary = ctx.me?.scs?.includes(7);
+      const cost = primary
+        ? "Technology primary: the first technology is free (exhaust nothing, press Done); a second costs 6 resources."
+        : ctx.web?.strategyCards?.some((sc) => sc.initiative === 7 && sc.played)
+          ? "Technology secondary: 4 resources."
+          : "";
+      return { ...base, kind: "spend", title: tech ? `Pay for ${tech}` : "Pay for the technology", text: cost ? `${cost}\n\n${text}` : text };
+    }
     return { ...base, kind: "spend", title: `Pay with ${what}`, text };
   }
   if (has(choices, ID.whensAfters)) {
@@ -448,6 +464,17 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       agenda,
       /* The table moved past this window (the bot keeps an old prompt when a press changed nothing). */
       optional: staleWindow(ctx, m.id, after ? "after" : "when") || undefined,
+    };
+  }
+  if (has(choices, /^resolveAgendaVote_outcomeTie/)) {
+    const agenda = currentAgenda(ctx);
+    return {
+      ...base,
+      kind: "agenda",
+      eyebrow: agenda ? `Agenda · ${agenda.name} · speaker` : "Agenda phase · speaker",
+      title: "Tied vote — you decide the winner",
+      text: "The outcomes below are tied on votes. As speaker, you choose which one wins.",
+      agenda,
     };
   }
   if (has(choices, /^rider_/)) {
@@ -554,7 +581,13 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       ...base,
       kind: "turn",
       eyebrow: "",
-      title: fresh ? "Your turn — choose an action" : abilities ? "End of turn — use an ability first?" : "End your turn",
+      title: fresh
+        ? "Your turn — choose an action"
+        : has(choices, /^passForRound/)
+          ? "Pass — use an ability first?"
+          : abilities
+            ? "End of turn — use an ability first?"
+            : "End your turn",
     };
   }
   if (has(choices, /^beginTacticalTeWarfare/)) {
@@ -707,6 +740,26 @@ function staleStatusStep(d: Decision, ctx: ClassifyContext): Decision {
   const phase = ctx.web?.gameState?.phase ?? "";
   if (d.kind !== "status" || !d.table || !phase || phase.startsWith("status")) return d;
   return { ...d, optional: true };
+}
+
+/** The technology I acquired just before `beforeId` ("<me> acquired the technology Gravity Drive."), from any channel. */
+function lastTechAcquired(ctx: ClassifyContext, beforeId: string): string | undefined {
+  const who = [ctx.me?.userName, ctx.me?.faction].filter(Boolean).map((x) => String(x).toLowerCase());
+  let best: { id: string; name: string } | undefined;
+  for (const data of Object.values(ctx.state.messages)) {
+    for (let i = data.ids.length - 1; i >= 0; i--) {
+      const id = data.ids[i];
+      if (id > beforeId && id.length >= beforeId.length) continue;
+      const m = data.byId[id];
+      const hit = m?.author.bot ? m.content.match(/acquired the technology (.+?)\.\s*$/m) : null;
+      if (!hit) continue;
+      if (who.length && !who.some((w) => m.content.toLowerCase().includes(w))) continue;
+      if (!best || id.length > best.id.length || (id.length === best.id.length && id > best.id))
+        best = { id, name: cleanLabel(hit[1]).replace(/[_*]/g, "").trim() };
+      break;
+    }
+  }
+  return best?.name;
 }
 
 /** Friendly copy for the table-wide setup buttons the bot addresses to nobody. */

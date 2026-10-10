@@ -41,6 +41,8 @@ export function SpendBody({ d, data, onPress, pendingKey }: RendererProps) {
   const pay = rest.filter((c) => PAY.test(baseId(c.customId)));
   const others = rest.filter((c) => !pay.includes(c));
   const total = d.text.match(/total spend of ([^.\n]+)/i)?.[1];
+  const techNote = d.text.match(/^Technology (?:primary|secondary):[^\n]*/)?.[0];
+  const freeTech = !!techNote && /first technology is free/.test(techNote) && !total;
   const cost = d.text.match(/(?:pay|for) a (?:total )?cost of (\d+)/i)?.[1];
   const ready = what === "resources" ? data.me?.resources : data.me?.influence;
   return (
@@ -50,6 +52,7 @@ export function SpendBody({ d, data, onPress, pendingKey }: RendererProps) {
         {total ? `Spent so far: ${total}.` : "Nothing spent yet."}
         {ready !== undefined && ` ${ready} ${what === "resources" ? "resources" : "influence"} ready, ${data.me?.tg ?? 0} TG.`}
       </p>
+      {techNote && <p className={classes.hint}>{techNote}</p>}
       {planets.length > 0 && (
         <div className={classes.planetGrid}>
             {planets.map((c) => {
@@ -103,7 +106,7 @@ export function SpendBody({ d, data, onPress, pendingKey }: RendererProps) {
         trailing={
           done && (
             <ChoiceButton
-              choice={{ ...done, style: 3, label: /exhausting/i.test(done.label) ? "Done paying" : done.label }}
+              choice={{ ...done, style: 3, label: freeTech ? "Done (free)" : /exhausting/i.test(done.label) ? "Done paying" : done.label }}
               onPress={onPress}
               pending={pendingKey === done.key}
               busy={!!pendingKey}
@@ -134,6 +137,13 @@ export function GainTokensBody({ d, data, onPress, pendingKey }: RendererProps) 
         : [undefined, undefined, undefined];
   const done = d.choices.find((c) => DONE.test(baseId(c.customId)) || /^done/i.test(c.label));
   const rest = d.choices.filter((c) => !POOLS.some((p) => p.id.test(c.customId ?? "")) && c !== done);
+  /* Gained since the prompt: the game's pools now against the snapshot the bot wrote into it. */
+  const gained =
+    fromText && data.me?.tacticalCC !== undefined
+      ? data.me.tacticalCC + data.me.fleetCC + data.me.strategicCC - (Number(fromText[1]) + Number(fromText[2]) + Number(fromText[3]))
+      : undefined;
+  const allowed = Number(d.text.match(/\bgain (\d+) (?:command )?tokens?/i)?.[1] ?? NaN);
+  const left = Number.isNaN(allowed) || gained === undefined ? undefined : Math.max(0, allowed - gained);
   const note = d.text.replace(/^.*command tokens are [\d/]+\.?\s*(use buttons to gain command tokens\.?)?/i, "").trim();
   return (
     <div className={classes.stack}>
@@ -159,6 +169,11 @@ export function GainTokensBody({ d, data, onPress, pendingKey }: RendererProps) 
           );
         })}
       </div>
+      {gained !== undefined && (
+        <p className={classes.hint}>
+          {left !== undefined ? `${left} left to place · ` : ""}gained {gained} so far
+        </p>
+      )}
       {note && <Prose text={note} clamp={1} muted />}
       <ChoiceButtons
         choices={rest}
@@ -168,7 +183,7 @@ export function GainTokensBody({ d, data, onPress, pendingKey }: RendererProps) 
         trailing={
           done && (
             <ChoiceButton
-              choice={{ ...done, style: 3, label: "Done" }}
+              choice={{ ...done, style: left === undefined || left === 0 ? 3 : 2, label: "Done" }}
               onPress={onPress}
               pending={pendingKey === done.key}
               busy={!!pendingKey}

@@ -1,9 +1,10 @@
 /* Docked to the right of the table so the middle of the map (and the focused system) stays visible;
    a bottom sheet on phones. */
+/* Top-anchored: content that grows (a new line after a press) never moves the buttons already under the cursor. */
 .layer {
   z-index: var(--z-decision-popup, 3450);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-end;
   padding: 16px;
   pointer-events: none;

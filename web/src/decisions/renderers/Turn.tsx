@@ -43,6 +43,9 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
       tone: "card",
     };
   }
+  if (id.startsWith("passForRound")) {
+    return { choice: c, title: "Pass", sub: "You are done for this round", icon: <IconFlag size={18} stroke={1.6} />, tone: "stop" };
+  }
   if (id.startsWith("passingAbilities")) {
     return { choice: c, title: "Pass", sub: "You are done for this round", icon: <IconFlag size={18} stroke={1.6} />, tone: "stop" };
   }
@@ -69,7 +72,7 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
     .map((c) => (/^(doAnotherAction|confirmSecondAction)/.test(baseId(c.customId)) ? { ...c, label: "I have an ability that grants another action", rank: "more" as const } : c));
   const me = data.me;
   /* The end-of-turn abilities prompt (End Turn / Do an Expedition / …): its abilities are the point, keep them in view. */
-  const endOfTurn = /^End of turn/.test(d.title);
+  const endOfTurn = /^(End of turn|Pass —)/.test(d.title);
   return (
     <div className={classes.stack}>
       {me && (

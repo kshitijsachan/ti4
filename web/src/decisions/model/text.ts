@@ -58,6 +58,8 @@ export function cleanText(content: string, names: Names): string {
     const word = EMOJI_WORDS[name] ?? EMOJI_WORDS[name.toLowerCase()];
     return word === undefined ? "" : word ? ` ${word} ` : "";
   });
+  /* "<:infantry:…> Infantry" → "Infantry Infantry": a unit emoji followed by its own name says it once. */
+  s = s.replace(/\b([A-Za-z][\w']+)( +\1\b)+/g, "$1");
   s = s.replace(/<@!?(\d+)>/g, (_m, id: string) => names.user(id) ?? "a player");
   s = s.replace(/<@&\d+>,? please indicate your choice with these buttons\.?/gi, "");
   s = s.replace(/^<@&\d+>,?\s*/gm, "");
