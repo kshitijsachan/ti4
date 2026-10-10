@@ -190,6 +190,10 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     if (newestMention && newestOtherPrompt) break;
   }
   const after = (id: string, mark: string | null) => !mark || compareSnowflakes(id, mark) >= 0;
+  /* My newest fresh turn menu (Tactical / Component / Strategic action): a strategy card I played before it is done. */
+  const newestTurnMenu = [...ids]
+    .reverse()
+    .find((id) => choicesOf(data.byId[id]).some((c) => /^tacticalAction/.test(baseId(c.customId)) && idFaction(c.customId) === opts.faction));
   const newestCombat = opts.combat
     ? [...ids].reverse().find((id) => choicesOf(data.byId[id]).some((c) => COMBAT_ID.test(c.customId ?? "")))
     : undefined;
@@ -234,7 +238,7 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     if (m.prompted_user_id === me.id && ping && (m.mention_roles ?? []).some((r) => myRoles.has(r))) {
       /* Only the card's own buttons are mine; the follow buttons are the other players'. */
       if (!forwardChoices(m).some((c) => !FOLLOW_ID.test(baseId(c.customId)))) answered = true;
-      const stale = index < ids.length - ROLE_WINDOW;
+      const stale = index < ids.length - ROLE_WINDOW || (!!newestTurnMenu && compareSnowflakes(id, newestTurnMenu) < 0);
       const presses = pressCount(me.id, m, m.my_press ? Date.parse(m.my_press.at) : state.pressed[m.id]);
       if (answered && presses > 0 && presses < pressesNeeded(m)) answered = false;
       items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale, presses });
