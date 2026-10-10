@@ -5,6 +5,7 @@ import { useGameData } from "@/state/useGameContext";
 import { filterPlayersWithAssignedFaction } from "@/entities/game/playerUtils";
 import PlayerCard from "@/domains/player/components/composition/PlayerCard";
 import { FactionSheet } from "@/faction";
+import { openTradeWith } from "@/trade";
 import { PlayerSeat, PlayerStats } from "./PlayerBoard";
 import { summarizePlayer } from "./playerSummary";
 import classes from "./PlayerRail.module.css";
@@ -102,6 +103,11 @@ export function PlayerRail({ myUserId, onAllPlayers }: Props) {
                         <UnstyledButton className={classes.more} onClick={() => open("faction")}>
                           Faction sheet
                         </UnstyledButton>
+                        {myUserId && !isMe && (
+                          <UnstyledButton className={classes.more} onClick={() => openTradeWith(player.faction)}>
+                            Trade
+                          </UnstyledButton>
+                        )}
                       </span>
                     }
                   />

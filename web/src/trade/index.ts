@@ -3,3 +3,4 @@ export type { TradePanelProps } from "./TradePanel";
 export { useTradeData } from "./useTradeData";
 export { fetchTradeOptions, fetchPendingTrades, proposeTrade, TradeApiError } from "./api";
 export type * from "./types";
+export { openTradeWith } from "./openTradeWith";

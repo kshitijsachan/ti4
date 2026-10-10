@@ -1,11 +1,14 @@
 import cx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDecisionRequests } from "@/decisions";
+import { useGameData } from "@/state/useGameContext";
 import { proposeTrade } from "./api";
 import { LedgerColumn } from "./components/LedgerColumn";
 import { OfferList } from "./components/OfferList";
+import { QuickDeals } from "./components/QuickDeals";
 import { SeatPicker } from "./components/SeatPicker";
 import { draftFromOffer } from "./counter";
+import { dealsWith, tradeHolderOf, type Deal } from "./deals";
 import {
   clampSide,
   emptyDraft,
@@ -16,6 +19,7 @@ import {
   type SideDraft,
   type TradeDraft,
 } from "./model";
+import { SELECT_PARTNER_EVENT, takeWantedPartner } from "./openTradeWith";
 import { createSocketPresser } from "./shimSocket";
 import classes from "./Trade.module.css";
 import type { ButtonRef, PendingOffer, PressButton } from "./types";
@@ -189,12 +193,28 @@ export function TradePanel({
     setStatus(null);
   };
 
-  const submit = async () => {
+  const holder = tradeHolderOf(useGameData()?.playerData);
+
+  // A seat card's "Trade" asks for a partner (possibly before this panel mounted).
+  const [wantedPartner, setWantedPartner] = useState<string | undefined>(takeWantedPartner);
+  useEffect(() => {
+    const onSelect = () => setWantedPartner(takeWantedPartner());
+    window.addEventListener(SELECT_PARTNER_EVENT, onSelect);
+    return () => window.removeEventListener(SELECT_PARTNER_EVENT, onSelect);
+  }, []);
+  useEffect(() => {
+    if (!wantedPartner || !options) return;
+    setWantedPartner(undefined);
+    if (counterparties.some((c) => c.faction === wantedPartner && c.canTrade)) choose(wantedPartner);
+    // choose() only reads the current selection, which a re-render keeps fresh.
+  }, [wantedPartner, options]);
+
+  const sendDraft = async (d: TradeDraft) => {
     if (!cp) return;
     setSending(true);
     setStatus(null);
     try {
-      const res = await proposeTrade(botBase, gameName, token, toRequest(cp.faction, { give, receive, note: draft.note }));
+      const res = await proposeTrade(botBase, gameName, token, toRequest(cp.faction, d));
       setDraft(emptyDraft());
       setStatus({
         kind: "ok",
@@ -207,6 +227,13 @@ export function TradePanel({
     } finally {
       setSending(false);
     }
+  };
+
+  const submit = () => sendDraft({ give, receive, note: draft.note });
+  const sendDeal = (deal: Deal) => void sendDraft(deal.draft);
+  const editDeal = (deal: Deal) => {
+    setDraft(deal.draft);
+    setStatus(null);
   };
 
   if (!options) {
@@ -280,6 +307,16 @@ export function TradePanel({
         )}
         {cp && limits && (
           <>
+            <QuickDeals
+              me={options.me}
+              cp={cp}
+              deals={blocked ? [] : dealsWith(options.me, cp, holder)}
+              holder={holder}
+              busy={sending}
+              onSend={sendDeal}
+              onEdit={editDeal}
+              onPickHolder={holder ? () => choose(holder.faction) : undefined}
+            />
             <div className={classes.ledger}>
               <LedgerColumn mode="give" side={give} limits={limits.give} me={options.me} cp={cp} onChange={setSide("give")} />
               <LedgerColumn mode="receive" side={receive} limits={limits.receive} me={options.me} cp={cp} onChange={setSide("receive")} />

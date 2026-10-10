@@ -6,6 +6,7 @@ import { Brain } from "./botplay/brain.js";
 import { parseBoard, type Board } from "./botplay/board.js";
 import { controlsOf, type Control, type Prompt } from "./botplay/prompts.js";
 import type { Seat } from "./botplay/seat.js";
+import { TradeDesk } from "./botplay/trade.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -366,6 +367,8 @@ class SeatPilot {
   private retries = new Map<string, number>();
   /** The planner (tactical actions, strategy card primaries, scoring); the rule table handles the rest. */
   private brain: Brain;
+  /** Trades: answers offers, proposes N-1 washes, runs the Trade card deal (botplay/trade.ts). */
+  private trade: TradeDesk;
 
   constructor(
     private mgr: Autopilot,
@@ -373,6 +376,7 @@ class SeatPilot {
   ) {
     this.conn = mgr.clients.attachVirtual(userId, (f) => this.onFrame(f));
     this.brain = new Brain(this.seat());
+    this.trade = new TradeDesk(this.seat(), mgr.botApi, () => Object.entries(this.store.state.seats).find(([, seat]) => seat.user_id === this.userId)?.[0]);
     // Some turns change without a message this seat can see (e.g. the draft); look again now and then.
     this.poll = setInterval(() => this.schedule(), 8000);
     log.info(`autopilot ${this.name}: started`);
@@ -449,7 +453,7 @@ class SeatPilot {
     this.busy = true;
     try {
       for (const game of this.liveGames()) {
-        if (await this.brain.tick(game)) {
+        if ((await this.brain.tick(game)) || (await this.trade.tick(game))) {
           this.busy = false;
           this.schedule();
           return;
@@ -555,7 +559,7 @@ class SeatPilot {
     if ((this.fails.get(m.id) ?? 0) >= MAX_FAILS) return null;
     let controls = controlsOf(m.components);
     if (!controls.length) return null;
-    if (this.brain.owns(game, { ch, m, controls })) return null;
+    if (this.brain.owns(game, { ch, m, controls }) || this.trade.owns(game, { ch, m, controls })) return null;
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
     // When we answered this prompt (unchanged since): this run, a re-posted copy, or before a restart.
     const sig = signature(controls);

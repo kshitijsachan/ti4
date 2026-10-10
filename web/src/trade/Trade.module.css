@@ -575,6 +575,82 @@
   color: var(--t-accent);
 }
 
+/* ---------- quick deals ------------------------------------------------- */
+
+.deals {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--t-hair);
+}
+
+.dealsHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 2px;
+  flex-wrap: wrap;
+}
+
+.dealsWho {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: var(--text-data);
+  color: var(--t-ink);
+}
+
+.dealsExplain {
+  margin: 0;
+  padding: 0 8px 6px;
+  font-size: var(--text-meta);
+  color: var(--t-ink-muted);
+}
+
+.dealsEmpty {
+  padding: 6px 8px 8px;
+  font-size: var(--text-meta);
+  color: var(--t-ink-muted);
+}
+
+.deal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--t-hair);
+}
+
+.dealBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dealTitle {
+  font-size: var(--text-data);
+  font-weight: 600;
+  color: var(--t-ink-bright);
+}
+
+.dealTerms {
+  font-family: var(--font-data);
+  font-size: var(--text-data);
+  color: var(--t-ink);
+}
+
+.dealTerms b {
+  color: var(--t-tg);
+  font-weight: 600;
+}
+
+.dealHint {
+  font-size: var(--text-meta);
+  color: var(--t-ink-muted);
+}
+
 /* ---------- footer: note + propose ------------------------------------- */
 
 .footer {
