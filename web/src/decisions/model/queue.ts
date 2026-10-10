@@ -18,7 +18,10 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
      Leadership's pay-then-gain must finish before the next card's follow, which may need the token it buys. */
   const continuation = (d: Decision) =>
     !d.setup && (d.prompt.reason === "ephemeral" || d.prompt.reason === "reply" || d.prompt.where === "hand");
-  return [...owed.filter(continuation), ...owed.filter((d) => !continuation(d)), ...turn];
+  /* A combat comes before anything else in the action (space combat happens before ground forces land). */
+  const combat = owed.filter((d) => d.kind === "combat");
+  const rest = owed.filter((d) => d.kind !== "combat");
+  return [...combat, ...rest.filter(continuation), ...rest.filter((d) => !continuation(d)), ...turn];
 }
 
 /**

@@ -374,7 +374,18 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
   for (const it of all) newestBySignature.set(`${it.channelId}:${buttonSignature(it.message)}`, it.message.id);
   /* A new round ("Started Round 2") retires whatever the last one left unanswered. */
   const roundStart = latestRoundStart(state, game.actions.id);
+  /*
+   * A tactical step is over once a newer one exists (movement done through the map's API never presses the bot's
+   * "move from" message) or a new turn of mine started.
+   */
+  const isStep = (it: PendingPrompt) => choicesOf(it.message).some((c) => TACTICAL_STEP.test(baseId(c.customId)));
+  const newestStep = all.filter(isStep).reduce<string | undefined>(
+    (max, it) => (!max || compareSnowflakes(it.message.id, max) > 0 ? it.message.id : max),
+    undefined,
+  );
+  const turnStart = latestTurnStart(state, game.actions.id, me.id);
   return all
+    .filter((it) => !isStep(it) || (it.message.id === newestStep && (!turnStart || compareSnowflakes(it.message.id, turnStart) > 0)))
     .filter((it) => !roundStart || compareSnowflakes(it.message.id, roundStart) > 0)
     .filter((it) =>
       it.ownCall
@@ -386,6 +397,19 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
 }
 
 const TURN_MENU = /^(tacticalAction(?!Build)|endOfTurnAbilities|turnEnd)/;
+/** The steps inside one tactical action: pick a system, the ships, land, conclude. */
+const TACTICAL_STEP = /^(ringTile_|ring_|getTilesThisFarAway_|tacticalMoveFrom_|unitTacticalMove_|doneWithOneSystem|concludeMove_|landUnits_|doneLanding_|doneWithTacticalAction)/;
+
+/** The newest "it is now your turn" ping to me in the action log. */
+function latestTurnStart(state: PlayState, actionsId: string, meId: string) {
+  const data = state.messages[actionsId];
+  if (!data) return undefined;
+  for (let i = data.ids.length - 1; i >= 0; i--) {
+    const m = data.byId[data.ids[i]];
+    if (m?.author.bot && /\bit is now your turn\b/i.test(m.content) && (m.mentions ?? []).some((u) => u.id === meId)) return m.id;
+  }
+  return undefined;
+}
 
 /**
  * My turn, yet nothing waits on me: a step got lost (an "only you can see this" prompt dropped by a reconnect, a press

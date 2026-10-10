@@ -9,6 +9,7 @@ import { snowflakeTime } from "@/discord/shared/snowflake";
 import { usePlayerData } from "@/api/usePlayerData";
 import type { PlayerDataResponse } from "@/entities/data/types";
 import { getToken } from "@/play/session";
+import { useMovementUI } from "@/mapactions/store";
 import { findGame } from "../detect/games";
 import { turnMenuFallback, usePendingPrompts } from "../detect/pending";
 import { useSetupWaiting } from "../detect/waiting";
@@ -138,6 +139,9 @@ function bursts(newestFirst: Decision[]): Decision[][] {
   return out;
 }
 
+/** Tactical steps the map can answer itself (pick ships, land ground forces). */
+const MAP_STEP = /(^| )(tacticalMoveFrom_|unitTacticalMove_|landUnits_)/;
+
 /** Position of the system a choice is about ("ringTile_301"), for the map highlight while hovering. */
 function choicePosition(c: Choice | null) {
   return c ? (baseId(c.customId).match(/^ringTile_(\w+)/)?.[1] ?? null) : null;
@@ -162,6 +166,8 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
   const prompts = usePendingPrompts(gameName, { myTurn, faction: mePlayer?.faction, setupOpen });
   const game = useMemo(() => findGame(channels, gameName), [channels, gameName]);
 
+  /* While the map is answering a movement / landing prompt, that prompt is the map's, not the popup's. */
+  const movement = useMovementUI();
   const { decisions, offers } = useMemo<{ decisions: Decision[]; offers: Decision[] }>(() => {
     if (!game) return { decisions: [], offers: [] };
     const all = prompts
@@ -170,7 +176,8 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     /* "Decide now whether to follow X" is moot once X has been played. */
     const played = new Set((web?.strategyCards ?? []).filter((sc) => sc.played).map((sc) => sc.initiative));
     const live = all.filter(
-      (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "scFollow" && !d.optional && d.sc && mePlayer?.followedSCs?.includes(d.sc)) && !(d.kind === "combat" && combatOver(d, web)),
+      (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "scFollow" && !d.optional && d.sc && mePlayer?.followedSCs?.includes(d.sc)) && !(d.kind === "combat" && combatOver(d, web)) &&
+        !(movement.active && (d.id === movement.promptId || (d.kind === "tactical" && MAP_STEP.test(d.choices.map((c) => baseId(c.customId)).join(" "))))),
     );
     const oldestFirst = inBursts(live);
     const queue = orderQueue(oldestFirst);
@@ -180,7 +187,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
       if (fallback) queue.push(classify(fallback, { state: { users, channels, messages }, game, web, me: mePlayer }));
     }
     return { decisions: queue, offers: offersOf(oldestFirst) };
-  }, [prompts, game, users, channels, messages, web, mePlayer, myTurn, phase, conn]);
+  }, [prompts, game, users, channels, messages, web, mePlayer, myTurn, phase, conn, movement.active, movement.promptId]);
   if (import.meta.env.DEV) (window as unknown as { __decisions?: unknown }).__decisions = { decisions, offers, prompts };
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };

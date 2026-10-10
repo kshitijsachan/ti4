@@ -1,9 +1,12 @@
 import { Loader, UnstyledButton } from "@mantine/core";
+import cx from "clsx";
 import { cdnImage } from "@/entities/data/cdnImage";
 import { getTileById } from "@/entities/lookup/systems";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
 import { Prose } from "../ui/parts";
+import { usePlay } from "@/discord";
+import { cleanLabel } from "../model/controls";
 import { getColorAlias } from "@/entities/lookup/colors";
 import type { DecisionData, RendererProps } from "./types";
 import classes from "./renderers.module.css";
@@ -115,7 +118,7 @@ function UnitMoveRows({ choices, data, onPress, pendingKey }: { choices: Choice[
 
 /** "moved 1 Carrier\nmoved 1 Fighter" → "1 Carrier, 1 Fighter". */
 function movedSummary(text: string) {
-  const parts = [...text.matchAll(/moved (\d+ [A-Za-z ]+?)(?= from\b|\n|$|>)/g)].map((m) => m[1].trim());
+  const parts = [...text.matchAll(/moved (\d+ [A-Za-z ]+?)(?= from\b| \(|\n|$|>)/g)].map((m) => m[1].trim());
   return parts.length ? parts.join(", ") : "nothing yet";
 }
 
@@ -127,6 +130,23 @@ function produceLabel(c: Choice): Choice {
   return { ...c, label: c.label.replace(/^Produce /, "").replace(/\s*\(\d+\/\d+\)$/, ""), style: 2 };
 }
 
+/** What this tactical action's explore found ("Gamma Wormhole: Place a gamma wormhole token…"), once it has run. */
+function useExploreResult(channelId: string) {
+  const data = usePlay((s) => s.messages[channelId]);
+  if (!data) return undefined;
+  for (let i = data.ids.length - 1; i >= 0; i--) {
+    const m = data.byId[data.ids[i]];
+    if (!m?.author.bot) continue;
+    if (/\bactivated \d+/.test(m.content)) return undefined;
+    const embed = m.embeds?.[0];
+    if (!/\bexplored\b/i.test(m.content) || !embed?.title) continue;
+    const name = cleanLabel(embed.title).replace(/[_*]/g, "").trim();
+    const what = cleanLabel(embed.description ?? "").replace(/[_*]/g, "").trim();
+    return what ? `${name}: ${what}` : name;
+  }
+  return undefined;
+}
+
 /** A step of a tactical action: the system / unit choices the bot offers, with my fleet numbers. */
 export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: RendererProps) {
   const systems = d.choices.filter((c) => SYSTEM.test(baseId(c.customId)));
@@ -134,6 +154,7 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   const unitMoves = d.choices.filter((c) => UNIT_MOVE.test(baseId(c.customId)));
   const movingFrom = systems.some((c) => /^tacticalMoveFrom_/.test(baseId(c.customId)));
   const active = d.position ? tileAt(data, d.position) : undefined;
+  const explored = useExploreResult(d.prompt.channelId);
   /* BOMBARDMENT only matters when someone else has ground forces on a planet here. */
   const planets = d.position ? Object.values(data.web?.tileUnitData?.[d.position]?.planets ?? {}) : [];
   const enemyOnPlanets = planets.some((p) =>
@@ -171,6 +192,10 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
         </div>
       )}
       {moved && <p className={classes.hint}>Moving in: {movedSummary(moved)}</p>}
+      {explored && !/^Explore /.test(d.title) && <p className={classes.cardText}>Explored — {explored}</p>}
+      {/distance exceeds move value/i.test(d.text) && (
+        <p className={cx(classes.hint, classes.warn)}>Some of these ships do not have the move value to reach this system. Take them back or use an ability that allows it.</p>
+      )}
       {text && <Prose text={text} clamp={4} muted={choosingSystem} />}
       {unitMoves.length > 0 && <UnitMoveRows choices={unitMoves} data={data} onPress={onPress} pendingKey={pendingKey} />}
       {systems.length > 0 && (
