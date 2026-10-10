@@ -1,6 +1,6 @@
 import { playerOf, type Board, type PlayerView } from "./board.js";
 import { BuildJob, payStep, type JobResult } from "./production.js";
-import { baseId, lockOf, snowflakeAfter, type Prompt } from "./prompts.js";
+import { baseId, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { promptForMe, Steps } from "./steps.js";
 import { dockSystems, hasMyCC, spendable } from "./strategy.js";
@@ -12,11 +12,13 @@ import { nextTech, researchable, TECH_PREFERENCE, typeLabelOf } from "./techs.js
  * is left to the rule table.
  */
 
-const JOB_MS = 90000;
+/** A job that has not moved for this long is dropped (its prompts go back to the rule table). */
+const JOB_MS = 75000;
 
 interface Job {
   name: string;
   started: number;
+  progressAt: number;
   /** Prompts the job answers (the rule table must leave them alone while it runs). */
   owns(p: Prompt): boolean;
   tick(board: Board | null, me: PlayerView | undefined, faction: string): Promise<JobResult>;
@@ -26,6 +28,7 @@ interface Job {
 class LeadershipJob implements Job {
   name = "Leadership";
   started = Date.now();
+  progressAt = Date.now();
   private steps: Steps;
   private spent = 0;
   private billDone = false;
@@ -86,6 +89,7 @@ class LeadershipJob implements Job {
 class TechJob implements Job {
   name = "Technology";
   started = Date.now();
+  progressAt = Date.now();
   private steps: Steps;
   private chosen: string | undefined;
   private picked = false;
@@ -149,6 +153,7 @@ class TechJob implements Job {
 class StatusTokensJob implements Job {
   name = "Status command tokens";
   started = Date.now();
+  progressAt = Date.now();
   private steps: Steps;
   private gained = 0;
 
@@ -190,6 +195,7 @@ class StatusTokensJob implements Job {
 class ScoreBillJob implements Job {
   name = "Objective payment";
   started = Date.now();
+  progressAt = Date.now();
   private steps: Steps;
   private tgPaid = 0;
 
@@ -233,6 +239,78 @@ class ScoreBillJob implements Job {
   }
 }
 
+/**
+ * Agenda vote: "Choose To Vote" → an outcome (For; ourselves when electing a player; our best planet when electing a
+ * planet; else the first offered) → exhaust our least influential planet → "Done exhausting planets" → "Confirm N
+ * votes". A few votes are enough: with everyone else abstaining it decides the agenda without a speaker tie.
+ */
+class VoteJob implements Job {
+  name = "Agenda vote";
+  started = Date.now();
+  progressAt = Date.now();
+  private steps: Steps;
+  private exhausted = false;
+
+  constructor(seat: Seat, game: string, since: string | undefined) {
+    this.steps = new Steps(seat, game, since);
+  }
+
+  owns(p: Prompt) {
+    return p.controls.some((c) => /^(vote|outcome_|planetOutcomes_|exhaustForVotes_|proceedToFinalizingVote|resetMyVote|resolveAgendaVote_\d+|distinguished_)/.test(baseId(c.custom_id)));
+  }
+
+  async tick(board: Board | null, me: PlayerView | undefined, faction: string): Promise<JobResult> {
+    if (!board || !me) return "wait";
+    const s = this.steps;
+    const confirm = s.find(faction, (b) => /^resolveAgendaVote_\d+$/.test(b) && b !== "resolveAgendaVote_0");
+    if (confirm && !s.wasPressed(confirm.p, confirm.c)) {
+      await s.press(confirm.p, confirm.c, `agenda: ${confirm.c.label}`);
+      return "done";
+    }
+    const planets = s.find(faction, (b) => /^exhaustForVotes_planet_/.test(b) || b === "proceedToFinalizingVote");
+    if (planets) {
+      if (!this.exhausted) {
+        const value = (c: Control) => Number(/\((\d+)\)\s*$/.exec(c.label)?.[1] ?? 99);
+        const pick = planets.p.controls.filter((c) => /^exhaustForVotes_planet_/.test(baseId(c.custom_id)) && value(c) > 0).sort((a, b) => value(a) - value(b))[0];
+        this.exhausted = true;
+        if (pick) {
+          await s.press(planets.p, pick, `agenda: vote with ${pick.label}`);
+          return "acted";
+        }
+      }
+      const done = planets.p.controls.find((c) => baseId(c.custom_id) === "proceedToFinalizingVote");
+      if (done && (await s.press(planets.p, done, "agenda: done exhausting planets"))) return "acted";
+      return "wait";
+    }
+    const planetOwner = s.find(faction, (b) => /^planetOutcomes_/.test(b));
+    if (planetOwner) {
+      const c = planetOwner.p.controls.find((x) => baseId(x.custom_id) === `planetOutcomes_${me.faction}` || baseId(x.custom_id) === `planetOutcomes_${me.color}`) ?? planetOwner.c;
+      if (await s.press(planetOwner.p, c, `agenda: a planet of ${c.label}`)) return "acted";
+      return "wait";
+    }
+    const outcome = s.find(faction, (b) => /^outcome_/.test(b));
+    if (outcome) {
+      const ids = outcome.p.controls.filter((c) => /^outcome_/.test(baseId(c.custom_id)));
+      const byId = (id: string) => ids.find((c) => baseId(c.custom_id).toLowerCase() === `outcome_${id}`.toLowerCase());
+      const best = me.planets
+        .map((id) => board.systems.get(board.planetSystem.get(id) ?? "")?.planets.find((p) => p.id === id))
+        .filter((p): p is NonNullable<typeof p> => !!p)
+        .sort((a, b) => b.resources + b.influence - (a.resources + a.influence))
+        .map((p) => byId(p.id))
+        .find(Boolean);
+      const c = byId("for") ?? byId(me.faction) ?? byId(me.color) ?? best ?? ids[0];
+      if (c && (await s.press(outcome.p, c, `agenda: vote for ${c.label}`))) return "acted";
+      return "wait";
+    }
+    const start = s.find(faction, (b) => b === "vote");
+    if (start && !s.wasPressed(start.p, start.c)) {
+      await s.press(start.p, start.c, "agenda: vote");
+      return "acted";
+    }
+    return Date.now() - this.started > 60000 ? "done" : "wait";
+  }
+}
+
 const rank = (alias: string) => {
   const i = TECH_PREFERENCE.indexOf(alias);
   return i < 0 ? 99 : i;
@@ -242,6 +320,7 @@ const rank = (alias: string) => {
 class ConstructionJob implements Job {
   name = "Construction";
   started = Date.now();
+  progressAt = Date.now();
   private steps: Steps;
   private build: BuildJob | null = null;
 
@@ -327,6 +406,8 @@ export class CardPlanner {
 
   owns(game: string, p: Prompt): boolean {
     if ((this.jobs.get(game) ?? []).some((j) => j.owns(p))) return true;
+    // Agenda: we vote when asked instead of presetting an abstention.
+    if (p.controls.some((c) => /^resolvePreassignment_Abstain On Agenda$/.test(c.custom_id))) return true;
     // Status scoring: the planner answers the public / secret scoring windows itself.
     if (p.controls.some((c) => /^(po_scoring_|po_no_scoring$|so_no_scoring$|get_so_score_buttons$|so_score_hand_)/.test(baseId(c.custom_id)))) return true;
     return false;
@@ -341,18 +422,23 @@ export class CardPlanner {
     if (jobs.length) {
       const board = await this.seat.board(game, true);
       const me = board ? playerOf(board, this.seat.userId) : undefined;
-      const job = jobs[0];
-      if (Date.now() - job.started > JOB_MS) {
-        this.seat.log(`${job.name}: giving up after ${JOB_MS / 1000}s`);
-        jobs.shift();
-        return false;
+      // Every job gets a look (one may wait on a prompt while another's is up); each expires after a quiet spell.
+      for (const job of [...jobs]) {
+        if (Date.now() - job.progressAt > JOB_MS) {
+          this.seat.log(`${job.name}: giving up after ${JOB_MS / 1000}s without progress`);
+          jobs.splice(jobs.indexOf(job), 1);
+          continue;
+        }
+        const r = await job.tick(board, me, faction);
+        if (r === "done") {
+          jobs.splice(jobs.indexOf(job), 1);
+          this.seat.log(`${job.name}: done`);
+        }
+        if (r !== "wait") {
+          job.progressAt = Date.now();
+          return true;
+        }
       }
-      const r = await job.tick(board, me, faction);
-      if (r === "done") {
-        jobs.shift();
-        this.seat.log(`${job.name}: done`);
-      }
-      if (r !== "wait") return true;
     }
     const prompts = this.seat.prompts(game);
     for (let i = prompts.length - 1; i >= 0 && i >= prompts.length - 40; i--) {
@@ -361,6 +447,7 @@ export class CardPlanner {
       if (await this.follow(game, faction, p)) return true;
       if (await this.scoring(game, faction, p)) return true;
       if (await this.statusTokens(game, p)) return true;
+      if (await this.vote(game, faction, p)) return true;
     }
     return false;
   }
@@ -442,6 +529,16 @@ export class CardPlanner {
     this.seat.log(`following Technology: research ${tech} for 4 resources and a strategy token`);
     await this.seat.press(p, get, "follow Technology");
     void faction;
+    return true;
+  }
+
+  /** Our turn to vote on an agenda: vote (cheaply) rather than abstain, so agendas do not end in a speaker tie. */
+  private async vote(game: string, faction: string, p: Prompt): Promise<boolean> {
+    const c = p.controls.find((x) => x.custom_id === `FFCC_${faction}_vote`);
+    if (!c || p.m._presses?.[this.seat.userId] || Date.now() - Date.parse(p.m.timestamp) > 10 * 60000) return false;
+    if (!this.once(`vote:${p.m.id}`)) return false;
+    this.add(game, new VoteJob(this.seat, game, String(BigInt(p.m.id) - 1n)));
+    this.seat.log("agenda: voting");
     return true;
   }
 

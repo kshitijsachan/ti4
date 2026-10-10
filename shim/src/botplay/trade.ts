@@ -27,6 +27,8 @@ const FORCE_ID = /^forceARefresh_/;
 const PROPOSE_GAP_MS = 25000;
 /** Minimum time between two proposals to the same partner, from any seat. */
 const PARTNER_GAP_MS = 60000;
+/** A wash offered to a partner this recently (by our cards-info thread) counts as this round's, even after a restart. */
+const RECENT_OFFER_MS = 25 * 60000;
 /** How long a deal made around the Trade card stays good. */
 const DEAL_MS = 20 * 60000;
 /** A non-holder washes with the holder it owes this long after being replenished, unless the holder proposed first. */
@@ -317,7 +319,7 @@ export class TradeDesk {
     const outgoing = new Set<string>();
     const candidates = opts.counterparties
       .filter((c) => c.canTrade && (c.neighbor || anyone) && this.proposed.get(`${game}:${c.faction}`) !== opts.round && !offering.has(c.color))
-      .filter((c) => Date.now() - (lastToPartner.get(c.userId) ?? 0) >= PARTNER_GAP_MS)
+      .filter((c) => Date.now() - (lastToPartner.get(c.userId) ?? 0) >= PARTNER_GAP_MS && !this.offeredLately(game, c.userName))
       .map((c) => ({ c, deal: washDeal(me, c) }))
       .filter((x): x is { c: Counterparty; deal: NonNullable<ReturnType<typeof washDeal>> } => !!x.deal);
     if (!candidates.length) return false;
@@ -352,10 +354,21 @@ export class TradeDesk {
       });
       const text = await res.text();
       const json = text ? (JSON.parse(text) as Json) : {};
-      return res.ok ? json : { ok: false, error: json.error ?? `HTTP ${res.status}` };
+      if (res.ok) return json;
+      return method === "POST" ? { ok: false, error: json.error ?? `HTTP ${res.status}` } : null;
     } catch (e) {
       return method === "POST" ? { ok: false, error: (e as Error).message } : null;
     }
+  }
+
+  /**
+   * We sent this partner an offer recently, by our cards-info thread ("you sent a transaction offer to …"): keeps
+   * "once per round" across shim restarts, which forget `proposed`.
+   */
+  private offeredLately(game: string, name: string) {
+    return this.seat
+      .messages(game)
+      .some((p) => p.ch.type === 12 && Date.now() - Date.parse(p.m.timestamp) < RECENT_OFFER_MS && /you sent a transaction offer to/.test(String(p.m.content ?? "")) && String(p.m.content).includes(`>${name} `));
   }
 
   private mentionsMe(p: Prompt) {
