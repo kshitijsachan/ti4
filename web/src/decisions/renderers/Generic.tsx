@@ -5,6 +5,7 @@ import { getTileById } from "@/entities/lookup/systems";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
 import { Prose } from "../ui/parts";
+import { riftNote } from "../model/classify";
 import { usePlay } from "@/discord";
 import { cleanLabel } from "../model/controls";
 import { getColorAlias } from "@/entities/lookup/colors";
@@ -185,7 +186,8 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   const build = d.choices.find((c) => /^tacticalActionBuild/.test(baseId(c.customId)));
   if (build && d.choices.some((c) => /^doneWithTacticalAction/.test(baseId(c.customId)))) {
     const value = build.label.match(/\((\d+) PRODUCTION/i)?.[1];
-    text = `Produce units here${value ? ` (production ${value})` : ""}, or conclude the action.`;
+    const rift = riftNote(d);
+    text = rift || `Produce units here${value ? ` (production ${value})` : ""}, or conclude the action.`;
   }
   return (
     <div className={classes.stack}>

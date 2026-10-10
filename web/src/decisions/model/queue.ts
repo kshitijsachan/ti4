@@ -35,7 +35,10 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   /* A trade offered to me is time-sensitive: right after any combat. */
   const trades = rest.filter((d) => d.kind === "transaction");
   const others = rest.filter((d) => d.kind !== "transaction");
-  return [...combat, ...trades, ...others.filter(continuation), ...others.filter((d) => !continuation(d)), ...turn, ...waiting];
+  /* A step that stays up while what it spawned is answered (the rift roll after moving) comes back after those, newest first. */
+  const steps = others.filter((d) => !d.hub);
+  const hubs = others.filter((d) => d.hub).reverse();
+  return [...combat, ...trades, ...steps.filter(continuation), ...steps.filter((d) => !continuation(d)), ...hubs, ...turn, ...waiting];
 }
 
 /**

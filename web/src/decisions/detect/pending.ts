@@ -114,9 +114,18 @@ function pressesNeeded(m: Message) {
 function isMultiPress(m: Message) {
   const ids = choicesOf(m).map((c) => baseId(c.customId));
   return (
-    ids.some((id) => /^(place_|spend_|reduceTG_|reduceComm_|increase_\w+_cc)/.test(id)) &&
-    ids.some((id) => /^(deleteButtons|resetProducedThings|resetSpend_|resetCCs)/.test(id))
+    ids.some((id) => /^(place_|spend_|reduceTG_|reduceComm_|increase_\w+_cc|riftUnit_|riftAllUnits_|wormholeUnit_|wormholeAllShips_)/.test(id)) &&
+    ids.some((id) => /^(deleteButtons|resetProducedThings|resetSpend_|resetCCs|doneRifting$)/.test(id))
   );
+}
+
+/**
+ * The step after moving (roll for the gravity rift, produce, conclude the tactical action): the bot leaves it up while
+ * the rift roll or another of its buttons is answered, and deletes it once I produce or conclude.
+ */
+function isTacticalHub(m: Message) {
+  const ids = choicesOf(m).map((c) => baseId(c.customId));
+  return ids.includes("doneWithTacticalAction") && !ids.some((id) => /^(doneLanding|landUnits)/.test(id));
 }
 
 /** How many of the newest messages of a channel a role-wide prompt stays relevant for. */
@@ -265,6 +274,7 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     let answered = answeredState(state, m, ping);
     /* Production takes many presses on one message (a unit each) and ends with its Done button, which removes it. */
     if (answered && isMultiPress(m)) answered = false;
+    if (answered && isTacticalHub(m)) answered = false;
     if (tableSetup) {
       /*
        * Addressed to nobody, so nobody else's prompt retires it: the bot deletes it once a press goes through. One
@@ -530,12 +540,18 @@ export function turnMenuFallback(state: PlayState, game: GameChannels, faction: 
   const roundStart = latestRoundStart(state, game.actions.id);
   const data = state.messages[game.actions.id];
   if (!data || !faction) return undefined;
+  let acted = false;
   for (let i = data.ids.length - 1; i >= 0; i--) {
     const m = data.byId[data.ids[i]];
     if (!m?.author.bot || state.dismissedPrompts[m.id]) continue;
     if (roundStart && compareSnowflakes(m.id, roundStart) < 0) return undefined;
-    const mine = choicesOf(m).some((c) => TURN_MENU.test(baseId(c.customId)) && idFaction(c.customId) === faction);
-    if (mine) return { message: m, channelId: game.actions.id, where: "actions", reason: "faction" as const };
+    if (/\bactivated \d+\b/i.test(m.content)) acted = true;
+    const ids = choicesOf(m).filter((c) => idFaction(c.customId) === faction).map((c) => baseId(c.customId));
+    /* Mid tactical action: the step that concludes it, not a fresh turn menu (that would start a second action). */
+    if (ids.includes("doneWithTacticalAction")) return { message: m, channelId: game.actions.id, where: "actions", reason: "faction" as const };
+    if (!ids.some((id) => TURN_MENU.test(id))) continue;
+    if (acted && ids.some((id) => /^tacticalAction(?!Build)/.test(id)) && !ids.some((id) => /^turnEnd/.test(id))) return undefined;
+    return { message: m, channelId: game.actions.id, where: "actions", reason: "faction" as const };
   }
   return undefined;
 }

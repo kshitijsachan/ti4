@@ -93,6 +93,11 @@ export type Decision = {
   table?: boolean;
   /** Part of setting the game up (starting technology, which secret objective to keep). */
   setup?: boolean;
+  /**
+   * A step that stays up while the prompts it spawns are answered (after moving: roll for the gravity rift, then
+   * produce or conclude the tactical action). It waits behind those, so it comes back once they are done.
+   */
+  hub?: boolean;
 };
 
 export type ClassifyContext = {
@@ -398,6 +403,21 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
     const trade = tradeOf(text);
     return { ...base, kind: "transaction", eyebrow: "", title: `${trade.from} offers a trade`, trade };
   }
+  /* Ships that moved out of or through a gravity rift (or a weird wormhole) roll for survival: a tactical step. Its
+     "Remove Transported Units" button is a combat-style id, but there is no combat here. */
+  if (has(choices, /^(riftUnit_|riftAllUnits_|wormholeUnit_|wormholeAllShips_|doneRifting$)/)) return { ...riftStep(base, choices, ctx), hub: true };
+  /* "Remove Transported Units" after a rift roll: the action log's remove-by-hand list (no dice, no auto-assign), not a combat. */
+  if (prompt.where === "actions" && has(choices, /^assignHits_/) && !has(choices, /^(combatRoll|autoAssign|getDamageButtons)/)) {
+    return {
+      ...base,
+      kind: "tactical",
+      eyebrow: "",
+      title: "Remove units",
+      text: "Remove the units that are lost (e.g. fighters and ground forces that rode in a ship the gravity rift destroyed, beyond what your remaining ships can carry), then press Done.",
+      choices: choices.map((c) => (baseId(c.customId) === "deleteButtons" ? { ...c, label: "Done removing", rank: "secondary" as const } : c)),
+      position: ctx.web?.gameState?.activeSystem ?? undefined,
+    };
+  }
   /* The landing step offers "Roll BOMBARDMENT" alongside "Done Landing Troops": it is a tactical step, not a combat. */
   const landingStep = has(choices, /^(doneLanding|landUnits)/);
   if ((has(choices, ID.combat) && !landingStep) || prompt.reason === "combat") {
@@ -655,13 +675,15 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   if (has(choices, ID.tactical)) {
     const ring = choices.map((c) => baseId(c.customId).match(/^ringTile_(\w+)/)?.[1]).filter(Boolean);
     const active = ctx.web?.gameState?.activeSystem ?? undefined;
-    return {
+    const tactical: Decision = {
       ...base,
       kind: "tactical",
       eyebrow: "",
       title: tacticalTitle(choices, text, ring.length > 0),
       position: ring.length ? undefined : active,
+      hub: has(choices, /^doneWithTacticalAction/) && !has(choices, /^(doneLanding|landUnits)/),
     };
+    return has(choices, /^getRiftButtons_/) ? riftFirst(tactical) : tactical;
   }
   if (has(choices, /^proceed_to_strategy$/) && !has(choices, /^flip_agenda$/)) {
     return {
@@ -866,6 +888,76 @@ function tableSetup(choices: Choice[]): { title: string; text: string } {
     };
   }
   return { title: "Start the strategy phase", text: "Setup is done: begin round 1. Anyone at the table can press this." };
+}
+
+const RIFT_RULE = "Each ship that moved out of or through a gravity rift rolls one die: on 1–3 it is destroyed.";
+
+/** After moving through a rift the bot offers the roll as one button among others: put it first and say why. */
+/** What the step after moving says about the gravity rift (empty when the bot offers no rift roll). */
+export function riftNote(d: Decision): string {
+  if (!d.choices.some((c) => /^getRiftButtons_/.test(baseId(c.customId)))) return "";
+  return d.prompt.message.my_press
+    ? "Rolled for the gravity rift? Then produce units here or conclude the tactical action."
+    : `Your ships may have used a gravity rift on the way. ${RIFT_RULE} Roll for them first, then produce units or conclude.`;
+}
+
+function riftFirst(d: Decision): Decision {
+  const rift = (c: Choice) => /^getRiftButtons_/.test(baseId(c.customId));
+  const pressed = !!d.prompt.message.my_press;
+  const note = riftNote(d);
+  return {
+    ...d,
+    title: pressed ? d.title : "Roll for the gravity rift",
+    text: [note, d.text].filter(Boolean).join("\n\n"),
+    choices: [
+      ...d.choices.filter(rift).map((c) => ({ ...c, label: "Roll for ships that used the rift", rank: "primary" as const })),
+      ...d.choices.filter((c) => !rift(c)),
+    ],
+  };
+}
+
+/** "<:carrier:…> in tile 204 rolled a <:d10red_2:…> and failed." posted after the rift prompt → "Carrier: 2, destroyed". */
+function riftRolls(prompt: PendingPrompt, ctx: ClassifyContext): string[] {
+  const data = ctx.state.messages[prompt.channelId];
+  if (!data) return [];
+  const out: string[] = [];
+  for (const id of data.ids) {
+    if (compareSnowflakes(id, prompt.message.id) <= 0) continue;
+    const content = data.byId[id]?.content ?? "";
+    const hit = content.match(/<a?:(\w+):\d+>\s*in tile \w+ rolled a <a?:d10\w*?_(\d+):\d+>/);
+    if (!hit) continue;
+    const unit = hit[1].replace(/^\w/, (x) => x.toUpperCase());
+    const survived = /\bsurvived\b/.test(content);
+    const second = content.match(/It now rolled a <a?:d10\w*?_(\d+):\d+>/)?.[1];
+    out.push(`${unit}: rolled ${hit[2]}${second ? `, then ${second}` : ""} — ${survived ? "survived" : "destroyed"}`);
+  }
+  return out;
+}
+
+/** The bot's rift-roll prompt: one button per ship (or all of them), remove what the lost ships carried, done. */
+function riftStep(base: Decision, choices: Choice[], ctx: ClassifyContext): Decision {
+  const wormhole = has(choices, /^(wormholeUnit_|wormholeAllShips_)/);
+  const relabel = (c: Choice): Choice => {
+    const id = baseId(c.customId);
+    if (id === "doneRifting") return { ...c, label: wormhole ? "Done rolling" : "Done rolling for the rift", rank: "secondary" };
+    if (/^getDamageButtons_\w+_remove/.test(id)) return { ...c, label: "Remove transported units", rank: "more" };
+    if (/^(riftAllUnits_|wormholeAllShips_)/.test(id)) return { ...c, label: "Roll for all ships here", rank: "primary" };
+    if (/^(riftUnit_|wormholeUnit_)/.test(id)) return { ...c, label: c.label.replace(/^(Rift|Wormhole)\b/, "Roll for"), rank: "primary" };
+    return c;
+  };
+  const rolls = riftRolls(base.prompt, ctx);
+  const rules = wormhole
+    ? "Roll for each ship that travelled through the weird wormhole, then press Done."
+    : `${RIFT_RULE} Roll only for the ships that used the rift ("all ships here" rolls for every ship in the system). If a lost ship carried fighters or ground forces the rest cannot hold, remove them. Then press Done.`;
+  return {
+    ...base,
+    kind: "tactical",
+    eyebrow: "",
+    title: wormhole ? "Weird wormhole — roll for your ships" : "Gravity rift — roll for your ships",
+    text: rolls.length ? `${rules}\n\n**Rolled so far:**\n${rolls.map((r) => `- ${r}`).join("\n")}` : rules,
+    choices: choices.map(relabel),
+    position: ctx.web?.gameState?.activeSystem ?? undefined,
+  };
 }
 
 function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean) {
