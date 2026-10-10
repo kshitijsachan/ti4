@@ -24,7 +24,14 @@ type Choice = {
   why: string;
 };
 
-type GameState = { phase: string | null; active: string | null; colors: Map<string, string>; combat: boolean };
+type GameState = {
+  phase: string | null;
+  active: string | null;
+  colors: Map<string, string>;
+  combat: boolean;
+  /** Per seated player (user id): faction and how many technologies it owns. */
+  players: Map<string, { faction: string; techs: number }>;
+};
 
 type Ctx = {
   /** Names this seat and nobody else, carries its faction's buttons, is only visible to it, or is in its own thread. */
@@ -261,12 +268,17 @@ export class Autopilot {
       if (res.ok) {
         const data = (await res.json()) as Json;
         const colors = new Map<string, string>();
-        for (const p of data.playerData ?? []) if (p.discordId && p.color) colors.set(String(p.discordId), String(p.color));
+        const players = new Map<string, { faction: string; techs: number }>();
+        for (const p of data.playerData ?? []) {
+          if (p.discordId && p.color) colors.set(String(p.discordId), String(p.color));
+          if (p.discordId && p.faction && p.faction !== "null" && p.faction !== "neutral") players.set(String(p.discordId), { faction: String(p.faction), techs: (p.techs ?? []).length });
+        }
         state = {
           phase: String(data.gameState?.phase ?? "") || null,
           active: data.gameState?.activePlayer ? String(data.gameState.activePlayer) : null,
           colors,
           combat: !!data.gameState?.activeCombat,
+          players,
         };
       }
     } catch {
@@ -274,6 +286,10 @@ export class Autopilot {
     }
     this.states.set(game, { at: Date.now(), state });
     return state;
+  }
+
+  forgetState(game: string) {
+    this.states.delete(game);
   }
 
   async phaseOf(game: string): Promise<string | null> {
@@ -639,6 +655,7 @@ class SeatPilot {
       if (rule.table && !rule.again && press) continue;
       if (rule.again && rule.why !== "combat: roll dice" && press && !mine && Date.parse(press.at) < this.started) continue;
       if (rule.why.startsWith("status: reveal") && !this.mayReveal(m, game)) continue;
+      if (rule.why === "setup: Keleres technology options" && !(await this.othersHaveStartingTech(game))) continue;
       // "Ready For Strategy / Agenda Phase": the last press moves the whole table on, so it must never be ours while a
       // person at the table is still doing their status-phase steps. Answer only after every person said ready.
       if (/pass_on_abilities/.test(String(rule.id)) && !(await this.peopleReady(m, game))) continue;
@@ -676,6 +693,32 @@ class SeatPilot {
       if (BigInt(other.id) <= BigInt(m.id)) continue;
       if (/public objective has been revealed|already revealed this round/i.test(String(other.content ?? ""))) return false;
       if (controlsOf(other.components).some((c) => /reveal_stage_/.test(c.custom_id))) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Keleres takes its starting technologies from the other players', and the bot offers them only once (pressed too
+   * early, Keleres gets prompts with no buttons and the game cannot deal secrets). Wait until every other player but
+   * Sardakk (no starting technology) owns one and no starting-technology prompt is left anywhere in the game.
+   */
+  private async othersHaveStartingTech(game: string) {
+    this.mgr.forgetState(game);
+    const st = await this.mgr.stateOf(game);
+    if (!st) return false;
+    for (const [id, p] of st.players) {
+      if (id === this.userId || p.faction.startsWith("sardakk") || p.faction.startsWith("keleres")) continue;
+      if (p.techs < 1) return false;
+    }
+    const s = this.store.state;
+    for (const ch of Object.values(s.channels)) {
+      if (gameOf(ch, s.channels) !== game) continue;
+      for (const m of this.store.messages(ch.id).slice(-WINDOW)) {
+        if (m._ephemeral_for && m._ephemeral_for !== this.userId) continue;
+        if (controlsOf(m.components).some((c) => /(^|_)(getTech_.+__noPay|acquireAFreeTech$|getAllTechOfType_)/.test(c.custom_id) && !c.custom_id.includes("keleres"))) {
+          if (!String(m.content ?? "").includes(`<@${this.userId}>`)) return false;
+        }
+      }
     }
     return true;
   }
