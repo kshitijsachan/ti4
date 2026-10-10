@@ -104,7 +104,7 @@ export type ClassifyContext = {
 const ID = {
   scPick: /^scPick_(\d+)/,
   scFollow: /^(sc_follow_|sc_no_follow_|sc_\w+_follow|preDeclineSC_|leadershipGenerateCCButtons|diploRefresh|construction_|acquireATechWithSC|warfareTeBuild|primaryOfTeWarfare|sendTradeHolder)/,
-  turn: /^(tacticalAction(?!Build)|componentAction|passingAbilities|passForRound|endOfTurnAbilities|turnEnd|doAnotherAction|confirmSecondAction|strategicAction_)/,
+  turn: /^(tacticalAction(?!Build)|componentAction(?!Res)|passingAbilities|passForRound|endOfTurnAbilities|turnEnd|doAnotherAction|confirmSecondAction|strategicAction_)/,
   tactical: /^(ringTile_|getTilesThisFarAway_|ring_|unitTactical|tacticalMoveFrom|doneWithOneSystem|doneMoving|doneLanding|landUnits|tacticalActionBuild|doneWithTacticalAction|concludeMove|planetsTake|place_|placeOneNDone|startCombat|getRaid)/i,
   combat: /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign|automateGroundCombat_)/,
   agendaVote: /^(resolveAgendaVote|vote$|planetOutcomes|outcome|agendaResolution|preVote|exhaustForVotes|abstain|distinguished|planetRider|rider_)/,
@@ -588,6 +588,16 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
           : abilities
             ? "End of turn — use an ability first?"
             : "End your turn",
+    };
+  }
+  if (has(choices, /^componentActionRes_/)) {
+    return {
+      ...base,
+      kind: "tactical",
+      eyebrow: "Component action",
+      title: "Component action — what do you use?",
+      choices: choices.map((c) => (baseId(c.customId) === "deleteButtons" ? { ...c, label: "Cancel", rank: "undo" as const } : c)),
+      text: "Pick the card, technology, leader or ability whose ACTION you use. “Generic” is for anything not listed (you then resolve it by hand).",
     };
   }
   if (has(choices, /^beginTacticalTeWarfare/)) {

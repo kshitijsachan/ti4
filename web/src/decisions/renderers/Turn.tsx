@@ -23,7 +23,7 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
       tone: "go",
     };
   }
-  if (id.startsWith("componentAction")) {
+  if (/^componentAction(?!Res)/.test(id)) {
     return {
       choice: c,
       title: "Component action",

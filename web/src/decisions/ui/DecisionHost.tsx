@@ -76,10 +76,20 @@ function useSetupOpen(gameName: string) {
 /** A space combat is over once one side has no ships left there (the bot leaves its buttons up). */
 function combatOver(d: Decision, web?: PlayerDataResponse) {
   const c = d.combat;
-  if (!c?.position || c.kind !== "space" || c.factions.length < 2 || !web) return false;
-  const space = web.tileUnitData?.[c.position]?.space;
+  if (!c?.position || c.factions.length < 2 || !web) return false;
+  const tile = web.tileUnitData?.[c.position];
+  if (!tile) return false;
+  const unit = (u: { entityType: string; count: number }) => u.entityType === "unit" && u.count > 0;
+  if (c.kind === "ground") {
+    /* A ground combat is over once one side has no ground forces left on the planet. */
+    const planet = c.planet ? tile.planets?.[c.planet] : undefined;
+    if (!planet) return false;
+    const forces = (f: string) => (planet.entities?.[f] ?? []).some((u) => unit(u) && ["gf", "mf"].includes(u.entityId));
+    return c.factions.some((f) => !forces(f));
+  }
+  const space = tile.space;
   if (!space) return false;
-  const ships = (f: string) => (space[f] ?? []).some((u) => u.entityType === "unit" && u.count > 0 && !["gf", "mf"].includes(u.entityId));
+  const ships = (f: string) => (space[f] ?? []).some((u) => unit(u) && !["gf", "mf"].includes(u.entityId));
   return c.factions.some((f) => !ships(f));
 }
 
@@ -200,7 +210,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
       (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "scFollow" && !d.optional && d.sc && (!mePlayer || mePlayer.followedSCs?.includes(d.sc))) && !(d.kind === "combat" && combatOver(d, web)) &&
         !(movement.active && (d.id === movement.promptId || (d.kind === "tactical" && MAP_STEP.test(d.choices.map((c) => baseId(c.customId)).join(" "))))),
     );
-    const oldestFirst = inBursts(live);
+    const oldestFirst = inBursts(live).filter((d) => !(d.kind === "combat" && combatOver(d, web)));
     const queue = orderQueue(oldestFirst);
     if (!queue.length && myTurn && phase === "action") {
       /* My turn and nothing waits on me: a step got lost; offer my turn menu again so the turn never dead-ends. */

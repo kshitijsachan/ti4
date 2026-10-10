@@ -31,8 +31,8 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   const combat = owed.filter((d) => d.kind === "combat" && combatWaitsOnMe(d));
   const waiting = owed.filter((d) => d.kind === "combat" && !combatWaitsOnMe(d));
   const rest = owed.filter((d) => d.kind !== "combat");
-  /* A combat that waits on the opponent never blocks what I can do (the landing card warns while it is unresolved). */
-  return [...combat, ...rest.filter(continuation), ...rest.filter((d) => !continuation(d)), ...waiting, ...turn];
+  /* A combat that waits on the opponent never blocks what I can do, my turn included (landing warns while it is unresolved). */
+  return [...combat, ...rest.filter(continuation), ...rest.filter((d) => !continuation(d)), ...turn, ...waiting];
 }
 
 /**

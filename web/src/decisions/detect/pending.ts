@@ -420,7 +420,12 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
   }
   const staleHit = (it: PendingPrompt) => {
     const k = hitKind(it.message);
-    return k !== undefined && newestHit.get(`${it.channelId}:${k}`) !== it.message.id;
+    if (k === undefined) return false;
+    if (retired.has(it.message.id)) return true;
+    /* Remembered, because the bot deletes the newer one once it is answered and the old one would surface again. */
+    const stale = newestHit.get(`${it.channelId}:${k}`) !== it.message.id;
+    if (stale) retireStep(me.id, it.message.id);
+    return stale;
   };
   return all
     .filter((it) => !staleHit(it))
