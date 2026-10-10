@@ -2,6 +2,10 @@ import type { Hub } from "./hub.js";
 import type { Clients } from "./clients.js";
 import type { Json, StoredMessage } from "./store.js";
 import { log } from "./log.js";
+import { Brain } from "./botplay/brain.js";
+import { parseBoard, type Board } from "./botplay/board.js";
+import { controlsOf, type Control, type Prompt } from "./botplay/prompts.js";
+import type { Seat } from "./botplay/seat.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -13,9 +17,6 @@ import { log } from "./log.js";
  * abstain on agendas, roll dice and auto-assign hits, reject trades, and otherwise answer prompts addressed to it
  * with their first sensible button. With ANTHROPIC_API_KEY set, prompts no rule covers are put to Claude.
  */
-
-/** A pressable control of a message: a button, or a string select (answered with its first option). */
-type Control = { custom_id: string; label: string; kind: "button" | "select"; values?: string[] };
 
 type Choice = {
   msg: StoredMessage;
@@ -363,12 +364,15 @@ class SeatPilot {
   private siblings = new Set<string>();
   /** Per message, how often we pressed a `retry` prompt again. */
   private retries = new Map<string, number>();
+  /** The planner (tactical actions, strategy card primaries, scoring); the rule table handles the rest. */
+  private brain: Brain;
 
   constructor(
     private mgr: Autopilot,
     readonly userId: string,
   ) {
     this.conn = mgr.clients.attachVirtual(userId, (f) => this.onFrame(f));
+    this.brain = new Brain(this.seat());
     // Some turns change without a message this seat can see (e.g. the draft); look again now and then.
     this.poll = setInterval(() => this.schedule(), 8000);
     log.info(`autopilot ${this.name}: started`);
@@ -444,6 +448,13 @@ class SeatPilot {
     if (Date.now() < this.restUntil) return;
     this.busy = true;
     try {
+      for (const game of this.liveGames()) {
+        if (await this.brain.tick(game)) {
+          this.busy = false;
+          this.schedule();
+          return;
+        }
+      }
       const choice = await this.decide();
       if (!choice) {
         await this.recoverTurns();
@@ -544,6 +555,7 @@ class SeatPilot {
     if ((this.fails.get(m.id) ?? 0) >= MAX_FAILS) return null;
     let controls = controlsOf(m.components);
     if (!controls.length) return null;
+    if (this.brain.owns(game, { ch, m, controls })) return null;
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
     // When we answered this prompt (unchanged since): this run, a re-posted copy, or before a restart.
     const sig = signature(controls);
@@ -877,15 +889,15 @@ class SeatPilot {
 
   // ---- acting ----
 
-  private async press(choice: Choice) {
+  private async press(choice: Choice): Promise<string | undefined> {
     const { msg, control } = choice;
     // The prompt may have gone while we waited for our turn.
     const fresh = this.store.findMessage(msg.channel_id, msg.id);
-    if (!fresh || !controlsOf(fresh.components).some((c) => c.custom_id === control.custom_id)) return;
+    if (!fresh || !controlsOf(fresh.components).some((c) => c.custom_id === control.custom_id)) return "the prompt is gone";
     // Another pilot may have revealed the objective while we were deciding.
     if (/reveal_stage_/.test(control.custom_id)) {
       const game = gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "";
-      if (!this.mayReveal(fresh, game)) return;
+      if (!this.mayReveal(fresh, game)) return "already revealed";
     }
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
@@ -938,6 +950,87 @@ class SeatPilot {
     } else this.streak = 0;
     // Let the bot's answer land before deciding again.
     await sleep(this.drafting ? 250 : 600);
+    return err;
+  }
+
+  // ---- the planner's view of this seat ----
+
+  /** Games this seat sits in with something happening in the last hour (by their actions channel). */
+  private liveGames(): string[] {
+    const out: string[] = [];
+    for (const ch of Object.values(this.store.state.channels)) {
+      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? "")) || !this.store.canView(this.userId, ch.id)) continue;
+      const last = this.store.messages(ch.id).at(-1);
+      if (!last || Date.now() - Date.parse(last.timestamp) > 3600000) continue;
+      out.push(/^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1]);
+    }
+    return out;
+  }
+
+  private boards = new Map<string, { at: number; board: Board | null }>();
+
+  private seat(): Seat {
+    const self = this;
+    const collect = (game: string, withControls: boolean): Prompt[] => {
+      const s = self.store.state;
+      const out: Prompt[] = [];
+      for (const ch of Object.values(s.channels)) {
+        if (![0, 11, 12].includes(ch.type) || !self.store.canView(self.userId, ch.id) || gameOf(ch, s.channels) !== game) continue;
+        for (const m of self.store.messages(ch.id).slice(-WINDOW)) {
+          if (m._ephemeral_for && m._ephemeral_for !== self.userId) continue;
+          if (!s.users[m.author?.id]?.bot) continue;
+          const controls = controlsOf(m.components);
+          if (withControls && !controls.length) continue;
+          out.push({ ch, m, controls });
+        }
+      }
+      return out.sort((a, b) => (BigInt(a.m.id) < BigInt(b.m.id) ? -1 : 1));
+    };
+    return {
+      userId: this.userId,
+      get name() {
+        return self.name;
+      },
+      faction: async (game) => {
+        const known = self.factions.get(game);
+        if (known) return known;
+        const f = family(await self.mgr.factionOf(game, self.userId));
+        if (f) self.factions.set(game, f);
+        return f;
+      },
+      prompts: (game) => collect(game, true),
+      messages: (game) => collect(game, false),
+      press: (p, c, why) => self.mgr.serial(() => self.press({ msg: p.m, control: c, score: 100, why })),
+      board: async (game, fresh) => {
+        const hit = self.boards.get(game);
+        if (hit && !fresh && Date.now() - hit.at < 1500) return hit.board;
+        let board: Board | null = null;
+        try {
+          const res = await fetch(`${self.mgr.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(8000) });
+          if (res.ok) board = parseBoard(game, (await res.json()) as Json, self.store.state.users);
+        } catch {
+          board = null;
+        }
+        self.boards.set(game, { at: Date.now(), board });
+        return board;
+      },
+      movement: async (game, target, displacement) => {
+        const token = Object.entries(self.store.state.seats).find(([, seat]) => seat.user_id === self.userId)?.[0];
+        try {
+          const res = await fetch(`${self.mgr.botApi}/api/game/${encodeURIComponent(game)}/movement`, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ targetPosition: target, displacement }),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!res.ok) return `${res.status} ${(await res.text().catch(() => "")).slice(0, 200)}`;
+          return undefined;
+        } catch (e) {
+          return (e as Error).message;
+        }
+      },
+      log: (text) => log.info(`autopilot ${self.name}: ${text}`),
+    };
   }
 }
 
@@ -965,26 +1058,6 @@ function myThreadOwner(ch: Json, s: Json, me: string): boolean {
   if (!members.includes(me)) return false;
   const name = String(s.users[me]?.global_name ?? "");
   return !!name && String(ch.name ?? "").endsWith(`-${name}`);
-}
-
-function controlsOf(components: Json[] | undefined): Control[] {
-  const out: Control[] = [];
-  const walk = (list: Json[] | undefined) => {
-    for (const c of list ?? []) {
-      if (!c || typeof c !== "object") continue;
-      if (c.type === 2 && !c.disabled && c.style !== 5 && c.custom_id) {
-        out.push({ custom_id: c.custom_id, label: String(c.label ?? c.emoji?.name ?? ""), kind: "button" });
-      } else if (c.type === 3 && !c.disabled && c.custom_id && c.options?.length) {
-        const min = Math.max(1, c.min_values ?? 1);
-        out.push({ custom_id: c.custom_id, label: String(c.placeholder ?? "select"), kind: "select", values: c.options.slice(0, min).map((o: Json) => o.value) });
-      }
-      walk(c.components);
-      if (c.accessory) walk([c.accessory]);
-      if (c.component) walk([c.component]);
-    }
-  };
-  walk(components);
-  return out;
 }
 
 /** The custom ids of a message's enabled controls, as Clients records them in `_presses`. */
