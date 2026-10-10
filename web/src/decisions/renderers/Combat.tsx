@@ -198,7 +198,23 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
     find(all, (id) => /^autoAssignAFBHits_/.test(id)) ?? find(all, (id) => /^autoAssignSpaceCannonOffenceHits_/.test(id)) ?? find(all, (id) => AUTO.test(id));
   const hitKind = auto ? hitKindOf(baseId(auto.c.customId)) : null;
   const plain = (x: Decision) => !x.choices.some((c) => AUTO.test(baseId(c.customId)));
-  const roll = find(all, (id) => ROUND_ROLL.test(id) && (ground ? !/_space$/.test(id) : /_space$/.test(id)), plain) ?? find(all, (id) => ROUND_ROLL.test(id), plain);
+  /*
+   * The bot's plain combat buttons count as answered once pressed, but they stay pressable (each round's roll, Retreat):
+   * when no open prompt carries one, use the newest message in the thread that does.
+   */
+  const fromThread = (test: (id: string) => boolean): Found | undefined => {
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const m = thread[i];
+      if (!m.author?.bot) continue;
+      const choices = choicesOfMessage(m);
+      if (choices.some((c) => AUTO.test(baseId(c.customId)))) continue;
+      const c = choices.find((x) => !x.disabled && test(baseId(x.customId)));
+      if (c) return { c, on: { ...d, id: m.id, prompt: { ...d.prompt, message: m }, choices, steps: undefined } };
+    }
+    return undefined;
+  };
+  const rollTest = (id: string) => ROUND_ROLL.test(id) && (ground ? !/_space$/.test(id) : /_space$/.test(id));
+  const roll = find(all, rollTest, plain) ?? find(all, (id) => ROUND_ROLL.test(id), plain) ?? fromThread(rollTest);
 
   const myRound = lastRoundOf(log, myFaction, ground);
   const theirRound = lastRoundOf(log, enemyFaction, ground);
@@ -237,6 +253,8 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
     }
     return null;
   };
+  /* Announced at the start of a round, carried out after it (Retreat now). */
+  const announce = find(all, (id) => id === "announceARetreat");
   const press = (f: Found) => {
     const other = rollElsewhere(f);
     if (other && f.c.customId) {
@@ -297,8 +315,11 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
               : `Round ${nextRound}: both sides roll, then each assigns the hits they took.`}
         </p>
         <ChoiceButtons
-          choices={[{ ...roll.c, label: `Roll round ${nextRound}`, style: 3, rank: "primary" }]}
-          onPress={() => press(roll)}
+          choices={[
+            { ...roll.c, label: `Roll round ${nextRound}`, style: 3, rank: "primary" },
+            ...(announce && !log.retreatAnnounced ? [{ ...announce.c, label: "Announce a retreat", style: 2, rank: "primary" as const }] : []),
+          ]}
+          onPress={(c) => press(announce && c.key === announce.c.key ? announce : roll)}
           pendingKey={rolling ? roll.c.key : pendingKey}
           channelId={roll.on.prompt.channelId}
           onHover={onHoverChoice}
@@ -306,6 +327,7 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
       </>
     );
     cover(roll);
+    cover(announce);
   } else {
     const waitingRoll = theirRound < myRound;
     main = (
@@ -322,7 +344,8 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
   }
 
   /* After a round: retreat now (if announced) or roll the next one. */
-  const retreatNow = !retreat ? find(all, (id) => /^retreat_\d+/.test(id) || /^retreat_[^_]+$/.test(id)) : undefined;
+  const retreatTest = (id: string) => /^retreat_[^_]+$/.test(id);
+  const retreatNow = !retreat ? (find(all, retreatTest) ?? fromThread(retreatTest)) : undefined;
   const nextRoll = !retreat && !pickPrompt && !(auto && hitKind) && rolledThis && roll && theirRound >= myRound ? roll : undefined;
   const actions: Choice[] = [];
   if (nextRoll) {

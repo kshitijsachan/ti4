@@ -119,7 +119,7 @@ const ID = {
   scFollow: /^(sc_follow_|sc_no_follow_|sc_\w+_follow|preDeclineSC_|leadershipGenerateCCButtons|diploRefresh|construction_|acquireATechWithSC|warfareTeBuild|primaryOfTeWarfare|sendTradeHolder)/,
   turn: /^(tacticalAction(?!Build)|componentAction(?!Res)|passingAbilities|passForRound|endOfTurnAbilities|turnEnd|doAnotherAction|confirmSecondAction|strategicAction_)/,
   tactical: /^(ringTile_|getTilesThisFarAway_|ring_|unitTactical|tacticalMoveFrom|doneWithOneSystem|doneMoving|doneLanding|landUnits|tacticalActionBuild|doneWithTacticalAction|concludeMove|planetsTake|place_|placeOneNDone|startCombat|getRaid)/i,
-  combat: /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign|automateGroundCombat_)/,
+  combat: /^(combatRoll|getDamageButtons|assignHits|retreat_|retreatUnitsFrom_|retreatGroundUnits_|rollForAmbush|bombardConfirm|assignDamage|autoAssign|automateGroundCombat_)/,
   agendaVote: /^(resolveAgendaVote|vote$|planetOutcomes|outcome|agendaResolution|preVote|exhaustForVotes|abstain|distinguished|planetRider|rider_)/,
   whensAfters: /^(queueAWhen|queueAnAfter|declineToQueueAWhen|declineToQueueAnAfter|no_when|no_after|play_when|play_after|passOnEverythingWhensNAfters|queueWhen_|queueAfter_|lockAftersIn)/,
   transaction: /^(acceptOffer|rejectOffer|resetOffer)/,

@@ -28,12 +28,14 @@ export function RetreatPicker({ d, data, pressOn, pendingKey }: Pick<RendererPro
   return (
     <div className={classes.stack}>
       <p className={classes.status}>
-        <strong>Retreat</strong> — pick where your ships go. Only systems you may legally retreat to are listed; you can also click one on the map.
+        <strong>Retreat</strong> — pick where your ships go. Only systems you may legally retreat to are listed (hover one to find it on the map).
       </p>
       <div className={classes.dests}>
         {space.map((c) => {
           const to = baseId(c.customId).match(SPACE)?.[2] ?? "";
-          const name = c.label.replace(/^retreat to\s*/i, "").replace(/\s*\(\w+\)\s*$/, "") || to;
+          /* "Retreat to 307 (Moll Primus - Mentak)" → "Moll Primus - Mentak". */
+          const rest = c.label.replace(/^retreat to\s*/i, "");
+          const name = rest.match(/^\w+\s*\((.+)\)\s*$/)?.[1] ?? (rest || to);
           return (
             <UnstyledButton
               key={c.key}
