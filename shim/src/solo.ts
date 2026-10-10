@@ -176,7 +176,7 @@ export class SoloGames {
       this.note(job, "Starting the draft with default settings");
       await this.retry(job, "Start Draft", () => p.click(settings, "jmfA_main_startMilty"));
 
-      await this.waitFor(job, "the draft to start", 180 * SECOND, async () => {
+      await this.waitFor(job, "the draft to start", 360 * SECOND, async () => {
         const draft = await this.draft(job.game!);
         return draft?.status === "drafting" || draft?.status === "finished" ? draft : undefined;
       });
