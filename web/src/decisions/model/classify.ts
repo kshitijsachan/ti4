@@ -526,13 +526,22 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   if (has(choices, /^getTech_/)) {
     const freeAtStart = has(choices, /__noPay__comp$/) && !ctx.web?.strategyCards?.some((sc) => sc.played) && (ctx.web?.gameRound ?? 1) <= 1;
     if (/starting tech/i.test(m.content) || freeAtStart) {
+      /* Factions that choose two (Argent Flight, …) get one prompt per pick: never offer one already taken. */
+      const owned = new Set(ctx.me?.techs ?? []);
+      const offered = choices.filter((c) => !owned.has(baseId(c.customId).match(/^getTech_([^_]+)/)?.[1] ?? ""));
+      const already = choices.length - offered.length;
       return {
         ...base,
+        choices: offered,
         kind: "tech",
         eyebrow: "Game setup",
-        title: "Choose your starting technology",
-        text: "Your faction starts the game with one of these technologies, for free.",
+        title: already ? "Choose another starting technology" : "Choose your starting technology",
+        text: already
+          ? "Your faction starts with more than one of these. Pick the next one, for free."
+          : "Your faction starts the game with one of these technologies, for free.",
         setup: true,
+        /* Every offered technology is already mine: this prompt is spent. */
+        optional: !offered.some((c) => /^getTech_/.test(baseId(c.customId))),
       };
     }
     return { ...base, kind: "tech", title: "Research a technology" };
@@ -809,6 +818,11 @@ function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean)
   if (placing.length && placing.every((u) => u === "sd" || u === "spacedock")) return "Place a space dock — choose a planet";
   const forward = choices.filter((c) => c.rank !== "undo" && c.rank !== "more");
   if (forward.length && forward.every((c) => /^doneWithTacticalAction/.test(baseId(c.customId)))) return "Finish the tactical action";
+  if (has(choices, /^placeOneNDone_skipbuild/)) {
+    const where = /hope'?s end/i.test(text) ? "Hope's End: " : "";
+    const ac = choices.some((c) => /action card/i.test(c.label));
+    return `${where}place 1 mech${ac ? " or draw 1 action card" : ""}`.replace(/^p/, (x) => (where ? x : x.toUpperCase()));
+  }
   if (has(choices, /^(tacticalActionBuild|place_|placeOneNDone)/) || /produce/i.test(text)) return "Produce units";
   if (has(choices, /^(landUnits|doneLanding|planetsTake)/) || /land/i.test(text)) return "Land ground forces";
   if (has(choices, /^(unitTactical|tacticalMoveFrom|doneWithOneSystem|doneMoving|concludeMove)/)) return "Move ships into the system";

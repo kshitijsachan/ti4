@@ -132,6 +132,17 @@ const FOLLOW_ID = /^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/;
 const SC_CALL_ID = /^(sc_follow_\d|sc_trade_follow|sc_no_follow_\d)/;
 const COMBAT_ID = /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign)/;
 
+/** After a homework prompt: the bot's "<faction> … is ready for strategy phase." line for this faction. */
+export function declaredReady(after: (Message | undefined)[], faction: string) {
+  const f = faction.toLowerCase();
+  const mine = (m: Message) =>
+    [...m.content.matchAll(/<a?:(\w+):\d+>/g)].some(([, name]) => {
+      const n = name.toLowerCase();
+      return n === f || f.startsWith(n) || n.startsWith(f);
+    });
+  return after.some((m) => !!m?.author.bot && /\bis ready for strategy phase\b/i.test(m.content) && mine(m));
+}
+
 /** The bot marks who has answered a table-wide prompt with that faction's emoji as a reaction. */
 export function reactedBy(m: Message, faction: string) {
   const f = faction.toLowerCase();
@@ -288,7 +299,8 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     }
     if (opts.roleCalls && opts.faction && forwardChoices(m).some((c) => baseId(c.customId) === "pass_on_abilities")) {
       /* Status homework: I may press "redistribute tokens" first; it waits on me until my faction reacts "ready". */
-      if (reactedBy(m, opts.faction)) return;
+      /* The bot also reacts with my faction when I only redistribute: ready means its "is ready for strategy phase" line. */
+      if (declaredReady(ids.slice(index + 1).map((x) => data.byId[x]), opts.faction)) return;
       items.push({ message: m, channelId, where, reason: "role" });
       return;
     }

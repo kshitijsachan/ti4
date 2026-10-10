@@ -130,13 +130,18 @@ function produceLabel(c: Choice): Choice {
   return { ...c, label: c.label.replace(/^Produce /, "").replace(/\s*\(\d+\/\d+\)$/, ""), style: 2 };
 }
 
-/** What this tactical action's explore found ("Gamma Wormhole: Place a gamma wormhole token…"), once it has run. */
-function useExploreResult(channelId: string) {
+/**
+ * What the explore just before this step found ("Gamma Wormhole: Place a gamma wormhole token…"): only on the first
+ * prompt after it, not on later steps.
+ */
+function useExploreResult(channelId: string, promptId: string) {
   const data = usePlay((s) => s.messages[channelId]);
   if (!data) return undefined;
   for (let i = data.ids.length - 1; i >= 0; i--) {
     const m = data.byId[data.ids[i]];
-    if (!m?.author.bot) continue;
+    if (!m?.author.bot || m.id === promptId) continue;
+    /* Another prompt between this step and the explore: the explore belongs to an earlier step. */
+    if ((m.components ?? []).length) return undefined;
     if (/\bactivated \d+/.test(m.content)) return undefined;
     const embed = m.embeds?.[0];
     if (!/\bexplored\b/i.test(m.content) || !embed?.title) continue;
@@ -154,7 +159,7 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   const unitMoves = d.choices.filter((c) => UNIT_MOVE.test(baseId(c.customId)));
   const movingFrom = systems.some((c) => /^tacticalMoveFrom_/.test(baseId(c.customId)));
   const active = d.position ? tileAt(data, d.position) : undefined;
-  const explored = useExploreResult(d.prompt.channelId);
+  const explored = useExploreResult(d.prompt.channelId, d.id);
   /* BOMBARDMENT only matters when someone else has ground forces on a planet here. */
   const planets = d.position ? Object.values(data.web?.tileUnitData?.[d.position]?.planets ?? {}) : [];
   const enemyOnPlanets = planets.some((p) =>
