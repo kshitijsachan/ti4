@@ -96,7 +96,7 @@ const RULES: Rule[] = [
   { id: /^milty_faction_/, score: 91, why: "draft: first faction" },
   { id: /^milty_order_/, score: 90, why: "draft: first speaker order" },
   // Setup: keep the first secret objective, discard the other.
-  { id: /^discardSecret_/, score: 80, addressed: true, last: true, why: "setup: keep the first secret objective" },
+  { id: /^discardSecret_/, score: 80, retry: true, addressed: true, last: true, why: "setup: keep the first secret objective" },
   // Setup: Keleres picks its flavor once the draft is over (the player's own setup waits on it).
   { id: /^setupStep5_\d+_keleres[a-z]_/, score: 84, addressed: true, why: "setup: Keleres flavor" },
   // Setup: starting technology. Most factions get a list of their allowed techs (getTech_<alias>__noPay__comp, once
@@ -654,7 +654,7 @@ class SeatPilot {
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
       if (rule.addressed && !ctx.addressed) continue;
-      if (rule.retry && lost && (this.tableStalled(m, game) || (await this.myTurn(game)))) {
+      if (rule.retry && lost && (this.tableStalled(m, game) || (await this.myTurn(game)) || String((await this.mgr.phaseOf(game)) ?? "").startsWith("setup"))) {
         const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && (rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id)));
         if (again.length && !BLOCKED_ID.test(again[0].custom_id.replace(/^FFCC_[^_]+_/, ""))) {
           this.retries.set(m.id, (this.retries.get(m.id) ?? 0) + 1);
