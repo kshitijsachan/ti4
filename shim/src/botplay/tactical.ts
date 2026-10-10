@@ -150,7 +150,7 @@ export class TacticalExecutor {
       return false;
     }
     // The bot offers End Turn once the action is concluded.
-    if (plan.stage === "done" && this.find(faction, (b) => /^turnEnd$|^endOfTurnAbilities$/.test(b))) {
+    if ((plan.stage === "done" || plan.stage === "conclude") && this.find(faction, (b) => /^turnEnd$|^endOfTurnAbilities$/.test(b))) {
       this.plan = null;
       return false;
     }

@@ -136,7 +136,7 @@ class TechJob implements Job {
       }
       return "wait";
     }
-    const bill = s.find(faction, (b) => /^spend_/.test(b) || /^reduceTG_/.test(b));
+    const bill = s.find(faction, (b, c) => /^spend_/.test(b) || /^reduceTG_/.test(b) || (/^deleteButtons/.test(b) && /^done exhausting/i.test(c.label)));
     if (bill) {
       const r = await payStep(s.seat, bill.p, board, me, "res", s.pressed, this.cost);
       return r === "done" ? "done" : r === "wait" ? "wait" : "acted";
