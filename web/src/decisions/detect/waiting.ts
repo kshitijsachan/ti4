@@ -61,13 +61,10 @@ export function setupWaiting(
   });
   if (choosingTech.length) return waitOn(choosingTech, "choose a starting technology");
 
-  /* A table-wide step nobody has taken yet. */
+  /* A table-wide step (deal secrets, reveal objectives) is pressed by the server within seconds: no note for it. */
   for (let i = log.length - 1; i >= 0; i--) {
     const m = log[i];
-    if (!m.author.bot || !isTableSetupPrompt(m)) continue;
-    const ids = forwardChoices(m).map((c) => baseId(c.customId));
-    if (ids.includes("deal2SOToAll")) return { text: "Everyone is set up — dealing secret objectives…", me: false };
-    return { text: "Revealing objectives and starting the game…", me: false };
+    if (m.author.bot && isTableSetupPrompt(m)) return undefined;
   }
 
   /* The newest prompt addressed to someone. */
