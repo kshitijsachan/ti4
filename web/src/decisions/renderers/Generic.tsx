@@ -132,47 +132,37 @@ function produceLabel(c: Choice): Choice {
 }
 
 /**
- * What the explore just before this step found ("Gamma Wormhole: Place a gamma wormhole token…"): only on the first
- * prompt after it, not on later steps.
+ * What this tactical action's explores found so far ("Quann → Mining World: gain 1 trade good"), oldest first: every
+ * explore since my newest activation in this channel, so each step keeps the earlier results in view.
  */
-function useExploreResult(channelId: string, promptId: string) {
+function useExploreResults(channelId: string): string[] {
   const data = usePlay((s) => s.messages[channelId]);
-  if (!data) return undefined;
-  const at = data.ids.indexOf(promptId);
-  const resultOf = (id: string): string | null | undefined => {
-    const m = data.byId[id];
-    if (!m?.author.bot) return undefined;
-    /* Another prompt or a new activation in between: the explore belongs to another step. */
-    if ((m.components ?? []).length || /\bactivated \d+/.test(m.content)) return null;
+  if (!data) return [];
+  const out: string[] = [];
+  for (let i = data.ids.length - 1; i >= 0; i--) {
+    const m = data.byId[data.ids[i]];
+    if (!m?.author.bot) continue;
+    if (/\bactivated \d+/.test(m.content)) break;
     const embed = m.embeds?.[0];
-    if (!/\bexplored\b/i.test(m.content) || !embed?.title) return undefined;
+    if (!/\bexplored\b/i.test(m.content) || !embed?.title) continue;
+    const planet = cleanLabel(m.content).match(/explored\s+(?:\w+\s+)?Planet\s+(.+?)\s+in tile/i)?.[1]?.replace(/[_*]/g, "").trim();
     const name = cleanLabel(embed.title).replace(/[_*]/g, "").trim();
     const what = cleanLabel(embed.description ?? "").replace(/[_*]/g, "").trim();
-    return what ? `${name}: ${what}` : name;
-  };
-  /* The explore that led to this step: the nearest one before it, else the first one right after it (the bot can
-     post the result after the next prompt). */
-  for (let i = at - 1; i >= 0 && at >= 0; i--) {
-    const r = resultOf(data.ids[i]);
-    if (r === null) break;
-    if (r) return r;
+    out.unshift(`${planet ? `${planet} → ` : ""}${name}${what ? `: ${what}` : ""}`);
   }
-  for (let i = at + 1; i < data.ids.length && at >= 0; i++) {
-    const r = resultOf(data.ids[i]);
-    if (r === null) return undefined;
-    if (r) return r;
-  }
-  return undefined;
+  return out;
 }
 
 /** A step of a tactical action: the system / unit choices the bot offers, with my fleet numbers. */
-export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: RendererProps) {
+export function TacticalBody({ d, data, onPress, pressOn, pendingKey, onHoverChoice }: RendererProps) {
   const systems = d.choices.filter((c) => SYSTEM.test(baseId(c.customId)));
   const done = d.choices.filter((c) => DONE.test(baseId(c.customId)) && !c.disabled);
   const unitMoves = d.choices.filter((c) => UNIT_MOVE.test(baseId(c.customId)));
   const movingFrom = systems.some((c) => /^tacticalMoveFrom_/.test(baseId(c.customId)));
   const active = d.position ? tileAt(data, d.position) : undefined;
-  const explored = useExploreResult(d.prompt.channelId, d.id);
+  const explored = useExploreResults(d.prompt.channelId);
+  /* Several new planets to explore: one button each, in the order I choose (folded by the host). */
+  const exploreSteps = d.steps?.length && /^movedNExplored_/.test(d.choices.map((c) => baseId(c.customId)).join(" ")) ? [d, ...d.steps] : [];
   /* BOMBARDMENT only matters when someone else has ground forces on a planet here. */
   const planets = d.position ? Object.values(data.web?.tileUnitData?.[d.position]?.planets ?? {}) : [];
   const enemyOnPlanets = planets.some((p) =>
@@ -180,6 +170,7 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   );
   const rest = d.choices
     .filter((c) => !systems.includes(c) && !done.includes(c) && !unitMoves.includes(c))
+    .filter((c) => !(d.steps?.length && /^movedNExplored_/.test(baseId(c.customId))))
     .map(produceLabel)
     .map((c) => (/^(ring_|ChooseDifferentDestination|getTilesThisFarAway_)/.test(baseId(c.customId)) ? { ...c, style: 2 } : c));
   const choosingSystem = !movingFrom && (systems.length > 0 || rest.some((c) => /^ring_/.test(baseId(c.customId))));
@@ -211,7 +202,34 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
         </div>
       )}
       {moved && <p className={classes.hint}>Moving in: {movedSummary(moved)}</p>}
-      {explored && !/^Explore /.test(d.title) && !/exploration$/i.test(d.eyebrow) && <p className={classes.cardText}>Explored — {explored}</p>}
+      {explored.length > 0 && !/exploration$/i.test(d.eyebrow) && (
+        <div className={classes.step}>
+          <span className={classes.stepLabel}>Explored this action</span>
+          {explored.map((r) => (
+            <p key={r} className={classes.cardText}>
+              {r}
+            </p>
+          ))}
+        </div>
+      )}
+      {exploreSteps.length > 0 && (
+        <div className={classes.systemGrid}>
+          {exploreSteps.map((x) => {
+            const c = x.choices.find((ch) => /^movedNExplored_/.test(baseId(ch.customId)));
+            if (!c) return null;
+            const trait = baseId(c.customId).match(/_(cultural|industrial|hazardous|frontier)$/)?.[1];
+            return (
+              <ChoiceButton
+                key={x.id}
+                choice={{ ...c, label: `${c.label.replace(/\s*\(\d+\/\d+\)$/, "")}${trait ? ` (${trait})` : ""}`, style: 3 }}
+                onPress={x === d ? onPress : pressOn(x)}
+                pending={pendingKey === c.key}
+                busy={!!pendingKey}
+              />
+            );
+          })}
+        </div>
+      )}
       {d.title === "Land ground forces" && data.web?.gameState?.activeCombat && data.web.gameState.activeCombat.system === d.position && (
         <p className={cx(classes.hint, classes.warn)}>The space combat here is not over yet. Ground forces land once it is won.</p>
       )}

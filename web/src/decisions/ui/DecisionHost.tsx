@@ -172,6 +172,16 @@ function bursts(newestFirst: Decision[]): Decision[][] {
   return out;
 }
 
+/** Several planets to explore after one action: one step, planets in the order I choose. */
+function foldExplores(list: Decision[]): Decision[] {
+  const isExplore = (d: Decision) => d.choices.some((c) => /^movedNExplored_/.test(baseId(c.customId)));
+  const all = list.filter(isExplore);
+  if (all.length < 2) return list;
+  const [lead, ...steps] = all;
+  const folded: Decision = { ...lead, title: "Explore your new planets — choose the order", text: "", steps };
+  return list.filter((d) => !steps.includes(d)).map((d) => (d === lead ? folded : d));
+}
+
 /** Tactical steps the map can answer itself (pick ships, land ground forces). */
 const MAP_STEP = /(^| )(tacticalMoveFrom_|unitTacticalMove_|landUnits_)/;
 
@@ -216,7 +226,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
       (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "scFollow" && !d.optional && d.sc && (!mePlayer || mePlayer.followedSCs?.includes(d.sc))) && !(d.kind === "combat" && combatOver(d, web)) &&
         !(movement.active && (d.id === movement.promptId || (d.kind === "tactical" && MAP_STEP.test(d.choices.map((c) => baseId(c.customId)).join(" "))))),
     );
-    const oldestFirst = inBursts(live).filter((d) => !(d.kind === "combat" && combatOver(d, web)));
+    const oldestFirst = foldExplores(inBursts(live)).filter((d) => !(d.kind === "combat" && combatOver(d, web)));
     const queue = orderQueue(oldestFirst);
     if (!queue.length && myTurn && phase === "action") {
       /* My turn and nothing waits on me: a step got lost; offer my turn menu again so the turn never dead-ends. */
