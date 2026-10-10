@@ -10,6 +10,7 @@
  * - `usePendingPrompts` / `selectPending` / `classify` — the detection and shaping, for other views.
  */
 import "./renderers/strategy";
+import "./renderers/counters";
 export { DecisionHost } from "./ui/DecisionHost";
 export type { DecisionHostProps } from "./ui/DecisionHost";
 export { useDecisionFocus, useDecisionRequests, OPEN_TRADE_EVENT } from "./model/focus";

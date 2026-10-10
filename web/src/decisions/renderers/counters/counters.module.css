@@ -1,0 +1,169 @@
+/* Counter panels: one panel, one confirm, for prompts the bot asks as button ladders. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--play-ink);
+}
+
+.head b {
+  color: var(--play-ink-bright);
+}
+
+.sectionLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--play-ink-muted);
+}
+
+.sectionLabel > span:last-child {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.warn {
+  color: rgb(var(--play-yellow));
+}
+
+/* Planet (or vote source) toggles: a tile that is either in or out. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 4px;
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 9px;
+  border-radius: 4px;
+  border: 1px solid var(--play-hairline);
+  background: var(--play-field);
+  box-shadow: var(--play-bevel);
+  text-align: left;
+  transition:
+    border-color 0.12s var(--play-ease),
+    background 0.12s var(--play-ease);
+}
+
+.tile:hover:not(:disabled) {
+  border-color: var(--play-hairline-strong);
+  background: var(--play-hover-strong);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--play-accent);
+  outline-offset: 1px;
+}
+
+.tile[aria-pressed="true"] {
+  border-color: rgba(var(--play-blue), 0.7);
+  background: rgba(var(--play-blue), 0.14);
+}
+
+.tile:disabled {
+  opacity: 0.5;
+}
+
+.check {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--play-border);
+  background: var(--play-socket);
+  color: var(--play-ink-bright);
+}
+
+.tile[aria-pressed="true"] .check {
+  border-color: rgb(var(--play-blue));
+  background: rgb(var(--play-blue));
+}
+
+.tileText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.tileName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--play-ink-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tileSub {
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.tileValue {
+  flex: none;
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--play-accent-ink);
+}
+
+.links {
+  display: flex;
+  gap: 12px;
+}
+
+.readout {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.readout b {
+  font-family: var(--font-data);
+  font-weight: 500;
+  color: var(--play-ink-bright);
+}
+
+.fragIcon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
