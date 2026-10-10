@@ -7,6 +7,18 @@ The rules engine is the [AsyncTI4 bot](https://github.com/AsyncTI4/TI4_map_gener
 self-hosted Discord stand-in, with a web client built on [ti4_web_new](https://github.com/AsyncTI4/ti4_web_new).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Play on your own computer
+
+Needs Docker (on a Mac: `brew install --cask orbstack && open -a OrbStack`). Then:
+
+```sh
+git clone --branch claude/ecstatic-franklin-lutbck https://github.com/kshitijsachan/ti4.git
+cd ti4 && ./play.sh            # first run builds (~10–20 min), then opens your page in the browser
+```
+
+Press **Play solo** for a game against autopilot bots. `./play.sh --tunnel` also prints a public link for friends;
+`./play.sh --stop` stops everything (games are kept). Update later with `git pull && ./play.sh`.
+
 ## Deploy
 
 One Ubuntu VM with 8 GB of RAM runs everything in Docker: postgres, the bot and the site.
