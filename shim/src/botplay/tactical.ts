@@ -2,6 +2,7 @@ import { countUnit, playerOf, type Board, type PlayerView } from "./board.js";
 import { baseId, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { BuildJob } from "./production.js";
+import { promptForMe } from "./steps.js";
 import { spendable, type ExpandGoal, type Goal, type ProduceGoal } from "./strategy.js";
 
 /*
@@ -116,12 +117,7 @@ export class TacticalExecutor {
   }
 
   forMe(p: Prompt, faction: string) {
-    const me = this.seat.userId;
-    if (p.m._ephemeral_for) return p.m._ephemeral_for === me;
-    if (p.controls.some((c) => lockOf(c.custom_id) === faction)) return true;
-    if (p.controls.some((c) => lockOf(c.custom_id) && lockOf(c.custom_id) !== faction)) return false;
-    if (p.m._prompted_for) return p.m._prompted_for === me;
-    return String(p.m.content ?? "").includes(`<@${me}>`);
+    return promptForMe(this.seat, p, faction);
   }
 
   private async press(p: Prompt, c: Control, why: string, repeatable = false) {

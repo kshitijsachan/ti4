@@ -45,7 +45,7 @@ type Offer = {
   reject?: ButtonRef | null;
 };
 type Pending = { incoming: Offer[]; outgoing: Offer[] };
-type Party = { userId: string; userName: string; faction: string; tg: number; commodities: number; commoditiesTotal: number; canSendCommodities: boolean };
+type Party = { userId: string; userName: string; faction: string; color: string; tg: number; commodities: number; commoditiesTotal: number; canSendCommodities: boolean };
 type Counterparty = Party & { canTrade: boolean; neighbor: boolean };
 type Options = { phase: string; round: number; blockedReason?: string | null; me: Party; counterparties: Counterparty[] };
 type Side = { tg?: number; commodities?: number };
@@ -116,6 +116,8 @@ type Promise_ = { faction: string; name: string; at: number };
 export class TradeDesk {
   /** Offer prompts (message id) answered. */
   private handled = new Set<string>();
+  /** Offer prompts the trade API did not list (yet): given up on after a few looks. */
+  private misses = new Map<string, number>();
   /** `${game}:${faction}` → round we proposed a wash in. */
   private proposed = new Map<string, number>();
   private lastPropose = new Map<string, number>();
@@ -155,11 +157,18 @@ export class TradeDesk {
     const open = this.seat.prompts(game).filter((p) => !this.handled.has(p.m.id) && p.controls.some((c) => /^acceptOffer_/.test(baseId(c.custom_id))));
     if (!open.length) return false;
     let pending: Pending | null = null;
+    // The bot reads its thread history with a short cache: a brand-new offer can take a moment to show up.
     for (let attempt = 0; attempt < 3 && !pending?.incoming.some((o) => open.some((p) => p.m.id === o.accept?.messageId)); attempt++) {
       if (attempt) await sleep(1200);
       pending = (await this.call(game, "GET", "pending")) as Pending | null;
     }
     if (!pending) return false;
+    for (const p of open) {
+      if (pending.incoming.some((o) => o.accept?.messageId === p.m.id)) continue;
+      const n = (this.misses.get(p.m.id) ?? 0) + 1;
+      this.misses.set(p.m.id, n);
+      if (n >= 3) this.handled.add(p.m.id);
+    }
     const board = await this.seat.board(game);
     const holder = board?.players.find((p) => p.scs.includes(5));
     const me = board ? playerOf(board, this.seat.userId) : undefined;
@@ -308,7 +317,7 @@ export class TradeDesk {
       .filter((c) => c.canTrade && c.neighbor && this.proposed.get(`${game}:${c.faction}`) !== opts.round && !offering.has(c.color))
       .filter((c) => Date.now() - (lastToPartner.get(c.userId) ?? 0) >= PARTNER_GAP_MS)
       .map((c) => ({ c, deal: washDeal(me, c) }))
-      .filter((x): x is { c: Counterparty & { color?: string }; deal: NonNullable<ReturnType<typeof washDeal>> } => !!x.deal);
+      .filter((x): x is { c: Counterparty; deal: NonNullable<ReturnType<typeof washDeal>> } => !!x.deal);
     if (!candidates.length) return false;
     // Don't stack offers: skip partners we already have an offer out to.
     const out = (await this.call(game, "GET", "pending")) as Pending | null;

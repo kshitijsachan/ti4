@@ -1,4 +1,5 @@
 import type { Json } from "../store.js";
+import { HYPERLANES } from "./hyperlanes.js";
 
 /*
  * The board as an autopilot sees it: the bot's web data (GET /api/public/game/{g}/web-data) turned into systems,
@@ -220,15 +221,54 @@ export function playerOf(board: Board, userId: string) {
   return board.players.find((p) => p.userId === userId);
 }
 
-/** Systems sharing an edge with `pos` (hex geometry only; hyperlanes and wormholes ignored). */
+/** Hex directions in the bot's order: N, NE, SE, S, SW, NW (axial deltas of a flat-topped grid). */
+const DIRS = [
+  [0, -1],
+  [1, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 1],
+  [-1, 0],
+];
+
+function at(board: Board, q: number, r: number): SystemView | undefined {
+  for (const s of board.systems.values()) if (s.hex && s.hex.q === q && s.hex.r === r) return s;
+  return undefined;
+}
+
+/**
+ * Systems adjacent to `pos`: sharing an edge, or joined through hyperlanes (followed lane by lane with the bot's
+ * connection table). Hyperlane tiles themselves are never returned. Wormholes are ignored.
+ */
 export function neighbours(board: Board, pos: string): SystemView[] {
   const s = board.systems.get(pos);
   if (!s?.hex) return [];
-  const out: SystemView[] = [];
-  for (const o of board.systems.values()) {
-    if (o.position !== pos && o.hex && hexDistance(o.hex, s.hex) === 1) out.push(o);
+  const cache = (board as Board & { _adj?: Map<string, SystemView[]> })._adj ?? new Map<string, SystemView[]>();
+  (board as Board & { _adj?: Map<string, SystemView[]> })._adj = cache;
+  const hit = cache.get(pos);
+  if (hit) return hit;
+  const out = new Map<string, SystemView>();
+  const walk = (lane: SystemView, enteredFrom: number, depth: number) => {
+    const data = HYPERLANES[lane.tileId];
+    if (!data || depth > 6 || !lane.hex) return;
+    const row = data.split(";")[enteredFrom] ?? "";
+    for (let e = 0; e < 6; e++) {
+      if (row[e] !== "1") continue;
+      const n = at(board, lane.hex.q + DIRS[e][0], lane.hex.r + DIRS[e][1]);
+      if (!n || n.position === pos) continue;
+      if (n.hyperlane) walk(n, (e + 3) % 6, depth + 1);
+      else out.set(n.position, n);
+    }
+  };
+  for (let d = 0; d < 6; d++) {
+    const n = at(board, s.hex.q + DIRS[d][0], s.hex.r + DIRS[d][1]);
+    if (!n) continue;
+    if (n.hyperlane) walk(n, (d + 3) % 6, 0);
+    else out.set(n.position, n);
   }
-  return out;
+  const list = [...out.values()];
+  cache.set(pos, list);
+  return list;
 }
 
 /** Other factions' ships (not fighters alone count too) in a system's space. */
@@ -262,8 +302,10 @@ export function distancesTo(board: Board, target: string, faction: string, max =
     const d = dist.get(pos)!;
     if (d >= max) continue;
     for (const n of neighbours(board, pos)) {
-      if (dist.has(n.position) || n.hyperlane || n.anomaly) continue;
+      if (dist.has(n.position) || n.hyperlane) continue;
       dist.set(n.position, d + 1);
+      // Ships may start in an anomaly (a nebula home system) but never pass through one.
+      if (n.anomaly) continue;
       // A ship starting in n reaches the target; going further out must pass through n.
       if (passable(n, faction)) queue.push(n.position);
     }

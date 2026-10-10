@@ -95,6 +95,7 @@ export function expansionOptions(board: Board, me: PlayerView): ExpandGoal[] {
       const carriers: Carrier[] = ships
         .filter((u) => isShip(u.unit) && u.unit !== "ff")
         .map((u) => ({ origin, unit: u.unit, ...statsOf(u.unit, me) }))
+        .map((c) => (sys.anomaly ? { ...c, move: Math.min(c.move, 1) } : c))
         .filter((c) => c.capacity > 0 && c.move >= d)
         .sort((a, b) => b.capacity - a.capacity);
       if (!carriers.length) continue;
@@ -128,7 +129,7 @@ export function expansionOptions(board: Board, me: PlayerView): ExpandGoal[] {
       if (carried < 1) continue;
       // One escort if one is there and fast enough (not the last ship guarding a dock).
       const escort = ships
-        .filter((u) => (u.unit === "dd" || u.unit === "ca") && statsOf(u.unit, me).move >= d)
+        .filter((u) => (u.unit === "dd" || u.unit === "ca") && (sys.anomaly ? 1 : statsOf(u.unit, me).move) >= d)
         .sort((a, b) => statsOf(a.unit, me).combat - statsOf(b.unit, me).combat)[0];
       if (escort) moves.push({ origin, holder: "space", unit: escort.unit, count: 1 });
       // Land one per planet, best planets first; extras on the best one.

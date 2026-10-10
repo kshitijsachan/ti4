@@ -13,8 +13,11 @@ export function promptForMe(seat: Seat, p: Prompt, faction: string) {
   if (p.m._ephemeral_for) return p.m._ephemeral_for === me;
   if (p.controls.some((c) => lockOf(c.custom_id) === faction)) return true;
   if (p.controls.some((c) => lockOf(c.custom_id) && lockOf(c.custom_id) !== faction)) return false;
+  // A ping names whose prompt it is; `_prompted_for` (who pressed last before the bot posted) can be someone else.
+  const pings = [...String(p.m.content ?? "").matchAll(/<@!?(\d+)>/g)].map((x) => x[1]);
+  if (pings.length) return pings.includes(me);
   if (p.m._prompted_for) return p.m._prompted_for === me;
-  return String(p.m.content ?? "").includes(`<@${me}>`);
+  return false;
 }
 
 /** Finding prompts and pressing their controls for one multi-step job, without double presses. */
