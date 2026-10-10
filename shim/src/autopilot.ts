@@ -31,8 +31,8 @@ type GameState = {
   active: string | null;
   colors: Map<string, string>;
   combat: boolean;
-  /** Per seated player (user id): faction and how many technologies it owns. */
-  players: Map<string, { faction: string; techs: number }>;
+  /** Per seated player (user id): faction and the technologies it owns. */
+  players: Map<string, { faction: string; techs: number; owned: string[] }>;
 };
 
 type Ctx = {
@@ -101,9 +101,9 @@ const RULES: Rule[] = [
   { id: /^setupStep5_\d+_keleres[a-z]_/, score: 84, addressed: true, why: "setup: Keleres flavor" },
   // Setup: starting technology. Most factions get a list of their allowed techs (getTech_<alias>__noPay__comp, once
   // or twice); open choices come as "Get a Technology" → a tech type → a tech; Keleres asks once the others are done.
-  { id: /(^|_)acquireAFreeTech$/, score: 83, addressed: true, why: "setup: get a starting technology" },
-  { id: /(^|_)getAllTechOfType_/, score: 82, addressed: true, why: "setup: first technology type" },
-  { id: /(^|_)getTech_.+__noPay/, score: 81, addressed: true, distinct: true, why: "setup: first starting technology" },
+  { id: /(^|_)acquireAFreeTech$/, score: 83, addressed: true, retry: true, why: "setup: get a starting technology" },
+  { id: /(^|_)getAllTechOfType_/, score: 82, addressed: true, retry: true, why: "setup: first technology type" },
+  { id: /(^|_)getTech_.+__noPay/, score: 81, addressed: true, retry: true, distinct: true, why: "setup: first starting technology" },
   { id: /(^|_)getKeleresTechOptions$/, score: 60, addressed: true, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
@@ -270,10 +270,10 @@ export class Autopilot {
       if (res.ok) {
         const data = (await res.json()) as Json;
         const colors = new Map<string, string>();
-        const players = new Map<string, { faction: string; techs: number }>();
+        const players = new Map<string, { faction: string; techs: number; owned: string[] }>();
         for (const p of data.playerData ?? []) {
           if (p.discordId && p.color) colors.set(String(p.discordId), String(p.color));
-          if (p.discordId && p.faction && p.faction !== "null" && p.faction !== "neutral") players.set(String(p.discordId), { faction: String(p.faction), techs: (p.techs ?? []).length });
+          if (p.discordId && p.faction && p.faction !== "null" && p.faction !== "neutral") players.set(String(p.discordId), { faction: String(p.faction), techs: (p.techs ?? []).length, owned: (p.techs ?? []).map(String) });
         }
         state = {
           phase: String(data.gameState?.phase ?? "") || null,
@@ -656,6 +656,12 @@ class SeatPilot {
       if (rule.addressed && !ctx.addressed) continue;
       if (rule.retry && lost && (this.tableStalled(m, game) || (await this.myTurn(game)) || String((await this.mgr.phaseOf(game)) ?? "").startsWith("setup"))) {
         const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && (rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id)));
+        const techAlias = /(?:^|_)getTech_(.+?)__noPay/.exec(again[0]?.custom_id ?? "")?.[1];
+        if (techAlias) {
+          this.mgr.forgetState(game);
+          const owned = (await this.mgr.stateOf(game))?.players.get(this.userId)?.owned ?? [];
+          if (owned.includes(techAlias)) continue;
+        }
         if (again.length && !BLOCKED_ID.test(again[0].custom_id.replace(/^FFCC_[^_]+_/, ""))) {
           this.retries.set(m.id, (this.retries.get(m.id) ?? 0) + 1);
           return { msg: m, control: again[0], score: rule.score, why: `${rule.why}; again, the first press was lost` };

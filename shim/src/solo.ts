@@ -43,6 +43,9 @@ const REFUSAL =
 
 const SECOND = 1000;
 
+/** Games whose secret objectives were dealt (kept across stewards; a restart re-reads the actions channel). */
+const dealtGames = new Set<string>();
+
 export class SoloGames {
   private jobs = new Map<string, SoloJob>();
   /** One setup reaches "game exists" at a time: the new game is recognised as the newest actions channel. */
@@ -390,8 +393,18 @@ export class SoloGames {
 
       // The bot posts "Deal 2 Secret Objectives To All" more than once (again after Keleres sets up) and deletes only
       // the copy that was pressed: once anyone holds a secret objective, the deal is done.
-      const dealt = this.realPlayers(web).some((p: Json) => Number(p.soCount ?? 0) > 0 || Object.keys(p.secretsScored ?? {}).length > 0);
-      const deal = dealt ? undefined : latest("deal2SOToAll");
+      // Dealt already? Any of: anyone holds a secret, the bot announced the deal in the actions channel (survives
+      // shim and bot restarts, unlike web data read while the bot is still loading), or this job saw it. And never
+      // deal on partial web data: every seat of the game must be listed with its faction.
+      const players = this.realPlayers(web);
+      const announced = this.store
+        .messages(actionsId)
+        .some((m) => this.store.state.users[m.author?.id]?.bot && /dealt to all players/i.test(String(m.content ?? "")));
+      if (announced) dealtGames.add(game);
+      const dealt =
+        dealtGames.has(game) || players.some((p: Json) => Number(p.soCount ?? 0) > 0 || Object.keys(p.secretsScored ?? {}).length > 0);
+      const complete = players.length >= 1 + job.others.length && players.length > 0;
+      const deal = dealt || !complete ? undefined : latest("deal2SOToAll");
       if (deal) {
         // Starting-technology prompts nobody has answered yet: "<faction> use the buttons to choose your starting
         // technology" (tech buttons, or "Get a Technology" when the options are open), and the tech lists they lead to.
