@@ -102,7 +102,7 @@ function pressCount(meId: string, m: Message, pressedAt: number | undefined) {
 }
 
 /** How many presses my own strategy card's message takes before its primary is resolved. */
-const TWO_PRESS_PRIMARY = /^(construction_|constructionPrimary_produce)/;
+const TWO_PRESS_PRIMARY = /^(construction_|constructionPrimary_produce|diploSystem|diploRefresh2)/;
 function pressesNeeded(m: Message) {
   return choicesOf(m).some((c) => TWO_PRESS_PRIMARY.test(baseId(c.customId))) ? 2 : 1;
 }

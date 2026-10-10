@@ -45,6 +45,12 @@ export function StrategyFollowBody({ d, data, onPress, pendingKey }: RendererPro
       <CardHeader sc={sc} data={data} sub={holder ? `Played by ${playerLabel(holder)}` : undefined}>
         <p className={classes.effect}>{spec?.secondary ?? d.text}</p>
       </CardHeader>
+      {sc === 5 && data.me && (
+        <p className={cx(classes.sub, data.me.commodities >= data.me.commoditiesTotal && classes.warn)}>
+          Commodities {data.me.commodities}/{data.me.commoditiesTotal}
+          {data.me.commodities >= data.me.commoditiesTotal ? " — already full, following gains nothing" : ` → ${data.me.commoditiesTotal}/${data.me.commoditiesTotal}`}
+        </p>
+      )}
       <div className={classes.cost}>
         {spec?.token ? (
           <span className={cx(noTokens && classes.warn)}>

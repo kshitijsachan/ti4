@@ -39,6 +39,9 @@ const FOLLOWERS = /^(sc_follow_|sc_no_follow_|sc_trade_follow|sc_refresh|request
 
 const SPEAKER = /^sc_3_assign_speaker_to_(\w+)/;
 
+/** Primary buttons already pressed on a card that takes two (Diplomacy: system, then ready planets). */
+const pressed = new Set<string>();
+
 function controlsMecatol(data: RendererProps["data"]) {
   return !!data.me?.planets?.some((p) => p === "mr" || p === "mrte");
 }
@@ -90,7 +93,12 @@ export function StrategyPrimaryBody(props: RendererProps) {
   const actions = (PRIMARY[sc] ?? [])
     .filter((a) => sc !== 8 || (mecatol ? !/sc_draw_so/.test(a.id.source) : !/score_imperial/.test(a.id.source)))
     .map((a) => ({ a, choice: d.choices.find((c) => a.id.test(baseId(c.customId)) && !c.disabled) }))
-    .filter((x): x is { a: PrimaryAction; choice: Choice } => !!x.choice);
+    .filter((x): x is { a: PrimaryAction; choice: Choice } => !!x.choice)
+    .filter((x) => !pressed.has(`${d.id}:${baseId(x.choice.customId)}`));
+  const press = (c: Choice, values?: string[]) => {
+    pressed.add(`${d.id}:${baseId(c.customId)}`);
+    onPress(c, values);
+  };
   const steps = (d.steps ?? []).filter((s) => s.choices.some((c) => !FOLLOWERS.test(baseId(c.customId)) && c.rank !== "more" && c.rank !== "undo"));
 
   return (
@@ -109,7 +117,7 @@ export function StrategyPrimaryBody(props: RendererProps) {
               <ChoiceButton
                 key={choice.key}
                 choice={{ ...choice, label: typeof a.label === "string" ? a.label : a.label(data), style: 3 }}
-                onPress={onPress}
+                onPress={press}
                 pending={pendingKey === choice.key}
                 busy={!!pendingKey}
                 emphasis
