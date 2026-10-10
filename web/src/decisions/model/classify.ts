@@ -444,6 +444,12 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       position: ctx.web?.gameState?.activeSystem ?? undefined,
     };
   }
+  /* "Remove Units in 308" after a fleet pool / capacity overflow: units to take off the board, not a combat. */
+  if (has(choices, /^getDamageButtons_\w+_remove$/) && !has(choices, /^(combatRoll|autoAssign)/)) {
+    const pos = choices.map((c) => baseId(c.customId).match(/^getDamageButtons_(\w+)_remove$/)?.[1]).find(Boolean);
+    const what = /fleet pool/i.test(text) ? "Fleet pool exceeded" : /capacity/i.test(text) ? "Over capacity" : "Too many units";
+    return { ...base, kind: "tactical", eyebrow: "", title: `${what} — remove units`, position: pos };
+  }
   /* The landing step offers "Roll BOMBARDMENT" alongside "Done Landing Troops": it is a tactical step, not a combat. */
   const landingStep = has(choices, /^(doneLanding|landUnits)/);
   if ((has(choices, ID.combat) && !landingStep) || prompt.reason === "combat") {

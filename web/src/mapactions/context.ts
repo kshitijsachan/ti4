@@ -102,9 +102,10 @@ function systemChoices(
 ): Record<string, Choice> | null {
   const out: Record<string, Choice> = {};
   for (const c of buttonsOf(prompt.message, faction)) {
-    const pos = baseId(c.customId).match(POSITION_IN_ID)?.[1];
-    if (!pos || !names[pos]) continue;
     const label = c.label.toLowerCase();
+    /* Ids can carry several positions ("retreatUnitsFrom_<from>_<to>"): the one the label names. */
+    const pos = baseId(c.customId).split("_").filter((p) => POSITION_IN_ID.test(p) && names[p]).find((p) => label.includes(p) || label.includes(names[p].toLowerCase()));
+    if (!pos || !names[pos]) continue;
     if (
       !label.includes(pos) &&
       !(names[pos] && label.includes(names[pos].toLowerCase()))

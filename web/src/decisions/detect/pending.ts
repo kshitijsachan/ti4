@@ -440,8 +440,14 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
     return stale;
   };
   /* The bot posts a fresh "assign N hits" each time and leaves the old ones: only the newest of a kind counts. */
+  /* Per kind and per player: the opponent's newer "assign hits" never retires mine. */
   const hitKind = (m: Message) =>
-    choicesOf(m).map((c) => baseId(c.customId).match(/^autoAssign(\w*?)Hits/)?.[1]).find((k) => k !== undefined);
+    choicesOf(m)
+      .map((c) => {
+        const k = baseId(c.customId).match(/^autoAssign(\w*?)Hits/)?.[1];
+        return k === undefined ? undefined : `${k}:${idFaction(c.customId) ?? ""}`;
+      })
+      .find((k) => k !== undefined);
   const newestHit = new Map<string, string>();
   for (const it of all) {
     const data = state.messages[it.channelId];

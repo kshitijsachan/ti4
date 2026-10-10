@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Decision } from "../model/classify";
 import { AgendaBody, AgendaPeekBody } from "./Agenda";
 import { CombatBody } from "./Combat";
+import { UnitPickBody, isUnitPick } from "./combat/UnitPick";
 import { ComponentBody } from "./Component";
 import { GainTokensBody, SpendBody } from "./Economy";
 import { GenericBody, TacticalBody } from "./Generic";
@@ -39,6 +40,7 @@ export function renderBody(d: Decision, props: RendererProps): ReactNode {
   if (d.kind === "scPrimary" && card?.primary) return card.primary(props);
   if (d.kind === "scFollow" && !d.optional && card?.follow) return card.follow(props);
   if (d.eyebrow === "Component action") return <ComponentBody {...props} />;
+  if (d.kind !== "combat" && isUnitPick(d, props.data.me?.faction)) return <UnitPickBody {...props} />;
   switch (d.kind) {
     case "scPick":
       return <ScPickBody {...props} />;
