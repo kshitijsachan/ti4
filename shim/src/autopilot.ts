@@ -532,7 +532,7 @@ class SeatPilot {
     // Still there, unchanged, well after we pressed it: for prompts the bot removes once it acts, the press was lost.
     const pressedAt = mine?.sig === sig ? mine.at : press && press.controls === sig ? Date.parse(press.at) : undefined;
     const lost = pressedAt !== undefined && Date.now() - pressedAt > RETRY_MS && (this.retries.get(m.id) ?? 0) < MAX_RETRIES;
-    if (answered && press && !mine && Date.parse(press.at) < this.started && !lost) return null;
+    if (answered && press && !mine && Date.parse(press.at) < this.started && !lost && !this.tableStalled(m, game)) return null;
     const unpressed = controls;
     controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`) && (sibling || !this.pressedRecently(m, c)));
 
