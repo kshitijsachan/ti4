@@ -10,7 +10,7 @@ import type { Seat } from "./seat.js";
  * - Offers to us: accept anything fair (we end up at most 1 behind when we send commodities, the "N for N-1" wash,
  *   otherwise not behind at all); reject the rest. Never give away promissory notes, action cards, relics, fragments
  *   or debt.
- * - N-1 washes: at most one proposal per neighbour per round, a few seconds apart at most once per ~25s per seat and
+ * - N-1 washes: at most one proposal per partner per round (neighbours in the action phase, anyone outside it), a few seconds apart at most once per ~25s per seat and
  *   once a minute per partner across all seats: swap commodities when both have some, else "N commodities for N-1 TG".
  * - The Trade strategy card: when we hold it and it has been played, offer each player we may force-replenish a free
  *   replenish in exchange for an N-1 wash with us; when they accept (or ask us), press their faction on the bot's
@@ -289,7 +289,9 @@ export class TradeDesk {
     if (Date.now() - (this.lastPropose.get(game) ?? 0) < PROPOSE_GAP_MS) return false;
     this.lastPropose.set(game, Date.now() - PROPOSE_GAP_MS + 8000 + Math.random() * 6000);
     const board = await this.seat.board(game);
-    if (!board || !/^(action|strategy)/.test(board.phase)) return false;
+    if (!board || !/^(action|strategy|status|agenda)/.test(board.phase)) return false;
+    // Neighbours only in the action phase; outside it anyone may trade.
+    const anyone = !/^action/.test(board.phase);
     const opts = (await this.call(game, "GET", "options")) as Options | null;
     if (!opts || opts.blockedReason) return false;
     const me = opts.me;
@@ -314,7 +316,7 @@ export class TradeDesk {
     }
     const outgoing = new Set<string>();
     const candidates = opts.counterparties
-      .filter((c) => c.canTrade && c.neighbor && this.proposed.get(`${game}:${c.faction}`) !== opts.round && !offering.has(c.color))
+      .filter((c) => c.canTrade && (c.neighbor || anyone) && this.proposed.get(`${game}:${c.faction}`) !== opts.round && !offering.has(c.color))
       .filter((c) => Date.now() - (lastToPartner.get(c.userId) ?? 0) >= PARTNER_GAP_MS)
       .map((c) => ({ c, deal: washDeal(me, c) }))
       .filter((x): x is { c: Counterparty; deal: NonNullable<ReturnType<typeof washDeal>> } => !!x.deal);
