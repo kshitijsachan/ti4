@@ -10,6 +10,7 @@ import { useSettingsStore, useAppStore } from "@/state/appStore";
 import { getTokenData } from "@/entities/lookup/tokens";
 import { DEFAULT_PLANET_RADIUS } from "@/entities/positioning/constants";
 import { isLargeLegendaryPlanet } from "./legendaryPlanetSize";
+import { rememberHoverTarget } from "../hoverAnchor";
 
 const TOKEN_PLANET_RADIUS = 45;
 const REGULAR_PLANET_Z_INDEX = 52;
@@ -67,9 +68,10 @@ export function PlanetCirclesLayer({
   });
   const hoverTimeoutRef = useRef<Record<string, number>>({});
 
-  const handlePlanetMouseEnter = (planetId: string, x: number, y: number) => {
+  const handlePlanetMouseEnter = (planetId: string, x: number, y: number, target: Element) => {
     if (!onPlanetMouseEnter) return;
-    hoverTimeoutRef.current[planetId] = setTimeout(() => {
+    hoverTimeoutRef.current[planetId] = window.setTimeout(() => {
+      rememberHoverTarget("planet", target);
       onPlanetMouseEnter(planetId, position.x + x, position.y + y);
     }, HOVER_DELAY_MS);
   };
@@ -132,7 +134,7 @@ export function PlanetCirclesLayer({
             ? "brightness(0.7) grayscale(1) blur(0px)"
             : undefined,
         }}
-        onMouseEnter={() => handlePlanetMouseEnter(planetId, x, y)}
+        onMouseEnter={(e) => handlePlanetMouseEnter(planetId, x, y, e.currentTarget)}
         onMouseLeave={() => handlePlanetMouseLeave(planetId)}
         onClick={onPlanetClick}
       />

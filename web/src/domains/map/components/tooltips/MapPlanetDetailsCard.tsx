@@ -1,7 +1,7 @@
 import { PlanetDetailsCard } from "@/domains/cards/components/PlanetDetailsCard";
 import { usePlanet } from "@/hooks/usePlanet";
 import { type MapLayout } from "@/domains/map/components/mapLayout";
-import { MapTooltipPositioner } from "@/domains/map/components/MapTooltipPositioner";
+import { MapTooltipPositioner, useLingeringHover } from "@/domains/map/components/MapTooltipPositioner";
 import type { TooltipPlanet } from "@/domains/map/components/hooks/useMapTooltips";
 
 type Props = {
@@ -12,11 +12,12 @@ type Props = {
 };
 
 export function MapPlanetDetailsCard({
-  tooltipPlanet,
+  tooltipPlanet: hovered,
   mapPadding,
   mapZoom,
   mapLayout = "panels",
 }: Props) {
+  const { shown: tooltipPlanet, onCardEnter, onCardLeave } = useLingeringHover(hovered);
   const planetTile = usePlanet(tooltipPlanet?.planetId ?? "");
   if (!tooltipPlanet || !tooltipPlanet.planetId) return null;
 
@@ -27,7 +28,9 @@ export function MapPlanetDetailsCard({
       mapZoom={mapZoom}
       mapLayout={mapLayout}
       zIndexVar="var(--z-map-planet-details)"
-      applyBrowserScale
+      kind="planet"
+      onCardEnter={onCardEnter}
+      onCardLeave={onCardLeave}
     >
       <PlanetDetailsCard
         planetId={tooltipPlanet.planetId}

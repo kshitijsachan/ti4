@@ -153,7 +153,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
           </div>
         )}
         {!takeover && (
-          <div className={classes.hand}>
+          <div className={classes.hand} data-hover-avoid>
             <HandSlot gameName={gameName} />
           </div>
         )}

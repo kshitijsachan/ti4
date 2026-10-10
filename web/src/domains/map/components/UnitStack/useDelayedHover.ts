@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { rememberHoverTarget } from "../hoverAnchor";
 
 const HOVER_DELAY_MS = 100;
 
@@ -13,7 +14,9 @@ export function useDelayedHover(
   const handleMouseEnter = (e: React.MouseEvent) => {
     if (!onUnitMouseOver) return;
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    hoverTimeoutRef.current = setTimeout(() => {
+    const target = e.currentTarget;
+    hoverTimeoutRef.current = window.setTimeout(() => {
+      rememberHoverTarget("unit", target);
       onUnitMouseOver(stackKey, e);
       hoverTimeoutRef.current = null;
     }, HOVER_DELAY_MS);

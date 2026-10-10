@@ -1,0 +1,19 @@
+/* Where the hovered point sits on the map: the card's fallback reference when the hovered element is gone. */
+.anchor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* The floating hover card. It scrolls inside when the table has less room than the card needs, so it carries
+   the lift itself (a scrolling box clips its child's shadow). */
+.card {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border-radius: var(--panel-radius);
+  box-shadow: var(--floating-card-lift);
+  pointer-events: auto;
+}

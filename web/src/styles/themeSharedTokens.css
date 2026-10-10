@@ -52,6 +52,8 @@
   --panel-bracket: rgba(226, 232, 240, 0.14);
   /* Corner rounding of data panels (softer themes may round more) */
   --panel-radius: 3px;
+  /* Drop shadow of surfaces that genuinely float over the map: hover cards. */
+  --floating-card-lift: 0 18px 48px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.45);
   /* Optional identity layer painted above the field (scanlines, blooms, ...) */
   --panel-texture: none;
   /* Full-card ambience inside player card boxes */
