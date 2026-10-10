@@ -2,12 +2,18 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { UnstyledButton } from "@mantine/core";
-import { IconArrowRight, IconPlus } from "@tabler/icons-react";
+import { IconArrowRight, IconPlus, IconX } from "@tabler/icons-react";
 import cx from "clsx";
 import { SiteFrame } from "@/play/SiteFrame";
 import { ConnectionBadge } from "@/play/ConnectionBadge";
 import { clearToken, getToken } from "@/play/session";
-import { displayName, usePlay, type Channel, type User } from "@/discord";
+import {
+  displayName,
+  usePlay,
+  usePlayConnection,
+  type Channel,
+  type User,
+} from "@/discord";
 import { deriveGames, type GameChannels } from "@/play/games";
 import {
   fetchPlayerData,
@@ -55,8 +61,15 @@ function summarize(data: PlayerDataResponse) {
  * route, with a visible "Opening"); modified clicks keep the link's own
  * behaviour (new tab, new window).
  */
-function GameCard({ game }: { game: GameChannels }) {
+function GameCard({
+  game,
+  onEnded,
+}: {
+  game: GameChannels;
+  onEnded: (name: string) => void;
+}) {
   const { data, isError } = usePlayerData(game.name, { select: summarize });
+  const conn = usePlayConnection();
   const openGame = useOpenGame();
   const [opening, setOpening] = useState(false);
   const funName = game.tableTalk?.name.slice(game.name.length + 1);
@@ -80,6 +93,26 @@ function GameCard({ game }: { game: GameChannels }) {
     void openGame(game.name).finally(() => setOpening(false));
   };
 
+  /** Ends the game for everyone with the bot's own `/game end` (no results posted; its channels are archived). */
+  const endGame = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!window.confirm(`End ${game.name} for everyone? This can't be undone.`))
+      return;
+    conn.runCommand(game.actions.id, "game", [
+      {
+        type: 1,
+        name: "end",
+        options: [
+          { type: 3, name: "confirm", value: "YES" },
+          { type: 5, name: "publish", value: false },
+          { type: 5, name: "archive_channels", value: true },
+        ],
+      },
+    ]);
+    onEnded(game.name);
+  };
+
   return (
     <Link
       to={`/game/${game.name}`}
@@ -93,6 +126,15 @@ function GameCard({ game }: { game: GameChannels }) {
         <span className={cx(classes.status, data?.mapReady && classes.live)}>
           {opening ? "Opening…" : isError ? "Setting up" : status}
         </span>
+        <button
+          type="button"
+          className={classes.endGame}
+          onClick={endGame}
+          title="End this game"
+          aria-label={`End ${game.name}`}
+        >
+          <IconX size={14} />
+        </button>
       </div>
       {funName && (
         <div className={classes.funName}>{funName.replace(/-/g, " ")}</div>
@@ -169,9 +211,13 @@ function useActiveGames(meId: string | undefined) {
       retry: false,
     })),
   });
+  const [ended, setEnded] = useState<string[]>([]);
   const fates = queries.map((q) => (meId ? gameFate(q, meId) : "loading"));
   return {
-    games: visible.filter((_, i) => fates[i] === "active"),
+    games: visible.filter(
+      (g, i) => fates[i] === "active" && !ended.includes(g.name),
+    ),
+    onEnded: (name: string) => setEnded((e) => [...e, name]),
     loading: fates.includes("loading"),
   };
 }
@@ -397,7 +443,7 @@ function Home() {
   const channels = usePlay((s) => s.channels);
   const ready = usePlay((s) => s.status === "open");
   useLandInNewGames(deriveGames(channels), ready && !!me);
-  const { games, loading } = useActiveGames(me?.id);
+  const { games, loading, onEnded } = useActiveGames(me?.id);
   useEffect(preloadGamePage, []);
 
   if (!me) {
@@ -424,7 +470,7 @@ function Home() {
         ) : (
           <div className={classes.grid}>
             {games.map((game) => (
-              <GameCard key={game.name} game={game} />
+              <GameCard key={game.name} game={game} onEnded={onEnded} />
             ))}
           </div>
         )}
