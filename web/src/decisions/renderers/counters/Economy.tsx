@@ -245,8 +245,10 @@ export function ScTradeGoodBody({ d }: RendererProps) {
   const cards = d.choices.filter((c) => SC_TG.test(baseId(c.customId)));
   const done = d.choices.find((c) => DONE.test(baseId(c.customId)));
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const limit = Number(d.text.match(/\b(\d+) trade goods?\b/i)?.[1] ?? 0) || undefined;
+  /* Manipulate Investments (the only source of this prompt) places 5 in total; a stated "total of N" wins. */
+  const limit = Number(d.text.match(/total of (\d+)/i)?.[1] ?? 5);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const spread = Object.values(counts).filter((n) => n > 0).length;
   const confirm = () => {
     const ch = d.prompt.channelId;
     const steps: PlanStep[] = cards.flatMap((c) =>
@@ -257,12 +259,12 @@ export function ScTradeGoodBody({ d }: RendererProps) {
   };
   return (
     <div className={classes.panel}>
-      <Prose text={d.text} clamp={3} />
+      <p className={classes.hint}>Place {limit} trade goods in total, on at least 3 different strategy cards.</p>
       {running ? (
         <RunProgress keyPrefix={`counter:sctg:${d.id}`} />
       ) : (
         <>
-          <div className={classes.list}>
+          <div className={classes.grid2}>
             {cards.map((c) => (
               <Quantity
                 key={c.key}
@@ -270,14 +272,19 @@ export function ScTradeGoodBody({ d }: RendererProps) {
                 value={counts[c.key] ?? 0}
                 onChange={(n) => setCounts({ ...counts, [c.key]: n })}
                 max={(counts[c.key] ?? 0) + (limit ? Math.max(0, limit - total) : 10)}
-                unit="TG"
                 maxShortcut={false}
                 busy={busy}
+                dense
               />
             ))}
           </div>
           <QuantityTotal label="Trade goods placed" value={total} unit={limit ? `of ${limit}` : undefined} />
-          <QuantityConfirm label={total ? `Place ${total} trade good${total === 1 ? "" : "s"}` : "Done — place none"} onConfirm={confirm} busy={busy} />
+          <QuantityConfirm
+            label={`Place ${total} trade good${total === 1 ? "" : "s"}`}
+            onConfirm={confirm}
+            busy={busy}
+            disabledReason={total < limit ? `${limit - total} left to place` : spread < 3 ? `Spread them over at least 3 cards (${spread} so far)` : undefined}
+          />
         </>
       )}
       <RunError />

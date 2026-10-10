@@ -167,3 +167,9 @@
   height: 22px;
   object-fit: contain;
 }
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}

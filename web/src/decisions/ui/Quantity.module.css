@@ -13,6 +13,26 @@
   transition: border-color 0.2s var(--play-ease);
 }
 
+.dense {
+  min-height: 34px;
+  padding: 2px 3px 2px 9px;
+  gap: 6px;
+}
+
+.dense .label {
+  font-size: 12px;
+}
+
+.dense .step {
+  width: 22px;
+  height: 22px;
+}
+
+.dense .value {
+  min-width: 26px;
+  font-size: 13px;
+}
+
 .on {
   border-color: var(--play-hairline-strong);
 }

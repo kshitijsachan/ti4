@@ -33,6 +33,8 @@ export type QuantityProps = {
   icon?: ReactNode;
   /** A run is pressing the bot's buttons: freeze the control. */
   busy?: boolean;
+  /** Compact row for long lists (a counter per strategy card). */
+  dense?: boolean;
 };
 
 function options(min: number, max: number, allowed?: number[]) {
@@ -67,6 +69,7 @@ export function Quantity({
   maxShortcut,
   icon,
   busy,
+  dense,
 }: QuantityProps) {
   const off = !!disabledReason || busy || max <= min;
   const list = options(min, max, allowed);
@@ -79,7 +82,7 @@ export function Quantity({
   const atMax = !off && value >= top && !!maxReason;
   const atMin = !off && value <= bottom && value > 0 && !!minReason;
   return (
-    <div className={cx(classes.row, off && classes.off, value > 0 && classes.on)}>
+    <div className={cx(classes.row, dense && classes.dense, off && classes.off, value > 0 && classes.on)}>
       {icon && <span className={classes.icon}>{icon}</span>}
       <span className={classes.text}>
         <span className={classes.label}>{label}</span>
