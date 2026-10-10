@@ -6,7 +6,9 @@ import { usePendingPrompts, type PendingPrompt } from "@/decisions";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { findGame } from "@/decisions/detect/games";
 import { baseId, type Choice } from "@/decisions/model/controls";
-import { buttonsOf, type Scope } from "./driver";
+import { buttonsOf, findButton, type Scope } from "./driver";
+import type { PlayState } from "@/discord";
+import { idFaction } from "@/decisions/model/controls";
 
 /** Which step of a tactical action the bot is waiting on me for, read from its newest prompt to me. */
 export type TacticalStep =
@@ -68,6 +70,23 @@ function stepOf(
   if (ids.some((id) => CHOOSE.test(id))) return { kind: "choose", prompt };
   if (ids.includes("tacticalAction")) return { kind: "turn", prompt };
   return null;
+}
+
+/**
+ * The newest bot message in scope that carries a button locked to my faction (`FFCC_<faction>_…`). The bot's
+ * tactical flow (activate, move, land, explore, conclude, end of turn, next turn) locks every step to the acting
+ * faction, so any prompt of that flow older than this one is stale. Shared with the decision popup.
+ */
+export function newestFactionPrompt(
+  state: PlayState,
+  scope: Scope,
+): string | undefined {
+  if (!scope.faction) return undefined;
+  return findButton(
+    state,
+    scope,
+    (_base, _label, customId) => idFaction(customId) === scope.faction,
+  )?.messageId;
 }
 
 const POSITION_IN_ID = /(?:^|_)(\d{3,4}|tl|tr|bl|br)(?:_|$)/;
@@ -137,13 +156,19 @@ export function useMapActionContext(
   );
 
   const active = web?.gameState?.activeSystem;
+  const messages = usePlay((s) => s.messages);
   const step = useMemo<TacticalStep>(() => {
     if (!myTurn) return { kind: "none" };
-    /* The newest prompt of the tactical action decides: an older one is a step the bot has moved past. */
+    /*
+     * Only the bot's newest prompt to my faction can be the current step: an older move or land prompt that
+     * nothing pressed (the movement API answers with a fresh one) is a step the bot has moved past.
+     */
+    const latest = newestFactionPrompt(conn.store.getState(), scope);
     const newestFirst = [...prompts].sort((a, b) =>
       compareSnowflakes(b.message.id, a.message.id),
     );
     for (const p of newestFirst) {
+      if (latest && compareSnowflakes(p.message.id, latest) < 0) break;
       const s = stepOf(
         p,
         me?.faction,
@@ -158,7 +183,8 @@ export function useMapActionContext(
         return { kind: "none" };
     }
     return { kind: "none" };
-  }, [prompts, myTurn, me?.faction, active]);
+    // `messages` is what newestFactionPrompt reads.
+  }, [prompts, myTurn, me?.faction, active, conn, scope, messages]);
 
   const pick = useMemo<SystemPick | null>(() => {
     /* Only the newest prompt: a map click must never answer a question the player has moved past. */

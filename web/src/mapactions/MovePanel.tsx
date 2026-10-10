@@ -19,7 +19,7 @@ import {
   type UnitGroup,
 } from "./movement";
 import { useMapActions } from "./store";
-import type { Rect } from "./useTileRects";
+import { obstaclesIn, placeBeside, type Rect } from "./useTileRects";
 import classes from "./MapActions.module.css";
 
 const unitImg = (color: string | undefined, unit: string) =>
@@ -180,22 +180,20 @@ export function UnitPicker({
   const [pos, setPos] = useState({ left: rect.x + rect.w, top: rect.y });
 
   useLayoutEffect(() => {
-    const box = frame.current?.getBoundingClientRect();
+    const el = frame.current;
     const me = ref.current?.getBoundingClientRect();
-    if (!box || !me) return;
-    const right = rect.x + rect.w * 0.92;
-    const left =
-      right + me.width > box.width - 8
-        ? Math.max(8, rect.x + rect.w * 0.08 - me.width)
-        : right;
-    const top = Math.min(
-      Math.max(8, rect.y + rect.h / 2 - me.height / 2),
-      box.height - me.height - 210,
+    if (!el || !me) return;
+    const box = el.getBoundingClientRect();
+    const next = placeBeside(
+      rect,
+      { w: me.width, h: me.height },
+      { w: box.width, h: box.height },
+      obstaclesIn(el),
     );
     setPos((p) =>
-      Math.abs(p.left - left) < 1 && Math.abs(p.top - top) < 1
+      Math.abs(p.left - next.left) < 1 && Math.abs(p.top - next.top) < 1
         ? p
-        : { left, top },
+        : next,
     );
   }, [rect, frame, groups.length]);
 
@@ -221,6 +219,7 @@ export function UnitPicker({
       ref={ref}
       className={cx(classes.surface, classes.picker)}
       style={{ left: pos.left, top: pos.top }}
+      data-mapactions-float
       role="dialog"
       aria-label={`Units in ${origin}`}
     >
@@ -404,7 +403,7 @@ export function MovePanel({
           ? busy
           : sum.empty
             ? hasOrigins
-              ? "Click a highlighted system to pick the ships that move in (dashed: probably out of reach)."
+              ? "Click a glowing system to pick the ships that move in (dimmed: probably out of reach)."
               : "None of your ships can move in. Press Move to continue without moving."
             : `Moving in: ${sum.text}`}
       </div>

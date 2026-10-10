@@ -50,24 +50,44 @@
   overflow: visible;
 }
 
+/* Systems ships can come from: a lit edge that reads at a glance; dimmer when probably out of reach. */
 .hexOrigin {
-  fill: rgba(var(--play-blue), 0.08);
-  stroke: rgba(var(--play-blue), 0.85);
-  stroke-width: 5;
-  stroke-dasharray: 14 10;
+  fill: rgba(var(--play-blue), 0.14);
+  stroke: rgb(var(--play-blue));
+  stroke-width: 9;
+  filter: drop-shadow(0 0 10px rgba(var(--play-blue), 0.95));
+  animation: originPulse 1.6s ease-in-out infinite;
 }
 
 .hexOriginFar {
-  fill: none;
-  stroke: rgba(148, 163, 184, 0.55);
-  stroke-width: 4;
-  stroke-dasharray: 6 12;
+  fill: rgba(var(--play-blue), 0.06);
+  stroke: rgba(var(--play-blue), 0.6);
+  stroke-width: 7;
+  stroke-dasharray: 18 10;
+  filter: drop-shadow(0 0 6px rgba(var(--play-blue), 0.6));
 }
 
 .hexOriginPicked {
-  fill: rgba(var(--play-blue), 0.16);
-  stroke: rgb(var(--play-blue));
-  stroke-width: 6;
+  fill: rgba(var(--play-blue), 0.22);
+  stroke: #93c5fd;
+  stroke-width: 10;
+  filter: drop-shadow(0 0 12px rgba(var(--play-blue), 1));
+}
+
+@keyframes originPulse {
+  0%,
+  100% {
+    stroke-opacity: 1;
+  }
+  50% {
+    stroke-opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hexOrigin {
+    animation: none;
+  }
 }
 
 .hexTarget {

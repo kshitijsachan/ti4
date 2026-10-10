@@ -16,6 +16,9 @@ type MapActionsState = {
   requested: string | null;
   plan: MovePlan;
   landing: LandingPlan;
+  /** A confirm chip or the unit picker is open: the map's hover cards should not cover it. */
+  interacting: boolean;
+  setInteracting: (on: boolean) => void;
   setPresence: (
     active: boolean,
     step: MapActionStep,
@@ -37,6 +40,9 @@ export const useMapActions = create<MapActionsState>((set) => ({
   requested: null,
   plan: {},
   landing: {},
+  interacting: false,
+  setInteracting: (interacting) =>
+    set((s) => (s.interacting === interacting ? s : { interacting })),
   setPresence: (active, step, promptId) =>
     set((s) =>
       s.active === active && s.step === step && s.promptId === promptId

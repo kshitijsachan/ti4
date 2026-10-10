@@ -25,7 +25,7 @@ import {
   HOME_LABEL_WIDTH,
   homeLabelAnchors,
 } from "@/domains/map/components/HomeSystemLabels";
-import { MapActionsLayer } from "@/mapactions";
+import { MapActionsLayer, useMapActions } from "@/mapactions";
 import { useBoardFocus } from "./focus";
 import { MAX_ZOOM, useBoardZoom } from "./boardZoom";
 import classes from "./BoardTable.module.css";
@@ -282,6 +282,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
   const { tooltipPlanet, handlePlanetMouseEnter, handlePlanetMouseLeave, handleUnitMouseEnter, handleUnitMouseLeave } =
     useMapTooltips(handleMouseEnter, handleMouseLeave);
 
+  const mapInteracting = useMapActions((s) => s.interacting);
   const isFirefox = useSettingsStore((s) => s.settings.isFirefox);
 
   const mapLayout = getMapLayoutConfig("pannable");
@@ -335,8 +336,8 @@ export function BoardTable({ gameName, docked = false }: Props) {
             onUnitSelect={handleMouseDown}
             onPlanetMouseEnter={handlePlanetMouseEnter}
             onPlanetMouseLeave={handlePlanetMouseLeave}
-            tooltipUnit={tooltipUnit}
-            tooltipPlanet={tooltipPlanet}
+            tooltipUnit={mapInteracting ? null : tooltipUnit}
+            tooltipPlanet={mapInteracting ? null : tooltipPlanet}
           />
         )}
       </div>

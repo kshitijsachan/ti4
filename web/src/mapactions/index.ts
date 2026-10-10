@@ -10,3 +10,4 @@
  */
 export { MapActionsLayer } from "./MapActionsLayer";
 export { activateSystem, useMovementUI, useMapActions } from "./store";
+export { newestFactionPrompt } from "./context";

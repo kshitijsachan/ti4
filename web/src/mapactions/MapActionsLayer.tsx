@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { IconCheck, IconX, IconInfoCircle } from "@tabler/icons-react";
 import cx from "clsx";
 import { useGameData } from "@/state/useGameContext";
@@ -18,7 +25,14 @@ import { promptHasMoves, unitsAt, type UnitGroup } from "./movement";
 import { distancesTo } from "./range";
 import { landingOffer } from "./landing";
 import { useMapActions } from "./store";
-import { tileAt, useTileRects, type Rect } from "./useTileRects";
+import {
+  obstaclesIn,
+  overlaps,
+  placeBeside,
+  tileAt,
+  useTileRects,
+  type Rect,
+} from "./useTileRects";
 import { MovePanel, MoveArt, UnitPicker } from "./MovePanel";
 import { LandingPanel } from "./LandingPanel";
 import classes from "./MapActions.module.css";
@@ -436,6 +450,56 @@ export function MapActionsLayer({
   })();
 
   const chipRect = chip ? rects[chip.position] : undefined;
+  /* While the player works a chip or the unit picker, the map's own hover cards stay out of the way. */
+  const interacting = !!chip || (moving && !!picker);
+  useEffect(() => {
+    useMapActions.getState().setInteracting(interacting);
+  }, [interacting]);
+  useEffect(() => () => useMapActions.getState().setInteracting(false), []);
+
+  /* The chip sits over the system unless that puts it under the decision popup or the step bar. */
+  const chipRef = useRef<HTMLDivElement>(null);
+  const [chipPos, setChipPos] = useState<{
+    left: number;
+    top: number;
+    transform: string;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const el = chipRef.current;
+    const frame = frameRef.current;
+    if (!el || !frame || !chipRect) {
+      setChipPos(null);
+      return;
+    }
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const box = frame.getBoundingClientRect();
+    const obstacles = obstaclesIn(frame);
+    const centred = {
+      x: chipRect.x + chipRect.w / 2 - w / 2,
+      y: chipRect.y + chipRect.h * 0.22 - h,
+      w,
+      h,
+    };
+    const fits =
+      centred.x >= 4 &&
+      centred.x + w <= box.width - 4 &&
+      !obstacles.some((o) => overlaps(centred, o));
+    const at = fits
+      ? { left: centred.x, top: centred.y }
+      : placeBeside(
+          chipRect,
+          { w, h },
+          { w: box.width, h: box.height },
+          obstacles,
+        );
+    setChipPos((p) =>
+      p && Math.abs(p.left - at.left) < 1 && Math.abs(p.top - at.top) < 1
+        ? p
+        : { ...at, transform: "none" },
+    );
+  }, [chipRect, chip]);
+
   const dossierFor = (position: string) => {
     const systemId = tiles[position]?.systemId;
     if (systemId) openDossier(position, systemId);
@@ -467,11 +531,15 @@ export function MapActionsLayer({
       <div className={cx(classes.layer, classes.ui, "ti4play")}>
         {chip && chipRect && (
           <div
+            ref={chipRef}
+            data-mapactions-float
             className={cx(classes.surface, classes.chip)}
-            style={{
-              left: chipRect.x + chipRect.w / 2,
-              top: chipRect.y + chipRect.h * 0.22,
-            }}
+            style={
+              chipPos ?? {
+                left: chipRect.x + chipRect.w / 2,
+                top: chipRect.y + chipRect.h * 0.22,
+              }
+            }
             role="dialog"
             aria-label={chip.label}
           >
@@ -541,6 +609,7 @@ export function MapActionsLayer({
 
         {showBar && (
           <div
+            data-mapactions-bar
             className={cx(
               classes.surface,
               classes.bar,
