@@ -78,7 +78,7 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments)/i;
+  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|blessBoonCC|placeCCBack_|spendAStratCC)/i;
 const BLOCKED_LABEL = /^(undo|un-|unqueue|spend|exhaust|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -163,7 +163,7 @@ const RULES: Rule[] = [
 
 /** Optional ability offers: never the fallback answer (a rule must score them explicitly). */
 const OPTIONAL_LABEL = /\b(use|using|agent|commander|hero|promissory|exhaust|play|purge|spend|pay|ability|on someone else|activate|trigger|steal|swap)\b/i;
-const OPTIONAL_ID = /(agent|commander|hero|leader|^play|^use|getAgentSelection|^pn_|_pn_|resolvePNPlay|steal)/i;
+const OPTIONAL_ID = /(reveal_stage|agent|commander|hero|leader|^play|^use|getAgentSelection|^pn_|_pn_|resolvePNPlay|steal)/i;
 
 /** Confirmations that offer a way to take the choice back: their lone button is not a question for us. */
 const TAKE_BACK_TEXT = /change your mind|if this was an accident|can change (that|your decision)|to undo|remove the preset|be asked (again|to decide)/i;
@@ -639,6 +639,9 @@ class SeatPilot {
       if (rule.table && !rule.again && press) continue;
       if (rule.again && rule.why !== "combat: roll dice" && press && !mine && Date.parse(press.at) < this.started) continue;
       if (rule.why.startsWith("status: reveal") && !this.mayReveal(m, game)) continue;
+      // "Ready For Strategy / Agenda Phase": the last press moves the whole table on, so it must never be ours while a
+      // person at the table is still doing their status-phase steps. Answer only after every person said ready.
+      if (/pass_on_abilities/.test(String(rule.id)) && !(await this.peopleReady(m, game))) continue;
       if (rule.phase) {
         if (phase === undefined) phase = await this.mgr.phaseOf(game);
         if (phase && !rule.phase.test(phase)) continue;
@@ -675,6 +678,20 @@ class SeatPilot {
       if (controlsOf(other.components).some((c) => /reveal_stage_/.test(c.custom_id))) return false;
     }
     return true;
+  }
+
+  /** Every non-autopilot player of the game has said "… is ready for …" since this window was posted. */
+  private async peopleReady(m: StoredMessage, game: string) {
+    const st = await this.mgr.stateOf(game);
+    if (!st) return true;
+    const s = this.store.state;
+    const autopilot = new Set(Object.values(s.seats).filter((x) => x.autopilot).map((x) => x.user_id));
+    const people = [...st.colors.keys()].filter((id) => !autopilot.has(id) && s.users[id] && !s.users[id].bot);
+    const later = this.store.messages(m.channel_id).filter((x) => BigInt(x.id) > BigInt(m.id) && / is ready for /i.test(String(x.content ?? "")));
+    return people.every((id) => {
+      const name = s.users[id]?.global_name;
+      return !!name && later.some((x) => String(x.content).includes(`${name} <`) || String(x.content).includes(`<@${id}>`));
+    });
   }
 
   /** The game this table window belongs to has been silent for 3 minutes (nothing new in its actions channel). */
@@ -822,6 +839,11 @@ class SeatPilot {
     // The prompt may have gone while we waited for our turn.
     const fresh = this.store.findMessage(msg.channel_id, msg.id);
     if (!fresh || !controlsOf(fresh.components).some((c) => c.custom_id === control.custom_id)) return;
+    // Another pilot may have revealed the objective while we were deciding.
+    if (/reveal_stage_/.test(control.custom_id)) {
+      const game = gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "";
+      if (!this.mayReveal(fresh, game)) return;
+    }
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
     if (this.siblings.has(msg.id)) {
