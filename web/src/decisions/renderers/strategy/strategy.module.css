@@ -1,0 +1,237 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.art {
+  flex: none;
+  border-radius: 4px;
+}
+
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cardName {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--play-ink-bright);
+}
+
+.initiative {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--play-border);
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--play-ink-bright);
+}
+
+.sub {
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.effect {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--play-ink);
+}
+
+.cost {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.costValue {
+  font-family: var(--font-data);
+  color: var(--play-ink-bright);
+}
+
+.warn {
+  color: rgb(var(--play-yellow));
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.actionRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.actionRow > * {
+  flex: 1 1 160px;
+}
+
+.sectionLabel {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--play-ink-muted);
+}
+
+.followRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--play-border);
+  font-size: 11px;
+  color: var(--play-ink);
+}
+
+.chipMe {
+  border-color: var(--play-hairline-strong, var(--play-border));
+}
+
+.chipDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--play-ink-muted);
+}
+
+.chipDone .chipDot {
+  background: rgb(var(--play-green));
+}
+
+.chipWait .chipDot {
+  background: rgb(var(--play-yellow));
+}
+
+.chipState {
+  color: var(--play-ink-muted);
+}
+
+/* Checklists (players to replenish, planets to exhaust) */
+
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--play-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--play-ink-bright);
+  text-align: left;
+}
+
+.checkItem:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.checkItem[aria-checked="true"] {
+  border-color: rgba(var(--play-green), 0.6);
+  background: rgba(var(--play-green), 0.08);
+}
+
+.checkBox {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid var(--play-border);
+}
+
+.checkItem[aria-checked="true"] .checkBox {
+  background: rgb(var(--play-green));
+  border-color: rgb(var(--play-green));
+  color: var(--play-ink-bright);
+}
+
+.checkName {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.checkMeta {
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.done {
+  color: rgb(var(--play-green));
+}
+
+.error {
+  color: rgb(var(--play-red));
+  font-size: 12px;
+}
+
+.numbers {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.number {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.numberValue {
+  font-family: var(--font-data);
+  font-size: 14px;
+  color: var(--play-ink-bright);
+}
+
+.numberLabel {
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}

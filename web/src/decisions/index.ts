@@ -9,6 +9,7 @@
  *   drawer (`openTrade` bumps; the window event carries the same `TradeRequest`).
  * - `usePendingPrompts` / `selectPending` / `classify` — the detection and shaping, for other views.
  */
+import "./renderers/strategy";
 export { DecisionHost } from "./ui/DecisionHost";
 export type { DecisionHostProps } from "./ui/DecisionHost";
 export { useDecisionFocus, useDecisionRequests, OPEN_TRADE_EVENT } from "./model/focus";
