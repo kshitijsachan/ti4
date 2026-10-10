@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
+import { reservedRects } from "@/state/reservedArea";
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
@@ -76,16 +77,17 @@ export function useTileRects(
 }
 
 /**
- * Screen areas floating controls must stay clear of, relative to `frame`: the docked decision popup (any open
- * non-modal dialog that is not ours) and the step bar.
+ * Screen areas floating controls must stay clear of, relative to `frame`: the reserved areas (the decision popup)
+ * and the step bar.
  */
 export function obstaclesIn(frame: HTMLElement | null): Rect[] {
   if (!frame) return [];
   const box = frame.getBoundingClientRect();
   const out: Rect[] = [];
-  const els = document.querySelectorAll<HTMLElement>(
-    '[role="dialog"][aria-modal="false"], [data-mapactions-bar]',
+  reservedRects().forEach((r) =>
+    out.push({ x: r.left - box.left, y: r.top - box.top, w: r.right - r.left, h: r.bottom - r.top }),
   );
+  const els = document.querySelectorAll<HTMLElement>("[data-mapactions-bar]");
   els.forEach((el) => {
     if (el.closest("[data-mapactions-float]")) return;
     const r = el.getBoundingClientRect();

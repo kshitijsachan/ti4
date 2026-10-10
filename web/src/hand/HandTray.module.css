@@ -145,7 +145,7 @@
   opacity: 0;
   visibility: hidden;
   width: max-content;
-  max-width: min(1440px, calc(100vw - 24px));
+  max-width: min(1440px, calc(100vw - 24px - var(--board-reserve-right, 0px)));
   padding: 14px 18px 12px;
   border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.28));
   border-radius: 10px;

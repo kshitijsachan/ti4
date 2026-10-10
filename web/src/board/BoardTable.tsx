@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { Tooltip, UnstyledButton } from "@mantine/core";
 import { IconMinus, IconPlus, IconArrowsMinimize } from "@tabler/icons-react";
 import { InteractiveMapRenderer } from "@/domains/map/components/renderer/InteractiveMapRenderer";
@@ -28,6 +28,8 @@ import {
 import { MapActionsLayer, useMapActions } from "@/mapactions";
 import { useBoardFocus } from "./focus";
 import { MAX_ZOOM, useBoardZoom } from "./boardZoom";
+import { useAreaSize } from "./useBoardReserve";
+import type { ScreenRect } from "@/state/reservedArea";
 import classes from "./BoardTable.module.css";
 
 const CLEARANCE = 20;
@@ -64,15 +66,23 @@ function boardGeometry(contentSize: ContentSize, unscaledWidth: number, zoom: nu
 const ZOOM_ROOM = 0.6;
 
 /** Margins for a zoomed-in board: room on every side to zoom about any point and pan past the edges. */
-function roomyMargins(contentSize: ContentSize, zoom: number, area: { w: number; h: number }) {
+function roomyMargins(
+  contentSize: ContentSize,
+  zoom: number,
+  area: { w: number; h: number },
+  reserve: ScreenRect | null,
+) {
   const { bleed } = contentSize;
   const padX = Math.max(CLEARANCE, area.w * ZOOM_ROOM);
   const padY = Math.max(CLEARANCE, area.h * ZOOM_ROOM);
+  // Enough to scroll the board's far edges out from under a popup.
+  const right = reserve && reserve.left > area.w / 2 ? area.w - reserve.left + CLEARANCE : 0;
+  const bottom = reserve && reserve.left <= area.w / 2 && reserve.top > area.h / 2 ? area.h - reserve.top + CLEARANCE : 0;
   return {
     marginLeft: bleed.left * zoom + padX,
-    marginRight: bleed.right * zoom + padX,
+    marginRight: bleed.right * zoom + Math.max(padX, right),
     marginTop: bleed.top * zoom + padY,
-    marginBottom: bleed.bottom * zoom + padY,
+    marginBottom: bleed.bottom * zoom + Math.max(padY, bottom, HAND_RESERVE + CLEARANCE),
   };
 }
 
@@ -143,10 +153,8 @@ function useFocusReveal(containerRef: RefObject<HTMLDivElement | null>) {
   }, [containerRef, position, persist, key]);
 }
 
-/** Space kept clear for the decision popup docked on the right of a wide table. */
-const DOCK_RESERVE = 400;
-/** Below this table width the popup is a bottom sheet and nothing is reserved for it. */
-const DOCK_MIN_TABLE = 1000;
+/** Kept between the board and a floating popup. */
+const RESERVE_GAP = 8;
 /** Kept clear at the bottom for the hand bar. */
 const HAND_RESERVE = 48;
 const FIT_PAD = 20;
@@ -210,41 +218,91 @@ function usePaintedBounds(contentHeight: number): Bounds | null {
   ]);
 }
 
-function useAreaSize(ref: RefObject<HTMLDivElement | null>) {
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref]);
-  return size;
-}
+type Box = { x: number; y: number; w: number; h: number };
+type Side = "full" | "left" | "right" | "above" | "below";
 
-/** The zoom that shows the whole board in the free part of the table, and where to put it. */
-function fitLayout(bounds: Bounds | null, area: { w: number; h: number }, docked: boolean) {
-  if (!bounds || !area.w || !area.h) return null;
-  const reserve = area.w >= DOCK_MIN_TABLE ? DOCK_RESERVE : 0;
+/** The zoom that shows the whole board inside `box`, and where that puts it. */
+function fitInto(bounds: Bounds, box: Box) {
   const bw = bounds.maxX - bounds.minX;
   const bh = bounds.maxY - bounds.minY;
-  const availW = area.w - FIT_PAD * 2 - reserve;
-  const availH = area.h - FIT_PAD * 2 - HAND_RESERVE;
-  const zoom = Math.min(FIT_MAX, Math.max(0.05, Math.min(availW / bw, availH / bh)));
-  // The zoom always leaves room for the popup; the board only slides over while it is open.
-  const right = docked ? area.w - reserve : area.w;
-  const cx = right / 2;
-  // A narrow table shows the popup as a bottom sheet: lift the board to the top, above it.
-  const cy = docked && !reserve ? FIT_PAD + (bh * zoom) / 2 : FIT_PAD + availH / 2;
-  return {
-    zoom,
-    marginLeft: cx - ((bounds.minX + bounds.maxX) / 2) * zoom,
-    marginTop: cy - ((bounds.minY + bounds.maxY) / 2) * zoom,
-    width: bounds.maxX * zoom,
-    height: bounds.maxY * zoom,
+  const zoom = Math.min(FIT_MAX, Math.max(0.05, Math.min((box.w - FIT_PAD * 2) / bw, (box.h - FIT_PAD * 2) / bh)));
+  const marginLeft = box.x + box.w / 2 - ((bounds.minX + bounds.maxX) / 2) * zoom;
+  const marginTop = box.y + box.h / 2 - ((bounds.minY + bounds.maxY) / 2) * zoom;
+  const painted = {
+    left: marginLeft + bounds.minX * zoom,
+    top: marginTop + bounds.minY * zoom,
+    right: marginLeft + bounds.maxX * zoom,
+    bottom: marginTop + bounds.maxY * zoom,
   };
+  return { zoom, marginLeft, marginTop, painted };
+}
+
+function hits(a: ScreenRect, b: ScreenRect) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+/**
+ * The zoom that shows the whole board in the free part of the table, and where to put it: clear of the hand bar
+ * and of `reserve` (a popup floating over the table), beside or above or below it, whichever shows the board largest.
+ */
+function fitLayout(bounds: Bounds | null, area: { w: number; h: number }, reserve: ScreenRect | null) {
+  if (!bounds || !area.w || !area.h) return null;
+  const free: Box = { x: 0, y: 0, w: area.w, h: area.h - HAND_RESERVE };
+  const candidates: { side: Side; box: Box }[] = [{ side: "full", box: free }];
+  if (reserve) {
+    const r = reserve;
+    candidates.push(
+      { side: "left", box: { ...free, w: r.left - RESERVE_GAP } },
+      { side: "right", box: { ...free, x: r.right + RESERVE_GAP, w: free.w - r.right - RESERVE_GAP } },
+      { side: "above", box: { ...free, h: Math.min(free.h, r.top - RESERVE_GAP) } },
+      { side: "below", box: { ...free, y: r.bottom + RESERVE_GAP, h: free.h - r.bottom - RESERVE_GAP } },
+    );
+  }
+  const fits = candidates
+    .filter((c) => c.box.w > FIT_PAD * 4 && c.box.h > FIT_PAD * 4)
+    .map((c) => ({ side: c.side, ...fitInto(bounds, c.box) }))
+    // The whole table only while the board, fitted to it, stays clear of the popup.
+    .filter((f) => f.side !== "full" || !reserve || !hits(f.painted, reserve));
+  if (!fits.length) return null;
+  const best = fits.reduce((a, b) => (b.zoom > a.zoom * 1.001 ? b : a));
+  return {
+    side: best.side,
+    zoom: best.zoom,
+    marginLeft: best.marginLeft,
+    marginTop: best.marginTop,
+    width: bounds.maxX * best.zoom,
+    height: bounds.maxY * best.zoom,
+  };
+}
+
+/** A fitted board moving to a new fit (a popup came or went) glides there instead of jumping. */
+function useFitGlide(
+  containerRef: RefObject<HTMLDivElement | null>,
+  fit: { zoom: number; marginLeft: number; marginTop: number } | null,
+  area: { w: number; h: number },
+) {
+  const prev = useRef<{ zoom: number; marginLeft: number; marginTop: number; w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    const last = prev.current;
+    prev.current = fit ? { zoom: fit.zoom, marginLeft: fit.marginLeft, marginTop: fit.marginTop, w: area.w, h: area.h } : null;
+    if (!fit || !last) return;
+    // Window resizes follow the window directly.
+    if (last.w !== area.w || last.h !== area.h) return;
+    const dx = last.marginLeft - fit.marginLeft;
+    const dy = last.marginTop - fit.marginTop;
+    const scale = last.zoom / fit.zoom;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(scale - 1) < 0.001) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const board = containerRef.current?.firstElementChild;
+    if (!(board instanceof HTMLElement) || typeof board.animate !== "function") return;
+    board.animate(
+      [
+        { transformOrigin: "0 0", transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+        { transformOrigin: "0 0", transform: "none" },
+      ],
+      { duration: 320, easing: "cubic-bezier(0.2, 0.7, 0.2, 1)" },
+    );
+  }, [containerRef, fit?.zoom, fit?.marginLeft, fit?.marginTop, area.w, area.h]);
 }
 
 function ZoomButton({ label, onClick, disabled, children }: {
@@ -264,16 +322,17 @@ function ZoomButton({ label, onClick, disabled, children }: {
 
 type Props = {
   gameName: string;
-  /** A decision popup is docked on the right: keep the board clear of it. */
-  docked?: boolean;
+  /** The part of the table a floating popup covers, in the table's pixels: the board keeps clear of it. */
+  reserve?: ScreenRect | null;
 };
 
 /**
  * The table: the live map. At rest the whole board is fitted into the free part of the table (clear of the
- * hand bar and of a docked decision popup) and follows the window size; zooming in makes it pannable, and
- * zooming back out (or the fit button) returns to the fitted view.
+ * hand bar and of a decision popup) and follows the window size and the popup coming and going; zooming in
+ * makes it pannable (with room to scroll every system out from under the popup), and zooming back out (or the
+ * fit button) returns to the fitted view.
  */
-export function BoardTable({ gameName, docked = false }: Props) {
+export function BoardTable({ gameName, reserve = null }: Props) {
   const gameData = useGameData();
   const tilesList = useTilesList(gameData?.tiles);
   useDragScroll();
@@ -290,7 +349,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const area = useAreaSize(containerRef);
   const bounds = usePaintedBounds(contentSize.height);
-  const fit = fitLayout(bounds, area, docked);
+  const fit = fitLayout(bounds, area, reserve);
 
   const fitZoom = fit?.zoom ?? 0;
   const { zoom: boardZoom, fitted, zoomIn, zoomOut, fit: fitBoard } = useBoardZoom(containerRef, fitZoom, gameName);
@@ -301,22 +360,26 @@ export function BoardTable({ gameName, docked = false }: Props) {
     ? {
         width: fit.width,
         height: fit.height,
-        margins: {
-          marginLeft: fit.marginLeft,
-          marginTop: fit.marginTop,
-          transition: "margin-left 240ms ease",
-        },
+        margins: { marginLeft: fit.marginLeft, marginTop: fit.marginTop },
       }
     : fit
-      ? { width: board.width, height: board.height, margins: roomyMargins(contentSize, zoom, area) }
+      ? { width: board.width, height: board.height, margins: roomyMargins(contentSize, zoom, area, reserve) }
       : { width: board.width, height: board.height, margins: board.margins };
 
+  useFitGlide(containerRef, useFit ? fit : null, area);
+  // Back at the fit: drop any scroll left over from panning, which would push the fitted board off its place.
+  useLayoutEffect(() => {
+    if (useFit) containerRef.current?.scrollTo(0, 0);
+  }, [useFit]);
   useBoardShortcuts({ zoomIn, zoomOut, fit: fitBoard });
+  // The popup docked down the right of the table: controls on that edge move left of it.
+  const reserveRight = reserve && reserve.left > area.w / 2 ? area.w - reserve.left : 0;
+  const tableStyle = { "--board-reserve-right": `${reserveRight}px` } as CSSProperties;
   useScrollToReplayHighlight(containerRef);
   useFocusReveal(containerRef);
 
   return (
-    <div className={classes.table}>
+    <div className={classes.table} style={tableStyle}>
       <div ref={containerRef} className={`dragscroll ${classes.scroller} ${useFit ? classes.fitted : ""}`}>
         {gameData && (
           <InteractiveMapRenderer
@@ -341,7 +404,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
           />
         )}
       </div>
-      <MapActionsLayer gameName={gameName} containerRef={containerRef} docked={docked} />
+      <MapActionsLayer gameName={gameName} containerRef={containerRef} docked={reserveRight > 0} />
       <MapLensChip />
       {!shouldHideZoomControls() && (
         <div className={classes.zoom}>

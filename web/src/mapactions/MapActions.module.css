@@ -227,7 +227,7 @@
 
 @media (min-width: 1000px) {
   .barDocked {
-    transform: translateX(calc(-50% - 200px));
+    transform: translateX(calc(-50% - var(--board-reserve-right, 400px) / 2));
   }
 }
 

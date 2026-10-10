@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePlay } from "@/discord";
 import { fetchPendingTrades } from "@/trade";
@@ -18,6 +18,7 @@ import { PlayerRail } from "./PlayerRail";
 import { PlayersView } from "./PlayersView";
 import { TopBar, type DrawerName } from "./TopBar";
 import { useExternalFocus } from "./useExternalFocus";
+import { useAreaSize, useBoardReserve } from "./useBoardReserve";
 import classes from "./GameScreen.module.css";
 
 /** Trades waiting on me, refreshed whenever my hand thread moves. */
@@ -53,21 +54,6 @@ function useJumps(
   });
 }
 
-/** Whether a decision popup is open (not minimised) on the table, so the board can keep clear of it. */
-function useDocked(stageRef: RefObject<HTMLElement | null>) {
-  const [docked, setDocked] = useState(false);
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    const check = () => setDocked(!!stage.querySelector('[role="dialog"][aria-modal="false"]'));
-    check();
-    const observer = new MutationObserver(check);
-    observer.observe(stage, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [stageRef]);
-  return docked;
-}
-
 type Props = {
   gameName: string;
   turn: TurnState;
@@ -88,7 +74,11 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
   const [objectivesOpen, setObjectivesOpen] = useState(false);
   const [playersOpen, setPlayersOpen] = useState(false);
   const stageRef = useRef<HTMLElement>(null);
-  const docked = useDocked(stageRef);
+  const stageSize = useAreaSize(stageRef);
+  const reserve = useBoardReserve(stageRef, stageSize);
+  // A popup docked on the right: the hand bar centres in what is left of the table.
+  const reserveRight = reserve && reserve.left > stageSize.w / 2 ? stageSize.w - reserve.left : 0;
+  const stageStyle = { "--board-reserve-right": `${reserveRight}px` } as CSSProperties;
   useExternalFocus();
 
   const handId = game?.hand?.id;
@@ -125,7 +115,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
 
   let stage: ReactNode = takeover;
   if (!stage) {
-    stage = data ? <BoardTable gameName={gameName} docked={docked} /> : boardMissing ? null : <MapLoadingState gameId={gameName} />;
+    stage = data ? <BoardTable gameName={gameName} reserve={reserve} /> : boardMissing ? null : <MapLoadingState gameId={gameName} />;
   }
 
   return (
@@ -145,7 +135,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
         incomingTrades={incomingTrades}
       />
       {!takeover && <PlayerRail myUserId={me?.id} onAllPlayers={() => setPlayersOpen(true)} />}
-      <main ref={stageRef} className={classes.stage}>
+      <main ref={stageRef} className={classes.stage} style={stageStyle}>
         {stage}
         {!takeover && (
           <div className={classes.ticker}>

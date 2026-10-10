@@ -16,6 +16,7 @@ import {
   type Rect,
 } from "@floating-ui/react";
 import { useAppStore } from "@/state/appStore";
+import { reservedRects } from "@/state/reservedArea";
 import {
   getMapLayoutConfig,
   mapCoordsToScreen,
@@ -31,8 +32,8 @@ const GAP = 10;
 const LINGER_MS = 250;
 const MIN_WIDTH = 160;
 const MIN_HEIGHT = 120;
-/** Table chrome a hover card must never slide under: the hand tray, and a decision popup docked beside the board. */
-const OBSTACLES = '[data-hover-avoid], [role="dialog"][aria-modal="false"]';
+/** Table chrome a hover card must never slide under: the hand tray (and the reserved areas: the decision popup). */
+const OBSTACLES = "[data-hover-avoid]";
 
 function findClippingContainer(element: Element | null): Element | null {
   let current = element?.parentElement ?? null;
@@ -70,6 +71,9 @@ function freeArea(anchor: Element | null): Rect {
     : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
   for (const obstacle of document.querySelectorAll(OBSTACLES)) {
     area = carve(area, obstacle.getBoundingClientRect());
+  }
+  for (const r of reservedRects()) {
+    area = carve(area, new DOMRect(r.left, r.top, r.right - r.left, r.bottom - r.top));
   }
   return toRect(area);
 }
