@@ -535,10 +535,25 @@ export class CardPlanner {
   /** Our turn to vote on an agenda: vote (cheaply) rather than abstain, so agendas do not end in a speaker tie. */
   private async vote(game: string, faction: string, p: Prompt): Promise<boolean> {
     const c = p.controls.find((x) => x.custom_id === `FFCC_${faction}_vote`);
-    if (!c || p.m._presses?.[this.seat.userId] || Date.now() - Date.parse(p.m.timestamp) > 10 * 60000) return false;
+    if (!c) return this.resumeVote(game, faction, p);
+    if (p.m._presses?.[this.seat.userId] || Date.now() - Date.parse(p.m.timestamp) > 10 * 60000) return false;
     if (!this.once(`vote:${p.m.id}`)) return false;
     this.add(game, new VoteJob(this.seat, game, String(BigInt(p.m.id) - 1n)));
     this.seat.log("agenda: voting");
+    return true;
+  }
+
+  /** A vote of ours half done (e.g. the shim restarted mid-vote): pick it up where it stands. */
+  private async resumeVote(game: string, faction: string, p: Prompt): Promise<boolean> {
+    if ((this.jobs.get(game) ?? []).some((j) => j instanceof VoteJob)) return false;
+    if (!p.controls.some((c) => /^(outcome_|planetOutcomes_|exhaustForVotes_|proceedToFinalizingVote$|resolveAgendaVote_[1-9])/.test(baseId(c.custom_id)))) return false;
+    if (!promptForMe(this.seat, p, faction) || Date.now() - Date.parse(p.m.edited_timestamp ?? p.m.timestamp) < 20000) return false;
+    const board = await this.seat.board(game);
+    const me = board ? playerOf(board, this.seat.userId) : undefined;
+    if (!board || !me || board.phase !== "agenda.voting" || board.activePlayer !== me.color) return false;
+    if (!this.once(`vote-resume:${p.m.id}`)) return false;
+    this.add(game, new VoteJob(this.seat, game, String(BigInt(p.m.id) - 1n)));
+    this.seat.log("agenda: resuming a vote left half done");
     return true;
   }
 
