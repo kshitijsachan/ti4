@@ -4,15 +4,26 @@ import cx from "clsx";
 import type { PlayConnection } from "@/discord";
 import { cdnImage } from "@/entities/data/cdnImage";
 import { getColorAlias } from "@/entities/lookup/colors";
-import { HEX_PATH, TILE_HEIGHT, TILE_WIDTH } from "@/entities/geometry/tilePositioning";
+import {
+  HEX_PATH,
+  TILE_HEIGHT,
+  TILE_WIDTH,
+} from "@/entities/geometry/tilePositioning";
 import { getPlanetData } from "@/entities/lookup/planets";
 import type { Scope } from "./driver";
-import { commitMove, groupKey, summarize, type MovePlan, type UnitGroup } from "./movement";
+import {
+  commitMove,
+  groupKey,
+  summarize,
+  type MovePlan,
+  type UnitGroup,
+} from "./movement";
 import { useMapActions } from "./store";
 import type { Rect } from "./useTileRects";
 import classes from "./MapActions.module.css";
 
-const unitImg = (color: string | undefined, unit: string) => cdnImage(`/units/${getColorAlias(color)}_${unit}.png`);
+const unitImg = (color: string | undefined, unit: string) =>
+  cdnImage(`/units/${getColorAlias(color)}_${unit}.png`);
 
 function picked(plan: MovePlan, origin: string) {
   return Object.values(plan[origin] ?? {}).reduce((a, b) => a + b, 0);
@@ -44,7 +55,10 @@ export function MoveArt({
   }
   const reach = (origin: string) => {
     const d = distances.get(origin);
-    const fastest = Math.max(0, ...(groups[origin] ?? []).filter((g) => !g.cargo).map((g) => g.move));
+    const fastest = Math.max(
+      0,
+      ...(groups[origin] ?? []).filter((g) => !g.cargo).map((g) => g.move),
+    );
     return d !== undefined && fastest >= d;
   };
   return (
@@ -52,7 +66,11 @@ export function MoveArt({
       {Object.keys(groups).map((origin) => {
         const r = rects[origin];
         if (!r) return null;
-        const cls = picked(plan, origin) ? classes.hexOriginPicked : reach(origin) ? classes.hexOrigin : classes.hexOriginFar;
+        const cls = picked(plan, origin)
+          ? classes.hexOriginPicked
+          : reach(origin)
+            ? classes.hexOrigin
+            : classes.hexOriginFar;
         return (
           <svg
             key={origin}
@@ -78,7 +96,15 @@ export function MoveArt({
       {t && (
         <svg className={classes.art} aria-hidden="true">
           <defs>
-            <marker id="mapactions-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <marker
+              id="mapactions-arrow"
+              viewBox="0 0 10 10"
+              refX="7"
+              refY="5"
+              markerWidth="5"
+              markerHeight="5"
+              orient="auto-start-reverse"
+            >
               <path d="M 0 0 L 10 5 L 0 10 z" className={classes.arrowHead} />
             </marker>
           </defs>
@@ -107,7 +133,10 @@ export function MoveArt({
         </svg>
       )}
       {t && incoming.size > 0 && (
-        <div className={cx(classes.surface, classes.ghost)} style={{ left: t.x + t.w / 2, top: t.y + t.h * 0.78 }}>
+        <div
+          className={cx(classes.surface, classes.ghost)}
+          style={{ left: t.x + t.w / 2, top: t.y + t.h * 0.78 }}
+        >
           {[...incoming.entries()].map(([unit, n]) => (
             <span key={unit} className={classes.ghostUnit}>
               <img src={unitImg(color, unit)} alt="" />
@@ -155,27 +184,63 @@ export function UnitPicker({
     const me = ref.current?.getBoundingClientRect();
     if (!box || !me) return;
     const right = rect.x + rect.w * 0.92;
-    const left = right + me.width > box.width - 8 ? Math.max(8, rect.x + rect.w * 0.08 - me.width) : right;
-    const top = Math.min(Math.max(8, rect.y + rect.h / 2 - me.height / 2), box.height - me.height - 210);
-    setPos((p) => (Math.abs(p.left - left) < 1 && Math.abs(p.top - top) < 1 ? p : { left, top }));
+    const left =
+      right + me.width > box.width - 8
+        ? Math.max(8, rect.x + rect.w * 0.08 - me.width)
+        : right;
+    const top = Math.min(
+      Math.max(8, rect.y + rect.h / 2 - me.height / 2),
+      box.height - me.height - 210,
+    );
+    setPos((p) =>
+      Math.abs(p.left - left) < 1 && Math.abs(p.top - top) < 1
+        ? p
+        : { left, top },
+    );
   }, [rect, frame, groups.length]);
 
   const picks = plan[origin] ?? {};
   const set = (g: UnitGroup, n: number) =>
-    setPlan((p) => ({ ...p, [origin]: { ...(p[origin] ?? {}), [groupKey(g)]: Math.max(0, Math.min(g.total, n)) } }));
+    setPlan((p) => ({
+      ...p,
+      [origin]: {
+        ...(p[origin] ?? {}),
+        [groupKey(g)]: Math.max(0, Math.min(g.total, n)),
+      },
+    }));
   const allShips = () =>
-    setPlan((p) => ({ ...p, [origin]: Object.fromEntries(groups.map((g) => [groupKey(g), g.total])) }));
+    setPlan((p) => ({
+      ...p,
+      [origin]: Object.fromEntries(groups.map((g) => [groupKey(g), g.total])),
+    }));
   const none = () => setPlan((p) => ({ ...p, [origin]: {} }));
   const local = summarize({ [origin]: picks }, { [origin]: groups });
 
   return (
-    <div ref={ref} className={cx(classes.surface, classes.picker)} style={{ left: pos.left, top: pos.top }} role="dialog" aria-label={`Units in ${origin}`}>
+    <div
+      ref={ref}
+      className={cx(classes.surface, classes.picker)}
+      style={{ left: pos.left, top: pos.top }}
+      role="dialog"
+      aria-label={`Units in ${origin}`}
+    >
       <div className={classes.pickerHead}>
-        <span className={cx(classes.barTitle, classes.ellipsis)}>{name || "System"}</span>
+        <span className={cx(classes.barTitle, classes.ellipsis)}>
+          {name || "System"}
+        </span>
         <span className={cx(classes.mono, classes.muted)}>{origin}</span>
         <span className={classes.grow} />
-        {distance !== undefined && <span className={cx(classes.muted, classes.nowrap)}>{distance} away</span>}
-        <button type="button" className={cx(classes.iconButton, classes.step)} onClick={onClose} aria-label="Close">
+        {distance !== undefined && (
+          <span className={cx(classes.muted, classes.nowrap)}>
+            {distance} away
+          </span>
+        )}
+        <button
+          type="button"
+          className={cx(classes.iconButton, classes.step)}
+          onClick={onClose}
+          aria-label="Close"
+        >
           <IconX size={13} />
         </button>
       </div>
@@ -184,23 +249,51 @@ export function UnitPicker({
         const slow = !g.cargo && distance !== undefined && g.move < distance;
         const damaged = g.states[1] + g.states[3];
         return (
-          <div key={groupKey(g)} className={cx(classes.unitRow, n > 0 && classes.unitRowPicked)}>
-            <img src={unitImg(color, g.unit)} alt="" className={classes.unitImg} onClick={() => set(g, n + 1)} title="Add one" />
+          <div
+            key={groupKey(g)}
+            className={cx(classes.unitRow, n > 0 && classes.unitRowPicked)}
+          >
+            <img
+              src={unitImg(color, g.unit)}
+              alt=""
+              className={classes.unitImg}
+              onClick={() => set(g, n + 1)}
+              title="Add one"
+            />
             <span className={classes.unitName}>
               {g.name}
               <span className={cx(classes.unitSub, slow && classes.slow)}>
-                {[holderLabel(g.holder), g.cargo ? "needs capacity" : `move ${g.move}${slow ? " — too slow?" : ""}`, g.capacity ? `capacity ${g.capacity}` : "", damaged ? `${damaged} damaged` : ""]
+                {[
+                  holderLabel(g.holder),
+                  g.cargo
+                    ? "needs capacity"
+                    : `move ${g.move}${slow ? " — too slow?" : ""}`,
+                  g.capacity ? `capacity ${g.capacity}` : "",
+                  damaged ? `${damaged} damaged` : "",
+                ]
                   .filter(Boolean)
                   .join(" · ")}
               </span>
             </span>
-            <button type="button" className={cx(classes.iconButton, classes.step)} onClick={() => set(g, n - 1)} disabled={!n} aria-label={`One less ${g.name}`}>
+            <button
+              type="button"
+              className={cx(classes.iconButton, classes.step)}
+              onClick={() => set(g, n - 1)}
+              disabled={!n}
+              aria-label={`One less ${g.name}`}
+            >
               <IconMinus size={12} />
             </button>
             <span className={classes.count}>
               {n}/{g.total}
             </span>
-            <button type="button" className={cx(classes.iconButton, classes.step)} onClick={() => set(g, n + 1)} disabled={n >= g.total} aria-label={`One more ${g.name}`}>
+            <button
+              type="button"
+              className={cx(classes.iconButton, classes.step)}
+              onClick={() => set(g, n + 1)}
+              disabled={n >= g.total}
+              aria-label={`One more ${g.name}`}
+            >
               <IconPlus size={12} />
             </button>
           </div>
@@ -210,12 +303,22 @@ export function UnitPicker({
         <button type="button" className={classes.button} onClick={allShips}>
           All
         </button>
-        <button type="button" className={classes.button} onClick={none} disabled={local.empty}>
+        <button
+          type="button"
+          className={classes.button}
+          onClick={none}
+          disabled={local.empty}
+        >
           None
         </button>
         <span className={classes.grow} />
         {local.capacity > 0 || local.cargo > 0 ? (
-          <span className={cx(classes.mono, local.cargo > local.capacity ? classes.slow : classes.muted)}>
+          <span
+            className={cx(
+              classes.mono,
+              local.cargo > local.capacity ? classes.slow : classes.muted,
+            )}
+          >
             cargo {local.cargo}/{local.capacity}
           </span>
         ) : null}
@@ -242,23 +345,57 @@ type PanelProps = {
 };
 
 /** The movement step's bar: what moves in, the capacity it needs, and one Move. */
-export function MovePanel({ gameName, target, targetName, groups, color, conn, scope, prompt, busy, error, run, setBusy, onHandBack, hasOrigins }: PanelProps) {
+export function MovePanel({
+  gameName,
+  target,
+  targetName,
+  groups,
+  color,
+  conn,
+  scope,
+  prompt,
+  busy,
+  error,
+  run,
+  setBusy,
+  onHandBack,
+  hasOrigins,
+}: PanelProps) {
   const plan = useMapActions((s) => s.plan);
   const resetPlans = useMapActions((s) => s.resetPlans);
   const sum = summarize(plan, groups);
   const over = sum.cargo > sum.capacity;
-  const fill = sum.capacity ? Math.min(100, (sum.cargo / sum.capacity) * 100) : sum.cargo ? 100 : 0;
+  const fill = sum.capacity
+    ? Math.min(100, (sum.cargo / sum.capacity) * 100)
+    : sum.cargo
+      ? 100
+      : 0;
 
   const move = () =>
-    run(() => commitMove(target, plan, groups, color, { gameName, conn, scope, prompt, onProgress: setBusy }).then(() => resetPlans()));
+    run(() =>
+      commitMove(target, plan, groups, color, {
+        gameName,
+        conn,
+        scope,
+        prompt,
+        onProgress: setBusy,
+      }).then(() => resetPlans()),
+    );
 
   return (
     <>
       <div className={classes.barHead}>
-        <span className={classes.barTitle}>Move into {targetName || "the system"}</span>
+        <span className={classes.barTitle}>
+          Move into {targetName || "the system"}
+        </span>
         <span className={cx(classes.mono, classes.muted)}>{target}</span>
         <span className={classes.grow} />
-        <button type="button" className={classes.link} onClick={onHandBack} disabled={!!busy}>
+        <button
+          type="button"
+          className={classes.link}
+          onClick={onHandBack}
+          disabled={!!busy}
+        >
           Use the game's buttons
         </button>
       </div>
@@ -284,10 +421,24 @@ export function MovePanel({ gameName, target, targetName, groups, color, conn, s
       )}
       {error && <div className={classes.error}>{error}</div>}
       <div className={classes.barActions}>
-        <button type="button" className={cx(classes.button, classes.primary)} onClick={() => void move()} disabled={!!busy}>
-          {sum.empty ? "Continue without moving" : over ? "Move anyway" : "Move"}
+        <button
+          type="button"
+          className={cx(classes.button, classes.primary)}
+          onClick={() => void move()}
+          disabled={!!busy}
+        >
+          {sum.empty
+            ? "Continue without moving"
+            : over
+              ? "Move anyway"
+              : "Move"}
         </button>
-        <button type="button" className={classes.button} onClick={resetPlans} disabled={!!busy || sum.empty}>
+        <button
+          type="button"
+          className={classes.button}
+          onClick={resetPlans}
+          disabled={!!busy || sum.empty}
+        >
           Clear
         </button>
       </div>

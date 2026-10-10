@@ -8,9 +8,18 @@ import { baseId, choicesOf, idFaction } from "@/decisions/model/controls";
  * prompt to appear. All rules stay the bot's.
  */
 
-export type FoundButton = { channelId: string; messageId: string; customId: string; label: string };
+export type FoundButton = {
+  channelId: string;
+  messageId: string;
+  customId: string;
+  label: string;
+};
 
-export type ButtonMatch = (base: string, label: string, customId: string) => boolean;
+export type ButtonMatch = (
+  base: string,
+  label: string,
+  customId: string,
+) => boolean;
 
 export type Scope = {
   /** Channels to look in (the game's action log, my hand thread, recent threads). */
@@ -28,7 +37,12 @@ function mine(customId: string | undefined, faction?: string) {
 }
 
 /** The newest bot message in scope (newer than `after`, if given) with an enabled button matching `match`. */
-export function findButton(state: PlayState, scope: Scope, match: ButtonMatch, after?: string): FoundButton | null {
+export function findButton(
+  state: PlayState,
+  scope: Scope,
+  match: ButtonMatch,
+  after?: string,
+): FoundButton | null {
   let best: FoundButton | null = null;
   for (const channelId of scope.channelIds) {
     const data = state.messages[channelId];
@@ -40,10 +54,20 @@ export function findButton(state: PlayState, scope: Scope, match: ButtonMatch, a
       const m = data.byId[id];
       if (!m?.author?.bot) continue;
       const hit = choicesOf(m).find(
-        (c) => c.kind === "button" && !c.disabled && !!c.customId && mine(c.customId, scope.faction) && match(baseId(c.customId), c.label, c.customId),
+        (c) =>
+          c.kind === "button" &&
+          !c.disabled &&
+          !!c.customId &&
+          mine(c.customId, scope.faction) &&
+          match(baseId(c.customId), c.label, c.customId),
       );
       if (hit?.customId) {
-        best = { channelId, messageId: id, customId: hit.customId, label: hit.label };
+        best = {
+          channelId,
+          messageId: id,
+          customId: hit.customId,
+          label: hit.label,
+        };
         break;
       }
     }
@@ -54,7 +78,13 @@ export function findButton(state: PlayState, scope: Scope, match: ButtonMatch, a
 /** All enabled buttons of one message that are mine. */
 export function buttonsOf(m: Message | undefined, faction?: string) {
   if (!m) return [];
-  return choicesOf(m).filter((c) => c.kind === "button" && !c.disabled && !!c.customId && mine(c.customId, faction));
+  return choicesOf(m).filter(
+    (c) =>
+      c.kind === "button" &&
+      !c.disabled &&
+      !!c.customId &&
+      mine(c.customId, faction),
+  );
 }
 
 /** The newest message id across the scope (a baseline: prompts newer than it answer what we press next). */
@@ -68,7 +98,10 @@ export function newestId(state: PlayState, scope: Scope): string | undefined {
 }
 
 /** Presses a button and settles when the bot acknowledges it. Rejects with the bot's error. */
-export function pressButton(conn: PlayConnection, b: { channelId: string; messageId: string; customId: string }) {
+export function pressButton(
+  conn: PlayConnection,
+  b: { channelId: string; messageId: string; customId: string },
+) {
   return new Promise<void>((resolve, reject) => {
     const nonce = conn.click(b.channelId, b.messageId, b.customId);
     if (!nonce) {
@@ -92,7 +125,11 @@ export function pressButton(conn: PlayConnection, b: { channelId: string; messag
 }
 
 /** Resolves with the first value `probe` returns from the store (now or as it changes); null on timeout. */
-export function waitFor<T>(conn: PlayConnection, probe: (s: PlayState) => T | null | undefined, timeoutMs = PROMPT_TIMEOUT_MS) {
+export function waitFor<T>(
+  conn: PlayConnection,
+  probe: (s: PlayState) => T | null | undefined,
+  timeoutMs = PROMPT_TIMEOUT_MS,
+) {
   return new Promise<T | null>((resolve) => {
     let done = false;
     const finish = (v: T | null) => {
@@ -113,12 +150,25 @@ export function waitFor<T>(conn: PlayConnection, probe: (s: PlayState) => T | nu
 }
 
 /** Waits for a button matching `match` on a message newer than `after` (or an edit of `editOf`). */
-export function waitForButton(conn: PlayConnection, scope: Scope, match: ButtonMatch, opts: { after?: string; timeoutMs?: number } = {}) {
-  return waitFor(conn, (s) => findButton(s, scope, match, opts.after), opts.timeoutMs);
+export function waitForButton(
+  conn: PlayConnection,
+  scope: Scope,
+  match: ButtonMatch,
+  opts: { after?: string; timeoutMs?: number } = {},
+) {
+  return waitFor(
+    conn,
+    (s) => findButton(s, scope, match, opts.after),
+    opts.timeoutMs,
+  );
 }
 
 /** The current copy of one message from the store. */
-export function messageOf(state: PlayState, channelId: string, messageId: string): Message | undefined {
+export function messageOf(
+  state: PlayState,
+  channelId: string,
+  messageId: string,
+): Message | undefined {
   return state.messages[channelId]?.byId[messageId];
 }
 

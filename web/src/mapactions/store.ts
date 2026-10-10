@@ -16,7 +16,11 @@ type MapActionsState = {
   requested: string | null;
   plan: MovePlan;
   landing: LandingPlan;
-  setPresence: (active: boolean, step: MapActionStep, promptId: string | null) => void;
+  setPresence: (
+    active: boolean,
+    step: MapActionStep,
+    promptId: string | null,
+  ) => void;
   handBack: (promptId: string) => void;
   takeOver: (promptId: string) => void;
   request: (position: string | null) => void;
@@ -34,8 +38,13 @@ export const useMapActions = create<MapActionsState>((set) => ({
   plan: {},
   landing: {},
   setPresence: (active, step, promptId) =>
-    set((s) => (s.active === active && s.step === step && s.promptId === promptId ? s : { active, step, promptId })),
-  handBack: (promptId) => set((s) => ({ handedBack: { ...s.handedBack, [promptId]: true } })),
+    set((s) =>
+      s.active === active && s.step === step && s.promptId === promptId
+        ? s
+        : { active, step, promptId },
+    ),
+  handBack: (promptId) =>
+    set((s) => ({ handedBack: { ...s.handedBack, [promptId]: true } })),
   takeOver: (promptId) =>
     set((s) => {
       const rest = { ...s.handedBack };
@@ -53,10 +62,16 @@ export const useMapActions = create<MapActionsState>((set) => ({
  * the popup should not show the bot's move or land buttons for `promptId` (the map answers that prompt).
  */
 export function useMovementUI() {
-  const active = useMapActions((s) => s.active && (s.step === "move" || s.step === "land"));
+  const active = useMapActions(
+    (s) => s.active && (s.step === "move" || s.step === "land"),
+  );
   const step = useMapActions((s) => s.step);
   const promptId = useMapActions((s) => s.promptId);
-  return { active, step: active ? step : null, promptId: active ? promptId : null };
+  return {
+    active,
+    step: active ? step : null,
+    promptId: active ? promptId : null,
+  };
 }
 
 /** Asks the board to activate `position` (the player still confirms on the map). */

@@ -16,16 +16,23 @@ export function activationOf(
   step: TacticalStep,
 ): Activation {
   const info = getTileById(tile.systemId);
-  if (info?.isHyperlane) return { ok: false, reason: "Hyperlanes can't be activated" };
-  if (tile.position === "special" || !tile.systemId) return { ok: false, reason: "Not a system" };
+  if (info?.isHyperlane)
+    return { ok: false, reason: "Hyperlanes can't be activated" };
+  if (tile.position === "special" || !tile.systemId)
+    return { ok: false, reason: "Not a system" };
   if (!me) return { ok: false, reason: "You're watching this game" };
   if (step.kind !== "turn" && step.kind !== "choose") {
-    if (step.kind === "move" || step.kind === "land") return { ok: false, reason: "Finish your current tactical action first" };
+    if (step.kind === "move" || step.kind === "land")
+      return { ok: false, reason: "Finish your current tactical action first" };
     return { ok: false, reason: "Not your turn" };
   }
-  if (me.tacticalCC < 1) return { ok: false, reason: "No command tokens in your tactic pool" };
-  const ccs = web?.tileUnitData?.[tile.position]?.ccs ?? tile.commandCounters ?? [];
-  if (ccs.includes(me.color) || ccs.includes(me.faction)) return { ok: false, reason: "Your command token is already here" };
-  if (info?.id?.toLowerCase() === "silver_flame") return { ok: false, reason: "This system can't be activated" };
+  if (me.tacticalCC < 1)
+    return { ok: false, reason: "No command tokens in your tactic pool" };
+  const ccs =
+    web?.tileUnitData?.[tile.position]?.ccs ?? tile.commandCounters ?? [];
+  if (ccs.includes(me.color) || ccs.includes(me.faction))
+    return { ok: false, reason: "Your command token is already here" };
+  if (info?.id?.toLowerCase() === "silver_flame")
+    return { ok: false, reason: "This system can't be activated" };
   return { ok: true };
 }

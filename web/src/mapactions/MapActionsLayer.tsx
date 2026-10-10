@@ -387,7 +387,8 @@ export function MapActionsLayer({
   };
 
   const tooltip = (() => {
-    if (!hover || !tipShown || chip || busy || hover.position === picker) return null;
+    if (!hover || !tipShown || chip || busy || hover.position === picker)
+      return null;
     const name = names[hover.position];
     const label = `${name ? `${name} ` : ""}(${hover.position})`;
     if (activating) {
@@ -414,6 +415,18 @@ export function MapActionsLayer({
     }
     if (moving && hover.position === target)
       return { text: `${label} — your ships move here`, blocked: false };
+    if (
+      moving &&
+      me &&
+      unitsAt(hover.position, me, web).some((g) => !g.cargo)
+    ) {
+      const ccs = web?.tileUnitData?.[hover.position]?.ccs ?? [];
+      const locked = ccs.includes(me.faction) || ccs.includes(me.color);
+      const why = locked
+        ? "your command token is here, so these ships can't leave"
+        : "the game doesn't offer moving from here";
+      return { text: `${label} — ${why}`, blocked: true };
+    }
     if (pick?.byPosition[hover.position])
       return {
         text: `Click to choose: ${pick.byPosition[hover.position].label}`,

@@ -8,8 +8,11 @@ const GROUND = new Set(["gf", "mf", "pd", "sd"]);
 
 function wormholesOf(tile: Tile, web?: PlayerDataResponse) {
   const out = new Set<string>();
-  for (const w of getTileById(tile.systemId)?.wormholes ?? []) if (w) out.add(w.toLowerCase());
-  for (const list of Object.values(web?.tileUnitData?.[tile.position]?.space ?? {})) {
+  for (const w of getTileById(tile.systemId)?.wormholes ?? [])
+    if (w) out.add(w.toLowerCase());
+  for (const list of Object.values(
+    web?.tileUnitData?.[tile.position]?.space ?? {},
+  )) {
     for (const e of list) {
       if (e.entityType !== "token") continue;
       const m = e.entityId.toLowerCase().match(/(alpha|beta|gamma)/);
@@ -19,10 +22,20 @@ function wormholesOf(tile: Tile, web?: PlayerDataResponse) {
   return out;
 }
 
-function enemyShips(position: string, faction: string, web?: PlayerDataResponse) {
+function enemyShips(
+  position: string,
+  faction: string,
+  web?: PlayerDataResponse,
+) {
   const space = web?.tileUnitData?.[position]?.space ?? {};
   return Object.entries(space).some(
-    ([f, list]) => f !== faction && f !== "neutral" && list.some((e) => e.entityType === "unit" && e.count > 0 && !GROUND.has(e.entityId)),
+    ([f, list]) =>
+      f !== faction &&
+      f !== "neutral" &&
+      list.some(
+        (e) =>
+          e.entityType === "unit" && e.count > 0 && !GROUND.has(e.entityId),
+      ),
   );
 }
 
@@ -38,19 +51,28 @@ export function distancesTo(
   techs: string[],
   web?: PlayerDataResponse,
 ): Map<string, number> {
-  const list = Object.values(tiles).filter((t) => t.systemId && t.position !== "special");
+  const list = Object.values(tiles).filter(
+    (t) => t.systemId && t.position !== "special",
+  );
   const lane = (t: Tile) => !!getTileById(t.systemId)?.isHyperlane;
   const holes = new Map(list.map((t) => [t.position, wormholesOf(t, web)]));
-  const gap = (a: Tile, b: Tile) => Math.hypot(a.properties.x - b.properties.x, a.properties.y - b.properties.y);
+  const gap = (a: Tile, b: Tile) =>
+    Math.hypot(
+      a.properties.x - b.properties.x,
+      a.properties.y - b.properties.y,
+    );
   let step = Infinity;
-  for (const a of list) for (const b of list) if (a !== b) step = Math.min(step, gap(a, b) || Infinity);
+  for (const a of list)
+    for (const b of list)
+      if (a !== b) step = Math.min(step, gap(a, b) || Infinity);
   const neighbours = (t: Tile) => {
     const out: Tile[] = [];
     const mine = holes.get(t.position)!;
     for (const o of list) {
       if (o === t) continue;
       if (gap(o, t) <= step * NEIGHBOUR_SLACK) out.push(o);
-      else if ([...holes.get(o.position)!].some((w) => mine.has(w))) out.push(o);
+      else if ([...holes.get(o.position)!].some((w) => mine.has(w)))
+        out.push(o);
     }
     return out;
   };
