@@ -37,7 +37,7 @@ const UTILITY_SUFFIX = /_?(moveAlongAfterAllHaveReactedToAC|endTurnWhenAllReacte
 const UTILITY_LABEL = /^(show |refresh|ping |pause timer|\(for others\)|request all|skip waiting|modify units|transaction$|player settings|list my games)/i;
 
 /** The hand tray's card menus (play / discard / score a card): the hand module answers those itself. */
-const HAND_ID = /^(ac_play_from_hand_|ac_discard_from_hand_|so_score_hand_|discardSecret_|get_so_score_buttons|get_so_discard_buttons|getDiscardButtonsACs)/;
+const HAND_ID = /^(ac_play_from_hand_|resolvePNPlay_|ac_discard_from_hand_|so_score_hand_|discardSecret_|get_so_score_buttons|get_so_discard_buttons|getDiscardButtonsACs)/;
 
 /** Draft and pre-draft configuration prompts: the draft view (and the game's creator) own those. */
 const DRAFT_ID =
@@ -163,7 +163,10 @@ export function isSecretDiscardPrompt(m: Message): boolean {
 /** A transient card menu from the hand thread, which the hand tray handles. */
 export function isHandMenu(m: Message): boolean {
   if (isSecretDiscardPrompt(m)) return false;
-  const ids = forwardChoices(m).map((c) => baseId(c.customId));
+  if (/^\W*click a button below to play an action card/i.test(m.content ?? "")) return true;
+  const ids = forwardChoices(m)
+    .map((c) => baseId(c.customId))
+    .filter((id) => id !== "deleteButtons");
   return ids.length > 0 && ids.every((id) => HAND_ID.test(id));
 }
 

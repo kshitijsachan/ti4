@@ -355,8 +355,48 @@
   font-size: 11px;
   color: var(--play-ink-muted);
   white-space: nowrap;
-  cursor: default;
   border-bottom: 1px dotted currentColor;
+}
+
+.moreWrap {
+  position: relative;
+  align-self: center;
+}
+
+/* The queue, opened from "2 more waiting": jump to any decision. */
+.queueList {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  max-width: 320px;
+  padding: 4px;
+  border-radius: 8px;
+  border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
+  background: var(--details-card-bg, #0b1020);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.queueItem {
+  padding: 6px 9px;
+  border-radius: 5px;
+  color: var(--play-ink);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.queueItem:hover {
+  background: var(--play-hover-strong);
+  color: var(--play-ink-bright);
+}
+
+.queueItemCurrent {
+  color: var(--play-ink-bright);
+  font-weight: 600;
 }
 
 /* "Peek at map": hold to see the board through the card, or click to toggle. */

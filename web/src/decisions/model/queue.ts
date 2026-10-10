@@ -24,9 +24,11 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   const turn = live.filter((d) => d.kind === "turn").reverse();
   /* The next step of something I just pressed (only-you prompts, replies to my press, my hand thread) comes first:
      Leadership's pay-then-gain must finish before the next card's follow, which may need the token it buys. */
-  const continuation = (d: Decision) =>
+  const reply = (d: Decision) =>
     !d.setup &&
     (d.prompt.reason === "ephemeral" || d.prompt.reason === "reply" || d.prompt.reason === "faction" || d.prompt.where === "hand");
+  /* A card that folded in the reply to my press (the secrets list inside the scoring card) is a continuation too. */
+  const continuation = (d: Decision) => reply(d) || (d.steps ?? []).some(reply);
   /* A combat comes before anything else in the action (space combat happens before ground forces land). */
   const combat = owed.filter((d) => d.kind === "combat" && combatWaitsOnMe(d));
   const waiting = owed.filter((d) => d.kind === "combat" && !combatWaitsOnMe(d));

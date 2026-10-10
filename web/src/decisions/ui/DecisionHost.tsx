@@ -339,7 +339,9 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
 
   /* One thing at a time: the head of the queue (or the one whose press is still settling). */
   const openOffer = offers.find((d) => d.id === offerId);
-  const shown = press.held ?? openOffer ?? decisions[0];
+  const [jumpId, setJumpId] = useState<string | null>(null);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const shown = press.held ?? openOffer ?? decisions.find((d) => d.id === jumpId) ?? decisions[0];
   const more = decisions.filter((d) => d.id !== shown?.id).length;
   const offerPill = offers.length > 0 && (
     <div ref={offersRef} className={classes.offers}>
@@ -417,26 +419,28 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
               <h2 className={classes.title}>{shown.title}</h2>
             </div>
             {more > 0 && (
-              <Tooltip
-                multiline
-                w={260}
-                position="bottom"
-                label={
-                  <>
-                    <b>Waiting after this one:</b>
-                    {decisions
-                      .filter((x) => x.id !== shown.id)
-                      .slice(0, 6)
-                      .map((x) => (
-                        <div key={x.id}>· {x.title}</div>
-                      ))}
-                  </>
-                }
-              >
-                <span className={classes.moreText} tabIndex={0}>
+              <span className={classes.moreWrap}>
+                <UnstyledButton className={classes.moreText} onClick={() => setQueueOpen((v) => !v)} aria-expanded={queueOpen}>
                   {more === 1 ? "1 more after this" : `${more} more waiting`}
-                </span>
-              </Tooltip>
+                </UnstyledButton>
+                {queueOpen && (
+                  <span className={classes.queueList} role="menu" aria-label="Decisions waiting">
+                    {decisions.map((x) => (
+                      <UnstyledButton
+                        key={x.id}
+                        role="menuitem"
+                        className={cx(classes.queueItem, x.id === shown.id && classes.queueItemCurrent)}
+                        onClick={() => {
+                          setJumpId(x.id);
+                          setQueueOpen(false);
+                        }}
+                      >
+                        {x.title}
+                      </UnstyledButton>
+                    ))}
+                  </span>
+                )}
+              </span>
             )}
             <Tooltip label="Hold to see the map, or click to toggle" position="bottom">
               <UnstyledButton
