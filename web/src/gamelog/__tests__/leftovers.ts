@@ -21,8 +21,10 @@ const list = args.includes("--list");
 let games = args.filter((a) => !a.startsWith("--"));
 if (!hasState()) throw new Error("no shim state");
 if (!games.length) {
-  const s = JSON.parse(readFileSync(process.env.SHIM_STATE ?? "/home/user/run/shim-data/state.json", "utf8"));
-  const ch = Object.values(s.channels) as { name?: string }[];
+  const s = JSON.parse(readFileSync(process.env.SHIM_STATE ?? "/home/user/run/shim-data/state.json", "utf8")) as {
+    channels: Record<string, { name?: string }>;
+  };
+  const ch = Object.values(s.channels);
   games = [...new Set(ch.map((c) => c.name ?? "").filter((n) => n.endsWith("-actions")).map((n) => n.split("-")[0]))];
 }
 const counts: Record<string, number> = {};

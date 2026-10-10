@@ -177,7 +177,6 @@ export function TradePanel({
     if (offer) void counter(offer);
     else if (tradeRequest.faction) setSelected(tradeRequest.faction);
     // counter() only closes over the latest options/pending, which are dependencies here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tradeRequest, options, pending]);
 
   const setSide = (key: "give" | "receive") => (next: SideDraft) =>
