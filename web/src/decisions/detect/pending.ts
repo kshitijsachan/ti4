@@ -11,6 +11,7 @@ import {
   idFaction,
   isDraftPrompt,
   isHandMenu,
+  isUtilityMenu,
   isSecretDiscardPrompt,
   isTableSetupPrompt,
   needsAnswer,
@@ -183,7 +184,7 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     if ((m.mention_roles ?? []).some((r) => myRoles.has(r))) rolePingAt = at;
     const roleFollowUp = !ping && !pingsOther && at - rolePingAt <= FOLLOW_UP_MS;
     const forOther = pingsOther || (!ping && at - otherPingAt <= FOLLOW_UP_MS) || otherFaction(m);
-    if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || isHandMenu(m)) return;
+    if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || isHandMenu(m) || isUtilityMenu(m)) return;
     const tableSetup = isTableSetupPrompt(m);
     // Table-wide setup steps (deal secret objectives, start the game) are pressed by the server once everyone is
     // ready (shim/src/solo.ts steward), so they are never a decision for a person.

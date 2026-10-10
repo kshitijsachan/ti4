@@ -162,6 +162,16 @@ export function isHandMenu(m: Message): boolean {
   return ids.length > 0 && ids.every((id) => HAND_ID.test(id));
 }
 
+/** The bot's general "player menu" (transaction, notes, map view, settings…): a toolbox, never a decision. */
+const PLAYER_MENU_ID =
+  /^(transaction|getModifyTiles|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|refreshInfoButtons|editEndOfRoundSummaries|notepad|cardsInfo|gameInfoButtons|offerDeckButtons|showMap|showPlayerAreas|passOnNextTurn|queueToPass|turnOffPass|player_?pref)/i;
+
+export function isUtilityMenu(m: Message): boolean {
+  if (/use these buttons to do various things/i.test(m.content ?? "")) return true;
+  const ids = forwardChoices(m).map((c) => baseId(c.customId));
+  return ids.length >= 3 && ids.filter((id) => PLAYER_MENU_ID.test(id)).length / ids.length >= 0.6;
+}
+
 /** The custom ids of a message's controls, sorted: the "question" it asks. */
 export function buttonSignature(m: Message): string {
   return choicesOf(m)

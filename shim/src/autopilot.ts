@@ -66,6 +66,12 @@ const RULES: Rule[] = [
   { id: /^milty_order_/, score: 90, why: "draft: first speaker order" },
   // Setup: keep the first secret objective, discard the other.
   { id: /^discardSecret_/, score: 80, last: true, why: "setup: keep the first secret objective" },
+  // Setup: starting technology. Most factions get a list of their allowed techs (getTech_<alias>__noPay__comp, once
+  // or twice); open choices come as "Get a Technology" → a tech type → a tech; Keleres asks once the others are done.
+  { id: /(^|_)acquireAFreeTech$/, score: 83, why: "setup: get a starting technology" },
+  { id: /(^|_)getAllTechOfType_/, score: 82, why: "setup: first technology type" },
+  { id: /(^|_)getTech_.+__noPay/, score: 81, why: "setup: first starting technology" },
+  { id: /(^|_)getKeleresTechOptions$/, score: 60, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
     id: /_scPick_\d+$/,
