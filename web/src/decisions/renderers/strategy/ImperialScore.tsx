@@ -37,12 +37,12 @@ export function ImperialScoreBody({ d, data, onPress, pendingKey }: RendererProp
           const o = all.find((x) => x.name === nameOf(c));
           const progress = faction ? o?.factionProgress?.[faction] : undefined;
           const tracked = !!o && o.progressThreshold > 0 && progress !== undefined;
-          const met = tracked && progress! >= o!.progressThreshold;
+          const met = tracked && progress >= o.progressThreshold;
           return (
             <div key={c.key} className={classes.inlineRow}>
               <span className={classes.checkName}>{nameOf(c)}</span>
               <span className={met ? classes.done : classes.checkMeta}>
-                {met ? "You meet this" : tracked ? `${progress} of ${o!.progressThreshold}` : ""}
+                {met ? "You meet this" : tracked ? `${progress} of ${o.progressThreshold}` : ""}
               </span>
               <ChoiceButton choice={{ ...c, label: "Score", style: met ? 3 : 2 }} onPress={onPress} pending={pendingKey === c.key} busy={busy} compact />
             </div>
