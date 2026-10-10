@@ -97,7 +97,12 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
   );
   const incomingTrades = useIncomingTrades(gameName, handId, handSignal);
   const talkId = game?.tableTalk?.id;
-  const talkUnread = usePlay((s) => (talkId ? (s.unread[talkId] ?? 0) : 0));
+  // Table talk shows people's chat only, so the bot's posts there are not "unread".
+  const talkUnread = usePlay((s) => {
+    const n = talkId ? (s.unread[talkId] ?? 0) : 0;
+    const c = talkId ? s.messages[talkId] : undefined;
+    return n && c ? c.ids.slice(-n).filter((id) => !c.byId[id]?.author?.bot).length : n;
+  });
 
   useJumps(gameName, (name, channelId) => {
     if (channelId) setRawChannel(channelId);

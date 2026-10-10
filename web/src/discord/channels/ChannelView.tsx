@@ -16,6 +16,7 @@ export type ChannelViewProps = {
   headerExtra?: ReactNode;
   /** Show the chat / slash-command composer. Default true. */
   composer?: boolean;
+  composerPlaceholder?: string;
   variant?: MessageListVariant;
   filter?: (m: Message) => boolean;
   empty?: ReactNode;
@@ -28,6 +29,7 @@ export function ChannelView({
   header = true,
   headerExtra,
   composer = true,
+  composerPlaceholder,
   variant = "cozy",
   filter,
   empty,
@@ -59,7 +61,7 @@ export function ChannelView({
         </header>
       )}
       <MessageList key={channelId} channelId={channelId} variant={variant} filter={filter} empty={empty} />
-      {composer && <Composer channelId={channelId} />}
+      {composer && <Composer channelId={channelId} placeholder={composerPlaceholder} />}
     </section>
   );
 }

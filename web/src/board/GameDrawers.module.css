@@ -80,3 +80,20 @@
 .hiddenHeader {
   display: none;
 }
+
+.botToggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 12px 2px;
+  font-size: 11px;
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+  user-select: none;
+}
+
+.botToggle input {
+  margin: 0;
+}

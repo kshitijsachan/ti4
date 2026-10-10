@@ -60,12 +60,30 @@ type Props = {
   tradeSignal?: string;
 };
 
-/**
- * The bot's Discord-only welcome post in table talk ("This channel is for typical over the table conversation…
- * you can create private threads off this channel"): channels, threads and bot commands mean nothing here.
- */
-const TALK_INTRO = /^(<@&\d+>\s*)?-\s*table talk channel\b/i;
-const notTalkIntro = (m: Message) => !(m.author?.bot && TALK_INTRO.test(m.content ?? ""));
+/** People's chat only: the bot's posts here are Discord onboarding (channel intros, rules dumps, house-rule buttons). */
+const peopleOnly = (m: Message) => !m.author?.bot;
+const anything = () => true;
+
+/** Table talk reads like a game chat: who said what. Bot posts stay one small toggle away. */
+function TableTalk({ channelId }: { channelId: string }) {
+  const [showBot, setShowBot] = useState(false);
+  return (
+    <div className={classes.column}>
+      <label className={classes.botToggle}>
+        <input type="checkbox" checked={showBot} onChange={(e) => setShowBot(e.currentTarget.checked)} />
+        Show bot posts
+      </label>
+      <ChannelView
+        channelId={channelId}
+        header={false}
+        composerPlaceholder="Message the table"
+        filter={showBot ? anything : peopleOnly}
+        empty={<Empty>Say hello to the table.</Empty>}
+        className={classes.fill}
+      />
+    </div>
+  );
+}
 
 /** The side drawers: everything off the table that you only look at sometimes. */
 export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, tradeSignal }: Props) {
@@ -85,13 +103,7 @@ export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, t
         return <LogSlot gameName={game.name} variant="full" defaultView="phases" />;
       case "talk":
         return game.tableTalk ? (
-          <ChannelView
-            channelId={game.tableTalk.id}
-            header={false}
-            filter={notTalkIntro}
-            empty={<Empty>Say hello to the table.</Empty>}
-            className={classes.fill}
-          />
+          <TableTalk channelId={game.tableTalk.id} />
         ) : (
           <Empty>This game has no table-talk channel.</Empty>
         );
