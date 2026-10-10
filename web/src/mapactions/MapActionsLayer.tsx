@@ -22,7 +22,8 @@ import { activationOf, type Activation } from "./eligibility";
 import { activateSystem as driveActivation } from "./activate";
 import { buttonsOf, pressButton } from "./driver";
 import { promptHasMoves, unitsAt, type UnitGroup } from "./movement";
-import { distancesTo } from "./range";
+import { distancesTo, maxBoost } from "./range";
+import { useMoveBonuses } from "./bonuses";
 import { landingOffer } from "./landing";
 import { useMapActions } from "./store";
 import {
@@ -195,10 +196,24 @@ export function MapActionsLayer({
   const distances = useMemo(
     () =>
       target && me && moving
-        ? distancesTo(target, tiles, me.faction, me.techs ?? [], web)
+        ? distancesTo(target, tiles, me.faction, me.techs ?? [], web, me.relics ?? [])
         : new Map<string, number>(),
     [target, me, moving, tiles, web],
   );
+  const moveBonus = useMoveBonuses({
+    gameName,
+    me,
+    web,
+    conn,
+    prompt: moving ? prompt : null,
+    promptMessage: step.kind === "move" ? step.prompt.message : undefined,
+    tiles,
+    target,
+    groups,
+    distances,
+    moving,
+  });
+  const bonuses = moveBonus.active;
 
   /* The popup steps aside while the map answers the move / land prompt. */
   useEffect(() => {
@@ -422,7 +437,7 @@ export function MapActionsLayer({
         d === undefined
           ? "no clear path by my count"
           : fastest
-            ? `${d} away · fastest ship moves ${fastest}`
+            ? `${d} away · fastest ship moves ${fastest}${maxBoost(bonuses) ? ` (+${maxBoost(bonuses)} with ${bonuses.map((b) => b.name).join(", ")})` : ""}`
             : `${d} away · no ships here: these need a carrier passing through`;
       return {
         text: `${label} — pick ships to move from here (${reach})`,
@@ -521,6 +536,7 @@ export function MapActionsLayer({
             distances={distances}
             plan={plan}
             color={me?.color}
+            bonuses={bonuses}
           />
         )}
         {chip && chipRect && (
@@ -603,7 +619,9 @@ export function MapActionsLayer({
             rect={rects[picker]}
             frame={frameRef}
             groups={groups[picker]}
-            distance={distances.get(picker)}
+            allGroups={groups}
+            distances={distances}
+            bonuses={bonuses}
             color={me.color}
             onClose={() => setPicker(null)}
           />
@@ -636,6 +654,9 @@ export function MapActionsLayer({
                   promptId && useMapActions.getState().handBack(promptId)
                 }
                 hasOrigins={Object.keys(groups).length > 0}
+                distances={distances}
+                bonuses={bonuses}
+                moveBonus={moveBonus}
               />
             ) : landing && target && prompt && offer && me ? (
               <LandingPanel

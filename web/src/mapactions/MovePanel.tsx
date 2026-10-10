@@ -19,6 +19,8 @@ import {
   type UnitGroup,
 } from "./movement";
 import { useMapActions } from "./store";
+import { maxBoost, outOfReach, reachOf, reachText, type MoveBonus } from "./range";
+import type { useMoveBonuses } from "./bonuses";
 import { obstaclesIn, placeBeside, type Rect } from "./useTileRects";
 import classes from "./MapActions.module.css";
 
@@ -37,6 +39,7 @@ export function MoveArt({
   distances,
   plan,
   color,
+  bonuses = [],
 }: {
   rects: Record<string, Rect>;
   target: string;
@@ -44,7 +47,9 @@ export function MoveArt({
   distances: Map<string, number>;
   plan: MovePlan;
   color?: string;
+  bonuses?: MoveBonus[];
 }) {
+  const extra = maxBoost(bonuses);
   const t = rects[target];
   const incoming = new Map<string, number>();
   for (const [origin, picks] of Object.entries(plan)) {
@@ -58,7 +63,7 @@ export function MoveArt({
     const ships = (groups[origin] ?? []).filter((g) => !g.cargo);
     /* Fighters and ground forces ride in ships from elsewhere: only the distance matters for them. */
     if (!ships.length) return d !== undefined;
-    return d !== undefined && Math.max(...ships.map((g) => g.move)) >= d;
+    return d !== undefined && Math.max(...ships.map((g) => g.move)) + extra >= d;
   };
   return (
     <>
@@ -160,7 +165,9 @@ export function UnitPicker({
   rect,
   frame,
   groups,
-  distance,
+  allGroups,
+  distances,
+  bonuses,
   color,
   onClose,
 }: {
@@ -169,10 +176,14 @@ export function UnitPicker({
   rect: Rect;
   frame: RefObject<HTMLDivElement | null>;
   groups: UnitGroup[];
-  distance?: number;
+  /** Every origin's units, to count the one-ship bonuses planned elsewhere. */
+  allGroups: Record<string, UnitGroup[]>;
+  distances: Map<string, number>;
+  bonuses: MoveBonus[];
   color: string;
   onClose: () => void;
 }) {
+  const distance = distances.get(origin);
   const plan = useMapActions((s) => s.plan);
   const setPlan = useMapActions((s) => s.setPlan);
   const ref = useRef<HTMLDivElement>(null);
@@ -197,18 +208,28 @@ export function UnitPicker({
   }, [rect, frame, groups.length]);
 
   const picks = plan[origin] ?? {};
+  const reach = (g: UnitGroup) => reachOf(g, origin, plan, allGroups, distances, bonuses);
+  /* Ships the map counts out of reach cannot be added; a one-ship bonus covers only as many as it allows. */
+  const cap = (g: UnitGroup) => {
+    const r = reach(g);
+    if (r.kind === "ok") return g.total;
+    if (r.kind === "bonus") return Math.min(g.total, r.left);
+    return picks[groupKey(g)] ?? 0;
+  };
   const set = (g: UnitGroup, n: number) =>
     setPlan((p) => ({
       ...p,
       [origin]: {
         ...(p[origin] ?? {}),
-        [groupKey(g)]: Math.max(0, Math.min(g.total, n)),
+        [groupKey(g)]: Math.max(0, Math.min(cap(g), n)),
       },
     }));
   const allShips = () =>
     setPlan((p) => ({
       ...p,
-      [origin]: Object.fromEntries(groups.map((g) => [groupKey(g), g.total])),
+      [origin]: Object.fromEntries(
+        groups.map((g) => [groupKey(g), reach(g).kind === "ok" ? g.total : (p[origin]?.[groupKey(g)] ?? 0)]),
+      ),
     }));
   const none = () => setPlan((p) => ({ ...p, [origin]: {} }));
   const local = summarize({ [origin]: picks }, { [origin]: groups });
@@ -244,7 +265,9 @@ export function UnitPicker({
       </div>
       {groups.map((g) => {
         const n = picks[groupKey(g)] ?? 0;
-        const slow = !g.cargo && distance !== undefined && g.move < distance;
+        const r = reach(g);
+        const slow = r.kind === "far";
+        const full = n >= cap(g);
         const damaged = g.states[1] + g.states[3];
         return (
           <div
@@ -256,16 +279,14 @@ export function UnitPicker({
               alt=""
               className={classes.unitImg}
               onClick={() => set(g, n + 1)}
-              title="Add one"
+              title={full && n < g.total ? reachText(r) : "Add one"}
             />
             <span className={classes.unitName}>
               {g.name}
               <span className={cx(classes.unitSub, slow && classes.slow)}>
                 {[
                   holderLabel(g.holder),
-                  g.cargo
-                    ? "needs capacity"
-                    : `move ${g.move}${slow ? " — too slow?" : ""}`,
+                  g.cargo ? "needs capacity" : reachText(r),
                   g.capacity ? `capacity ${g.capacity}` : "",
                   damaged ? `${damaged} damaged` : "",
                 ]
@@ -289,7 +310,8 @@ export function UnitPicker({
               type="button"
               className={cx(classes.iconButton, classes.step)}
               onClick={() => set(g, n + 1)}
-              disabled={n >= g.total}
+              disabled={full}
+              title={full && n < g.total ? reachText(r) : undefined}
               aria-label={`One more ${g.name}`}
             >
               <IconPlus size={12} />
@@ -340,6 +362,9 @@ type PanelProps = {
   setBusy: (text: string | null) => void;
   onHandBack: () => void;
   hasOrigins: boolean;
+  distances: Map<string, number>;
+  bonuses: MoveBonus[];
+  moveBonus: ReturnType<typeof useMoveBonuses>;
 };
 
 /** The movement step's bar: what moves in, the capacity it needs, and one Move. */
@@ -358,10 +383,14 @@ export function MovePanel({
   setBusy,
   onHandBack,
   hasOrigins,
+  distances,
+  bonuses,
+  moveBonus,
 }: PanelProps) {
   const plan = useMapActions((s) => s.plan);
   const resetPlans = useMapActions((s) => s.resetPlans);
   const sum = summarize(plan, groups);
+  const far = outOfReach(plan, groups, distances, bonuses);
   const over = sum.cargo > sum.capacity;
   const fill = sum.capacity
     ? Math.min(100, (sum.cargo / sum.capacity) * 100)
@@ -370,15 +399,17 @@ export function MovePanel({
       : 0;
 
   const move = () =>
-    run(() =>
-      commitMove(target, plan, groups, color, {
+    run(async () => {
+      await moveBonus.runChosen(setBusy);
+      await commitMove(target, plan, groups, color, {
         gameName,
         conn,
         scope,
         prompt,
         onProgress: setBusy,
-      }).then(() => resetPlans()),
-    );
+      });
+      resetPlans();
+    });
 
   return (
     <>
@@ -417,6 +448,31 @@ export function MovePanel({
           </span>
         </div>
       )}
+      {(moveBonus.offers.length > 0 || moveBonus.notes.length > 0) && (
+        <div className={classes.bonuses} aria-label="Move bonuses">
+          {moveBonus.offers.map((o) => (
+            <label key={o.id} className={classes.bonus} title={o.note}>
+              <input
+                type="checkbox"
+                checked={moveBonus.chosen.includes(o.id)}
+                onChange={() => moveBonus.toggle(o.id)}
+                disabled={!!busy}
+              />
+              <span>{o.label}</span>
+            </label>
+          ))}
+          {moveBonus.notes.map((n) => (
+            <div key={n} className={classes.muted}>
+              {n}
+            </div>
+          ))}
+        </div>
+      )}
+      {far.length > 0 && !busy && (
+        <div className={cx(classes.barText, classes.slow)}>
+          Out of reach by the map's count: {far.join("; ")}. The game will refuse it unless an ability covers it.
+        </div>
+      )}
       {error && <div className={classes.error}>{error}</div>}
       <div className={classes.barActions}>
         <button
@@ -427,7 +483,7 @@ export function MovePanel({
         >
           {sum.empty
             ? "Continue without moving"
-            : over
+            : over || far.length
               ? "Move anyway"
               : "Move"}
         </button>

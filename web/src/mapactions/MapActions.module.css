@@ -530,3 +530,24 @@
 .nowrap {
   white-space: nowrap;
 }
+
+/* Move bonuses on the movement bar: optional ones as checkboxes, automatic ones as notes. */
+.bonuses {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.bonus {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--play-ink-body);
+  cursor: pointer;
+}
+
+.bonus input {
+  accent-color: var(--play-green);
+}
