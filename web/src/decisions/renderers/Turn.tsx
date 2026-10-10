@@ -62,14 +62,33 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
   return null;
 }
 
+/**
+ * What lets me take another action this turn, from the game's own data: Fleet Logistics (2 actions a turn), Master
+ * Plan in hand, Suffi An (Keleres commander, unlocked), the Minister of War law elected to me. The bot never checks.
+ */
+function extraActionSources(data: DecisionData): string[] {
+  const me = data.me;
+  if (!me) return [];
+  const out: string[] = [];
+  if (me.techs?.includes("fl")) out.push("Fleet Logistics");
+  if ((data.hand ?? []).some((a) => /^master_plan\d*$/.test(a))) out.push("Master Plan");
+  if (me.leaders?.some((l) => l.id === "kelerescommander" && !l.locked)) out.push("Suffi An");
+  if (data.web?.lawsInPlay?.some((l) => l.id === "minister_war" && l.electedFaction === me.faction)) out.push("Minister of War");
+  return out;
+}
+
 /** My turn: the handful of actions TI4 allows, as a few quiet buttons; everything else folded away. */
 export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
   const actions = d.choices.map((c) => actionOf(c, data)).filter((a): a is Action => !!a);
   const used = new Set(actions.map((a) => a.choice.key));
-  /* One action per turn: "Do another action" is only for abilities that grant one, so it stays a quiet extra. */
+  /* One action per turn: "another action" only when something I hold grants one, and named after it; else gone. */
+  const extra = extraActionSources(data);
   const rest = d.choices
     .filter((c) => !used.has(c.key))
-    .map((c) => (/^(doAnotherAction|confirmSecondAction)/.test(baseId(c.customId)) ? { ...c, label: "I have an ability that grants another action", rank: "more" as const } : c));
+    .filter((c) => !/^(doAnotherAction|confirmSecondAction)/.test(baseId(c.customId)) || extra.length > 0)
+    .map((c) =>
+      /^(doAnotherAction|confirmSecondAction)/.test(baseId(c.customId)) ? { ...c, label: `${extra.join(" / ")}: take another action`, rank: "more" as const } : c,
+    );
   const me = data.me;
   /* The end-of-turn abilities prompt (End Turn / Do an Expedition / …): its abilities are the point, keep them in view. */
   const endOfTurn = /^(End of turn|Pass —)/.test(d.title);

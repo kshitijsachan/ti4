@@ -226,7 +226,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     return { decisions: queue, offers: offersOf(oldestFirst) };
   }, [prompts, game, users, channels, messages, web, mePlayer, myTurn, phase, conn, movement.active, movement.promptId]);
   if (import.meta.env.DEV) (window as unknown as { __decisions?: unknown }).__decisions = { decisions, offers, prompts };
-  const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));
+  const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction" || d.kind === "turn"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };
   const waiting = useSetupWaiting(gameName);
   if (!decisions.length && !offers.length && setupOpen && waiting && web?.tilePositions.length) {
