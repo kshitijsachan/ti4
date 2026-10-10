@@ -79,6 +79,9 @@ export function setupWaiting(
     const label = who.map((u) => (u.id === meId ? "you" : displayName(state.users[u.id] ?? u)));
     return { text: `Waiting for ${names(label)}…`, me: who.some((u) => u.id === meId) };
   }
+  /* The draft is on: its own screen says whose pick it is. */
+  if (phase.startsWith("setup.draft") || log.some((m) => /^(milty|queueMilyPick|jwds)/i.test(forwardChoices(m).map((c) => baseId(c.customId)).join(" "))))
+    return undefined;
   /* Before the draft: the game's settings (expansion, draft options) wait on whoever created it. */
   for (let i = log.length - 1; i >= Math.max(0, log.length - 30); i--) {
     const m = log[i];

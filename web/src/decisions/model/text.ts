@@ -67,6 +67,7 @@ export function cleanText(content: string, names: Names): string {
   s = s.replace(/<#(\d+)>/g, (_m, id: string) => names.channel(id) ?? "a channel");
   s = s.replace(/(message link is:\s*)?https:\/\/discord\.com\/channels\/[\d/]+\.?/gi, "");
   s = s.replace(/these buttons will work inside the thread\.?/gi, "");
+  s = s.replace(/(?:in|to) your #?cards[- ]info(?:[- ]\S+)?(?: thread)?/gi, "in your hand");
   s = s.replace(/^#{1,3} +(.+)$/gm, "**$1**");
   s = s.replace(/^-# +/gm, "");
   s = s.replace(/\*\*\s*\*\*/g, "");

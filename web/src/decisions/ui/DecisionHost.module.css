@@ -193,8 +193,9 @@
 
 /* Minimised */
 
+/* Status pills sit at the top of the board, clear of the hand tray. */
 .layer:has(.pill) {
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .pill {
@@ -271,13 +272,14 @@
 }
 
 /* "Available now": optional abilities the game does not wait on, a quiet pill above the hand bar. */
+/* Top-left of the board: clear of the decision card (right) and the open hand tray (bottom). */
 .offers {
   position: absolute;
-  right: calc(12px + var(--decision-right-inset, 0px));
-  bottom: 56px;
+  left: 12px;
+  top: 100px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: column-reverse;
+  align-items: flex-start;
   gap: 6px;
 }
 

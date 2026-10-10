@@ -138,7 +138,8 @@ export function GainTokensBody({ d, data, onPress, pendingKey }: RendererProps) 
   const done = d.choices.find((c) => DONE.test(baseId(c.customId)) || /^done/i.test(c.label));
   const rest = d.choices.filter((c) => !POOLS.some((p) => p.id.test(c.customId ?? "")) && c !== done);
   /* Gained since the prompt: the game's pools now against the snapshot the bot wrote into it. */
-  const gained =
+  const net = d.text.match(/net gain of:?\s*(-?\d+)/i)?.[1];
+  const gained = net !== undefined ? Number(net) :
     fromText && data.me?.tacticalCC !== undefined
       ? data.me.tacticalCC + data.me.fleetCC + data.me.strategicCC - (Number(fromText[1]) + Number(fromText[2]) + Number(fromText[3]))
       : undefined;

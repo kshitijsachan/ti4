@@ -751,7 +751,7 @@ function secretHint(ctx: ClassifyContext): string | undefined {
   for (let i = data.ids.length - 1; i >= Math.max(0, data.ids.length - 40); i--) {
     const m = data.byId[data.ids[i]];
     if (!m?.author.bot) continue;
-    if (/does not believe that you can score/i.test(m.content)) return "The game does not think you meet any of your secret objectives.";
+    if (/does not believe that you can score[^.]*secret/i.test(m.content)) return "The game does not think you meet any of your secret objectives.";
     const able = m.content.match(/capable of scoring the following secret objectives?:\s*([\s\S]*)$/i)?.[1];
     if (!able) continue;
     const names = able
