@@ -268,6 +268,20 @@ export class Rest {
     });
     this.on("GET", "/guilds/:g/emojis", ({ res }) => sendJson(res, 200, []));
     this.on("GET", "/guilds/:g/stickers", ({ res }) => sendJson(res, 200, []));
+    // The bot looks up Discord's built-in stickers (legendary planet art) by id; answer with a standard sticker so
+    // those flows don't crash. Its image URL points at Discord's CDN, which the web client doesn't need.
+    this.on("GET", "/stickers/:id", ({ res, params }) =>
+      sendJson(res, 200, {
+        id: params[0],
+        name: "sticker",
+        description: "",
+        tags: "",
+        type: 1,
+        format_type: 1,
+        pack_id: "0",
+        sort_value: 0,
+      }),
+    );
     this.on("GET", "/guilds/:g/invites", ({ res }) => sendJson(res, 200, []));
     this.on("GET", "/guilds/:g/webhooks", ({ res }) => sendJson(res, 200, Object.values(s().webhooks ?? {}).map((w) => this.webhookJson(w))));
     this.on("GET", "/guilds/:g/scheduled-events", ({ res }) => sendJson(res, 200, []));
