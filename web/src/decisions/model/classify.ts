@@ -2,6 +2,7 @@ import type { Message, PlayState } from "@/discord";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { getStrategyCardByInitiative } from "@/entities/lookup/strategyCards";
 import { agendas } from "@/entities/data/agendas";
+import { explorations } from "@/entities/data/explorations";
 import { actionCards } from "@/entities/data/actionCards";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import type { PendingPrompt } from "../detect/pending";
@@ -612,6 +613,8 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       text: "Pick the card, technology, leader or ability whose ACTION you use. “Generic” is for anything not listed (you then resolve it by hand).",
     };
   }
+  const exploreCard = m.content.match(/please resolve _([^_]+)_/i)?.[1];
+  if (exploreCard && has(choices, /^decline_explore$/)) return exploreResolution(base, exploreCard, choices, m.content, ctx);
   if (has(choices, /^rollFracture_/)) {
     const spawn = choices.some((c) => /spawn/i.test(c.label));
     return {
@@ -808,6 +811,44 @@ function lastTechAcquired(ctx: ClassifyContext, beforeId: string): string | unde
     }
   }
   return best?.name;
+}
+
+/** "If you have at least 1 mech on this planet, or if you remove 1 infantry …, gain 1 command token." → its parts. */
+const HAZARD = /^If you have at least 1 mech on this planet, or if you remove 1 infantry from this planet, (.+?)\.?$/i;
+
+/**
+ * An explore card the bot asks me to resolve ("Please resolve Volatile Fuel Source"): title with its effect, the card
+ * text, options labelled by what they do, and, when none is open to me, why — with one button that moves on.
+ */
+function exploreResolution(base: Decision, name: string, choices: Choice[], content: string, ctx: ClassifyContext): Decision {
+  const card = explorations.find((e) => e.name.toLowerCase() === name.toLowerCase());
+  const effect = card?.text.match(HAZARD)?.[1] ?? card?.text.split(/,\s*/).pop()?.replace(/\.$/, "");
+  const planetFromLabel = choices.map((c) => c.label.match(/\b(?:on|there|ready)\s+([A-Z][\w' ]+?)(?:\s+(?:with|by)\b|$)/i)?.[1]).find(Boolean);
+  const planet = planetFromLabel ?? cleanLabel(content).match(/\bon ([A-Z][\w' ]+?)\s*(?:\(|\.|$)/m)?.[1] ?? "this planet";
+  const options = choices.filter((c) => /^resolve\w*(Mech|Inf)|^resolve\w+_(Mech|Inf)/i.test(baseId(c.customId)));
+  const hazard = !!card && HAZARD.test(card.text);
+  const relabel = (c: Choice): Choice => {
+    const id = baseId(c.customId);
+    if (id === "decline_explore") return { ...c, label: options.length ? "Decline" : "OK — continue", style: options.length ? 2 : 3 };
+    if (/mech/i.test(id)) return { ...c, label: `Use your mech on ${planet} → ${effect ?? "resolve"}` };
+    if (/inf/i.test(id)) return { ...c, label: `Remove 1 infantry from ${planet} → ${effect ?? "resolve"}` };
+    return c;
+  };
+  const why =
+    !options.length && hazard
+      ? `You need a mech on ${planet}, or an infantry there to remove — you have neither, so this card does nothing.`
+      : !options.length
+        ? "None of its options is open to you right now, so this card does nothing."
+        : "";
+  return {
+    ...base,
+    kind: "tactical",
+    eyebrow: card ? `${card.type} exploration` : "Exploration",
+    title: effect ? `${card?.name ?? name}: ${effect}` : (card?.name ?? name),
+    text: [card?.text, why].filter(Boolean).join("\n\n"),
+    choices: choices.map(relabel),
+    position: ctx.web?.gameState?.activeSystem ?? undefined,
+  };
 }
 
 /** Friendly copy for the table-wide setup buttons the bot addresses to nobody. */
