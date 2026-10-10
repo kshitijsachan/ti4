@@ -1,0 +1,209 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.done {
+  margin: 0;
+  font-size: 13px;
+  color: var(--play-ink-bright);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.objective {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--play-hairline);
+  border-left-width: 3px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Signal colours: stage I orange, stage II blue, secret red. */
+.stage1 {
+  border-left-color: rgb(var(--gd-orange));
+}
+
+.stage2 {
+  border-left-color: rgb(var(--gd-blue));
+}
+
+.secret {
+  border-left-color: rgb(var(--gd-red));
+}
+
+.met {
+  border-color: rgba(var(--play-green), 0.45);
+  border-left-color: rgb(var(--play-green));
+  background: rgba(var(--play-green), 0.05);
+}
+
+.objMain {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.objHead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.objName {
+  color: var(--play-ink-bright);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vp {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.progress {
+  margin-left: auto;
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.progressMet {
+  color: rgb(var(--play-green));
+  font-weight: 600;
+}
+
+.objText {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--play-ink);
+}
+
+.scoredBy {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.scoreBtn {
+  flex: none;
+  min-width: 64px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--play-border);
+  color: var(--play-ink-bright);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scoreBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.scoreBtnMet {
+  border-color: rgba(var(--play-green), 0.6);
+  background: rgba(var(--play-green), 0.16);
+}
+
+.scoreBtnMet:hover:not(:disabled) {
+  background: rgba(var(--play-green), 0.26);
+}
+
+.scoreBtn:disabled {
+  opacity: 0.5;
+}
+
+.chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--play-hairline);
+  color: var(--play-ink-muted);
+}
+
+.chip_scored {
+  color: rgb(var(--play-green));
+  border-color: rgba(var(--play-green), 0.4);
+}
+
+.chip_queued {
+  color: rgb(var(--play-yellow));
+  border-color: rgba(var(--play-yellow), 0.4);
+}
+
+.chip_open {
+  color: rgb(var(--play-yellow));
+}
+
+.chip_none {
+  color: var(--play-ink-muted);
+}
+
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--play-hairline);
+}
+
+.tableLabel {
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.tableList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.tableList li {
+  display: grid;
+  grid-template-columns: 14px minmax(70px, auto) 1fr 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.tableName {
+  color: var(--play-ink);
+}
+
+.tableState {
+  color: var(--play-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

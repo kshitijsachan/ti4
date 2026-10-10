@@ -6,6 +6,7 @@ import type { PendingPrompt } from "../detect/pending";
 import type { GameChannels } from "../detect/games";
 import { baseId, choicesOf, cleanLabel, type Choice } from "./controls";
 import { cleanText, firstLine, namesFrom } from "./text";
+import { isScoringSummary, myScoringLine, scoringSummary, type ScoringLine } from "./scoring";
 
 export type DecisionKind =
   | "tech"
@@ -46,6 +47,16 @@ export type CombatInfo = {
   planet?: string;
 };
 
+export type ScoringInfo = {
+  /** Picking which secret objective to score (the bot's follow-up to "Score A Secret Objective"). */
+  secretPick?: boolean;
+  /** Every player's answers so far, from the bot's live scoring summary. */
+  lines: ScoringLine[];
+  mine?: ScoringLine;
+  /** What the bot told me in my hand thread about my secret objectives this status phase. */
+  soHint?: string;
+};
+
 export type TradeSide = { who: string; items: string[] };
 export type TradeInfo = { from: string; sides: TradeSide[] };
 
@@ -63,6 +74,7 @@ export type Decision = {
   agenda?: AgendaInfo;
   combat?: CombatInfo;
   trade?: TradeInfo;
+  scoring?: ScoringInfo;
   /** System the prompt is about, for the map highlight. */
   position?: string;
   /** Prompts the bot posted together with this one that belong to it (my strategy card's follow-up steps). */
@@ -417,13 +429,53 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       position: ring.length ? undefined : active,
     };
   }
-  if (has(choices, ID.scoring)) {
-    return { ...base, kind: "scoring", eyebrow: "", title: "Score objectives" };
+  if (has(choices, /^so_score_hand_/)) {
+    return {
+      ...base,
+      kind: "scoring",
+      eyebrow: "Status phase · only you see this",
+      title: "Score which secret objective?",
+      text: "Score one secret objective you meet now. Scoring one you do not meet is against the rules — nothing checks it for you.",
+      scoring: { secretPick: true, lines: [], soHint: secretHint(ctx) },
+    };
+  }
+  if (has(choices, ID.scoring) || isScoringSummary(m)) {
+    const lines = scoringSummary(m.content);
+    const user = ctx.me ? ctx.state.users[ctx.me.discordId] : undefined;
+    const mine = myScoringLine(lines, [ctx.me?.userName, ctx.me?.displayName, user?.global_name ?? undefined, user?.username]);
+    return {
+      ...base,
+      kind: "scoring",
+      eyebrow: `Status phase${ctx.web?.gameRound ? ` · round ${ctx.web.gameRound}` : ""}`,
+      title: "Score objectives",
+      text: "",
+      scoring: { lines, mine, soHint: secretHint(ctx) },
+    };
   }
   if (has(choices, ID.status)) {
     return { ...base, kind: "status", eyebrow: "", title: "Status phase — tidy up" };
   }
   return { ...base, text: generic.rest };
+}
+
+/** The bot's newest word in my hand thread on whether I can score a secret objective this status phase. */
+function secretHint(ctx: ClassifyContext): string | undefined {
+  const data = ctx.game.hand ? ctx.state.messages[ctx.game.hand.id] : undefined;
+  if (!data) return undefined;
+  for (let i = data.ids.length - 1; i >= Math.max(0, data.ids.length - 40); i--) {
+    const m = data.byId[data.ids[i]];
+    if (!m?.author.bot) continue;
+    if (/does not believe that you can score/i.test(m.content)) return "The game does not think you meet any of your secret objectives.";
+    const able = m.content.match(/capable of scoring the following secret objectives?:\s*([\s\S]*)$/i)?.[1];
+    if (!able) continue;
+    const names = able
+      .split("\n")
+      .map((l) => l.replace(/<a?:\w+:\d+>/g, "").replace(/[_*]/g, "").replace(/\(\d+\)/, "").trim())
+      .filter(Boolean)
+      .map((l) => l.split(/\s+[-–—:]\s+/)[0]);
+    return names.length ? `The game thinks you meet: ${names.join(", ")}.` : undefined;
+  }
+  return undefined;
 }
 
 /** Friendly copy for the table-wide setup buttons the bot addresses to nobody. */

@@ -16,6 +16,7 @@ import {
   isTableSetupPrompt,
   needsAnswer,
 } from "../model/controls";
+import { isScoringSummary, scoringOpenFor } from "../model/scoring";
 import { findGame, type GameChannels } from "./games";
 
 /** Why a prompt is considered mine. */
@@ -237,6 +238,16 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
       if (answered && presses > 0 && presses < pressesNeeded(m)) answered = false;
       items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale, presses });
       return;
+    }
+    if (opts.roleCalls && isScoringSummary(m)) {
+      /* Status-phase scoring has two halves (public, secret): it waits on me until the bot's summary has both. */
+      const meUser = state.users[me.id] ?? me;
+      const open = scoringOpenFor(m, [meUser.global_name ?? undefined, meUser.username]);
+      if (open === false) return;
+      if (open) {
+        items.push({ message: m, channelId, where, reason: "role" });
+        return;
+      }
     }
     if (answered) return;
 
