@@ -231,6 +231,8 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
   const enemyRows = sideRows(tile, enemy, ground, combat?.planet);
   const holderNames = useMemo(() => Object.fromEntries(Object.keys(tile?.planets ?? {}).map((p) => [p, planetName(p)])), [tile]);
 
+  /* The other side is wiped out: no more rolling or retreating, only hits still owed. */
+  const enemyGone = !!tile && enemyRows.length === 0;
   const sides = (
     <div className={classes.sides}>
       <Side player={me} rows={myRows} fallback="You" />
@@ -300,7 +302,7 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
       />
     );
     pickPrompt.choices.forEach((c) => covered.add(c.key));
-  } else if (auto && hitKind && (hitRound <= myRound || !roll || !/^autoAssign(Space|Ground)Hits_/.test(baseId(auto.c.customId)))) {
+  } else if (auto && hitKind && (hitRound <= myRound || !roll || enemyGone || !/^autoAssign(Space|Ground)Hits_/.test(baseId(auto.c.customId)))) {
     main = <AssignHits fromRound={hitRound < round ? hitRound : undefined} auto={auto} kind={hitKind} all={all} data={data} tile={tile} pos={pos} holderNames={holderNames} runFlow={runFlow} />;
     auto.on.choices.forEach((c) => covered.add(c.key));
   } else if (roll && !rolledThis) {
@@ -346,13 +348,13 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
   /* After a round: retreat now (if announced) or roll the next one. */
   const retreatTest = (id: string) => /^retreat_[^_]+$/.test(id);
   const retreatNow = !retreat ? (find(all, retreatTest) ?? fromThread(retreatTest)) : undefined;
-  const nextRoll = !retreat && !pickPrompt && !(auto && hitKind) && rolledThis && roll && theirRound >= myRound ? roll : undefined;
+  const nextRoll = !enemyGone && !retreat && !pickPrompt && !(auto && hitKind) && rolledThis && roll && theirRound >= myRound ? roll : undefined;
   const actions: Choice[] = [];
   if (nextRoll) {
     actions.push({ ...nextRoll.c, key: `next:${nextRoll.c.key}`, label: `Roll round ${round + 1}`, style: 3, rank: "primary" });
     cover(nextRoll);
   }
-  if (retreatNow && log.retreatAnnounced) {
+  if (retreatNow && log.retreatAnnounced && !enemyGone) {
     actions.push({ ...retreatNow.c, key: `retreat:${retreatNow.c.key}`, label: "Retreat now", style: 1, rank: "primary" });
     cover(retreatNow);
   }
