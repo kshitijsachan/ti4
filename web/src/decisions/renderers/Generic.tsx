@@ -104,6 +104,7 @@ function UnitMoveRows({ choices, data, onPress, pendingKey }: { choices: Choice[
               pending={pendingKey === c.key}
               busy={!!pendingKey}
               compact
+              ariaLabel={`${/_reverse$/.test(c.customId ?? "") ? "Take back" : "Move"} ${baseId(c.customId).match(UNIT_MOVE)?.[2] ?? ""} ${UNIT_NAMES[unit] ?? unit}${/damaged/i.test(c.label) ? " (damaged)" : ""}`}
             />
           ))}
         </div>
@@ -114,7 +115,7 @@ function UnitMoveRows({ choices, data, onPress, pendingKey }: { choices: Choice[
 
 /** "moved 1 Carrier\nmoved 1 Fighter" → "1 Carrier, 1 Fighter". */
 function movedSummary(text: string) {
-  const parts = [...text.matchAll(/moved (\d+ [A-Za-z ]+?)(?=\n|$|>)/g)].map((m) => m[1].trim());
+  const parts = [...text.matchAll(/moved (\d+ [A-Za-z ]+?)(?= from\b|\n|$|>)/g)].map((m) => m[1].trim());
   return parts.length ? parts.join(", ") : "nothing yet";
 }
 
@@ -134,6 +135,7 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
   const moved = movingFrom && /\bmoved\b/i.test(d.text) ? d.text.replace(/^\*\*Tactical Action in system[^\n]*\n*/i, "") : "";
   if (movingFrom) text = moved ? "" : "Pick where your ships come from.";
   if (unitMoves.length) text = d.text.match(/from system [^\n(]+/i)?.[0]?.trim() ?? "";
+  if (d.title === "Finish the tactical action") text = "Nothing else to do in this system. Conclude the action to end it.";
   return (
     <div className={classes.stack}>
       {active && d.position && !choosingSystem && (

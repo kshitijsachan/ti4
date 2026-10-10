@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Loader, UnstyledButton } from "@mantine/core";
-import { IconCards, IconFlag, IconPlayerSkipForward, IconRepeat, IconRocket } from "@tabler/icons-react";
+import { IconCards, IconFlag, IconPlayerSkipForward, IconRocket } from "@tabler/icons-react";
 import cx from "clsx";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
@@ -56,9 +56,6 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
       tone: "stop",
     };
   }
-  if (id.startsWith("confirmSecondAction")) {
-    return { choice: c, title: "Take another action", sub: "Use your ability to act again", icon: <IconRepeat size={18} stroke={1.6} />, tone: "go" };
-  }
   return null;
 }
 
@@ -69,7 +66,7 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
   /* One action per turn: "Do another action" is only for abilities that grant one, so it stays a quiet extra. */
   const rest = d.choices
     .filter((c) => !used.has(c.key))
-    .map((c) => (/^doAnotherAction/.test(baseId(c.customId)) ? { ...c, label: "I have an ability that grants another action", rank: "more" as const } : c));
+    .map((c) => (/^(doAnotherAction|confirmSecondAction)/.test(baseId(c.customId)) ? { ...c, label: "I have an ability that grants another action", rank: "more" as const } : c));
   const me = data.me;
   /* The end-of-turn abilities prompt (End Turn / Do an Expedition / …): its abilities are the point, keep them in view. */
   const endOfTurn = /^End of turn/.test(d.title);
@@ -103,7 +100,7 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
         channelId={d.prompt.channelId}
         rankOf={(c) => {
           if (c.rank === "undo") return c.rank;
-          if (/^doAnotherAction/.test(baseId(c.customId))) return "more";
+          if (/^(doAnotherAction|confirmSecondAction)/.test(baseId(c.customId))) return "more";
           return endOfTurn && c.rank !== "more" ? "secondary" : "more";
         }}
       />

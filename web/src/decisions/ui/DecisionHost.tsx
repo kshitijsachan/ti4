@@ -181,6 +181,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     }
     return { decisions: queue, offers: offersOf(oldestFirst) };
   }, [prompts, game, users, channels, messages, web, mePlayer, myTurn, phase, conn]);
+  if (import.meta.env.DEV) (window as unknown as { __decisions?: unknown }).__decisions = { decisions, offers, prompts };
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };
   const waiting = useSetupWaiting(gameName);

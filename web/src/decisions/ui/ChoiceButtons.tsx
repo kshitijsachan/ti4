@@ -43,8 +43,11 @@ export function ChoiceButton({
   compact,
   emphasis,
   onHover,
+  ariaLabel,
 }: {
   choice: Choice;
+  /** Spoken name when the visible label is terse ("+1"). */
+  ariaLabel?: string;
   onPress: PressFn;
   pending: boolean;
   busy: boolean;
@@ -63,6 +66,7 @@ export function ChoiceButton({
       disabled={choice.disabled || busy}
       data-pending={pending || undefined}
       aria-busy={pending}
+      aria-label={ariaLabel}
       onClick={() => onPress(choice)}
       onMouseEnter={() => onHover?.(choice)}
       onMouseLeave={() => onHover?.(null)}

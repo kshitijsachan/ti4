@@ -99,6 +99,8 @@ export function choicesOf(m: Message): Choice[] {
 function pushControl(c: Component, out: Choice[]) {
   if (c.type === 2) {
     if (c.style === 6) return;
+    /* Links to asyncti4.com's own UI ("Move on Map (Desktop Only, BETA)") lead off this site. */
+    if (c.style === 5 && /asyncti4\.com/i.test(c.url ?? "")) return;
     const label = cleanLabel(c.label) || c.emoji?.name || "";
     const kind = c.style === 5 ? "link" : "button";
     out.push({

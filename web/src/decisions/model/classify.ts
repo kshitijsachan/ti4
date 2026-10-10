@@ -303,6 +303,10 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       optional: true,
     };
   }
+  if (/you can change your mind|declined to queue an? "?(when|after)/i.test(m.content) && choices.length <= 2) {
+    /* "You have declined to queue a when. You can change your mind with this button." — a take-back, not a question. */
+    return { ...base, eyebrow: "Optional", title: "Changed your mind?", text: generic.rest || text, optional: true };
+  }
   if (has(choices, /^editRoundSummary_/)) {
     return {
       ...base,
@@ -378,7 +382,7 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       ...base,
       kind: "reaction",
       eyebrow: agenda ? `Agenda · ${agenda.name}` : "Agenda phase",
-      title: `Play a ${what} card?`,
+      title: `Play ${after ? "an" : "a"} ${what} card?`,
       text: `${window}${yours}`,
       agenda,
     };
