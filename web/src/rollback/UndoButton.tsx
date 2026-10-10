@@ -49,9 +49,9 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
   };
 
   return (
-    <Popover opened={open} onChange={setOpen} position="bottom-end" shadow="md" width={300} withinPortal>
+    <Popover opened={open} onChange={setOpen} position="bottom-end" shadow="md" width={300} withinPortal zIndex={3500}>
       <Popover.Target>
-        <Tooltip label={tip} disabled={open} withinPortal openDelay={250} multiline maw={280}>
+        <Tooltip label={tip} disabled={open} withinPortal openDelay={250} multiline maw={280} zIndex={3500}>
           <button
             type="button"
             className={`${classes.undoButton} ${className ?? ""}`}

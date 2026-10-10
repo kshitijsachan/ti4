@@ -45,7 +45,7 @@ export function RewindDialog({ request, onCancel, onConfirm }: Props) {
   };
 
     return (
-    <Modal opened={!!request} onClose={close} centered size={400} title="Rewind the game?" classNames={{ content: `ti4play ${classes.dialog}`, title: classes.dialogTitle }}>
+    <Modal opened={!!request} onClose={close} centered size={400} zIndex={3500} title="Rewind the game?" classNames={{ content: `ti4play ${classes.dialog}`, title: classes.dialogTitle }}>
       {request && (
         <div className={classes.dialogBody}>
           <p className={classes.question}>

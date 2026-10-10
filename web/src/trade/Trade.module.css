@@ -138,6 +138,8 @@
 .seat {
   --seat-color: var(--t-ink-muted);
   position: relative;
+  min-width: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 28px 1fr;
   grid-template-rows: auto auto;
@@ -219,6 +221,9 @@
 
 .seatStats {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  min-width: 0;
   gap: 8px;
   font-family: var(--font-data);
   font-size: var(--text-meta);
