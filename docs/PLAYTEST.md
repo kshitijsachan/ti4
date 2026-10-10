@@ -44,3 +44,9 @@ auto-pass timers, "react within N hours" settings, time zones / active hours, en
 private threads, "use /command", "check #channel", onboarding/help posts. Prefer instant, synchronous flows: show
 what's happening now, who we're waiting on, and let reactions resolve immediately. New games should be created with
 the bot's async features off (auto-ping 0 etc.).
+
+## Shared dev server (memory)
+
+All agents work in the same checkout, so ONE vite dev server serves everyone: http://127.0.0.1:5347 (started by the
+main session; do not stop it). Do not start your own vite. If 5347 is down, tell main instead of starting another.
+Maven/bot builds and `npm run build` only under `flock /tmp/ti4-heavy.lock`, one at a time.
