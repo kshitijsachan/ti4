@@ -7,6 +7,7 @@ import { TradePrimaryBody } from "./TradePrimary";
 import { LeadershipBody, isLeadershipStep } from "./Leadership";
 import { DiploSystemBody, isDiploSystemStep } from "./DiploSystem";
 import { ReadyPlanetsBody, isReadyPlanetsStep } from "./ReadyPlanets";
+import { ImperialScoreBody, isImperialScoreStep } from "./ImperialScore";
 
 /**
  * Strategy-card renderers, one per card (primary and follow), registered with `registerStrategyCardRenderer`.
@@ -22,3 +23,4 @@ for (const sc of Object.keys(CARDS).map(Number)) {
 strategyStepRenderers.push((props: RendererProps) => (isLeadershipStep(props.d.choices) ? <LeadershipBody {...props} /> : null));
 strategyStepRenderers.push((props: RendererProps) => (isDiploSystemStep(props.d.choices) ? <DiploSystemBody {...props} /> : null));
 strategyStepRenderers.push((props: RendererProps) => (isReadyPlanetsStep(props.d.choices) ? <ReadyPlanetsBody {...props} /> : null));
+strategyStepRenderers.push((props: RendererProps) => (isImperialScoreStep(props.d.choices) ? <ImperialScoreBody {...props} /> : null));

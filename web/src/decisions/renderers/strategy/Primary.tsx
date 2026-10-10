@@ -5,6 +5,7 @@ import type { RendererProps } from "../types";
 import { cardSpec } from "./cards";
 import { scDefinition } from "../../ui/parts";
 import { CardHeader, playerLabel } from "./shared";
+import type { Objective } from "@/entities/data/types";
 import { useRunner, useRunSequence } from "./runner";
 import classes from "./strategy.module.css";
 
@@ -29,9 +30,9 @@ const PRIMARY: Record<number, PrimaryAction[]> = {
   ],
   7: [{ id: /^acquireATechWithSC(_first)?$/, label: "Research a technology" }],
   8: [
-    { id: /^scoreAnObjective$/, label: "Score a public objective" },
     { id: /^score_imperial$/, label: "Gain 1 point for Mecatol Rex" },
     { id: /^sc_draw_so$/, label: "Draw a secret objective (no Mecatol Rex)" },
+    { id: /^scoreAnObjective$/, label: "Score a public objective" },
   ],
 };
 
@@ -80,6 +81,33 @@ function StepView({ step, props, index }: { step: Decision; props: RendererProps
   );
 }
 
+/** Imperial: the revealed public objectives I have not scored, with how close I am (when the game tracks it). */
+function ObjectiveProgress({ data }: { data: RendererProps["data"] }) {
+  const faction = data.me?.faction;
+  const objs = data.web?.objectives;
+  if (!objs || !faction) return null;
+  const open = [...objs.stage1Objectives, ...objs.stage2Objectives].filter((o: Objective) => o.revealed && !o.scoredFactions.includes(faction));
+  if (!open.length) return <p className={classes.sub}>No revealed public objective is left for you to score.</p>;
+  return (
+    <div className={classes.checklist} aria-label="Public objectives">
+      {open.map((o) => {
+        const progress = o.factionProgress?.[faction];
+        const tracked = o.progressThreshold > 0 && progress !== undefined;
+        const met = tracked && progress >= o.progressThreshold;
+        return (
+          <div key={o.key} className={classes.inlineRow}>
+            <span className={classes.checkName}>{o.name}</span>
+            <span className={met ? classes.done : classes.checkMeta}>
+              {met ? "You meet this" : tracked ? `${progress} of ${o.progressThreshold}` : "check yourself"}
+            </span>
+            <span className={classes.checkMeta}>{o.pointValue} VP</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * My strategy card, just played: the card, its primary in plain words, the holder's buttons as a few clear
  * actions, and any steps the bot posted with it (speaker, agendas) in order. Followers' buttons and the bot's
@@ -108,7 +136,7 @@ export function StrategyPrimaryBody(props: RendererProps) {
       useRunner.getState().set({ error: "This button has no action." });
       return;
     }
-    if (sc === 2) pressed.add(`${d.id}:${baseId(c.customId)}`);
+    if (sc === 2 || sc === 8) pressed.add(`${d.id}:${baseId(c.customId)}`);
     void run(`primary:${d.id}:${c.key}`, [{ channelId: d.prompt.channelId, messageId: d.id, customId: c.customId, label: c.label }]);
   };
   const steps = (d.steps ?? []).filter((s) => s.choices.some((c) => !FOLLOWERS.test(baseId(c.customId)) && c.rank !== "more" && c.rank !== "undo"));
@@ -139,6 +167,7 @@ export function StrategyPrimaryBody(props: RendererProps) {
         </div>
       )}
       {runner.error && <span className={classes.error}>Did not go through: {runner.error}</span>}
+      {sc === 8 && <ObjectiveProgress data={data} />}
       {sc === 8 && <p className={classes.sub}>{mecatol ? "You control Mecatol Rex: the point is yours." : "You do not control Mecatol Rex, so you draw a secret objective instead of the point."}</p>}
     </div>
   );
