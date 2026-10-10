@@ -79,6 +79,9 @@ function useSetupOpen(gameName: string) {
 function combatOver(d: Decision, web?: PlayerDataResponse) {
   const c = d.combat;
   if (!web) return false;
+  /* A combat thread of an earlier round ("…-round-1-system-204-…") is history. */
+  const round = Number(d.prompt.where.match(/round-(\d+)-system/)?.[1] ?? NaN);
+  if (!Number.isNaN(round) && web.gameRound && round < web.gameRound) return true;
   /* Hits are simultaneous: wiping out the other side still leaves me the hits they rolled to assign. */
   if ([d, ...(d.steps ?? [])].some((x) => x.choices.some((ch) => /^(autoAssign\w*Hits|assignHits|assignDamage)_/.test(baseId(ch.customId))))) return false;
   /* No system, or a system the game has no fight in: a leftover (or a space-cannon prompt), nothing to fight. */

@@ -26,7 +26,11 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
      Leadership's pay-then-gain must finish before the next card's follow, which may need the token it buys. */
   const reply = (d: Decision) =>
     !d.setup &&
-    (d.prompt.reason === "ephemeral" || d.prompt.reason === "reply" || d.prompt.reason === "faction" || d.prompt.where === "hand");
+    (d.prompt.reason === "ephemeral" ||
+      d.prompt.reason === "reply" ||
+      d.prompt.reason === "faction" ||
+      /* My hand thread, except the agenda's when/after window the bot opens there ahead of time. */
+      (d.prompt.where === "hand" && d.kind !== "reaction"));
   /* A card that folded in the reply to my press (the secrets list inside the scoring card) is a continuation too. */
   const continuation = (d: Decision) => reply(d) || (d.steps ?? []).some(reply);
   /* A combat comes before anything else in the action (space combat happens before ground forces land). */
@@ -40,7 +44,10 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   /* A step that stays up while what it spawned is answered (the rift roll after moving) comes back after those, newest first. */
   const steps = others.filter((d) => !d.hub);
   const hubs = others.filter((d) => d.hub).reverse();
-  return [...combat, ...trades, ...steps.filter(continuation), ...steps.filter((d) => !continuation(d)), ...hubs, ...turn, ...waiting];
+  /* Status-phase steps before the next agenda's "when / after" window the bot opens early (it waits on them anyway). */
+  const phaseRank = (d: Decision) => (d.kind === "status" || d.kind === "scoring" ? 0 : 1);
+  const owedRest = steps.filter((d) => !continuation(d)).sort((a, b) => phaseRank(a) - phaseRank(b));
+  return [...combat, ...trades, ...steps.filter(continuation), ...owedRest, ...hubs, ...turn, ...waiting];
 }
 
 /**
