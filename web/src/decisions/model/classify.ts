@@ -10,6 +10,7 @@ import type { GameChannels } from "../detect/games";
 import { baseId, choicesOf, cleanLabel, idFaction, type Choice } from "./controls";
 import { cleanText, firstLine, namesFrom } from "./text";
 import { isScoringSummary, myScoringLine, scoringSummary, type ScoringLine } from "./scoring";
+import { affordableExpeditions, isExpeditionChoice } from "./expedition";
 
 export type DecisionKind =
   | "tech"
@@ -98,6 +99,10 @@ export type Decision = {
    * produce or conclude the tactical action). It waits behind those, so it comes back once they are done.
    */
   hub?: boolean;
+  /** Turn menus: the open expeditions I can pay for now (undefined when unknown). */
+  expeditions?: string[];
+  /** Secret discard that draws a replacement (Mecatol Rex). */
+  redraw?: boolean;
   /** The gravity-rift roll of this tactical action was already taken. */
   riftRolled?: boolean;
 };
@@ -322,6 +327,18 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
 
   if (prompt.reason === "table" || has(choices, /^(deal2SOToAll|startOfGameObjReveal|startOfGameStrategyPhase)$/)) {
     return { ...base, ...tableSetup(choices), kind: "setup", eyebrow: "Setup · anyone can press", table: true, setup: true };
+  }
+  if (has(choices, /^discardSecret_\d+redraw$/)) {
+    /* Mecatol Rex (Thunder's Edge legendary): already exhausted; swap one secret for a fresh draw. */
+    return {
+      ...base,
+      kind: "secretDiscard",
+      eyebrow: "Mecatol Rex",
+      title: "Swap a secret objective",
+      text: "Discard one of your secret objectives; you draw a new one right away.",
+      redraw: true,
+      choices: choices.map((c) => (baseId(c.customId) === "deleteButtons" ? { ...c, label: "Keep my secrets", rank: "undo" as const } : c)),
+    };
   }
   if (prompt.reason === "setup" || has(choices, /^(discardSecret_|SODISCARD_)\d+/)) {
     const round1 = !ctx.web?.gameRound || ctx.web.gameRound <= 1;
@@ -618,15 +635,20 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   }
   if (has(choices, ID.turn)) {
     const fresh = has(choices, /^tacticalAction(?!Build)/);
-    const abilities = has(choices, /^turnEnd/) && !has(choices, /^(endOfTurnAbilities|doAnotherAction)/) && choices.some((c) => c.rank !== "undo" && !/^turnEnd/.test(baseId(c.customId)));
+    /* "Do an Expedition" rides on every end of turn and pass; only keep it when I can pay for one that is still open. */
+    const affordable = affordableExpeditions(ctx.me, ctx.web);
+    const turnChoices = affordable?.length === 0 ? choices.filter((c) => !isExpeditionChoice(c)) : choices;
+    const abilities = has(turnChoices, /^turnEnd/) && !has(turnChoices, /^(endOfTurnAbilities|doAnotherAction)/) && turnChoices.some((c) => c.rank !== "undo" && !/^turnEnd/.test(baseId(c.customId)));
     return {
       ...base,
+      choices: turnChoices,
+      expeditions: affordable,
       kind: "turn",
       eyebrow: "",
       title: fresh
         ? "Your turn — choose an action"
-        : has(choices, /^passForRound/)
-          ? "Pass — use an ability first?"
+        : has(turnChoices, /^passForRound/)
+          ? turnChoices.some((c) => c.rank !== "undo" && !/^passForRound/.test(baseId(c.customId))) ? "Pass — use an ability first?" : "Pass for the round"
           : abilities
             ? "End of turn — use an ability first?"
             : "End your turn",

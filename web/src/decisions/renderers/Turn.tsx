@@ -7,6 +7,8 @@ import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { ScArt, scDefinition } from "../ui/parts";
 import type { DecisionData, RendererProps } from "./types";
 import classes from "./renderers.module.css";
+import turnClasses from "./Turn.module.css";
+import { isExpeditionChoice } from "../model/expedition";
 
 type Action = { choice: Choice; title: string; sub: string; icon: ReactNode; tone: "go" | "card" | "stop" };
 
@@ -54,7 +56,7 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
     return {
       choice: c,
       title: ability ? "End turn…" : "End turn",
-      sub: ability ? "You get to use an end-of-turn ability first (e.g. an expedition)" : "Hand the turn to the next player",
+      sub: ability ? "You get to use an end-of-turn ability first" : "Hand the turn to the next player",
       icon: <IconPlayerSkipForward size={18} stroke={1.6} />,
       tone: "stop",
     };
@@ -83,12 +85,14 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
   const used = new Set(actions.map((a) => a.choice.key));
   /* One action per turn: "another action" only when something I hold grants one, and named after it; else gone. */
   const extra = extraActionSources(data);
+  const expedition = d.choices.find(isExpeditionChoice);
   const rest = d.choices
-    .filter((c) => !used.has(c.key))
+    .filter((c) => !used.has(c.key) && c !== expedition)
     .filter((c) => !/^(doAnotherAction|confirmSecondAction)/.test(baseId(c.customId)) || extra.length > 0)
     .map((c) =>
       /^(doAnotherAction|confirmSecondAction)/.test(baseId(c.customId)) ? { ...c, label: `${extra.join(" / ")}: take another action`, rank: "more" as const } : c,
-    );
+    )
+    .map((c) => (/^planetAbilityExhaust_mrte$/.test(baseId(c.customId)) ? { ...c, label: "Mecatol Rex: swap a secret objective" } : c));
   const me = data.me;
   /* The end-of-turn abilities prompt (End Turn / Do an Expedition / …): its abilities are the point, keep them in view. */
   const endOfTurn = /^(End of turn|Pass —)/.test(d.title);
@@ -126,6 +130,19 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
           return endOfTurn && c.rank !== "more" ? "secondary" : "more";
         }}
       />
+      {expedition && (
+        <div className={turnClasses.expedition}>
+          <span>Expedition open{d.expeditions?.length ? ` — you can ${d.expeditions.join(", ")}` : ""}.</span>
+          <UnstyledButton
+            className={turnClasses.expeditionLink}
+            onClick={() => onPress(expedition)}
+            disabled={!!pendingKey}
+            title={expedition.label}
+          >
+            {pendingKey === expedition.key ? <Loader size={12} color="currentColor" /> : "Do an expedition"}
+          </UnstyledButton>
+        </div>
+      )}
     </div>
   );
 }

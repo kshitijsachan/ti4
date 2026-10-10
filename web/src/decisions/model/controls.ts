@@ -151,10 +151,13 @@ export function isTableSetupPrompt(m: Message): boolean {
   return ids.length > 0 && ids.some((id) => TABLE_SETUP_ID.test(id)) && ids.every((id) => TABLE_SETUP_ID.test(id));
 }
 
-/** "Use these buttons to discard a secret objective." with one button per secret: a real decision, not a menu. */
+/**
+ * "Use these buttons to discard a secret objective." (or Mecatol Rex's "choose a secret objective to discard") with one
+ * button per secret: a real decision, not a menu.
+ */
 export function isSecretDiscardPrompt(m: Message): boolean {
   const ids = forwardChoices(m).map((c) => baseId(c.customId));
-  return ids.length > 0 && ids.every((id) => SO_DISCARD_ID.test(id)) && /discard a secret objective/i.test(m.content);
+  return ids.length > 0 && ids.every((id) => SO_DISCARD_ID.test(id)) && /discard a secret objective|secret objective to discard/i.test(m.content);
 }
 
 /** A transient card menu from the hand thread, which the hand tray handles. */

@@ -1,0 +1,20 @@
+/* The end-of-turn expedition: a quiet line under the turn's choices, never a tile beside End turn. */
+.expedition {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
+.expeditionLink {
+  font-size: 12px;
+  color: var(--play-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.expeditionLink:hover:not(:disabled) {
+  color: var(--play-ink-bright);
+}

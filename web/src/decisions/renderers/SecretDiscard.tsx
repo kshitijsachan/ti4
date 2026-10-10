@@ -33,7 +33,8 @@ function rank(source?: string) {
 export function SecretDiscardBody({ d, onPress, pendingKey }: RendererProps) {
   const offered = d.choices.filter((c) => DISCARD.test(baseId(c.customId)) && !c.disabled).map((c) => ({ c, ...cardOf(c) }));
   const rest = d.choices.filter((c) => !offered.some((o) => o.c === c));
-  const keepMode = offered.length === 2;
+  const keepMode = !d.redraw && offered.length === 2;
+  const discardWord = d.redraw ? "Swap out" : "Discard";
   const [selected, setSelected] = useState<string | null>(null);
   const current = offered.find((o) => o.c.key === selected);
   const other = keepMode && current ? offered.find((o) => o !== current) : undefined;
@@ -56,17 +57,17 @@ export function SecretDiscardBody({ d, onPress, pendingKey }: RendererProps) {
               {card?.phase && <span className={classes.soPhase}>{phaseLabel(card.phase)}</span>}
             </span>
             {card?.text && <span className={classes.soText}>{card.text}</span>}
-            {c.key === selected && <span className={classes.soMark}>{keepMode ? "Keep" : "Discard"}</span>}
+            {c.key === selected && <span className={classes.soMark}>{keepMode ? "Keep" : discardWord}</span>}
           </UnstyledButton>
         ))}
       </div>
       {current && pressTarget && (
         <UnstyledButton className={classes.bigConfirm} disabled={!!pendingKey} onClick={() => onPress(pressTarget)}>
           {pendingKey === pressTarget.key ? <Loader size={16} color="currentColor" /> : null}
-          {keepMode ? `Keep ${current.card?.name ?? current.name}` : `Discard ${current.card?.name ?? current.name}`}
+          {keepMode ? `Keep ${current.card?.name ?? current.name}` : `${discardWord} ${current.card?.name ?? current.name}`}
         </UnstyledButton>
       )}
-      {!current && <p className={classes.hint}>{keepMode ? "Pick the one you want to keep." : "Pick the one to discard."}</p>}
+      {!current && <p className={classes.hint}>{keepMode ? "Pick the one you want to keep." : d.redraw ? "Pick the one to swap for a new draw." : "Pick the one to discard."}</p>}
       {rest.length > 0 && (
         <ChoiceButtons
           choices={rest}
