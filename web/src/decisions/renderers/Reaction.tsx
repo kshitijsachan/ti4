@@ -8,6 +8,13 @@ import classes from "./renderers.module.css";
 
 const PASS = /^(no_sabotage|no_when|no_after|declineToQueueAWhen|declineToQueueAnAfter|passOnEverythingWhensNAfters|lockAftersIn)/;
 
+function passLabel(id: string, label: string) {
+  if (/^declineToQueueAWhen|^no_when/.test(id)) return "Pass — no “when”";
+  if (/^declineToQueueAnAfter|^no_after/.test(id)) return "Pass — no “after”";
+  if (/^passOnEverythingWhensNAfters/.test(id)) return "Pass on both “when” and “after”";
+  return label.replace(/\s*\(.*\)$/, "");
+}
+
 /** Which of my action cards fit this window. */
 function playable(hand: string[] | undefined, kind: "sabotage" | "when" | "after") {
   if (!hand) return [];
@@ -28,11 +35,15 @@ export function ReactionBody({ d, data, onPress, pendingKey }: RendererProps) {
   const cards = playable(data.hand, kind);
   const rankOf = (c: Choice) => {
     if (c.rank === "undo" || c.rank === "more") return c.rank;
+    if (/^explain/.test(baseId(c.customId))) return "more";
     return PASS.test(baseId(c.customId)) ? "primary" : "secondary";
   };
   const choices = d.choices.map((c) => {
     const id = baseId(c.customId);
-    if (PASS.test(id)) return { ...c, style: 3, label: kind === "sabotage" ? "Let it resolve" : c.label.replace(/\s*\(.*\)$/, "") };
+    if (PASS.test(id)) return { ...c, style: 3, label: kind === "sabotage" ? "Let it resolve" : passLabel(id, c.label) };
+    if (/^queueAWhen$/.test(id)) return { ...c, label: "Play a “when”…" };
+    if (/^queueAnAfter$/.test(id)) return { ...c, label: "Play an “after”…" };
+    if (/^explain/.test(id)) return { ...c, label: "How the queue works" };
     if (/^sabotage_/.test(id)) return { ...c, label: "Sabotage it", style: 2 };
     return c;
   });
@@ -40,7 +51,7 @@ export function ReactionBody({ d, data, onPress, pendingKey }: RendererProps) {
   const cardText = d.prompt.message.embeds?.[0]?.description?.replace(/\*/g, "").trim();
   return (
     <div className={classes.stack}>
-      {d.agenda && <AgendaCard agenda={d.agenda} compact />}
+      {d.agenda && <AgendaCard agenda={d.agenda} compact={kind === "sabotage"} />}
       <Prose text={kind === "sabotage" ? lead : d.text} clamp={2} />
       <ChoiceButtons choices={choices} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} rankOf={rankOf} />
       {kind === "sabotage" && cardText && (

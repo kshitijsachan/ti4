@@ -246,6 +246,10 @@ export function isNoise(d: Decision): boolean {
 
 /** Shapes a pending prompt into what the popup shows: kind, plain-language title and text, ranked choices. */
 export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
+  return staleStatusStep(classifyPrompt(prompt, ctx), ctx);
+}
+
+function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   const m = prompt.message;
   const choices = choicesOf(m);
   const names = namesFrom(ctx.state, (n) => scName(ctx, n));
@@ -364,12 +368,18 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
   if (has(choices, ID.whensAfters)) {
     const agenda = currentAgenda(ctx);
     const after = has(choices, /after/i) && !has(choices, /when/i);
-    const what = after ? `"After"s` : has(choices, /after/i) ? `"When"s or "After"s` : `"When"s`;
+    const what = after ? "“after”" : has(choices, /after/i) ? "“when” or “after”" : "“when”";
+    const count = m.content.match(/you may currently play (\d+)/i)?.[1];
+    const window = after
+      ? "After the agenda is revealed and before voting, players may play “after” cards (riders and the like) in speaker order."
+      : "Before anything else, players may play “when” cards (like Veto) in speaker order.";
+    const yours = count === undefined ? "" : count === "0" ? " You hold none that fit." : ` You hold ${count} that fit${count === "1" ? "s" : ""}.`;
     return {
       ...base,
       kind: "reaction",
       eyebrow: agenda ? `Agenda · ${agenda.name}` : "Agenda phase",
-      title: `Play any ${what}?`,
+      title: `Play a ${what} card?`,
+      text: `${window}${yours}`,
       agenda,
     };
   }
@@ -453,6 +463,16 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       eyebrow: "",
       title: tacticalTitle(choices, text, ring.length > 0),
       position: ring.length ? undefined : active,
+    };
+  }
+  if (has(choices, /^flip_agenda$/)) {
+    const n = choices.find((c) => baseId(c.customId) === "flip_agenda")?.label.match(/#\s*(\d+)/)?.[1];
+    return {
+      ...base,
+      kind: "agenda",
+      eyebrow: "Agenda phase · speaker",
+      title: n === "2" ? "Reveal the second agenda" : "Reveal the agenda",
+      text: "Reveal the top card of the agenda deck. Everyone then gets a chance to play “when” and “after” cards before voting.",
     };
   }
   if (has(choices, /^(startStrategyPhase|startAgendaPhase)$/)) {
@@ -542,6 +562,13 @@ function secretHint(ctx: ClassifyContext): string | undefined {
   return undefined;
 }
 
+/** A status-phase table step left over after the game moved on (an agenda started by command, a new round). */
+function staleStatusStep(d: Decision, ctx: ClassifyContext): Decision {
+  const phase = ctx.web?.gameState?.phase ?? "";
+  if (d.kind !== "status" || !d.table || !phase || phase.startsWith("status")) return d;
+  return { ...d, optional: true };
+}
+
 /** Friendly copy for the table-wide setup buttons the bot addresses to nobody. */
 function tableSetup(choices: Choice[]): { title: string; text: string } {
   if (has(choices, /^deal2SOToAll$/)) {
@@ -564,6 +591,8 @@ function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean)
   const placing = choices.map((c) => baseId(c.customId).match(/^place_(\w+?)_/)?.[1]).filter(Boolean);
   if (placing.length && placing.every((u) => u === "pds")) return "Place a PDS — choose a planet";
   if (placing.length && placing.every((u) => u === "sd" || u === "spacedock")) return "Place a space dock — choose a planet";
+  const forward = choices.filter((c) => c.rank !== "undo" && c.rank !== "more");
+  if (forward.length && forward.every((c) => /^doneWithTacticalAction/.test(baseId(c.customId)))) return "Finish the tactical action";
   if (has(choices, /^(tacticalActionBuild|place_|placeOneNDone)/) || /produce/i.test(text)) return "Produce units";
   if (has(choices, /^(landUnits|doneLanding|planetsTake)/) || /land/i.test(text)) return "Land ground forces";
   if (has(choices, /^(unitTactical|tacticalMoveFrom|doneWithOneSystem|doneMoving|concludeMove)/)) return "Move ships into the system";

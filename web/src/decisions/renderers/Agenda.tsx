@@ -46,6 +46,20 @@ const ABSTAIN = /abstain/i;
 
 /** Vote on an agenda: the card, my votes, and the outcomes / vote counts. */
 export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
+  if (d.choices.some((c) => baseId(c.customId) === "flip_agenda")) {
+    return (
+      <div className={classes.stack}>
+        <Prose text={d.text} clamp={3} />
+        <ChoiceButtons
+          choices={d.choices.map((c) => (baseId(c.customId) === "flip_agenda" ? { ...c, label: "Reveal the agenda", style: 1 } : c))}
+          onPress={onPress}
+          pendingKey={pendingKey}
+          channelId={d.prompt.channelId}
+          rankOf={(c) => (c.rank === "undo" || c.rank === "more" ? c.rank : "primary")}
+        />
+      </div>
+    );
+  }
   const faction = data.me?.faction;
   const start = faction ? data.web?.gameState?.agenda?.startVoteCounts?.[faction] : undefined;
   const cast = faction ? data.web?.gameState?.agenda?.castVoteCounts?.[faction] : undefined;
