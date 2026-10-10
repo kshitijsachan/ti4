@@ -23,6 +23,7 @@ import { useDecisionPress } from "../model/usePress";
 import { renderBody, isWide } from "../renderers";
 import type { DecisionData } from "../renderers/types";
 import { OutcomeToast } from "./OutcomeToast";
+import { CombatOutcome } from "../renderers/combat/Outcome";
 import classes from "./DecisionHost.module.css";
 
 export type DecisionHostProps = {
@@ -269,6 +270,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     <>
       <DecisionPopup decisions={decisions} offers={offers} data={data} placement={placement} className={className} rightInset={rightInset} />
       <OutcomeToast gameName={gameName} faction={mePlayer?.faction} rightInset={rightInset} />
+      <CombatOutcome gameName={gameName} rightInset={rightInset} />
     </>
   );
 }

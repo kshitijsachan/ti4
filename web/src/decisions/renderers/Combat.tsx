@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { usePlay, type Message } from "@/discord";
+import { compareSnowflakes } from "@/discord/shared/snowflake";
 import type { PlayerData, TileUnitData } from "@/entities/data/types";
 import { getPlanetData } from "@/entities/lookup/planets";
 import type { Decision } from "../model/classify";
@@ -8,9 +9,10 @@ import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { FactionIcon } from "../ui/parts";
 import { playerByFaction, type RendererProps } from "./types";
 import { HitPanel, UnitTile } from "./combat/HitPanel";
+import { RollRow } from "./combat/Dice";
 import { RetreatPicker, isRetreatPrompt } from "./combat/Retreat";
 import { readCombatLog, type CombatLog, type Roll } from "./combat/rolls";
-import { useRunFlow, doneOf } from "./combat/run";
+import { useCombatRun, useRunFlow, doneOf } from "./combat/run";
 import {
   botPlan,
   parsePick,
@@ -61,6 +63,7 @@ function hitKindOf(id: string): HitKind | null {
 }
 
 const AUTO = /^autoAssign\w*Hits_/;
+const AUTO_ON = (d: Decision) => d.choices.some((c) => AUTO.test(baseId(c.customId)));
 /** combatRoll_<position>_<space | planet>: a combat round's roll (not _afb / _bombardment / space cannon). */
 const ROUND_ROLL = /^combatRoll_[^_]+_[^_]+$/;
 
@@ -107,34 +110,6 @@ const ROLL_WORD: Record<Roll["kind"], string> = {
   spaceCannonOffence: "Space cannon",
   spaceCannonDefence: "Space cannon defence",
 };
-
-function RollRow({ who, roll, waiting }: { who: PlayerData | undefined; roll?: Roll; waiting: string }) {
-  const dice = roll?.lines.flatMap((l) => l.dice) ?? [];
-  return (
-    <div className={classes.rollRow}>
-      <span className={classes.rollWho}>
-        <FactionIcon faction={who?.faction} size={14} />
-        {who?.userName ?? "Opponent"}
-      </span>
-      {roll ? (
-        <span className={classes.dice} title={roll.lines.map((l) => `${l.count}× ${l.unit ? unitName(l.unit, l.count) : "unit"} hit on ${l.hitsOn ?? "?"}+`).join(" · ")}>
-          {dice.map((die, i) => (
-            <span key={i} className={die.hit ? `${classes.die} ${classes.dieHit}` : classes.die}>
-              {die.value}
-            </span>
-          ))}
-        </span>
-      ) : (
-        <span className={classes.rollWaiting}>{waiting}</span>
-      )}
-      {roll && (
-        <span className={classes.rollHits}>
-          → {roll.total} hit{roll.total === 1 ? "" : "s"}
-        </span>
-      )}
-    </div>
-  );
-}
 
 /** The round being fought: my dice and theirs ("rolled 7, 3 → 1 hit"), plus any barrage / space cannon this combat. */
 function RoundReadout({ log, round, ground, me, enemy }: { log: CombatLog; round: number; ground: boolean; me?: PlayerData; enemy?: PlayerData }) {
@@ -202,6 +177,7 @@ const COVERED = /^(autoAssign\w*Hits_|getDamageButtons_\d+deleteThis|combatRoll_
  */
 export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: RendererProps) {
   const runFlow = useRunFlow();
+  const rolling = useCombatRun((r) => !!r.running?.startsWith("roll:"));
   const combat = d.combat;
   const all = useMemo(() => [d, ...(d.steps ?? [])], [d]);
   const me = data.me;
@@ -230,6 +206,11 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
   const rolledThis = round > 0 && myRound >= round;
   const nextRound = rolledThis ? round + 1 : Math.max(round, 1);
 
+  /* The round the open hit prompt is from: the opponent's last roll before it. Hits of a round I already rolled are assigned now. */
+  const hitRound = auto
+    ? Math.max(0, ...log.rolls.filter((r) => r.kind === "combat" && r.ground === ground && sameFaction(r.faction, enemyFaction) && compareSnowflakes(r.id, auto.on.id) < 0).map((r) => r.round ?? 0))
+    : 0;
+
   const myRows = sideRows(tile, me, ground, combat?.planet);
   const enemyRows = sideRows(tile, enemy, ground, combat?.planet);
   const holderNames = useMemo(() => Object.fromEntries(Object.keys(tile?.planets ?? {}).map((p) => [p, planetName(p)])), [tile]);
@@ -242,7 +223,28 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
   );
   const readout = <RoundReadout log={log} round={round} ground={ground} me={me} enemy={enemy} />;
 
-  const press = (f: Found) => pressOn(f.on)(f.c);
+  /*
+   * The opponent rolled first: the round's only roll button sits on my "assign hits" prompt, and pressing it there
+   * would count that prompt as answered (and drop my hits). Press the same button on an earlier plain roll prompt.
+   */
+  const rollElsewhere = (f: Found) => {
+    if (!AUTO_ON(f.on)) return null;
+    const id = f.c.customId;
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const m = thread[i];
+      const ids = choicesOfMessage(m).map((c) => c.customId);
+      if (m.id !== f.on.id && ids.includes(id) && !ids.some((x) => AUTO.test(baseId(x)))) return m;
+    }
+    return null;
+  };
+  const press = (f: Found) => {
+    const other = rollElsewhere(f);
+    if (other && f.c.customId) {
+      void runFlow({ key: `roll:${other.id}`, target: { channelId: other.channel_id, messageId: other.id }, ids: [{ customId: f.c.customId, label: "Rolling" }] });
+      return;
+    }
+    pressOn(f.on)(f.c);
+  };
   const covered = new Set<string>();
   const cover = (f?: Found) => f && covered.add(f.c.key);
 
@@ -280,8 +282,8 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
       />
     );
     pickPrompt.choices.forEach((c) => covered.add(c.key));
-  } else if (auto && hitKind && (rolledThis || !roll || !/^autoAssign(Space|Ground)Hits_/.test(baseId(auto.c.customId)))) {
-    main = <AssignHits auto={auto} kind={hitKind} all={all} data={data} tile={tile} pos={pos} holderNames={holderNames} runFlow={runFlow} />;
+  } else if (auto && hitKind && (hitRound <= myRound || !roll || !/^autoAssign(Space|Ground)Hits_/.test(baseId(auto.c.customId)))) {
+    main = <AssignHits fromRound={hitRound < round ? hitRound : undefined} auto={auto} kind={hitKind} all={all} data={data} tile={tile} pos={pos} holderNames={holderNames} runFlow={runFlow} />;
     auto.on.choices.forEach((c) => covered.add(c.key));
   } else if (roll && !rolledThis) {
     const incoming = hitKind ? hitKind.hits : 0;
@@ -297,7 +299,7 @@ export function CombatBody({ d, data, pressOn, pendingKey, onHoverChoice }: Rend
         <ChoiceButtons
           choices={[{ ...roll.c, label: `Roll round ${nextRound}`, style: 3, rank: "primary" }]}
           onPress={() => press(roll)}
-          pendingKey={pendingKey}
+          pendingKey={rolling ? roll.c.key : pendingKey}
           channelId={roll.on.prompt.channelId}
           onHover={onHoverChoice}
         />
@@ -390,7 +392,9 @@ function labelOf(customId: string) {
 }
 
 /** "Assign 4 hits": tiles prefilled with the bot's own suggestion (or the cheapest), Confirm presses it. */
-function AssignHits({ auto, kind, all, data, tile, pos, holderNames, runFlow }: {
+function AssignHits({ fromRound, auto, kind, all, data, tile, pos, holderNames, runFlow }: {
+  /** The hits are from an earlier round than the one shown (the opponent already rolled the next). */
+  fromRound?: number;
   auto: Found;
   kind: HitKind;
   all: Decision[];
@@ -409,7 +413,7 @@ function AssignHits({ auto, kind, all, data, tile, pos, holderNames, runFlow }: 
   const template: PickButton[] = me && pos
     ? [{ choice: auto.c, action: "assignHits", pos, unit: "ff", holder: "space", color: me.color, prefix: `FFCC_${me.faction}_` }]
     : [];
-  const heading = `Assign ${kind.hits} ${kind.label}${kind.hits === 1 ? "" : "s"}`;
+  const heading = `Assign ${kind.hits} ${kind.label}${kind.hits === 1 ? "" : "s"}${fromRound ? ` from round ${fromRound}` : ""}`;
   const note = kind.target === "afb" ? "Anti-fighter barrage only hits fighters." : undefined;
   return (
     <HitPanel

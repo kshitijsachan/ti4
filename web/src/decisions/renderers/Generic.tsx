@@ -11,6 +11,9 @@ import { cleanLabel } from "../model/controls";
 import { getColorAlias } from "@/entities/lookup/colors";
 import type { DecisionData, RendererProps } from "./types";
 import classes from "./renderers.module.css";
+import { RecentRolls } from "./combat/Dice";
+
+const BOMBARD_KINDS = ["bombardment" as const, "spaceCannonDefence" as const];
 
 /** Anything without a dedicated renderer: the bot's words, cleaned, and its choices ranked. */
 export function GenericBody({ d, onPress, pendingKey, onHoverChoice }: RendererProps) {
@@ -233,6 +236,7 @@ export function TacticalBody({ d, data, onPress, pressOn, pendingKey, onHoverCho
       {d.title === "Land ground forces" && data.web?.gameState?.activeCombat && data.web.gameState.activeCombat.system === d.position && (
         <p className={cx(classes.hint, classes.warn)}>The space combat here is not over yet. Ground forces land once it is won.</p>
       )}
+      {d.title === "Land ground forces" && <RecentRolls channelId={d.prompt.channelId} after={d.id} kinds={BOMBARD_KINDS} data={data} />}
       {/distance exceeds move value/i.test(d.text) && (
         <p className={cx(classes.hint, classes.warn)}>Some of these ships do not have the move value to reach this system. Take them back or use an ability that allows it.</p>
       )}
