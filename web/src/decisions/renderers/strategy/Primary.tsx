@@ -96,7 +96,7 @@ export function StrategyPrimaryBody(props: RendererProps) {
     .filter((x): x is { a: PrimaryAction; choice: Choice } => !!x.choice)
     .filter((x) => !pressed.has(`${d.id}:${baseId(x.choice.customId)}`));
   const press = (c: Choice, values?: string[]) => {
-    pressed.add(`${d.id}:${baseId(c.customId)}`);
+    if (sc === 2) pressed.add(`${d.id}:${baseId(c.customId)}`);
     onPress(c, values);
   };
   const steps = (d.steps ?? []).filter((s) => s.choices.some((c) => !FOLLOWERS.test(baseId(c.customId)) && c.rank !== "more" && c.rank !== "undo"));
@@ -104,7 +104,7 @@ export function StrategyPrimaryBody(props: RendererProps) {
   return (
     <div className={classes.panel}>
       <CardHeader sc={sc} data={data} sub="Your strategy card">
-        <p className={classes.effect}>{second ? "Place one more PDS on a planet you control." : spec?.primary}</p>
+        <p className={classes.effect}>{second ? (scDefinition(sc, data.web)?.id === "te4construction" ? "Place one more structure (PDS or space dock) on a planet you control." : "Place one more PDS on a planet you control.") : spec?.primary}</p>
       </CardHeader>
       {steps.map((s, i) => (
         <StepView key={s.id} step={s} props={props} index={i} />
