@@ -1,26 +1,22 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { UnstyledButton } from "@mantine/core";
 import { IconArrowRight, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
 import { SiteFrame } from "@/play/SiteFrame";
 import { ConnectionBadge } from "@/play/ConnectionBadge";
 import { clearToken, getToken } from "@/play/session";
-import {
-  ChannelView,
-  displayName,
-  usePlay,
-  usePlayConnection,
-  type Command,
-  type User,
-} from "@/discord";
-import { deriveGames, lobbyChannel, type GameChannels } from "@/play/games";
+import { displayName, usePlay, type User } from "@/discord";
+import { deriveGames, type GameChannels } from "@/play/games";
 import { usePlayerData } from "@/api/usePlayerData";
 import { CircularFactionIcon } from "@/shared/ui/CircularFactionIcon";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type { PlayerDataResponse } from "@/entities/data/types";
 import { QuickSoloGame } from "./QuickSoloGame";
 import classes from "./PlayHomePage.module.css";
+
+/** Players besides you a game can seat. */
+const MAX_OTHERS = 7;
 
 const PHASE_LABELS: Record<string, string> = {
   strategy: "Strategy phase",
@@ -85,116 +81,183 @@ function GameCard({ game }: { game: GameChannels }) {
   );
 }
 
-/** How many player slots `/game create_game_button` takes. */
-function maxSeats(commands: Command[]) {
-  const game = commands.find((c) => c.name === "game");
-  const sub = game?.options?.find((o) => o.name === "create_game_button");
-  return sub?.options?.filter((o) => o.type === 6).length || 8;
+const EXPANSIONS = [
+  { id: "te", label: "Thunder's Edge + PoK" },
+  { id: "newPoK", label: "Prophecy of Kings" },
+  { id: "oldPoK", label: "PoK (old rules)" },
+] as const;
+
+type NewGameStatus = {
+  game?: string;
+  state: "creating" | "setting_up" | "drafting" | "playing" | "error";
+  step: string;
+  error?: string;
+};
+
+async function errorText(res: Response) {
+  try {
+    const body = (await res.json()) as { message?: string };
+    return body.message ?? `The server answered ${res.status}.`;
+  } catch {
+    return `The server answered ${res.status}.`;
+  }
 }
 
-function NewGame({ lobbyId }: { lobbyId: string }) {
+/**
+ * A new game for the people you pick: the server creates it, launches it, picks the expansion and starts the
+ * Milty draft for you, then you (and everyone you picked) land in the draft.
+ */
+function NewGame() {
   const me = usePlay((s) => s.me);
   const users = usePlay((s) => s.users);
-  const commands = usePlay((s) => s.commands);
-  const connection = usePlayConnection();
-  const [picked, setPicked] = useState<string[]>(() => (me ? [me.id] : []));
-  const [nonce, setNonce] = useState<string | null>(null);
-  const busy = usePlay((s) => !!nonce && !!s.pending[nonce]);
   const botReady = usePlay((s) => s.status === "open" && s.botOnline);
-  const error = usePlay((s) => (nonce ? s.results[nonce] : null));
+  const navigate = useNavigate();
+  const [picked, setPicked] = useState<string[]>([]);
+  const [expansion, setExpansion] = useState<(typeof EXPANSIONS)[number]["id"]>("te");
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<NewGameStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   const people = Object.values(users)
-    .filter((u) => !u.bot)
+    .filter((u) => !u.bot && u.id !== me?.id)
     .sort((a, b) => displayName(a).localeCompare(displayName(b)));
-  const limit = maxSeats(commands);
 
-  const toggle = (user: User) => {
-    setPicked((current) => {
-      if (current.includes(user.id))
-        return current.filter((id) => id !== user.id);
-      if (current.length >= limit) return current;
-      return [...current, user.id];
-    });
-  };
-
-  const create = () => {
-    const options = [
-      { type: 3, name: "game_fun_name", value: "_" },
-      ...picked.map((id, i) => ({
-        type: 6,
-        name: `player${i + 1}`,
-        value: id,
-      })),
-    ];
-    setNonce(
-      connection.runCommand(lobbyId, "game", [
-        { type: 1, name: "create_game_button", options },
-      ]),
+  const toggle = (user: User) =>
+    setPicked((current) =>
+      current.includes(user.id)
+        ? current.filter((id) => id !== user.id)
+        : current.length >= MAX_OTHERS
+          ? current
+          : [...current, user.id],
     );
+
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    setStatus({ state: "creating", step: "Creating the game" });
+    try {
+      const res = await fetch("/app/new-game", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: getToken(), players: picked, expansion }),
+      });
+      if (!res.ok) throw new Error(await errorText(res));
+      const body = (await res.json()) as { game: string; status: NewGameStatus };
+      setStatus(body.status);
+      while (alive.current) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const poll = await fetch(`/app/new-game/status?game=${encodeURIComponent(body.game)}`);
+        if (!poll.ok) throw new Error(await errorText(poll));
+        const next = (await poll.json()) as NewGameStatus;
+        if (!alive.current) return;
+        setStatus(next);
+        if (next.state === "error") throw new Error(next.error ?? "Setup failed.");
+        if (next.state === "drafting" || next.state === "playing") {
+          navigate(`/game/${body.game}`);
+          return;
+        }
+      }
+    } catch (e) {
+      if (alive.current) setError((e as Error).message);
+    } finally {
+      if (alive.current) setBusy(false);
+    }
   };
 
   return (
     <section className={classes.panel}>
       <div className={classes.label}>New game</div>
       <p className={classes.note}>
-        Pick who is playing. The bot posts a summary in the lobby below — press
-        its
-        <strong> Launch Game</strong> button to open the table.
+        Pick who plays with you. The game is set up for you and everyone lands in the draft.
       </p>
-      <div className={classes.people}>
-        {people.map((user) => {
-          const on = picked.includes(user.id);
-          return (
-            <UnstyledButton
-              key={user.id}
-              className={cx(classes.person, on && classes.personOn)}
-              onClick={() => toggle(user)}
-              aria-pressed={on}
-            >
-              <span className={classes.check}>
-                {on ? picked.indexOf(user.id) + 1 : ""}
-              </span>
-              {displayName(user)}
-              {user.id === me?.id && <span className={classes.you}>you</span>}
-            </UnstyledButton>
-          );
-        })}
-      </div>
+      {people.length === 0 ? (
+        <p className={classes.note}>No other players yet — ask your host to add them.</p>
+      ) : (
+        <div className={classes.people}>
+          {people.map((user) => {
+            const on = picked.includes(user.id);
+            return (
+              <UnstyledButton
+                key={user.id}
+                className={cx(classes.person, on && classes.personOn)}
+                onClick={() => toggle(user)}
+                aria-pressed={on}
+                disabled={busy}
+              >
+                <span className={classes.check}>{on ? "✓" : ""}</span>
+                {displayName(user)}
+              </UnstyledButton>
+            );
+          })}
+        </div>
+      )}
       <div className={classes.actions}>
+        <select
+          className={classes.select}
+          value={expansion}
+          onChange={(e) => setExpansion(e.target.value as typeof expansion)}
+          disabled={busy}
+          aria-label="Expansion"
+        >
+          {EXPANSIONS.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.label}
+            </option>
+          ))}
+        </select>
         <span className={classes.meta}>
-          {picked.length} of up to {limit} players
+          You + {picked.length} {picked.length === 1 ? "player" : "players"}
         </span>
         <button
           type="button"
           className={classes.primary}
           disabled={!picked.length || busy || !botReady}
-          onClick={create}
+          onClick={() => void create()}
           title={botReady ? undefined : "The game server is starting up"}
         >
           <IconPlus size={14} />
-          {!botReady
-            ? "Game server starting…"
-            : busy
-              ? "Creating…"
-              : "Create game"}
+          {!botReady ? "Game server starting…" : busy ? "Setting up…" : "Create game"}
         </button>
       </div>
+      {busy && status && (
+        <p className={classes.note} role="status">
+          {status.step}
+        </p>
+      )}
       {error && <p className={classes.error}>{error}</p>}
-      <div className={classes.lobby}>
-        <div className={classes.lobbyLabel}># lobby</div>
-        <div className={classes.lobbyView}>
-          <ChannelView channelId={lobbyId} header={false} />
-        </div>
-      </div>
     </section>
   );
+}
+
+/** Takes me to a game that appears while I'm on this page (someone just started one with me in it). */
+function useLandInNewGames(games: GameChannels[], ready: boolean) {
+  const navigate = useNavigate();
+  const known = useRef<Set<string> | null>(null);
+  const names = games.map((g) => g.name).join(",");
+  useEffect(() => {
+    if (!ready) return;
+    const now = new Set(names ? names.split(",") : []);
+    if (known.current) {
+      const fresh = [...now].find((n) => !known.current!.has(n));
+      if (fresh) navigate(`/game/${fresh}`);
+    }
+    known.current = now;
+  }, [names, ready, navigate]);
 }
 
 function Home() {
   const me = usePlay((s) => s.me);
   const channels = usePlay((s) => s.channels);
   const games = deriveGames(channels);
-  const lobby = lobbyChannel(channels);
+  const ready = usePlay((s) => s.status === "open");
+  useLandInNewGames(games, ready && !!me);
 
   if (!me) {
     return <p className={classes.note}>Connecting…</p>;
@@ -213,7 +276,7 @@ function Home() {
         {games.length === 0 ? (
           <p className={classes.note}>
             No games yet. Start one below, or wait for a friend to add you to
-            theirs.
+            theirs — you will be taken there as soon as they do.
           </p>
         ) : (
           <div className={classes.grid}>
@@ -223,7 +286,7 @@ function Home() {
           </div>
         )}
       </section>
-      {lobby && <NewGame lobbyId={lobby.id} />}
+      <NewGame />
     </>
   );
 }

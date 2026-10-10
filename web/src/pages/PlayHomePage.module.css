@@ -257,26 +257,15 @@
   color: var(--mantine-color-red-5);
 }
 
-.lobby {
-  margin-top: 16px;
-  border: 1px solid var(--panel-hairline);
-  border-radius: var(--panel-radius);
-  background: var(--trough-bg);
-  overflow: hidden;
+.select {
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--mantine-color-dark-4);
+  background: var(--mantine-color-dark-7);
+  color: var(--mantine-color-gray-2);
+  font-size: 13px;
 }
-
-.lobbyLabel {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--panel-separator);
-  font-family: var(--font-data);
-  font-size: var(--text-meta);
-  color: var(--mantine-color-gray-4);
-}
-
-.lobbyView {
-  height: 380px;
-}
-
 .signOut {
   font-family: var(--font-display);
   font-size: var(--text-label);
