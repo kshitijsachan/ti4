@@ -342,7 +342,9 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     else if (role) reason = "role";
     if (!reason) return;
     /* Only I see an ephemeral prompt or the reply to my own press: someone else's newer prompt never retires it. */
-    if (reason !== "role" && reason !== "combat" && reason !== "ephemeral" && reason !== "reply" && !after(id, newestOtherPrompt)) return;
+    /* A rider's prediction is mine alone and waits until the vote resolves: other players' voting prompts never retire it. */
+    const rider = forwardChoices(m).some((c) => /^rider_/.test(baseId(c.customId)));
+    if (reason !== "role" && reason !== "combat" && reason !== "ephemeral" && reason !== "reply" && !rider && !after(id, newestOtherPrompt)) return;
     items.push({ message: m, channelId, where, reason });
   });
   return items;
