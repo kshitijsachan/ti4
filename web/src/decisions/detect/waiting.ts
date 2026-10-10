@@ -41,19 +41,24 @@ export function setupWaiting(
   const data = state.messages[game.actions.id];
   const log = data ? data.ids.map((id) => data.byId[id]).filter(Boolean) : [];
   /* Starting technology prompts still up ("<faction> use the buttons to choose your starting technology"). */
-  const techFactions = new Set<string>();
-  const techUsers = new Set<string>();
+  /* The bot leaves these up after the pick, so a prompt only counts while its player holds fewer technologies than
+     the starting-tech prompts they were given (it posts one per technology to choose, and only to tech-less players). */
+  const techPrompts = new Map<string, number>();
+  const bump = (key: string) => techPrompts.set(key, (techPrompts.get(key) ?? 0) + 1);
   for (const m of log) {
     if (!m.author.bot || !/starting tech/i.test(m.content)) continue;
     const choices = forwardChoices(m);
     if (!choices.length) continue;
     const f = choices.map((c) => idFaction(c.customId)).find(Boolean);
-    if (f) techFactions.add(f);
-    else for (const u of m.mentions ?? []) techUsers.add(u.id);
+    if (f) bump(f.startsWith("keleres") ? "keleres" : f);
+    else for (const u of m.mentions ?? []) bump(u.id);
   }
-  const choosingTech = players.filter(
-    (p) => techFactions.has(p.faction) || techUsers.has(p.discordId) || (techFactions.has("keleres") && p.faction.startsWith("keleres")),
-  );
+  const promptsFor = (p: (typeof players)[number]) =>
+    techPrompts.get(p.faction.startsWith("keleres") ? "keleres" : p.faction) ?? techPrompts.get(p.discordId) ?? 0;
+  const choosingTech = players.filter((p) => {
+    const asked = promptsFor(p);
+    return asked > 0 && (p.techs?.length ?? 0) < asked;
+  });
   if (choosingTech.length) return waitOn(choosingTech, "choose a starting technology");
 
   /* A table-wide step nobody has taken yet. */

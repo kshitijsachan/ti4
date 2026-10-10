@@ -117,7 +117,17 @@ const EDIT_ANSWER_MS = 15000;
 const TABLE_RETRY_MS = 20000;
 /** Combat-thread buttons: rolling dice, assigning hits, retreating. */
 const FOLLOW_ID = /^(sc_follow_|sc_no_follow_|sc_\w+_follow|requestAllFollow)/;
+const SC_CALL_ID = /^(sc_follow_\d|sc_trade_follow|sc_no_follow_\d)/;
 const COMBAT_ID = /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbush|bombardConfirm|assignDamage|autoAssign)/;
+
+/** The bot marks who has answered a table-wide prompt with that faction's emoji as a reaction. */
+export function reactedBy(m: Message, faction: string) {
+  const f = faction.toLowerCase();
+  return (m.reactions ?? []).some((r) => {
+    const name = (r.emoji?.name ?? "").toLowerCase();
+    return !!name && (name === f || f.startsWith(name) || name.startsWith(f));
+  });
+}
 
 function whereLabel(game: GameChannels, id: string, state: PlayState) {
   if (id === game.actions.id) return "actions";
@@ -219,7 +229,9 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     if ((m.mention_roles ?? []).some((r) => myRoles.has(r))) rolePingAt = at;
     const roleFollowUp = !ping && !pingsOther && at - rolePingAt <= FOLLOW_UP_MS;
     const forOther = pingsOther || (!ping && at - otherPingAt <= FOLLOW_UP_MS) || otherFaction(m);
-    if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || isHandMenu(m) || isUtilityMenu(m)) return;
+    /* "Score A Secret Objective" pressed on the status-phase summary (not from the hand tray) answers in the action log. */
+    const secretPick = !!m.ephemeral && opts.roleCalls && !opts.hand && forwardChoices(m).some((c) => /^so_score_hand_/.test(baseId(c.customId)));
+    if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || (isHandMenu(m) && !secretPick) || isUtilityMenu(m)) return;
     const tableSetup = isTableSetupPrompt(m);
     // Table-wide setup steps (deal secret objectives, start the game) are pressed by the server once everyone is
     // ready (shim/src/solo.ts steward), so they are never a decision for a person.
@@ -257,11 +269,19 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
         return;
       }
     }
+    if (opts.roleCalls && opts.faction && forwardChoices(m).some((c) => baseId(c.customId) === "pass_on_abilities")) {
+      /* Status homework: I may press "redistribute tokens" first; it waits on me until my faction reacts "ready". */
+      if (reactedBy(m, opts.faction)) return;
+      items.push({ message: m, channelId, where, reason: "role" });
+      return;
+    }
     if (answered) return;
     /* The list of secrets to score, left over after I answered the secret half another way. */
     if (scoringClosed && forwardChoices(m).some((c) => /^so_score_hand_/.test(baseId(c.customId)))) return;
 
-    const role = opts.roleCalls && index >= ids.length - ROLE_WINDOW && isRolePrompt(me.id, m, myRoles, roleFollowUp);
+    /* A played strategy card waits on my follow however busy the log gets (bots play on); the round's end retires it. */
+    const scCall = forwardChoices(m).some((c) => SC_CALL_ID.test(baseId(c.customId)));
+    const role = opts.roleCalls && (scCall || index >= ids.length - ROLE_WINDOW) && isRolePrompt(me.id, m, myRoles, roleFollowUp);
     let reason: PendingReason | null = null;
     if (opts.hand && isSecretDiscardPrompt(m)) {
       items.push({ message: m, channelId, where, reason: "setup" });
@@ -342,6 +362,26 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
     )
     .filter((it) => newestBySignature.get(`${it.channelId}:${buttonSignature(it.message)}`) === it.message.id)
     .sort((a, b) => compareSnowflakes(b.message.id, a.message.id));
+}
+
+const TURN_MENU = /^(tacticalAction|endOfTurnAbilities|turnEnd)/;
+
+/**
+ * My turn, yet nothing waits on me: a step got lost (an "only you can see this" prompt dropped by a reconnect, a press
+ * that failed). Offer my newest turn menu again, so the turn never dead-ends.
+ */
+export function turnMenuFallback(state: PlayState, game: GameChannels, faction: string | undefined): PendingPrompt | undefined {
+  const roundStart = latestRoundStart(state, game.actions.id);
+  const data = state.messages[game.actions.id];
+  if (!data || !faction) return undefined;
+  for (let i = data.ids.length - 1; i >= 0; i--) {
+    const m = data.byId[data.ids[i]];
+    if (!m?.author.bot || state.dismissedPrompts[m.id]) continue;
+    if (roundStart && compareSnowflakes(m.id, roundStart) < 0) return undefined;
+    const mine = choicesOf(m).some((c) => TURN_MENU.test(baseId(c.customId)) && idFaction(c.customId) === faction);
+    if (mine) return { message: m, channelId: game.actions.id, where: "actions", reason: "faction" as const };
+  }
+  return undefined;
 }
 
 /**

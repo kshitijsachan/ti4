@@ -4,13 +4,12 @@ import { IconMinus, IconPlus, IconArrowsMinimize } from "@tabler/icons-react";
 import { InteractiveMapRenderer } from "@/domains/map/components/renderer/InteractiveMapRenderer";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { useTabsAndTooltips } from "@/hooks/useTabsAndTooltips";
-import { useGameData, useGameDataState } from "@/state/useGameContext";
+import { useGameData } from "@/state/useGameContext";
 import { useSettingsStore } from "@/state/appStore";
 import { useMapContentSize } from "@/domains/map/components/hooks/useMapContentSize";
 import { useTilesList } from "@/hooks/useTilesList";
 import { shouldHideZoomControls, computeMapZoom } from "@/utils/zoom";
 import { useMapTooltips } from "@/domains/map/components/hooks/useMapTooltips";
-import { ReconnectButton } from "@/domains/map/components/renderer/ReconnectButton";
 import { getMapLayoutConfig } from "@/domains/map/components/mapLayout";
 import { useBoardShortcuts } from "@/domains/map/components/hooks/useBoardShortcuts";
 import { MapLensChip } from "@/domains/map/components/MapLensChip";
@@ -26,6 +25,7 @@ import {
   HOME_LABEL_WIDTH,
   homeLabelAnchors,
 } from "@/domains/map/components/HomeSystemLabels";
+import { MapActionsLayer } from "@/mapactions";
 import { useBoardFocus } from "./focus";
 import { MAX_ZOOM, useBoardZoom } from "./boardZoom";
 import classes from "./BoardTable.module.css";
@@ -276,7 +276,6 @@ type Props = {
 export function BoardTable({ gameName, docked = false }: Props) {
   const gameData = useGameData();
   const tilesList = useTilesList(gameData?.tiles);
-  const gameDataState = useGameDataState();
   useDragScroll();
 
   const { tooltipUnit, handleMouseEnter, handleMouseLeave, handleMouseDown } = useTabsAndTooltips();
@@ -341,6 +340,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
           />
         )}
       </div>
+      <MapActionsLayer gameName={gameName} containerRef={containerRef} docked={docked} />
       <MapLensChip />
       {!shouldHideZoomControls() && (
         <div className={classes.zoom}>
@@ -355,7 +355,6 @@ export function BoardTable({ gameName, docked = false }: Props) {
           </ZoomButton>
         </div>
       )}
-      <ReconnectButton gameDataState={gameDataState} />
     </div>
   );
 }

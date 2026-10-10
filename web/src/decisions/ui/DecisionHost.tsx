@@ -10,7 +10,7 @@ import { usePlayerData } from "@/api/usePlayerData";
 import type { PlayerDataResponse } from "@/entities/data/types";
 import { getToken } from "@/play/session";
 import { findGame } from "../detect/games";
-import { usePendingPrompts } from "../detect/pending";
+import { turnMenuFallback, usePendingPrompts } from "../detect/pending";
 import { useSetupWaiting } from "../detect/waiting";
 import { classify, isNoise, type Decision } from "../model/classify";
 import { offersOf, orderQueue } from "../model/queue";
@@ -149,6 +149,7 @@ function choicePosition(c: Choice | null) {
  * looked past (hold “peek at the map”); only optional prompts can be hidden.
  */
 export function DecisionHost({ gameName, placement = "fixed", className, rightInset = 0 }: DecisionHostProps) {
+  const conn = usePlayConnection();
   const me = usePlay((s) => s.me);
   const channels = usePlay((s) => s.channels);
   const users = usePlay((s) => s.users);
@@ -169,11 +170,17 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     /* "Decide now whether to follow X" is moot once X has been played. */
     const played = new Set((web?.strategyCards ?? []).filter((sc) => sc.played).map((sc) => sc.initiative));
     const live = all.filter(
-      (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "combat" && combatOver(d, web)),
+      (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "scFollow" && !d.optional && d.sc && mePlayer?.followedSCs?.includes(d.sc)) && !(d.kind === "combat" && combatOver(d, web)),
     );
     const oldestFirst = inBursts(live);
-    return { decisions: orderQueue(oldestFirst), offers: offersOf(oldestFirst) };
-  }, [prompts, game, users, channels, messages, web, mePlayer]);
+    const queue = orderQueue(oldestFirst);
+    if (!queue.length && myTurn && phase === "action") {
+      /* My turn and nothing waits on me: a step got lost; offer my turn menu again so the turn never dead-ends. */
+      const fallback = turnMenuFallback(conn.store.getState(), game, mePlayer?.faction);
+      if (fallback) queue.push(classify(fallback, { state: { users, channels, messages }, game, web, me: mePlayer }));
+    }
+    return { decisions: queue, offers: offersOf(oldestFirst) };
+  }, [prompts, game, users, channels, messages, web, mePlayer, myTurn, phase, conn]);
   const hand = useHandAliases(gameName, decisions.some((d) => d.kind === "reaction"));
   const data: DecisionData = { gameName, web, me: mePlayer, players: web?.playerData ?? [], hand };
   const waiting = useSetupWaiting(gameName);

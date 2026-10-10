@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip, UnstyledButton } from "@mantine/core";
 import { IconListDetails, IconMessageCircle, IconTarget, IconTransfer, IconUsers } from "@tabler/icons-react";
@@ -53,7 +53,15 @@ const LINK_LABELS = {
 function LinkWarning() {
   const status = usePlay((s) => s.status);
   const botOnline = usePlay((s) => s.botOnline);
-  if (status === "open" && botOnline) return null;
+  const fine = status === "open" && botOnline;
+  /* The link reconnects by itself within seconds (server restarts): only speak up if it stays down. */
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    if (fine) return setLate(false);
+    const timer = window.setTimeout(() => setLate(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [fine]);
+  if (fine || !late) return null;
   const label = status === "open" ? "Game server is starting up or offline" : LINK_LABELS[status];
   return (
     <Tooltip label={label} position="bottom">

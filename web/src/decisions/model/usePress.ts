@@ -51,10 +51,17 @@ export function useDecisionPress() {
   const press = async (shown: Decision, target: Decision, choice: Choice, values?: string[]) => {
     if (!choice.customId || state.pendingKey) return;
     setState({ held: shown, pendingKey: choice.key, error: null });
+    const before = conn.store.getState().pressed[target.id];
     const result = values
       ? await selectAndWait(target, choice, values)
       : await pressButton(target.prompt.channelId, target.id, choice.customId);
     if (result.error) {
+      /* The press did not go through: the prompt is still unanswered, so keep it in the queue. */
+      const { pressed } = conn.store.getState();
+      const restored = { ...pressed };
+      if (before === undefined) delete restored[target.id];
+      else restored[target.id] = before;
+      conn.store.setState({ pressed: restored });
       setState({ held: shown, pendingKey: null, error: result.error });
       return;
     }
