@@ -127,18 +127,10 @@
   }
 }
 
-.link {
+.elapsed {
   margin-left: auto;
-  border: 0;
-  background: none;
   font-family: var(--font-data);
-  font-size: var(--text-meta);
-  color: var(--mantine-color-blue-4);
-  cursor: pointer;
-}
-
-.link:hover {
-  text-decoration: underline;
+  color: var(--mantine-color-gray-5);
 }
 
 .error {

@@ -84,7 +84,9 @@ export class Lobby {
     if (method === "GET" && path === "/me") {
       const userId = this.clients.userForToken(query.get("token"));
       if (!userId) return discordError(res, 401, 0, "unknown link");
-      return sendJson(res, 200, { user: this.store.userJson(userId), lobby_channel_id: this.ensureLobbyChannel().id });
+      // players: seats a person plays (autopilot seats left out), for the home page's "New game" picker.
+      const players = Object.values(this.store.state.seats).filter((x) => !x.autopilot).map((x) => x.user_id);
+      return sendJson(res, 200, { user: this.store.userJson(userId), lobby_channel_id: this.ensureLobbyChannel().id, players });
     }
 
     if (method === "GET" && path === "/admin/players") {

@@ -1,18 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Link } from "react-router-dom";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { UnstyledButton } from "@mantine/core";
 import { IconArrowRight, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
 import { SiteFrame } from "@/play/SiteFrame";
 import { ConnectionBadge } from "@/play/ConnectionBadge";
 import { clearToken, getToken } from "@/play/session";
-import { displayName, usePlay, type User } from "@/discord";
+import { displayName, usePlay, type Channel, type User } from "@/discord";
 import { deriveGames, type GameChannels } from "@/play/games";
-import { usePlayerData } from "@/api/usePlayerData";
+import {
+  fetchPlayerData,
+  GameDataFetchError,
+  usePlayerData,
+} from "@/api/usePlayerData";
 import { CircularFactionIcon } from "@/shared/ui/CircularFactionIcon";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type { PlayerDataResponse } from "@/entities/data/types";
 import { QuickSoloGame } from "./QuickSoloGame";
+import { preloadGamePage, useOpenGame } from "./openGame";
 import classes from "./PlayHomePage.module.css";
 
 /** Players besides you a game can seat. */
@@ -24,6 +30,11 @@ const PHASE_LABELS: Record<string, string> = {
   status: "Status phase",
   agenda: "Agenda phase",
 };
+
+/** "status.homework" → "Status phase"; setup and unknown phases have no label. */
+function phaseLabel(phase?: string) {
+  return phase ? PHASE_LABELS[phase.split(".")[0]] : undefined;
+}
 
 function summarize(data: PlayerDataResponse) {
   const active = data.playerData.find((p) => p.active);
@@ -39,19 +50,48 @@ function summarize(data: PlayerDataResponse) {
   };
 }
 
+/**
+ * A plain left click opens the game through useOpenGame (code first, then the
+ * route, with a visible "Opening"); modified clicks keep the link's own
+ * behaviour (new tab, new window).
+ */
 function GameCard({ game }: { game: GameChannels }) {
   const { data, isError } = usePlayerData(game.name, { select: summarize });
+  const openGame = useOpenGame();
+  const [opening, setOpening] = useState(false);
   const funName = game.tableTalk?.name.slice(game.name.length + 1);
-  const phase = data?.phase ? PHASE_LABELS[data.phase] : undefined;
-  const status =
-    !data || !data.mapReady ? "Setting up" : (phase ?? `Round ${data.round}`);
+  const phase = phaseLabel(data?.phase);
+  const settingUp =
+    !data || !data.mapReady || !!data.phase?.startsWith("setup");
+  const status = settingUp ? "Setting up" : (phase ?? `Round ${data.round}`);
+
+  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    if (opening) return;
+    setOpening(true);
+    void openGame(game.name).finally(() => setOpening(false));
+  };
 
   return (
-    <Link to={`/game/${game.name}`} className={classes.card}>
+    <Link
+      to={`/game/${game.name}`}
+      className={cx(classes.card, opening && classes.opening)}
+      onClick={onClick}
+      onPointerEnter={preloadGamePage}
+      aria-busy={opening}
+    >
       <div className={classes.cardTop}>
         <span className={classes.gameName}>{game.name}</span>
         <span className={cx(classes.status, data?.mapReady && classes.live)}>
-          {isError ? "Setting up" : status}
+          {opening ? "Opening…" : isError ? "Setting up" : status}
         </span>
       </div>
       {funName && (
@@ -81,6 +121,61 @@ function GameCard({ game }: { game: GameChannels }) {
   );
 }
 
+/** The bot's end-game flow moves a game's channels to "The in-limbo PBD Archive". */
+const ARCHIVE_CATEGORY = /archive|limbo/i;
+
+function isArchived(game: GameChannels, channels: Record<string, Channel>) {
+  if (game.actions.thread_metadata?.archived) return true;
+  const category = game.actions.parent_id
+    ? channels[game.actions.parent_id]
+    : undefined;
+  return !!category && ARCHIVE_CATEGORY.test(category.name);
+}
+
+type GameFate = "active" | "gone" | "loading";
+
+/**
+ * Whether a game belongs on the home page: not ended (the bot reports phase
+ * "finished" once a game has ended or has a winner), not deleted (its data is
+ * gone), and I hold a seat in it. Bot hiccups other than "not found" keep it.
+ */
+function gameFate(
+  query: { data?: PlayerDataResponse; error: Error | null; isPending: boolean },
+  meId: string,
+): GameFate {
+  if (query.error) {
+    const missing =
+      query.error instanceof GameDataFetchError && query.error.status === 404;
+    return missing ? "gone" : "active";
+  }
+  if (query.isPending || !query.data) return "loading";
+  const { gameState, playerData } = query.data;
+  if (gameState?.phase === "finished" || gameState?.winner) return "gone";
+  const seated =
+    playerData.length === 0 || playerData.some((p) => p.discordId === meId);
+  return seated ? "active" : "gone";
+}
+
+/** My games that are still being played, newest first. */
+function useActiveGames(meId: string | undefined) {
+  const channels = usePlay((s) => s.channels);
+  const visible = deriveGames(channels).filter((g) => !isArchived(g, channels));
+  const queries = useQueries({
+    queries: visible.map((g) => ({
+      queryKey: ["playerData", g.name],
+      queryFn: () => fetchPlayerData(g.name),
+      // The home page has no live stream: re-check ended games on each visit.
+      staleTime: 30_000,
+      retry: false,
+    })),
+  });
+  const fates = queries.map((q) => (meId ? gameFate(q, meId) : "loading"));
+  return {
+    games: visible.filter((_, i) => fates[i] === "active"),
+    loading: fates.includes("loading"),
+  };
+}
+
 const EXPANSIONS = [
   { id: "te", label: "Thunder's Edge + PoK" },
   { id: "newPoK", label: "Prophecy of Kings" },
@@ -93,6 +188,30 @@ type NewGameStatus = {
   step: string;
   error?: string;
 };
+
+/**
+ * Seats the shim says a person plays (no autopilot seats). Older shims don't
+ * send `players`; then only the name rules below apply.
+ */
+async function fetchPeople(token: string): Promise<string[] | null> {
+  const res = await fetch(`/app/me?token=${encodeURIComponent(token)}`);
+  if (!res.ok) return null;
+  const body = (await res.json()) as { players?: string[] };
+  return body.players ?? null;
+}
+
+/** Solo games name their autopilot seats "Bot Alpha", "Bot Beta 2", ... */
+const AUTOPILOT_NAME = /^Bot [A-Z][a-z]+(?: \d+)?$/;
+/** Seats the test drivers and agents made (soak runs, e2e flows, role-named probes). */
+const TEST_NAME =
+  /^(?:soak|e2e|test|qa|probe|smoke|integrator|mapclicker|strategist|actor|handy|trader|follower)(?:\b|\d|$)/i;
+
+function isPerson(user: User, players: string[] | null | undefined) {
+  if (user.bot) return false;
+  if (players && !players.includes(user.id)) return false;
+  const name = displayName(user);
+  return !AUTOPILOT_NAME.test(name) && !TEST_NAME.test(name);
+}
 
 async function errorText(res: Response) {
   try {
@@ -111,9 +230,17 @@ function NewGame() {
   const me = usePlay((s) => s.me);
   const users = usePlay((s) => s.users);
   const botReady = usePlay((s) => s.status === "open" && s.botOnline);
-  const navigate = useNavigate();
+  const openGame = useOpenGame();
+  const token = getToken();
+  const { data: players } = useQuery({
+    queryKey: ["me-players", token],
+    queryFn: () => fetchPeople(token!),
+    enabled: !!token,
+    staleTime: 60_000,
+  });
   const [picked, setPicked] = useState<string[]>([]);
-  const [expansion, setExpansion] = useState<(typeof EXPANSIONS)[number]["id"]>("te");
+  const [expansion, setExpansion] =
+    useState<(typeof EXPANSIONS)[number]["id"]>("te");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<NewGameStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +253,7 @@ function NewGame() {
   }, []);
 
   const people = Object.values(users)
-    .filter((u) => !u.bot && u.id !== me?.id)
+    .filter((u) => u.id !== me?.id && isPerson(u, players))
     .sort((a, b) => displayName(a).localeCompare(displayName(b)));
 
   const toggle = (user: User) =>
@@ -149,18 +276,24 @@ function NewGame() {
         body: JSON.stringify({ token: getToken(), players: picked, expansion }),
       });
       if (!res.ok) throw new Error(await errorText(res));
-      const body = (await res.json()) as { game: string; status: NewGameStatus };
+      const body = (await res.json()) as {
+        game: string;
+        status: NewGameStatus;
+      };
       setStatus(body.status);
       while (alive.current) {
         await new Promise((r) => setTimeout(r, 1000));
-        const poll = await fetch(`/app/new-game/status?game=${encodeURIComponent(body.game)}`);
+        const poll = await fetch(
+          `/app/new-game/status?game=${encodeURIComponent(body.game)}`,
+        );
         if (!poll.ok) throw new Error(await errorText(poll));
         const next = (await poll.json()) as NewGameStatus;
         if (!alive.current) return;
         setStatus(next);
-        if (next.state === "error") throw new Error(next.error ?? "Setup failed.");
+        if (next.state === "error")
+          throw new Error(next.error ?? "Setup failed.");
         if (next.state === "drafting" || next.state === "playing") {
-          navigate(`/game/${body.game}`);
+          await openGame(body.game);
           return;
         }
       }
@@ -175,10 +308,13 @@ function NewGame() {
     <section className={classes.panel}>
       <div className={classes.label}>New game</div>
       <p className={classes.note}>
-        Pick who plays with you. The game is set up for you and everyone lands in the draft.
+        Pick who plays with you. The game is set up for you and everyone lands
+        in the draft.
       </p>
       {people.length === 0 ? (
-        <p className={classes.note}>No other players yet — ask your host to add them.</p>
+        <p className={classes.note}>
+          No other players yet — ask your host to add them.
+        </p>
       ) : (
         <div className={classes.people}>
           {people.map((user) => {
@@ -223,7 +359,11 @@ function NewGame() {
           title={botReady ? undefined : "The game server is starting up"}
         >
           <IconPlus size={14} />
-          {!botReady ? "Game server starting…" : busy ? "Setting up…" : "Create game"}
+          {!botReady
+            ? "Game server starting…"
+            : busy
+              ? "Setting up…"
+              : "Create game"}
         </button>
       </div>
       {busy && status && (
@@ -238,7 +378,7 @@ function NewGame() {
 
 /** Takes me to a game that appears while I'm on this page (someone just started one with me in it). */
 function useLandInNewGames(games: GameChannels[], ready: boolean) {
-  const navigate = useNavigate();
+  const openGame = useOpenGame();
   const known = useRef<Set<string> | null>(null);
   const names = games.map((g) => g.name).join(",");
   useEffect(() => {
@@ -246,18 +386,19 @@ function useLandInNewGames(games: GameChannels[], ready: boolean) {
     const now = new Set(names ? names.split(",") : []);
     if (known.current) {
       const fresh = [...now].find((n) => !known.current!.has(n));
-      if (fresh) navigate(`/game/${fresh}`);
+      if (fresh) void openGame(fresh);
     }
     known.current = now;
-  }, [names, ready, navigate]);
+  }, [names, ready, openGame]);
 }
 
 function Home() {
   const me = usePlay((s) => s.me);
   const channels = usePlay((s) => s.channels);
-  const games = deriveGames(channels);
   const ready = usePlay((s) => s.status === "open");
-  useLandInNewGames(games, ready && !!me);
+  useLandInNewGames(deriveGames(channels), ready && !!me);
+  const { games, loading } = useActiveGames(me?.id);
+  useEffect(preloadGamePage, []);
 
   if (!me) {
     return <p className={classes.note}>Connecting…</p>;
@@ -273,7 +414,9 @@ function Home() {
         <div className={classes.label}>
           Your games <span className={classes.count}>{games.length}</span>
         </div>
-        {games.length === 0 ? (
+        {games.length === 0 && loading ? (
+          <p className={classes.note}>Loading your games…</p>
+        ) : games.length === 0 ? (
           <p className={classes.note}>
             No games yet. Start one below, or wait for a friend to add you to
             theirs — you will be taken there as soon as they do.

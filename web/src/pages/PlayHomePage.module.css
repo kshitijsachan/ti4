@@ -64,8 +64,13 @@
   transition: border-color 0.2s ease;
 }
 
-.card:hover {
+.card:hover,
+.opening {
   border-color: var(--bay-lit-edge);
+}
+
+.opening {
+  cursor: progress;
 }
 
 .card:hover .go {

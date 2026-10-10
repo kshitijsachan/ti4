@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 import { IconMinus, IconPlayerPlay, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
+import { preloadGamePage, useOpenGame } from "./openGame";
 import classes from "./QuickSoloGame.module.css";
 
 type SoloStatus = {
@@ -41,45 +41,47 @@ export function QuickSoloGame({
   /** Extra controls under the main row (e.g. which seat plays). */
   children?: ReactNode;
 }) {
-  const navigate = useNavigate();
+  const openGame = useOpenGame();
   const [bots, setBots] = useState(3);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<SoloStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
+    preloadGamePage();
     return () => {
       alive.current = false;
     };
   }, []);
+  useEffect(() => {
+    if (!busy) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
-  const open = (game: string) => {
+  const open = async (url: string) => {
     beforeOpen?.();
-    navigate(`/game/${game}`);
+    await openGame(url);
   };
 
-  const follow = async (game: string) => {
-    while (alive.current) {
-      await new Promise((r) => setTimeout(r, 1000));
-      const res = await fetch(
-        `/app/solo-game/status?game=${encodeURIComponent(game)}`,
-      );
-      if (!res.ok) throw new Error(await errorText(res));
-      const next = (await res.json()) as SoloStatus;
-      if (!alive.current) return;
-      setStatus(next);
-      if (next.state === "error")
-        throw new Error(next.error ?? "Setup failed.");
-      if (next.state === "drafting") return open(game);
-    }
-  };
-
+  /**
+   * The server answers once the game exists (seats added, game created and
+   * launched); picking the expansion and starting the draft carry on in the
+   * background, and the game screen shows them as they happen.
+   */
   const start = async () => {
     if (!token) return;
     setBusy(true);
     setError(null);
-    setStatus({ state: "creating", step: "Creating the game" });
+    setStartedAt(Date.now());
+    setNow(Date.now());
+    setStatus({
+      state: "creating",
+      step: `Seating ${bots} autopilot opponents and creating the game`,
+    });
     try {
       const res = await fetch("/app/solo-game", {
         method: "POST",
@@ -87,9 +89,18 @@ export function QuickSoloGame({
         body: JSON.stringify({ token, bots }),
       });
       if (!res.ok) throw new Error(await errorText(res));
-      const body = (await res.json()) as { game: string; status: SoloStatus };
-      setStatus(body.status);
-      await follow(body.game);
+      const body = (await res.json()) as {
+        game: string;
+        url?: string;
+        status: SoloStatus;
+      };
+      if (!alive.current) return;
+      setStatus({
+        ...body.status,
+        game: body.game,
+        step: `Opening ${body.game}`,
+      });
+      await open(body.url ?? `/game/${body.game}`);
     } catch (e) {
       if (alive.current) setError((e as Error).message);
     } finally {
@@ -147,15 +158,11 @@ export function QuickSoloGame({
       {busy && status && (
         <div className={classes.progress} role="status">
           <span className={classes.pulse} />
-          {status.state === "drafting" ? "Drafting" : status.step}
-          {status.game && (
-            <button
-              type="button"
-              className={classes.link}
-              onClick={() => open(status.game!)}
-            >
-              Open {status.game}
-            </button>
+          {status.step}
+          {startedAt !== null && (
+            <span className={classes.elapsed}>
+              {Math.max(0, Math.round((now - startedAt) / 1000))}s
+            </span>
           )}
         </div>
       )}
