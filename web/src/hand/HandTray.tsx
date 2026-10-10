@@ -245,6 +245,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
           number={hand.numbers.get(selectedCard.key)}
           timing={cardTiming(selectedCard, hand)}
           overBy={selectedCard.kind === "ac" ? Math.max(0, hand.acHeld - hand.acLimit) : 0}
+          unmet={botJudges(selectedCard, hand) && !hand.index.soMet!.includes(selectedCard.name.toLowerCase())}
           actions={liveCard ? actionsFor(selectedCard, hand) : []}
           gone={!liveCard && !scoredNow}
           players={hand.players}

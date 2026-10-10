@@ -28,6 +28,8 @@ type Props = {
   gone?: boolean;
   /** Action cards over the hand limit. */
   overBy?: number;
+  /** The game has said it does not think you meet this secret (status scoring). */
+  unmet?: boolean;
 };
 
 type Sent = { action: CardAction; baseline?: string; error?: string; busy: boolean };
@@ -59,7 +61,7 @@ function timingLine(card: HandCard, timing: Timing, hasPlay: boolean, overBy: nu
 
 /** The focused view of one card: big face, its timing, and what the bot lets you do with it. */
 export function CardPopup(props: Props) {
-  const { card, number, timing, actions, players, myColor, threadId, actionsId, meId, run, onClose, gone, overBy = 0 } = props;
+  const { card, number, timing, actions, players, myColor, threadId, actionsId, meId, run, onClose, gone, overBy = 0, unmet } = props;
   const [sent, setSent] = useState<Sent | null>(null);
   const [picking, setPicking] = useState<CardAction | null>(null);
   const thread = useChannelMessages(threadId);
@@ -90,7 +92,7 @@ export function CardPopup(props: Props) {
 
   const others = players.filter((p) => p.color !== myColor);
   const hasPlay = actions.some((a) => a.id === "play" || a.id === "score");
-  const status = statusOf(sent, refused, replies.length);
+  const status = statusOf(sent, refused, replies, card);
 
   return createPortal(
     <div className={classes.backdrop} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -111,6 +113,11 @@ export function CardPopup(props: Props) {
           <p className={`${classes.popupTiming} ${timing === "now" && hasPlay && !gone ? classes.popupTimingNow : ""}`}>
             {gone ? "This card has left your hand." : timingLine(card, timing, hasPlay, overBy)}
           </p>
+          {unmet && !card.scored && (
+            <p className={classes.popupWarn}>
+              The game says you don&apos;t meet {card.name} yet: {card.text} You can still score it on your word.
+            </p>
+          )}
 
           {actions.length > 0 && (
             <div className={classes.actions}>
@@ -122,7 +129,7 @@ export function CardPopup(props: Props) {
                   title={action.hint}
                   onClick={() => void perform(action)}
                 >
-                  {action.label}
+                  {action.id === "score" && unmet ? "Score anyway" : action.label}
                 </button>
               ))}
             </div>
@@ -206,13 +213,37 @@ function ReplyButton({ label, pendingKey, onPress }: { label: string; pendingKey
   );
 }
 
-function statusOf(sent: Sent | null, refused: boolean, replyCount: number) {
+function statusOf(sent: Sent | null, refused: boolean, replies: Message[], card: HandCard) {
   if (!sent) return null;
+  if (sent.busy && sent.action.id === "score") return { kind: "busy", text: `Asking the game to score ${card.name}…` };
   if (sent.busy) return { kind: "busy", text: `${sent.action.label.replace("…", "")}…` };
-  if (sent.error) return { kind: "error", text: sent.error };
+  if (sent.error) return { kind: "error", text: scoreError(sent, card) ?? sent.error };
   if (refused) return { kind: "error", text: "The bot did not allow it — see its reply below." };
   // A show answers privately to the other player; the command's own acknowledgement is the outcome.
   if (sent.action.id === "show") return { kind: "ok", text: DONE_TEXT.show };
-  if (replyCount === 0) return { kind: "busy", text: "Sent. Waiting for the bot…" };
+  if (sent.action.id === "score") return scoreStatus(replies, card);
+  if (replies.length === 0) return { kind: "busy", text: "Sent. Waiting for the bot…" };
   return { kind: "ok", text: DONE_TEXT[sent.action.id] ?? "Done." };
+}
+
+/** The game's word on a score: done (with the progress it counted), queued behind others, or not yet. */
+function scoreStatus(replies: Message[], card: HandCard) {
+  const texts = replies.map((m) => m.content ?? "");
+  const queued = texts.find((t) => /queued to score a secret objective/i.test(t));
+  if (queued) return { kind: "busy", text: `Queued — ${card.name} scores once the players ahead of you in scoring order have.` };
+  const scoredLine = texts.find((t) => / scored /.test(t) && t.includes(card.name));
+  if (card.scored || scoredLine) {
+    const progress = scoredLine && /\((\d+)\/(\d+)\)\s*$/m.exec(scoredLine);
+    const short = progress && Number(progress[1]) < Number(progress[2]);
+    const vp = `+${card.vp ?? 1} VP — scored ${card.name}.`;
+    return short
+      ? { kind: "error", text: `${vp} The game counts ${progress[1]} of ${progress[2]} for it — use Undo if that was a mistake.` }
+      : { kind: "ok", text: vp };
+  }
+  return { kind: "busy", text: "Sent. Waiting for the bot…" };
+}
+
+function scoreError(sent: Sent, card: HandCard): string | undefined {
+  if (sent.action.id !== "score") return undefined;
+  return `The game did not offer to score ${card.name} just now — reopen your hand and try again.`;
 }
