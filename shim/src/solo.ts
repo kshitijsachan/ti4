@@ -226,9 +226,17 @@ export class SoloGames {
 
       const deal = latest("deal2SOToAll");
       if (deal) {
-        const choosing = setupMessages.filter((m) => /starting tech/i.test(String(m.content ?? "")) && hasControl(m, /(^|_)(getTech_|getKeleresTechOptions)/));
+        // Starting-technology prompts nobody has answered yet: "<faction> use the buttons to choose your starting
+        // technology" (tech buttons, or "Get a Technology" when the options are open), and the tech lists they lead to.
+        const choosing = setupMessages.filter(
+          (m) =>
+            BigInt(m.id) > BigInt(deal.id) - (60n * 1000n << 22n) &&
+            !Object.keys(m._presses ?? {}).length &&
+            controlIds(m.components).some((id) => !/^(deleteButtons|ultimateUndo|undo)/i.test(id)) &&
+            (/starting tech/i.test(String(m.content ?? "")) || hasControl(m, /(^|_)getTech_.*noPay/)),
+        );
         if (choosing.length) {
-          const who = [...new Set(choosing.map((m) => this.factionName(web, /FFCC_([^_]+)_/.exec(controlIds(m.components)[0] ?? "")?.[1])))];
+          const who = [...new Set(choosing.map((m) => this.whoIsAsked(web, m)))];
           say(`Waiting for ${who.join(", ")} to choose a starting technology`);
           continue;
         }
@@ -320,6 +328,15 @@ export class SoloGames {
 
   private realPlayers(web: Json): Json[] {
     return (web.playerData ?? []).filter((p: Json) => p.discordId && p.faction && p.faction !== "null" && p.faction !== "neutral");
+  }
+
+  /** The player a setup prompt is for: by its faction-locked buttons, else by its mention. */
+  private whoIsAsked(web: Json, m: StoredMessage) {
+    const faction = controlIds(m.components).map((id) => /^FFCC_([^_]+)_/.exec(id)?.[1]).find(Boolean);
+    if (faction) return this.factionName(web, faction);
+    const id = /<@!?(\d+)>/.exec(String(m.content ?? ""))?.[1] ?? m._ephemeral_for;
+    const p = this.realPlayers(web).find((x: Json) => String(x.discordId) === id);
+    return String(p?.userName ?? "a player");
   }
 
   private factionName(web: Json, faction: string | undefined) {

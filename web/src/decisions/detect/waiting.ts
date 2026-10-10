@@ -42,15 +42,18 @@ export function setupWaiting(
   const log = data ? data.ids.map((id) => data.byId[id]).filter(Boolean) : [];
   /* Starting technology prompts still up ("<faction> use the buttons to choose your starting technology"). */
   const techFactions = new Set<string>();
+  const techUsers = new Set<string>();
   for (const m of log) {
-    if (!m.author.bot) continue;
+    if (!m.author.bot || !/starting tech/i.test(m.content)) continue;
     const choices = forwardChoices(m);
-    const tech = choices.filter((c) => /^(getTech_|getKeleresTechOptions)/.test(baseId(c.customId)));
-    if (!tech.length || !/starting tech/i.test(m.content)) continue;
-    const f = idFaction(tech[0].customId);
+    if (!choices.length) continue;
+    const f = choices.map((c) => idFaction(c.customId)).find(Boolean);
     if (f) techFactions.add(f);
+    else for (const u of m.mentions ?? []) techUsers.add(u.id);
   }
-  const choosingTech = players.filter((p) => techFactions.has(p.faction) || (techFactions.has("keleres") && p.faction.startsWith("keleres")));
+  const choosingTech = players.filter(
+    (p) => techFactions.has(p.faction) || techUsers.has(p.discordId) || (techFactions.has("keleres") && p.faction.startsWith("keleres")),
+  );
   if (choosingTech.length) return waitOn(choosingTech, "choose a starting technology");
 
   /* A table-wide step nobody has taken yet. */

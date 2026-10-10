@@ -64,6 +64,7 @@ export function PlayerRail({ myUserId, onAllPlayers }: Props) {
                 position="bottom"
                 openDelay={touch ? 0 : 120}
                 closeDelay={60}
+                disabled={!!openColor}
                 transitionProps={{ transition: "fade", duration: 90 }}
                 shadow="md"
                 withinPortal

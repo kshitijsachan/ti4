@@ -251,6 +251,15 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       setup: round1,
     };
   }
+  if (/choose your starting tech/i.test(m.content) && !has(choices, /^getTech_/)) {
+    return {
+      ...base,
+      eyebrow: "Game setup",
+      title: "Choose your starting technology",
+      text: "Your faction starts with a technology of your choice, for free. Press “Get a Technology” to see the options.",
+      setup: true,
+    };
+  }
   if (has(choices, /^sandbagPref_/)) {
     return {
       ...base,
