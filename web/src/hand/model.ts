@@ -257,7 +257,9 @@ export function timingOf(
   const phase = state?.phase ?? "unknown";
   const myTurn = !!myColor && state?.activePlayer === myColor;
   if (card.kind === "so") {
-    if (window.startsWith("action")) return phase === "action" ? "now" : "later";
+    // Action-phase secrets score the moment you achieve one, which the public state cannot tell, so they never
+    // light up as open; the popup still offers Score.
+    if (window.startsWith("action")) return "later";
     // Secrets score in the status phase's scoring step only, not during its homework.
     if (window.startsWith("status")) return phase === "status.scoring" ? "now" : "later";
     return "later";
