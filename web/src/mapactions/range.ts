@@ -2,9 +2,8 @@ import type { PlayerDataResponse } from "@/entities/data/types";
 import type { Tile } from "@/entities/game/types";
 import { getTileById } from "@/entities/lookup/systems";
 
-/** Centre-to-centre distance of neighbouring hexes on the map (TILE_HEIGHT), with slack. */
-const NEIGHBOUR_MIN = 270;
-const NEIGHBOUR_MAX = 330;
+/** Neighbouring hexes sit at the map's smallest centre-to-centre distance; this much slack is allowed. */
+const NEIGHBOUR_SLACK = 1.12;
 const GROUND = new Set(["gf", "mf", "pd", "sd"]);
 
 function wormholesOf(tile: Tile, web?: PlayerDataResponse) {
@@ -39,15 +38,18 @@ export function distancesTo(
   techs: string[],
   web?: PlayerDataResponse,
 ): Map<string, number> {
-  const list = Object.values(tiles).filter((t) => t.systemId && !getTileById(t.systemId)?.isHyperlane);
+  const list = Object.values(tiles).filter((t) => t.systemId && t.position !== "special");
+  const lane = (t: Tile) => !!getTileById(t.systemId)?.isHyperlane;
   const holes = new Map(list.map((t) => [t.position, wormholesOf(t, web)]));
+  const gap = (a: Tile, b: Tile) => Math.hypot(a.properties.x - b.properties.x, a.properties.y - b.properties.y);
+  let step = Infinity;
+  for (const a of list) for (const b of list) if (a !== b) step = Math.min(step, gap(a, b) || Infinity);
   const neighbours = (t: Tile) => {
     const out: Tile[] = [];
     const mine = holes.get(t.position)!;
     for (const o of list) {
       if (o === t) continue;
-      const d = Math.hypot(o.properties.x - t.properties.x, o.properties.y - t.properties.y);
-      if (d >= NEIGHBOUR_MIN && d <= NEIGHBOUR_MAX) out.push(o);
+      if (gap(o, t) <= step * NEIGHBOUR_SLACK) out.push(o);
       else if ([...holes.get(o.position)!].some((w) => mine.has(w))) out.push(o);
     }
     return out;
@@ -70,17 +72,20 @@ export function distancesTo(
   const dist = new Map<string, number>([[target, 0]]);
   const start = tiles[target];
   if (!start || !enterable(start)) return dist;
-  let frontier = [start];
-  for (let d = 1; frontier.length && d <= 6; d++) {
-    const next: Tile[] = [];
-    for (const t of frontier) {
-      for (const n of neighbours(t)) {
-        if (dist.has(n.position)) continue;
-        dist.set(n.position, d);
-        if (passable(n)) next.push(n);
-      }
+  /* Hyperlanes cost nothing to cross (and, as a hint, are taken to join all their neighbours). */
+  const queue: Tile[] = [start];
+  while (queue.length) {
+    const t = queue.shift()!;
+    const d = dist.get(t.position)!;
+    if (d >= 6) continue;
+    for (const n of neighbours(t)) {
+      const nd = lane(n) ? d : d + 1;
+      if ((dist.get(n.position) ?? Infinity) <= nd) continue;
+      dist.set(n.position, nd);
+      if (lane(n)) queue.unshift(n);
+      else if (passable(n)) queue.push(n);
     }
-    frontier = next;
   }
+  for (const t of list) if (lane(t)) dist.delete(t.position);
   return dist;
 }

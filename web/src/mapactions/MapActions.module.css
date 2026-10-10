@@ -1,0 +1,512 @@
+/* Over the map, under the zoom controls and the decision popup; only its controls take the pointer. */
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-game-state-overlay);
+  overflow: hidden;
+}
+
+.layer > * {
+  pointer-events: auto;
+}
+
+.layer > .art,
+.layer > .mark {
+  pointer-events: none;
+}
+
+/* The floating controls sit above the map's own planet and unit cards, which open under the cursor. */
+.ui {
+  z-index: calc(var(--z-map-planet-details) + 50);
+}
+
+.mark {
+  position: absolute;
+  overflow: visible;
+}
+
+/* Map hexes I can act on: a pointer and a faint lift under the cursor. Set on the tile elements by id. */
+:global(.mapactions-can),
+:global(.mapactions-origin) {
+  cursor: pointer;
+}
+
+:global(.mapactions-can:hover) [data-map-tile-visual="true"],
+:global(.mapactions-origin:hover) [data-map-tile-visual="true"] {
+  filter: brightness(1.18);
+}
+
+:global(.mapactions-cannot) [data-map-tile-visual="true"] {
+  cursor: not-allowed;
+}
+
+/* Hex outlines drawn over tiles (origins, the activated system, a pending confirm). */
+.art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.hexOrigin {
+  fill: rgba(var(--play-blue), 0.08);
+  stroke: rgba(var(--play-blue), 0.85);
+  stroke-width: 5;
+  stroke-dasharray: 14 10;
+}
+
+.hexOriginFar {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.55);
+  stroke-width: 4;
+  stroke-dasharray: 6 12;
+}
+
+.hexOriginPicked {
+  fill: rgba(var(--play-blue), 0.16);
+  stroke: rgb(var(--play-blue));
+  stroke-width: 6;
+}
+
+.hexTarget {
+  fill: rgba(var(--play-yellow), 0.08);
+  stroke: rgb(var(--play-yellow));
+  stroke-width: 7;
+}
+
+.hexConfirm {
+  fill: rgba(var(--play-yellow), 0.12);
+  stroke: rgb(var(--play-yellow));
+  stroke-width: 6;
+}
+
+.arrow {
+  stroke: rgb(var(--play-blue));
+  stroke-width: 4;
+  stroke-linecap: round;
+  fill: none;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8));
+}
+
+.arrowHead {
+  fill: rgb(var(--play-blue));
+}
+
+/* Small floating surfaces: the confirm chip, the tooltip, the unit picker, the step bars. */
+.surface {
+  position: absolute;
+  border-radius: 8px;
+  background: var(--panel-texture, none), var(--details-card-bg, #0b1020);
+  border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    0 3px 10px rgba(0, 0, 0, 0.4);
+  color: var(--play-ink);
+  font-size: 12px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 5px 5px 10px;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  animation: rise 140ms var(--play-ease);
+}
+
+.chipText {
+  color: var(--play-ink-bright);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--play-ink-muted);
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--play-hairline-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--play-ink);
+}
+
+.iconButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--play-ink-bright);
+}
+
+.iconButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.go {
+  border-color: rgba(var(--play-green), 0.6);
+  background: rgba(var(--play-green), 0.2);
+  color: #bbf7d0;
+}
+
+.go:hover:not(:disabled) {
+  background: rgba(var(--play-green), 0.32);
+  color: #f0fdf4;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--play-ink-muted);
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover {
+  color: var(--play-ink-bright);
+}
+
+.tooltip {
+  padding: 4px 8px;
+  pointer-events: none !important;
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.35;
+  transform: translate(12px, 14px);
+}
+
+.tooltipBlocked {
+  color: #fca5a5;
+}
+
+/* The step bar: what this step of the tactical action is, and its one confirm. */
+.bar {
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(460px, calc(100% - 24px));
+  padding: 10px 12px;
+  animation: rise 160ms var(--play-ease);
+}
+
+@media (min-width: 1000px) {
+  .barDocked {
+    transform: translateX(calc(-50% - 200px));
+  }
+}
+
+.barHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.barTitle {
+  color: var(--play-ink-bright);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.grow {
+  flex: 1;
+}
+
+.barText {
+  color: var(--play-ink-body);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.barActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--play-hairline-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--play-ink-bright);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.primary {
+  border-color: rgba(var(--play-green), 0.65);
+  background: rgba(var(--play-green), 0.22);
+}
+
+.primary:hover:not(:disabled) {
+  background: rgba(var(--play-green), 0.34);
+}
+
+.error {
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+/* Capacity meter: cargo (fighters, ground forces) against the moving ships' capacity. */
+.meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.meterTrack {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--play-socket);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  background: rgb(var(--play-blue));
+  transition: width 160ms var(--play-ease);
+}
+
+.meterOver .meterFill {
+  background: rgb(var(--play-red));
+}
+
+.meterOver {
+  color: #fca5a5;
+}
+
+/* The unit picker anchored to an origin system. */
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 248px;
+  padding: 8px;
+  animation: rise 140ms var(--play-ease);
+}
+
+.pickerHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 4px;
+  border-bottom: 1px solid var(--play-separator);
+}
+
+.unitRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 2px 2px;
+  border-radius: 6px;
+}
+
+.unitRowPicked {
+  background: rgba(var(--play-blue), 0.12);
+}
+
+.unitImg {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  cursor: pointer;
+}
+
+.unitName {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  color: var(--play-ink-bright);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.unitSub {
+  color: var(--play-ink-muted);
+  font-size: 10px;
+}
+
+.slow {
+  color: #fcd34d;
+}
+
+.count {
+  min-width: 34px;
+  text-align: center;
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--play-ink-bright);
+}
+
+.step {
+  width: 24px;
+  height: 24px;
+}
+
+.pickerFoot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--play-separator);
+}
+
+/* Ghost of what moves in, at the activated system. */
+.ghost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px 5px;
+  transform: translate(-50%, -50%);
+  pointer-events: none !important;
+  max-width: 160px;
+  background: rgba(10, 16, 32, 0.85);
+  border-color: rgba(var(--play-blue), 0.7);
+}
+
+.ghostUnit {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11px;
+  color: var(--play-ink-bright);
+}
+
+.ghostUnit img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  opacity: 0.9;
+}
+
+/* Landing: one row per planet. */
+.planets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.planet {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--play-socket);
+}
+
+.planetName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--play-ink-bright);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.planetMeta {
+  display: flex;
+  gap: 8px;
+  color: var(--play-ink-muted);
+  font-size: 11px;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  flex: none;
+}
+
+.steppers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stepper img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.spaceRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--play-ink-muted);
+  font-size: 11px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip,
+  .bar,
+  .picker {
+    animation: none;
+  }
+}
+
+.ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
