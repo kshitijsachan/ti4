@@ -86,7 +86,11 @@ export class Gateway {
     return true;
   }
 
+  /** Set while the shim shuts down: new interactions are dropped so the bot's follow-up writes can finish. */
+  draining = false;
+
   dispatch(t: string, d: Json) {
+    if (this.draining && t === "INTERACTION_CREATE") return;
     if (!this.ready) {
       this.backlog.push({ t, d });
       if (this.backlog.length > 5000) {

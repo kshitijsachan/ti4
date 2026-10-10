@@ -1,5 +1,5 @@
 diff --git a/src/main/java/ti4/discord/JdaService.java b/src/main/java/ti4/discord/JdaService.java
-index b3bb870..267549f 100644
+index b3bb870..04d6b18 100644
 --- a/src/main/java/ti4/discord/JdaService.java
 +++ b/src/main/java/ti4/discord/JdaService.java
 @@ -148,7 +148,7 @@ public class JdaService {
@@ -11,7 +11,7 @@ index b3bb870..267549f 100644
                  .setEventPool(EVENT_EXECUTOR)
                  .enableIntents(
                          // Needed to listen for joins/leaves
-@@ -165,8 +165,24 @@ public class JdaService {
+@@ -165,8 +165,26 @@ public class JdaService {
                  .setChunkingFilter(ChunkingFilter.ALL)
                  .disableCache(DISABLED_JDA_CACHE_FLAGS)
                  // This allows us to use our own ShutdownHook, created below
@@ -22,7 +22,9 @@ index b3bb870..267549f 100644
 +        String apiBase = System.getenv("DISCORD_API_BASE");
 +        if (apiBase != null && !apiBase.isBlank()) {
 +            builder.setRestConfig(new net.dv8tion.jda.api.requests.RestConfig().setBaseUrl(apiBase))
-+                    .setCompression(net.dv8tion.jda.api.utils.Compression.NONE);
++                    .setCompression(net.dv8tion.jda.api.utils.Compression.NONE)
++                    .setHttpClientBuilder(net.dv8tion.jda.internal.utils.IOUtil.newHttpClientBuilder()
++                            .addInterceptor(new ti4.selfhost.ShimRetryInterceptor()));
 +            String gateway = System.getenv()
 +                    .getOrDefault(
 +                            "DISCORD_GATEWAY_URL",
@@ -82,7 +84,7 @@ index d91d9d5..50e3842 100644
  
              generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
 diff --git a/src/main/java/ti4/helpers/TransactionHelper.java b/src/main/java/ti4/helpers/TransactionHelper.java
-index 22ecac6..4adb45d 100644
+index 22ecac6..6d15e7d 100644
 --- a/src/main/java/ti4/helpers/TransactionHelper.java
 +++ b/src/main/java/ti4/helpers/TransactionHelper.java
 @@ -1571,6 +1571,7 @@ public class TransactionHelper {
@@ -102,6 +104,15 @@ index 22ecac6..4adb45d 100644
  
          int offerNumber = 1;
          String key = "offerFrom" + player.getFaction() + "To" + p2.getFaction();
+@@ -2669,6 +2670,8 @@ public class TransactionHelper {
+                             + p2.getRepresentation(false, false));
+             player.clearTransactionItemsWithPlayer(p2);
+             ButtonHelper.deleteMessage(event);
++            if (ti4.selfhost.SelfHosted.isEnabled())
++                ti4.spring.api.selfhost.TradeService.retireStaleOffers(game, player, p2);
+         }
+     }
+ 
 diff --git a/src/main/java/ti4/image/ImageHelper.java b/src/main/java/ti4/image/ImageHelper.java
 index d389e4e..bf1fc4e 100644
 --- a/src/main/java/ti4/image/ImageHelper.java
@@ -163,6 +174,51 @@ index 0000000..e03efb2
 +        if (url.startsWith("https://media.discordapp.net/")) return shimBaseUrl() + url.substring("https://media.discordapp.net".length());
 +        if (url.startsWith("/")) return shimBaseUrl() + url;
 +        return url;
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/ShimRetryInterceptor.java b/src/main/java/ti4/selfhost/ShimRetryInterceptor.java
+new file mode 100644
+index 0000000..35c108f
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/ShimRetryInterceptor.java
+@@ -0,0 +1,39 @@
++package ti4.selfhost;
++
++import java.io.IOException;
++import java.net.ConnectException;
++import okhttp3.Interceptor;
++import okhttp3.Response;
++import ti4.logging.BotLogger;
++
++/**
++ * Self-hosted only: the shim restarts on deploys. A REST call that cannot connect at all (nothing was sent, so it is
++ * safe to repeat) is retried with backoff for up to ~60s instead of being dropped, so the game's messages stay in sync.
++ */
++public final class ShimRetryInterceptor implements Interceptor {
++    private static final long MAX_WAIT_MS = 60_000;
++
++    @Override
++    public Response intercept(Chain chain) throws IOException {
++        long start = System.currentTimeMillis();
++        long delay = 250;
++        for (int attempt = 1; ; attempt++) {
++            try {
++                return chain.proceed(chain.request());
++            } catch (ConnectException e) {
++                if (System.currentTimeMillis() - start + delay > MAX_WAIT_MS) throw e;
++                if (attempt == 1) {
++                    BotLogger.info("Shim unreachable (" + e.getMessage() + "); retrying "
++                            + chain.request().method() + " " + chain.request().url().encodedPath());
++                }
++                try {
++                    Thread.sleep(delay);
++                } catch (InterruptedException ie) {
++                    Thread.currentThread().interrupt();
++                    throw e;
++                }
++                delay = Math.min(delay * 2, 4_000);
++            }
++        }
 +    }
 +}
 diff --git a/src/main/java/ti4/service/game/CreateGameService.java b/src/main/java/ti4/service/game/CreateGameService.java
@@ -1476,10 +1532,10 @@ index 0000000..e09cc47
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/TradeService.java b/src/main/java/ti4/spring/api/selfhost/TradeService.java
 new file mode 100644
-index 0000000..9a7bd68
+index 0000000..bfbe444
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/TradeService.java
-@@ -0,0 +1,657 @@
+@@ -0,0 +1,692 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.lang.reflect.Method;
@@ -1716,6 +1772,7 @@ index 0000000..9a7bd68
 +        me.clearTransactionItemsWithPlayer(them);
 +        for (String item : items) me.addTransactionItem(item);
 +        TransactionHelper.sendOffer(game, me, "sendOffer_" + them.getColor(), null);
++        retireStaleOffers(game, me, them);
 +
 +        String key = "offerFrom" + me.getFaction() + "To" + them.getFaction();
 +        int offerNumber = parseInt(game.getStoredValue(key), 0);
@@ -1940,6 +1997,40 @@ index 0000000..9a7bd68
 +                rescind,
 +                m.getTimeCreated().toString(),
 +                emojiUrl(to));
++    }
++
++    /**
++     * Strips the Accept / Reject / Counter buttons of {@code sender}'s offers in {@code receiver}'s cards-info thread
++     * that the bot would refuse anyway: replaced by a newer offer, or rescinded (the bot only deletes the rescinder's
++     * own message). Otherwise they stay pressable and show up in the web client as an open trade decision.
++     */
++    public static void retireStaleOffers(Game game, Player sender, Player receiver) {
++        java.util.concurrent.CompletableFuture.runAsync(() -> {
++            try {
++                ThreadChannel thread = receiver.getCardsInfoThread();
++                if (thread == null) return;
++                // Give a just-sent offer time to land, so it is seen (and kept) as the newest one.
++                Thread.sleep(1500);
++                int latest = parseInt(game.getStoredValue("offerFrom" + sender.getFaction() + "To" + receiver.getFaction()), -1);
++                boolean live = !sender.getTransactionItemsWithPlayer(receiver).isEmpty();
++                String prefix = "acceptOffer_" + sender.getColor();
++                String botId = JdaService.getBotId();
++                for (Message m : thread.getHistory().retrievePast(100).timeout(5, TimeUnit.SECONDS).complete()) {
++                    if (botId != null && !botId.equals(m.getAuthor().getId())) continue;
++                    for (Button b : m.getComponentTree().findAll(Button.class)) {
++                        String id = b.getCustomId();
++                        if (id == null || !(id.equals(prefix) || id.startsWith(prefix + "_"))) continue;
++                        String[] parts = id.split("_");
++                        int num = parts.length > 2 ? parseInt(parts[2], -1) : -1;
++                        if (live && (num == -1 || num == latest)) break;
++                        m.editMessageComponents(java.util.Collections.emptyList()).queue(ok -> {}, e -> {});
++                        break;
++                    }
++                }
++            } catch (Exception e) {
++                ti4.logging.BotLogger.error("Could not retire stale trade offers in " + game.getName(), e);
++            }
++        });
 +    }
 +
 +    private List<Message> history(ThreadChannel channel, Game game) {

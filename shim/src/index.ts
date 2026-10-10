@@ -75,6 +75,10 @@ function serveFile(res: import("node:http").ServerResponse, file: string, cache 
   return true;
 }
 
+// Bot REST traffic, so a shutdown can wait until the bot's writes for the last interaction have landed.
+let restInFlight = 0;
+let lastRest = 0;
+
 // Only websocket upgrades go to the 'upgrade' handler. Java's HttpClient (the bot fetching emoji/attachment
 // images from us) sends `Upgrade: h2c` on plain-HTTP requests, which must be served as normal requests.
 const server = createServer({ shouldUpgradeCallback: (req: import("node:http").IncomingMessage) => /websocket/i.test(String(req.headers.upgrade ?? "")) } as any, async (req, res) => {
@@ -82,7 +86,14 @@ const server = createServer({ shouldUpgradeCallback: (req: import("node:http").I
   const path = url.pathname;
   try {
     if (path.startsWith("/api/v10/") || path.startsWith("/api/v9/")) {
-      return await rest.handle(req, res, path.replace(/^\/api\/v\d+/, ""), url.searchParams);
+      restInFlight++;
+      lastRest = Date.now();
+      try {
+        return await rest.handle(req, res, path.replace(/^\/api\/v\d+/, ""), url.searchParams);
+      } finally {
+        restInFlight--;
+        lastRest = Date.now();
+      }
     }
     if (path.startsWith("/app/")) return await lobby.handle(req, res, path.slice(4), url.searchParams);
     if (path.startsWith("/attachments/")) {
@@ -209,8 +220,23 @@ server.listen(PORT, () => {
   log.info(`admin link: ${PUBLIC_URL || INTERNAL_URL}/admin?key=${store.state.admin_token}`);
 });
 
+// Graceful shutdown: stop taking new interactions, then exit once the bot's REST traffic has been idle for 2s
+// (at most 10s), so a restart does not drop the bot's follow-up writes. A second signal exits at once.
+let stopping = false;
 for (const sig of ["SIGINT", "SIGTERM"]) {
-  process.on(sig, () => {
+  process.on(sig, async () => {
+    if (stopping) {
+      store.saveNow();
+      process.exit(0);
+    }
+    stopping = true;
+    gateway.draining = true;
+    log.info(`${sig}: draining bot REST traffic before exit`);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 10_000 && (restInFlight > 0 || Date.now() - lastRest < 2_000)) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    log.info(`exiting after ${Date.now() - t0}ms (${restInFlight} REST calls still in flight)`);
     store.saveNow();
     process.exit(0);
   });
