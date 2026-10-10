@@ -148,6 +148,16 @@ export function LeadershipBody({ d, data }: RendererProps) {
   };
 
   const spec = cardSpec(1);
+  if (runner.running?.startsWith("leadership:")) {
+    return (
+      <div className={classes.panel}>
+        <CardHeader sc={1} data={data} sub={primary ? "Your strategy card" : "Following"} />
+        <div className={classes.progress}>
+          <Loader size={14} /> {runner.label} ({runner.step}/{runner.total})
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={classes.panel}>
       <CardHeader sc={1} data={data} sub={primary ? "Your strategy card" : "Following"}>

@@ -48,7 +48,7 @@ function StepView({ step, props, index }: { step: Decision; props: RendererProps
   const { data, pendingKey, pressOn } = props;
   const speaker = step.choices.some((c) => SPEAKER.test(baseId(c.customId)));
   const agendas = step.choices.some((c) => /^drawAgenda_2$/.test(baseId(c.customId)));
-  const title = speaker ? "Choose the new speaker" : agendas ? "Then look at the top 2 agendas" : step.title;
+  const title = speaker ? "Choose the new speaker" : agendas ? (index ? "Then look at the top 2 agendas" : "Look at the top 2 agendas") : step.title;
   const choices = step.choices
     .filter((c) => !FOLLOWERS.test(baseId(c.customId)))
     .map((c): Choice => {

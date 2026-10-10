@@ -48,7 +48,7 @@ export const CARDS: Record<number, CardSpec> = {
   3: {
     initiative: 3,
     name: "Politics",
-    primary: "Choose a new speaker (not you), draw 2 action cards, look at the top 2 agendas and put each on the top or bottom.",
+    primary: "Give the speaker token to any player other than the current speaker (you may take it), draw 2 action cards, then look at the top 2 agendas and put each on the top or bottom.",
     secondary: "Draw 2 action cards.",
     token: true,
     follow: [{ id: /^sc_ac_draw$/, label: "Follow — draw 2 action cards", effect: "Draw 2 action cards." }],
