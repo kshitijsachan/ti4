@@ -9,6 +9,7 @@ import { DiploSystemBody, isDiploSystemStep } from "./DiploSystem";
 import { ReadyPlanetsBody, isReadyPlanetsStep } from "./ReadyPlanets";
 import { ImperialScoreBody, isImperialScoreStep } from "./ImperialScore";
 import { AgendaPlacementBody, isAgendaPlacementStep } from "./AgendaPlacement";
+import { TokensBody, isTokenStep } from "./Tokens";
 
 /**
  * Strategy-card renderers, one per card (primary and follow), registered with `registerStrategyCardRenderer`.
@@ -26,3 +27,4 @@ strategyStepRenderers.push((props: RendererProps) => (isDiploSystemStep(props.d.
 strategyStepRenderers.push((props: RendererProps) => (isReadyPlanetsStep(props.d.choices) ? <ReadyPlanetsBody {...props} /> : null));
 strategyStepRenderers.push((props: RendererProps) => (isImperialScoreStep(props.d.choices) ? <ImperialScoreBody {...props} /> : null));
 strategyStepRenderers.push((props: RendererProps) => (isAgendaPlacementStep(props.d.choices) ? <AgendaPlacementBody {...props} /> : null));
+strategyStepRenderers.push((props: RendererProps) => (isTokenStep(props.d.choices) ? <TokensBody {...props} /> : null));

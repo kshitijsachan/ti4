@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconCheck, IconMinus, IconPlus } from "@tabler/icons-react";
+import cx from "clsx";
 import { usePlay } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { baseId, choicesOf, type Choice } from "../../model/controls";
@@ -98,7 +99,9 @@ export function LeadershipBody({ d, data }: RendererProps) {
   const [tg, setTg] = useState(0);
   const influence = planets.filter((c) => picked.has(c.key)).reduce((n, c) => n + planetOf(c).inf, 0) + tg;
   const bought = Math.floor(influence / 3);
-  const total = free + bought;
+  const reinf = (me as { ccReinf?: number } | undefined)?.ccReinf;
+  const total = Math.min(free + bought, reinf ?? Infinity);
+  const capped = reinf !== undefined && free + bought > reinf;
   const [alloc, setAlloc] = useState<Record<string, number>>({ tactic: 0, fleet: 0, strategy: 0 });
   const placed = alloc.tactic + alloc.fleet + alloc.strategy;
   const left = total - placed;
@@ -203,6 +206,7 @@ export function LeadershipBody({ d, data }: RendererProps) {
         <span className={classes.costValue}>{total}</span> token{total === 1 ? "" : "s"}
         {primary && <span className={classes.sub}> (3 free + {bought} bought)</span>}
       </p>
+      {capped && <p className={cx(classes.sub, classes.warn)}>Only {reinf} token{reinf === 1 ? "" : "s"} left in your reinforcements — spending more influence buys nothing.</p>}
       {gain && total > 0 && (
         <>
           <span className={classes.sectionLabel}>Place them{left > 0 ? ` · ${left} left` : ""}</span>
