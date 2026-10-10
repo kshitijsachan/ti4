@@ -122,6 +122,9 @@ function isDecline(c: Choice) {
 /** "Spend 1 token from your strategy pool to draw 2 action cards." → "Draw 2 action cards." */
 function benefit(secondary?: string) {
   if (!secondary) return "";
+  /* "…strategy pool and 4 resources to research 1 technology." → "Research 1 technology for 4 resources." */
+  const paid = secondary.match(/^spend 1 token from your strategy pool and (.+?) to (.+?)\.?$/i);
+  if (paid) return `${paid[2].charAt(0).toUpperCase()}${paid[2].slice(1)} for ${paid[1]}.`;
   const s = secondary.replace(/^spend 1 token from your strategy pool (and )?(to )?/i, "");
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

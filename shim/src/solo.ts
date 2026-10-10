@@ -261,7 +261,10 @@ export class SoloGames {
         return at === undefined || Date.now() - at > 45 * SECOND;
       };
 
-      const deal = latest("deal2SOToAll");
+      // The bot posts "Deal 2 Secret Objectives To All" more than once (again after Keleres sets up) and deletes only
+      // the copy that was pressed: once anyone holds a secret objective, the deal is done.
+      const dealt = this.realPlayers(web).some((p: Json) => Number(p.soCount ?? 0) > 0 || Object.keys(p.secretsScored ?? {}).length > 0);
+      const deal = dealt ? undefined : latest("deal2SOToAll");
       if (deal) {
         // Starting-technology prompts nobody has answered yet: "<faction> use the buttons to choose your starting
         // technology" (tech buttons, or "Get a Technology" when the options are open), and the tech lists they lead to.

@@ -398,11 +398,12 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
   }
   if (has(choices, ID.turn)) {
     const fresh = has(choices, /^tacticalAction/);
+    const abilities = has(choices, /^turnEnd/) && !has(choices, /^(endOfTurnAbilities|doAnotherAction)/) && choices.some((c) => c.rank !== "undo" && !/^turnEnd/.test(baseId(c.customId)));
     return {
       ...base,
       kind: "turn",
       eyebrow: "",
-      title: fresh ? "Your turn — choose an action" : "Finish your turn",
+      title: fresh ? "Your turn — choose an action" : abilities ? "End of turn — use an ability first?" : "Finish your turn",
     };
   }
   if (has(choices, ID.tactical)) {

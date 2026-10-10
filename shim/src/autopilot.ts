@@ -49,6 +49,8 @@ type Rule = {
   again?: boolean;
   /** Ranks matching controls (lower first). */
   rank?: (c: Control) => number;
+  /** Not a control we chose (by label) in this channel in the last 10 minutes: a second starting technology. */
+  distinct?: boolean;
   /**
    * Only while the game is in a matching phase (the bot's web-data phase, e.g. `status.homework`). Table windows stay
    * on the table after their phase ends, and the bot acts on a late press anyway: a "Ready For Strategy Phase" pressed
@@ -76,7 +78,7 @@ const RULES: Rule[] = [
   // or twice); open choices come as "Get a Technology" → a tech type → a tech; Keleres asks once the others are done.
   { id: /(^|_)acquireAFreeTech$/, score: 83, why: "setup: get a starting technology" },
   { id: /(^|_)getAllTechOfType_/, score: 82, why: "setup: first technology type" },
-  { id: /(^|_)getTech_.+__noPay/, score: 81, why: "setup: first starting technology" },
+  { id: /(^|_)getTech_.+__noPay/, score: 81, distinct: true, why: "setup: first starting technology" },
   { id: /(^|_)getKeleresTechOptions$/, score: 60, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
@@ -487,6 +489,7 @@ class SeatPilot {
         if (phase && !rule.phase.test(phase)) continue;
       }
       let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true));
+      if (rule.distinct) hits = hits.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= 600000);
       if (!hits.length) continue;
       if (rule.rank) hits = [...hits].sort((a, b) => rule.rank!(a) - rule.rank!(b));
       const control = rule.last ? hits[hits.length - 1] : hits[0];
@@ -631,7 +634,7 @@ class SeatPilot {
     const key = `${msg.id}:${control.custom_id}`;
     if (this.siblings.has(msg.id)) {
       // Answering the second copy of a prompt starts its follow-ups afresh: they are not re-posts of the first's.
-      for (const k of [...this.recent.keys()]) if (k.startsWith(`${msg.channel_id}:`) && !k.includes(":roll:")) this.recent.delete(k);
+      for (const k of [...this.recent.keys()]) if (k.startsWith(`${msg.channel_id}:`) && !k.includes(":roll:") && !k.includes(":label:")) this.recent.delete(k);
     }
     this.pressed.add(key);
     this.answered.set(msg.id, { sig: signature(controlsOf(fresh.components)), at: Date.now() });

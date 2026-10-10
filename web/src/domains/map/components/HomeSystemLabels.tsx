@@ -8,6 +8,7 @@ import { getPrimaryColorCSS } from "@/entities/lookup/colors";
 import { getPlayerFactionDisplayName } from "@/entities/game/playerUtils";
 import type { PlayerData } from "@/entities/data/types";
 import type { Tile } from "@/entities/game/types";
+import { useFactionColors } from "@/hooks/useFactionColors";
 import styles from "./HomeSystemLabels.module.css";
 
 /** Unscaled size of a label's box, for whoever fits the board to the screen. */
@@ -93,6 +94,8 @@ export const HomeSystemLabels = memo(function HomeSystemLabels({
   anchors,
   playerData,
 }: Props) {
+  // The drawn colour (Accessible colors can recolour a seat), as the units on the map use.
+  const colors = useFactionColors();
   return (
     <>
       {anchors.map(({ faction, x, y, side }) => {
@@ -109,7 +112,7 @@ export const HomeSystemLabels = memo(function HomeSystemLabels({
                 top: y - HOME_LABEL_HEIGHT / 2,
                 width: HOME_LABEL_WIDTH,
                 height: HOME_LABEL_HEIGHT,
-                "--seat": getPrimaryColorCSS(player.color),
+                "--seat": getPrimaryColorCSS(colors[faction]?.color ?? player.color),
               } as CSSProperties
             }
           >

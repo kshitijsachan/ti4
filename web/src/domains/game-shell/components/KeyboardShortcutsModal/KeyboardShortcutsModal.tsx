@@ -74,41 +74,30 @@ export function KeyboardShortcutsModal({
       <Box className={classes.content}>
         <Grid>
           <Grid.Col span={6}>
-            <SectionTitle>Navigation &amp; Display</SectionTitle>
+            <SectionTitle>Map view</SectionTitle>
             <Box className={classes.section}>
-              <ShortcutItem
-                keys="h"
-                description="Toggle both sidebars (smart toggle)"
-              />
-              <ShortcutItem keys="l" description="Toggle left sidebar" />
-              <ShortcutItem keys="r" description="Toggle right sidebar" />
               <ShortcutItem keys={["+", "="]} description="Zoom in" />
               <ShortcutItem keys="-" description="Zoom out" />
-              <ShortcutItem keys="t" description="Toggle tech skip rendering" />
-              <ShortcutItem keys="a" description="Toggle attachments mode" />
-              <ShortcutItem keys="o" description="Toggle overlays" />
+              <ShortcutItem keys="0" description="Fit the whole board" />
+              <ShortcutItem keys="o" description="Control overlays" />
             </Box>
           </Grid.Col>
 
           <Grid.Col span={6}>
-            <SectionTitle>Right Sidebar Selection</SectionTitle>
+            <SectionTitle>Highlight</SectionTitle>
             <Box className={classes.section}>
-              <ShortcutItem
-                keys={["1", "2", "3", "4", "5", "6", "7", "8"]}
-                description="Select faction by seat order"
-                range
-              />
-              <ShortcutItem keys="T" description="Toggle tech tab" />
-              <ShortcutItem keys="H" description="Toggle hand tab" />
-              <ShortcutItem keys="S" description="Toggle strength tab" />
+              <ShortcutItem keys="y" description="Planet types" />
+              <ShortcutItem keys="t" description="Tech skips" />
+              <ShortcutItem keys="a" description="Attachments" />
+              <ShortcutItem keys="p" description="PDS coverage" />
             </Box>
           </Grid.Col>
         </Grid>
 
         <Box mt="lg" className={classes.note}>
           <Text className={classes.noteText}>
-            Press the same key again to deselect. Shortcuts are disabled while
-            you are typing in an input.
+            Press a highlight key again to turn it off; one highlight shows at a time. Shortcuts are off
+            while you are typing.
           </Text>
         </Box>
       </Box>

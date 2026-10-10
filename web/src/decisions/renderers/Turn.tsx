@@ -47,10 +47,11 @@ function actionOf(c: Choice, data: DecisionData): Action | null {
     return { choice: c, title: "Pass", sub: "You are done for this round", icon: <IconFlag size={18} stroke={1.6} />, tone: "stop" };
   }
   if (id.startsWith("endOfTurnAbilities") || id.startsWith("turnEnd")) {
+    const ability = /\+\d+ abilit/i.test(c.label);
     return {
       choice: c,
-      title: "End turn",
-      sub: "Hand the turn to the next player",
+      title: ability ? "End turn…" : "End turn",
+      sub: ability ? "You get to use an end-of-turn ability first (e.g. an expedition)" : "Hand the turn to the next player",
       icon: <IconPlayerSkipForward size={18} stroke={1.6} />,
       tone: "stop",
     };
@@ -70,6 +71,8 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
   const used = new Set(actions.map((a) => a.choice.key));
   const rest = d.choices.filter((c) => !used.has(c.key));
   const me = data.me;
+  /* The end-of-turn abilities prompt (End Turn / Do an Expedition / …): its abilities are the point, keep them in view. */
+  const endOfTurn = /^End of turn/.test(d.title);
   return (
     <div className={classes.stack}>
       {me && (
@@ -98,7 +101,7 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
         onPress={onPress}
         pendingKey={pendingKey}
         channelId={d.prompt.channelId}
-        rankOf={(c) => (c.rank === "undo" ? c.rank : "more")}
+        rankOf={(c) => (c.rank === "undo" ? c.rank : endOfTurn && c.rank !== "more" ? "secondary" : "more")}
       />
     </div>
   );

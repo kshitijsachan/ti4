@@ -114,7 +114,7 @@ export function SettingsMenu({ onRawChannels }: Props) {
             <div className={classes.hint}>
               {alerts === "blocked"
                 ? "Blocked in this browser's site settings"
-                : "Notify me when it's my move and this tab is hidden"}
+                : "A browser notification when it's my move"}
             </div>
           </Menu.Item>
         )}

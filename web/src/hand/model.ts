@@ -255,7 +255,8 @@ export function timingOf(
   const myTurn = !!myColor && state?.activePlayer === myColor;
   if (card.kind === "so") {
     if (window.startsWith("action")) return phase === "action" ? "now" : "later";
-    if (window.startsWith("status")) return phase.startsWith("status") ? "now" : "later";
+    // Secrets score in the status phase's scoring step only, not during its homework.
+    if (window.startsWith("status")) return phase === "status.scoring" ? "now" : "later";
     return "later";
   }
   if (window === "action") return phase === "action" && myTurn ? "now" : "later";

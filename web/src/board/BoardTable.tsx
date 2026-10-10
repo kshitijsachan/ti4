@@ -5,7 +5,7 @@ import { InteractiveMapRenderer } from "@/domains/map/components/renderer/Intera
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { useTabsAndTooltips } from "@/hooks/useTabsAndTooltips";
 import { useGameData, useGameDataState } from "@/state/useGameContext";
-import { useAppStore, useSettingsStore } from "@/state/appStore";
+import { useSettingsStore } from "@/state/appStore";
 import { useMapContentSize } from "@/domains/map/components/hooks/useMapContentSize";
 import { useTilesList } from "@/hooks/useTilesList";
 import { shouldHideZoomControls, computeMapZoom } from "@/utils/zoom";
@@ -27,9 +27,12 @@ import {
   homeLabelAnchors,
 } from "@/domains/map/components/HomeSystemLabels";
 import { useBoardFocus } from "./focus";
+import { MAX_ZOOM, useBoardZoom } from "./boardZoom";
 import classes from "./BoardTable.module.css";
 
 const CLEARANCE = 20;
+/** Before the board's extent is known (no tiles yet). */
+const DEFAULT_ZOOM = 0.4;
 const FOCUS_MS = 4000;
 const FOCUS_CLASS = "board-focus-tile";
 
@@ -264,10 +267,6 @@ export function BoardTable({ gameName, docked = false }: Props) {
   const { tooltipPlanet, handlePlanetMouseEnter, handlePlanetMouseLeave, handleUnitMouseEnter, handleUnitMouseLeave } =
     useMapTooltips(handleMouseEnter, handleMouseLeave);
 
-  const storeZoom = useAppStore((s) => s.zoomLevel);
-  const handleZoomIn = useAppStore((s) => s.handleZoomIn);
-  const handleZoomOut = useAppStore((s) => s.handleZoomOut);
-  const handleZoomFitToWidth = useAppStore((s) => s.handleZoomFitToWidth);
   const isFirefox = useSettingsStore((s) => s.settings.isFirefox);
 
   const mapLayout = getMapLayoutConfig("pannable");
@@ -277,21 +276,10 @@ export function BoardTable({ gameName, docked = false }: Props) {
   const bounds = usePaintedBounds(contentSize.height);
   const fit = fitLayout(bounds, area, docked);
 
-  // Fitted until the player zooms past the fit; zooming back down to it (or below) fits again.
-  const [fitted, setFitted] = useState(true);
   const fitZoom = fit?.zoom ?? 0;
-  const lastStoreZoom = useRef(storeZoom);
-  useEffect(() => {
-    const changed = lastStoreZoom.current !== storeZoom;
-    lastStoreZoom.current = storeZoom;
-    if (!fitZoom) return;
-    if (storeZoom <= fitZoom) setFitted(true);
-    else if (changed) setFitted(false);
-  }, [storeZoom, fitZoom]);
-  useEffect(() => setFitted(true), [gameName]);
-
+  const { zoom: boardZoom, fitted, zoomIn, zoomOut, fit: fitBoard } = useBoardZoom(containerRef, fitZoom, gameName);
   const useFit = fitted && !!fit;
-  const zoom = useFit ? fit.zoom : computeMapZoom(storeZoom, contentSize.width + 150);
+  const zoom = fit ? boardZoom : computeMapZoom(DEFAULT_ZOOM, contentSize.width + 150);
   const board = boardGeometry(contentSize, contentSize.width + mapLayout.mapWidthExtra, zoom);
   const placement = useFit
     ? {
@@ -304,33 +292,6 @@ export function BoardTable({ gameName, docked = false }: Props) {
         },
       }
     : { width: board.width, height: board.height, margins: board.margins };
-
-  /** Out of the fitted view: the next zoom step above it, centred on the board. */
-  const zoomIn = () => {
-    if (!useFit) return handleZoomIn();
-    let next = handleZoomFitToWidth(1, fitZoom);
-    if (next <= fitZoom) {
-      handleZoomIn();
-      next = useAppStore.getState().zoomLevel;
-    }
-    setFitted(false);
-    requestAnimationFrame(() => {
-      const el = containerRef.current;
-      if (!el || !bounds) return;
-      el.scrollTo({
-        left: ((bounds.minX + bounds.maxX) / 2) * next - el.clientWidth / 2 + CLEARANCE,
-        top: ((bounds.minY + bounds.maxY) / 2) * next - el.clientHeight / 2 + CLEARANCE,
-      });
-    });
-  };
-  /** Down the ladder; the step that would reach (or can't go below) the fit returns to the fitted view. */
-  const zoomOut = () => {
-    if (useFit) return;
-    handleZoomOut();
-    const next = useAppStore.getState().zoomLevel;
-    if (next === storeZoom || next <= fitZoom) setFitted(true);
-  };
-  const fitBoard = () => setFitted(true);
 
   useBoardShortcuts({ zoomIn, zoomOut, fit: fitBoard });
   useScrollToReplayHighlight(containerRef);
@@ -365,7 +326,7 @@ export function BoardTable({ gameName, docked = false }: Props) {
       <MapLensChip />
       {!shouldHideZoomControls() && (
         <div className={classes.zoom}>
-          <ZoomButton label="Zoom in (+)" onClick={zoomIn} disabled={!useFit && storeZoom >= 2}>
+          <ZoomButton label="Zoom in (+)" onClick={zoomIn} disabled={!useFit && zoom >= MAX_ZOOM}>
             <IconPlus size={14} stroke={1.8} />
           </ZoomButton>
           <ZoomButton label="Zoom out (−)" onClick={zoomOut} disabled={useFit}>
