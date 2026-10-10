@@ -15,6 +15,7 @@ const page = await browser.newPage({ viewport: { width: 1366, height: 800 } });
 const problems = [];
 page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
 page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
+page.on("response", (r) => r.status() >= 400 && problems.push(`${r.status()} ${r.url()}`));
 for (const [name, query] of shots) {
   await page.goto(`${base}/?${query ?? `faction=${name}`}`);
   await page.waitForTimeout(1800);

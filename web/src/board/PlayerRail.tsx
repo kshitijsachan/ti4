@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { HoverCard, Modal, UnstyledButton } from "@mantine/core";
+import { HoverCard, Modal, Tabs, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useGameData } from "@/state/useGameContext";
 import { filterPlayersWithAssignedFaction } from "@/entities/game/playerUtils";
 import PlayerCard from "@/domains/player/components/composition/PlayerCard";
+import { FactionSheet } from "@/faction";
 import { PlayerSeat, PlayerStats } from "./PlayerBoard";
 import { summarizePlayer } from "./playerSummary";
 import classes from "./PlayerRail.module.css";
@@ -22,6 +23,7 @@ export function PlayerRail({ myUserId, onAllPlayers }: Props) {
   const data = useGameData();
   const [openColor, setOpenColor] = useState<string | null>(null);
   const [peekColor, setPeekColor] = useState<string | null>(null);
+  const [tab, setTab] = useState<"board" | "faction">("board");
   const touch = useMediaQuery("(hover: none)") ?? false;
   const railRef = useRef<HTMLDivElement>(null);
   const players = filterPlayersWithAssignedFaction(data?.playerData ?? []);
@@ -51,8 +53,9 @@ export function PlayerRail({ myUserId, onAllPlayers }: Props) {
         {players.map((player) => {
           const summary = summarizePlayer(player, data.strategyCardIdMap);
           const isMe = !!myUserId && player.discordId === myUserId;
-          const open = () => {
+          const open = (which: "board" | "faction" = "board") => {
             setPeekColor(null);
+            setTab(which);
             setOpenColor(player.color);
           };
           return (
@@ -74,7 +77,7 @@ export function PlayerRail({ myUserId, onAllPlayers }: Props) {
                   <UnstyledButton
                     className={classes.seatButton}
                     onClick={() =>
-                      touch ? setPeekColor((c) => (c === player.color ? null : player.color)) : open()
+                      touch ? setPeekColor((c) => (c === player.color ? null : player.color)) : open("board")
                     }
                     aria-label={`${summary.name} (${summary.factionName}), ${summary.vp} victory points`}
                   >
@@ -87,13 +90,18 @@ export function PlayerRail({ myUserId, onAllPlayers }: Props) {
                     vpsToWin={vpsToWin}
                     isMe={isMe}
                     hint={
-                      touch ? (
-                        <UnstyledButton className={classes.more} onClick={open}>
-                          Open player area
+                      <span className={classes.hintRow}>
+                        {touch ? (
+                          <UnstyledButton className={classes.more} onClick={() => open("board")}>
+                            Open player area
+                          </UnstyledButton>
+                        ) : (
+                          <span>Click the seat for the full player area</span>
+                        )}
+                        <UnstyledButton className={classes.more} onClick={() => open("faction")}>
+                          Faction sheet
                         </UnstyledButton>
-                      ) : (
-                        "Click the seat for the full player area"
-                      )
+                      </span>
                     }
                   />
                 </HoverCard.Dropdown>
@@ -110,7 +118,20 @@ export function PlayerRail({ myUserId, onAllPlayers }: Props) {
         title={opened ? `${opened.userName} · ${summarizePlayer(opened).factionName}` : ""}
         classNames={{ content: classes.detail, body: classes.detailBody }}
       >
-        {opened && <PlayerCard playerData={opened} />}
+        {opened && (
+          <Tabs value={tab} onChange={(v) => setTab(v === "faction" ? "faction" : "board")} keepMounted={false}>
+            <Tabs.List className={classes.detailTabs}>
+              <Tabs.Tab value="board">Board</Tabs.Tab>
+              <Tabs.Tab value="faction">Faction</Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="board">
+              <PlayerCard playerData={opened} />
+            </Tabs.Panel>
+            <Tabs.Panel value="faction">
+              <FactionSheet faction={opened.faction} player={opened} playerColor={opened.color} />
+            </Tabs.Panel>
+          </Tabs>
+        )}
         {onAllPlayers && (
           <div className={classes.detailFoot}>
             <UnstyledButton
