@@ -8,19 +8,21 @@ out=/home/user/run/screenshots/playtest/integrator
 log=/home/user/run/shim.log
 here=$(cd "$(dirname "$0")" && pwd)
 
-# Wait (up to 10 min) for load < 8 and no "bot busy" re-sends in the last 30s of the shim log.
+# Wait (up to 10 min) for load < 2x CPUs, >= 3 GB available memory and no "bot busy" re-sends in the last 30s.
+maxload=$(( $(nproc) * 2 ))
 for i in $(seq 1 60); do
   load=$(cut -d' ' -f1 /proc/loadavg)
   since=$(date -d '-30 sec' +%H:%M:%S)
   busy=$(tail -2000 "$log" | awk -v s="$since" '$1 >= s && /bot busy/' | wc -l)
   healthy=$(curl -s -m 5 "$base/healthz" | grep -c '"bot":true')
-  if [ "$healthy" = 1 ] && [ "$busy" = 0 ] && awk -v l="$load" 'BEGIN{exit !(l < 8)}'; then break; fi
-  [ $((i % 6)) = 1 ] && echo "[regress] waiting: load=$load busy=$busy healthy=$healthy"
+  mem=$(free -g | awk '/Mem:/{print $7}')
+  if [ "$healthy" = 1 ] && [ "$busy" = 0 ] && [ "$mem" -ge 3 ] && awk -v l="$load" -v m="$maxload" 'BEGIN{exit !(l < m)}'; then break; fi
+  [ $((i % 6)) = 1 ] && echo "[regress] waiting: load=$load busy=$busy healthy=$healthy mem=${mem}G"
   sleep 10
 done
 
 start=$(date +%H:%M:%S)
-commit=$(git -C "$here" rev-parse --short HEAD)
+commit=${BUILT:-$(git -C "$here" rev-parse --short HEAD)}  # the commit the prod build was made from
 node "$here/setup-flow.mjs" "$base" "$token" "$out" "$tag"
 rc=$?
 if [ $rc = 0 ]; then
