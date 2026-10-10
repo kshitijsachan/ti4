@@ -157,6 +157,13 @@ const VOTE_NOISE = [
 ];
 
 const PLAIN_NOISE: [RegExp, string][] = [
+  // Async-play nudges and Discord housekeeping: everyone is at the table here.
+  [/this is a gentle reminder that it is your turn|this is a quick nudge in case you forgot|This is a nudge that the "\w+" queue/, "async nudge"],
+  [/^Role deleted: /, "role notice"],
+  [/had queued a strategy card pick\.?$/, "async queue"],
+  [/^Whispers have been disabled/, "whispers"],
+  [/you need to assign speaker first before drawing agendas|The bot thinks that a public objective was already revealed/, "bot refusal"],
+  [/\b\w+(Exception|Error): /, "bot error"],
   [/^- actions channel\b|^This channel is for taking actions in the game/, "channel intro"],
   [/^Reminder that all games played on this server must abide/, "code of conduct"],
   [/^The button failed\. An exception has been logged/, "bot error"],
@@ -433,6 +440,14 @@ const rules: Rule[] = [
       summary: [txt("spent "), b(total ? unmark(total[1]) : `${lines.length} planets`)],
       details: lines.map((l) => richText(l.replace(/^>\s*/, ""))),
     });
+  },
+
+  // Hand limit -------------------------------------------------------------------------------------------
+  (m) => {
+    const hit = findActor(m.content);
+    const at = m.content.match(/exceeding the action card hand limit of (\d+)/);
+    if (!at) return null;
+    return ev({ kind: "action_card", actor: hit?.actor, summary: [txt("is over the action card hand limit of "), b(at[1]), txt(" — discarding down")] });
   },
 
   // Explore ----------------------------------------------------------------------------------------------

@@ -203,3 +203,18 @@ void test("explores (real bot messages): card, plain effect, and the follow-ups 
   // The full card text stays one click away.
   assert.match(segText(events.find((e) => e.kind === "explore")!.details![0]), /If you have at least 1 mech/);
 });
+
+void test("live play: async nudges, reminders and Discord housekeeping never reach the log", () => {
+  for (const content of [
+    "<@1558155013916852224> this is a gentle reminder that it is your turn.",
+    "<@1558155013916852224> this is a quick nudge in case you forgot to end turn. Please forgive the impertinence.",
+    'This is a nudge that the "when" queue is currently waiting on you.',
+    "Role deleted: pbd9 - use `/game ping` to ping all players",
+    "<@1558155013916852224> had queued a strategy card pick.",
+    "Whispers have been disabled for this game.",
+  ]) {
+    assert.equal(classify(bot(content), ctx()).cls.type, "noise", content);
+  }
+  const limit = one(bot("<@1558155013916852224> you are exceeding the action card hand limit of 7. Please discard down to the limit. Check your #cards-info thread for the blue discard buttons."));
+  assert.match(limit.line, /over the action card hand limit of 7/);
+});
