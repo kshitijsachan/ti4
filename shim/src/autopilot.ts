@@ -453,7 +453,16 @@ class SeatPilot {
     this.busy = true;
     try {
       for (const game of this.liveGames()) {
-        if ((await this.brain.tick(game)) || (await this.trade.tick(game))) {
+        // A planner error must never keep the rule table from answering (it would stall the game).
+        const acted = async (name: string, fn: () => Promise<boolean>) => {
+          try {
+            return await fn();
+          } catch (e) {
+            log.error(`autopilot ${this.name}: ${name} failed in ${game}: ${(e as Error).stack}`);
+            return false;
+          }
+        };
+        if ((await acted("planner", () => this.brain.tick(game))) || (await acted("trade desk", () => this.trade.tick(game)))) {
           this.busy = false;
           this.schedule();
           return;
