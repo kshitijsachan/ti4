@@ -14,71 +14,60 @@ function pickNumber(c: Choice) {
   return n ? Number(n) : undefined;
 }
 
-type Tile = { initiative: number; choice: Choice; tradeGoods: number };
+type Tile = { initiative: number; choice?: Choice; tradeGoods: number; takenBy?: string };
 
-function CardTexts({ initiative, web, which }: {
-  initiative: number;
-  web: RendererProps["data"]["web"];
-  which: ("primary" | "secondary")[];
-}) {
-  const def = scDefinition(initiative, web);
-  if (!def) return null;
-  return (
-    <>
-      {which.includes("primary") &&
-        def.primaryTexts.map((t) => (
-          <p key={`p${t}`} className={classes.cardText}>
-            {t}
-          </p>
-        ))}
-      {which.includes("secondary") && def.secondaryTexts.length > 0 && (
-        <p className={classes.cardText}>
-          <b>Others may: </b>
-          {def.secondaryTexts.join(" ")}
-        </p>
-      )}
-    </>
-  );
-}
-
-/** Pick a strategy card: the free cards as small art tiles; the chosen one named, with its trade goods. */
+/** Pick a strategy card: all eight cards in a 4×2 grid, taken ones greyed with who has them; the chosen one named. */
 export function ScPickBody({ d, data, onPress, pendingKey }: RendererProps) {
-  const tiles: Tile[] = [];
+  const byInitiative = new Map<number, Tile>();
+  for (const sc of data.web?.strategyCards ?? []) {
+    const taker = sc.pickedByFaction ? playerByFaction(data, sc.pickedByFaction) : undefined;
+    byInitiative.set(sc.initiative, {
+      initiative: sc.initiative,
+      tradeGoods: sc.tradeGoods ?? 0,
+      takenBy: sc.pickedByFaction ? (taker?.userName ?? sc.pickedByFaction) : undefined,
+    });
+  }
   for (const c of d.choices) {
     const n = pickNumber(c);
     if (n === undefined) continue;
-    const onTable = data.web?.strategyCards.find((s) => s.initiative === n);
-    tiles.push({
+    const known = byInitiative.get(n);
+    byInitiative.set(n, {
       initiative: n,
       choice: c,
-      tradeGoods: onTable?.tradeGoods ?? Number(c.label.match(/(\d+) Trade Good/i)?.[1] ?? 0),
+      tradeGoods: known?.tradeGoods ?? Number(c.label.match(/(\d+) Trade Good/i)?.[1] ?? 0),
     });
   }
-  tiles.sort((a, b) => a.initiative - b.initiative);
+  const tiles = [...byInitiative.values()].sort((a, b) => a.initiative - b.initiative);
   const [selected, setSelected] = useState<number | undefined>(undefined);
-  const current = tiles.find((t) => t.initiative === selected);
+  const current = tiles.find((t) => t.initiative === selected && t.choice);
   const def = current ? scDefinition(current.initiative, data.web) : undefined;
   const rest = d.choices.filter((c) => pickNumber(c) === undefined);
-  const taken = (data.web?.strategyCards ?? []).filter((s) => s.pickedByFaction);
   return (
     <div className={classes.stack}>
       <div className={classes.scGrid} role="listbox" aria-label="Strategy cards">
-        {tiles.map((t) => (
-          <UnstyledButton
-            key={t.initiative}
-            role="option"
-            aria-selected={t.initiative === selected}
-            className={cx(classes.scTile, t.initiative === selected && classes.scTileSelected)}
-            onClick={() => setSelected(t.initiative)}
-            onDoubleClick={() => onPress(t.choice)}
-          >
-            <ScArt initiative={t.initiative} web={data.web} width={80} />
-            {t.tradeGoods > 0 && <span className={classes.tgBadge}>+{t.tradeGoods}</span>}
-            {pendingKey === t.choice.key && <Loader size={18} className={classes.tileSpinner} />}
-          </UnstyledButton>
-        ))}
+        {tiles.map((t) => {
+          const name = scDefinition(t.initiative, data.web)?.name ?? `Card ${t.initiative}`;
+          return (
+            <UnstyledButton
+              key={t.initiative}
+              role="option"
+              aria-selected={t.initiative === selected}
+              aria-disabled={!t.choice}
+              aria-label={t.choice ? name : `${name} — taken by ${t.takenBy ?? "another player"}`}
+              title={t.choice ? name : `Taken by ${t.takenBy ?? "another player"}`}
+              className={cx(classes.scTile, t.initiative === selected && classes.scTileSelected, !t.choice && classes.scTileTaken)}
+              onClick={() => t.choice && setSelected(t.initiative)}
+              onDoubleClick={() => t.choice && onPress(t.choice)}
+            >
+              <ScArt initiative={t.initiative} web={data.web} width={80} />
+              {t.tradeGoods > 0 && t.choice && <span className={classes.tgBadge}>+{t.tradeGoods}</span>}
+              {!t.choice && <span className={classes.takenBadge}>{t.takenBy ?? "Taken"}</span>}
+              {t.choice && pendingKey === t.choice.key && <Loader size={18} className={classes.tileSpinner} />}
+            </UnstyledButton>
+          );
+        })}
       </div>
-      {current ? (
+      {current?.choice ? (
         <>
           <p className={classes.cardText}>
             <b>{def?.name}</b>
@@ -97,13 +86,7 @@ export function ScPickBody({ d, data, onPress, pendingKey }: RendererProps) {
           </Details>
         </>
       ) : (
-        <p className={classes.hint}>
-          Tap a card to see it.
-          {taken.length > 0 &&
-            ` Taken: ${taken
-              .map((s) => `${s.name} (${playerByFaction(data, s.pickedByFaction ?? undefined)?.userName ?? s.pickedByFaction})`)
-              .join(", ")}.`}
-        </p>
+        <p className={classes.hint}>Tap a free card to see it; greyed cards are taken.</p>
       )}
       <ChoiceButtons choices={rest} onPress={onPress} pendingKey={pendingKey} channelId={d.prompt.channelId} />
     </div>

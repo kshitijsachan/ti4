@@ -1,7 +1,7 @@
 /* Docked to the right of the table so the middle of the map (and the focused system) stays visible;
    a bottom sheet on phones. */
 .layer {
-  z-index: var(--z-floating-panel);
+  z-index: var(--z-decision-popup, 3450);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -13,6 +13,18 @@
   position: fixed;
   inset: 0;
   padding: 72px 16px 120px;
+}
+
+/* Over the board area: under the top bar and player rail, above the hand bar, left of an open side drawer. */
+.fixed.board {
+  padding: 100px calc(12px + var(--decision-right-inset, 0px)) 52px 12px;
+}
+
+/* "Peek at the map" held: the popup all but disappears and lets the map through. */
+.peeking .card {
+  opacity: 0.1;
+  pointer-events: none;
+  transition: opacity 120ms ease;
 }
 
 .contained {
@@ -42,7 +54,7 @@
   display: flex;
   flex-direction: column;
   width: min(380px, 100%);
-  max-height: min(100%, 45vh);
+  max-height: min(100%, 62vh);
   border-radius: 10px;
   background: var(--panel-texture, none), var(--details-card-bg, #0b1020);
   border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));

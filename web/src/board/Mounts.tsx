@@ -7,8 +7,8 @@ import { HandTray } from "@/hand";
  * over the table), the hand tray (in front of you) and the game log.
  */
 
-export function DecisionSlot({ gameName, className }: { gameName: string; className?: string }) {
-  return <DecisionHost gameName={gameName} placement="contained" className={className} />;
+export function DecisionSlot({ gameName, className, rightInset }: { gameName: string; className?: string; rightInset?: number }) {
+  return <DecisionHost gameName={gameName} placement="contained" className={className} rightInset={rightInset} />;
 }
 
 export function HandSlot({ gameName }: { gameName: string }) {

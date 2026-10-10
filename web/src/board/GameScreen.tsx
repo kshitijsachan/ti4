@@ -152,7 +152,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
             <HandSlot gameName={gameName} />
           </div>
         )}
-        <DecisionSlot gameName={gameName} className={classes.decision} />
+        <DecisionSlot gameName={gameName} className={classes.decision} rightInset={drawer ? (drawer === "raw" ? 560 : 460) : 0} />
       </main>
       <GameDrawers
         game={game}

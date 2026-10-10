@@ -198,7 +198,7 @@ function tradeOf(text: string): TradeInfo {
       continue;
     }
     const it = line.match(ITEM);
-    if (it && sides.length) sides[sides.length - 1].items.push(it[1].trim());
+    if (it && sides.length) sides[sides.length - 1].items.push(it[1].replace(/(^|\s)_(.+?)_(?=\s|$)/g, "$1$2").replace(/\*\*/g, "").trim());
   }
   return { from, sides };
 }
@@ -225,6 +225,18 @@ function genericTitle(text: string): { title: string; rest: string } {
   const idx = text.indexOf(sentence.slice(-Math.min(sentence.length, 24)));
   const rest = idx >= 0 ? text.slice(idx + Math.min(sentence.length, 24)).replace(/^[\s*_]+/, "") : text;
   return { title, rest: rest.trim() };
+}
+
+/**
+ * Async-Discord housekeeping that means nothing at a live table: the new-player survey, auto-pass timers in hours,
+ * AFK hours, per-user preferences. Never a decision.
+ */
+const NOISE_ID = /^(answerSurvey_|offerSurvey|setAutoPass|setHourAsAFK_|playerPref|offerPlayerPref|sandbagPref_|setOptIn|setPersonalAutoPing|offerAFK)/;
+const NOISE_TEXT = /automatically pass on sabos|median time \(in hours\)|your afk times|complete a 1 time survey/i;
+
+export function isNoise(d: Decision): boolean {
+  if (d.choices.some((c) => NOISE_ID.test(baseId(c.customId)))) return true;
+  return NOISE_TEXT.test(d.prompt.message.content);
 }
 
 /** Shapes a pending prompt into what the popup shows: kind, plain-language title and text, ranked choices. */

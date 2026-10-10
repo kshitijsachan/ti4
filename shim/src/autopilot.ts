@@ -24,6 +24,8 @@ type Choice = {
   why: string;
 };
 
+type GameState = { phase: string | null; active: string | null; colors: Map<string, string> };
+
 type Ctx = {
   /** Addressed to this seat: ephemeral for it, mentions it, its faction's buttons, its threads, replies to it. */
   direct: boolean;
@@ -51,6 +53,11 @@ type Rule = {
   rank?: (c: Control) => number;
   /** Not a control we chose (by label) in this channel in the last 10 minutes: a second starting technology. */
   distinct?: boolean;
+  /**
+   * The bot deletes this prompt once it acts on the press: if it is still there, unchanged, RETRY_MS after we
+   * pressed, the press was lost (e.g. refused while the bot was busy with the game) and we press it again.
+   */
+  retry?: boolean;
   /**
    * Only while the game is in a matching phase (the bot's web-data phase, e.g. `status.homework`). Table windows stay
    * on the table after their phase ends, and the bot acts on a late press anyway: a "Ready For Strategy Phase" pressed
@@ -84,6 +91,7 @@ const RULES: Rule[] = [
   {
     id: /_scPick_\d+$/,
     score: 80,
+    retry: true,
     why: "strategy phase: preferred card",
     rank: (c) => {
       const n = Number(/_scPick_(\d+)$/.exec(c.custom_id)?.[1]);
@@ -92,12 +100,12 @@ const RULES: Rule[] = [
     },
   },
   // Action phase: play the strategy card, then pass; always end the turn.
-  { id: /_turnEnd$/, score: 88, why: "end turn" },
-  { id: /_endOfTurnAbilities$/, score: 87, why: "end turn" },
+  { id: /_turnEnd$/, score: 88, retry: true, why: "end turn" },
+  { id: /_endOfTurnAbilities$/, score: 87, retry: true, why: "end turn" },
   { id: /_strategicAction_\d+$/, score: 86, why: "play strategy card" },
   // Politics primary: someone must get the speaker token before the bot moves on.
   { id: /^sc_3_assign_speaker_to_/, score: 64, why: "Politics: assign the speaker token" },
-  { id: /_passForRound$/, score: 85, why: "pass" },
+  { id: /_passForRound$/, score: 85, retry: true, why: "pass" },
   { id: /_passingAbilities$/, score: 84, why: "pass" },
   // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
   { id: /^resolvePreassignment_Abstain On Agenda$/, score: 79, why: "agenda: pre-abstain" },
@@ -151,6 +159,10 @@ const MAX_FAILS = 2;
 const MAX_STREAK = 8;
 /** A control on a re-posted prompt with the same text is not pressed again within this time. */
 const REPOST_MS = 60000;
+/** A lost press on a `retry` prompt is tried again after this long (at most MAX_RETRIES times). */
+const RETRY_MS = 20000;
+const MAX_RETRIES = 3;
+const BUSY_TEXT = /hasn't finished processing the last task/i;
 
 export class Autopilot {
   private pilots = new Map<string, SeatPilot>();
@@ -206,21 +218,30 @@ export class Autopilot {
     for (const [game, hit] of this.drafts) if (hit.data?.status !== "finished") this.drafts.delete(game);
   }
 
-  private phases = new Map<string, { at: number; phase: string | null }>();
+  private states = new Map<string, { at: number; state: GameState | null }>();
 
-  /** A game's phase from the bot's web data (`strategy`, `action`, `status.scoring`, `agenda.voting`, ...), cached 3s. */
-  async phaseOf(game: string): Promise<string | null> {
-    const hit = this.phases.get(game);
-    if (hit && Date.now() - hit.at < 3000) return hit.phase;
-    let phase: string | null = null;
+  /** A game's phase (`strategy`, `action`, `status.scoring`, `agenda.voting`, ...) and whose turn it is, cached 3s. */
+  async stateOf(game: string): Promise<GameState | null> {
+    const hit = this.states.get(game);
+    if (hit && Date.now() - hit.at < 3000) return hit.state;
+    let state: GameState | null = null;
     try {
       const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(5000) });
-      if (res.ok) phase = String(((await res.json()) as Json).gameState?.phase ?? "") || null;
+      if (res.ok) {
+        const data = (await res.json()) as Json;
+        const colors = new Map<string, string>();
+        for (const p of data.playerData ?? []) if (p.discordId && p.color) colors.set(String(p.discordId), String(p.color));
+        state = { phase: String(data.gameState?.phase ?? "") || null, active: data.gameState?.activePlayer ? String(data.gameState.activePlayer) : null, colors };
+      }
     } catch {
-      phase = null;
+      state = null;
     }
-    this.phases.set(game, { at: Date.now(), phase });
-    return phase;
+    this.states.set(game, { at: Date.now(), state });
+    return state;
+  }
+
+  async phaseOf(game: string): Promise<string | null> {
+    return (await this.stateOf(game))?.phase ?? null;
   }
 
   /** Each seat's faction in a game, from the bot's web data (cached; refetched at most every 20s while unknown). */
@@ -288,6 +309,8 @@ class SeatPilot {
    * re-post of the one we answered.
    */
   private siblings = new Set<string>();
+  /** Per message, how often we pressed a `retry` prompt again. */
+  private retries = new Map<string, number>();
 
   constructor(
     private mgr: Autopilot,
@@ -321,6 +344,12 @@ class SeatPilot {
       case "message_create":
         if (f.message?.ephemeral && BUSY_WRONG.test(f.message.content ?? "") && this.lastPressed) {
           this.fails.set(this.lastPressed, MAX_FAILS);
+        }
+        // The bot refused our press because it was busy (the shim re-sends a few times first): let `retry`
+        // prompts be pressed again soon rather than after RETRY_MS.
+        if (f.message?.ephemeral && BUSY_TEXT.test(f.message.content ?? "") && this.lastPressed) {
+          const a = this.answered.get(this.lastPressed);
+          if (a) a.at = Math.min(a.at, Date.now() - RETRY_MS + 3000);
         }
         this.schedule();
         break;
@@ -431,7 +460,11 @@ class SeatPilot {
             : undefined;
     // A later nudge in this channel says the bot still waits on us: look at the prompt again.
     const answered = answeredAt !== undefined && !((this.nudges.get(m.channel_id) ?? 0) > answeredAt);
-    if (answered && press && !mine && Date.parse(press.at) < this.started) return null;
+    // Still there, unchanged, well after we pressed it: for prompts the bot removes once it acts, the press was lost.
+    const pressedAt = mine?.sig === sig ? mine.at : press && press.controls === sig ? Date.parse(press.at) : undefined;
+    const lost = pressedAt !== undefined && Date.now() - pressedAt > RETRY_MS && (this.retries.get(m.id) ?? 0) < MAX_RETRIES;
+    if (answered && press && !mine && Date.parse(press.at) < this.started && !lost) return null;
+    const unpressed = controls;
     controls = controls.filter((c) => !this.pressed.has(`${m.id}:${c.custom_id}`) && (sibling || !this.pressedRecently(m, c)));
 
     const faction = await this.faction(game, m);
@@ -481,6 +514,13 @@ class SeatPilot {
     let phase: string | null | undefined;
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
+      if (rule.retry && lost && (await this.myTurn(game))) {
+        const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")));
+        if (again.length && !BLOCKED_ID.test(again[0].custom_id.replace(/^FFCC_[^_]+_/, ""))) {
+          this.retries.set(m.id, (this.retries.get(m.id) ?? 0) + 1);
+          return { msg: m, control: again[0], score: rule.score, why: `${rule.why}; again, the first press was lost` };
+        }
+      }
       if (answered && !rule.again) continue;
       // A table window we answered once stays answered, even if the bot edited it since (e.g. after a restart).
       if (rule.table && !rule.again && press) continue;
@@ -502,6 +542,12 @@ class SeatPilot {
     if (!fresh.length) return null;
     controls = fresh;
     return { msg: m, control: controls[0], score: controls.length === 1 ? 25 : 10, why: controls.length === 1 ? "only option" : "first option" };
+  }
+
+  /** Whether the bot's web data says it is this seat's turn (in the strategy or action phase). */
+  private async myTurn(game: string) {
+    const st = await this.mgr.stateOf(game);
+    return !!st?.active && st.active === st.colors.get(this.userId);
   }
 
   private repostKey(m: StoredMessage, c: Control) {

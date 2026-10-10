@@ -1,5 +1,6 @@
 import cx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDecisionRequests } from "@/decisions";
 import { proposeTrade } from "./api";
 import { LedgerColumn } from "./components/LedgerColumn";
 import { OfferList } from "./components/OfferList";
@@ -41,6 +42,9 @@ export type TradePanelProps = {
 };
 
 type Status = { kind: "ok" | "error"; text: string } | null;
+
+/** The decision popup's last "Counter…" request this page has acted on (the request outlives the drawer). */
+let handledTradeRequest = 0;
 
 const hiddenKey = (game: string) => `ti4-trade-hidden:${game}`;
 
@@ -160,6 +164,21 @@ export function TradePanel({
     setDraft({ ...draftFromOffer(offer, options.me.faction), note: "" });
     setStatus({ kind: "ok", text: `Rejected — edit the terms below and propose your counter to ${offer.otherUserName}.` });
   };
+
+  // "Counter…" in the decision popup opens this drawer: reject that offer and load it here, mirrored, to edit.
+  const tradeRequest = useDecisionRequests((s) => s.openTrade);
+  useEffect(() => {
+    if (!tradeRequest || tradeRequest.key <= handledTradeRequest || !options || !pending) return;
+    handledTradeRequest = tradeRequest.key;
+    const name = tradeRequest.playerName?.toLowerCase();
+    const offer = pending.incoming.find(
+      (o) => o.current && (o.otherFaction === tradeRequest.faction || (!!name && o.otherUserName.toLowerCase() === name)),
+    );
+    if (offer) void counter(offer);
+    else if (tradeRequest.faction) setSelected(tradeRequest.faction);
+    // counter() only closes over the latest options/pending, which are dependencies here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeRequest, options, pending]);
 
   const setSide = (key: "give" | "receive") => (next: SideDraft) =>
     setDraft((d) => ({ ...d, [key]: next }));

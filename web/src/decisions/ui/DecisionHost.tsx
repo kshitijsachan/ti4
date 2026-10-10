@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { UnstyledButton, Tooltip } from "@mantine/core";
-import { IconChevronLeft, IconChevronRight, IconEyeOff, IconMinus, IconAlertTriangle } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconEyeOff, IconMap, IconAlertTriangle } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import cx from "clsx";
 import { usePlay, usePlayConnection } from "@/discord";
@@ -11,7 +12,7 @@ import { getToken } from "@/play/session";
 import { findGame } from "../detect/games";
 import { usePendingPrompts } from "../detect/pending";
 import { useSetupWaiting } from "../detect/waiting";
-import { classify, type Decision } from "../model/classify";
+import { classify, isNoise, type Decision } from "../model/classify";
 import { baseId, type Choice } from "../model/controls";
 import { useDecisionFocus } from "../model/focus";
 import { useDecisionPress } from "../model/usePress";
@@ -27,6 +28,8 @@ export type DecisionHostProps = {
    */
   placement?: "fixed" | "contained";
   className?: string;
+  /** Width of a side drawer open on the right: the popup docks left of it instead of covering it. */
+  rightInset?: number;
 };
 
 function useHandAliases(gameName: string, enabled: boolean) {
@@ -140,9 +143,9 @@ function choicePosition(c: Choice | null) {
 /**
  * The decision popup: every bot prompt waiting on me, newest first, one at a time as a calm card over
  * the board, with the information that decision needs and its choices as a few large buttons. It can be
- * minimised to a pill and reopens by itself when a new decision arrives.
+ * looked past (hold “peek at the map”); only optional prompts can be hidden.
  */
-export function DecisionHost({ gameName, placement = "fixed", className }: DecisionHostProps) {
+export function DecisionHost({ gameName, placement = "fixed", className, rightInset = 0 }: DecisionHostProps) {
   const me = usePlay((s) => s.me);
   const channels = usePlay((s) => s.channels);
   const users = usePlay((s) => s.users);
@@ -157,7 +160,9 @@ export function DecisionHost({ gameName, placement = "fixed", className }: Decis
 
   const decisions = useMemo<Decision[]>(() => {
     if (!game) return [];
-    const all = prompts.map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }));
+    const all = prompts
+      .map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }))
+      .filter((d) => !isNoise(d));
     /* "Decide now whether to follow X" is moot once X has been played. */
     const played = new Set((web?.strategyCards ?? []).filter((sc) => sc.played).map((sc) => sc.initiative));
     const live = all.filter(
@@ -185,7 +190,7 @@ export function DecisionHost({ gameName, placement = "fixed", className }: Decis
       </div>
     );
   }
-  return <DecisionPopup decisions={decisions} data={data} placement={placement} className={className} />;
+  return <DecisionPopup decisions={decisions} data={data} placement={placement} className={className} rightInset={rightInset} />;
 }
 
 export type DecisionPopupProps = {
@@ -194,23 +199,57 @@ export type DecisionPopupProps = {
   data: DecisionData;
   placement?: DecisionHostProps["placement"];
   className?: string;
+  rightInset?: number;
 };
 
-/** The popup itself over a list of decisions: paging, minimise pill, presses, map focus. */
-export function DecisionPopup({ decisions, data, placement = "fixed", className }: DecisionPopupProps) {
+/** Required decisions cannot be put away; optional ones (preferences, plan-ahead) and unrecognised prompts can. */
+function canHide(d: Decision) {
+  return !!d.optional || d.kind === "generic";
+}
+
+/**
+ * The popup floats above the board, its drawers and the players view, so it renders into the page body. It sits
+ * in the board's area (under the top bar, over the hand bar) and left of an open side drawer.
+ */
+function PopupLayer({ children, placement, rightInset, peeking }: {
+  children: ReactNode;
+  placement: DecisionHostProps["placement"];
+  rightInset: number;
+  peeking?: boolean;
+}) {
+  const style = { "--decision-right-inset": `${rightInset}px` } as CSSProperties;
+  const layer = (
+    <div className={cx("ti4play", classes.layer, classes.fixed, placement === "contained" && classes.board, peeking && classes.peeking)} style={style}>
+      {children}
+    </div>
+  );
+  return typeof document === "undefined" ? layer : createPortal(layer, document.body);
+}
+
+/** The popup itself over a list of decisions: paging, peeking at the map, presses, map focus. */
+export function DecisionPopup({ decisions, data, placement = "fixed", className, rightInset = 0 }: DecisionPopupProps) {
   const conn = usePlayConnection();
   const press = useDecisionPress();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [minimized, setMinimized] = useState(false);
+  const [peeking, setPeeking] = useState(false);
   const newest = decisions[0]?.id;
   const lastNewest = useRef<string | undefined>(newest);
   useEffect(() => {
-    if (newest && newest !== lastNewest.current) {
-      setSelectedId(newest);
-      setMinimized(false);
-    }
+    if (newest && newest !== lastNewest.current) setSelectedId(newest);
     lastNewest.current = newest;
   }, [newest]);
+  useEffect(() => {
+    if (!peeking) return;
+    const stop = () => setPeeking(false);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    window.addEventListener("blur", stop);
+    return () => {
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
+    };
+  }, [peeking]);
 
   const index = Math.max(0, decisions.findIndex((d) => d.id === selectedId));
   const live = decisions[index];
@@ -220,8 +259,8 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className 
   const setFocus = useDecisionFocus((s) => s.set);
   const promptPosition = shown?.position ?? null;
   useEffect(() => {
-    setFocus(minimized ? null : promptPosition, "prompt", shown?.kind === "combat" ? "Combat" : null);
-  }, [promptPosition, minimized, shown?.kind, setFocus]);
+    setFocus(promptPosition, "prompt", shown?.kind === "combat" ? "Combat" : null);
+  }, [promptPosition, shown?.kind, setFocus]);
   useEffect(() => () => setFocus(null, null), [setFocus]);
   const onHoverChoice = (c: Choice | null) => {
     const pos = choicePosition(c);
@@ -230,22 +269,6 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className 
   };
 
   if (!shown || count === 0) return null;
-
-  const place = placement === "contained" ? classes.contained : classes.fixed;
-
-  if (minimized) {
-    return (
-      <div className={cx("ti4play", classes.layer, place, className)}>
-        <UnstyledButton className={classes.pill} onClick={() => setMinimized(false)} aria-label="Show decisions">
-          <span className={classes.pillDot} />
-          <span className={classes.pillText}>
-            {count === 1 ? shown.title : `${count} decisions waiting`}
-          </span>
-          <span className={classes.pillOpen}>Open</span>
-        </UnstyledButton>
-      </div>
-    );
-  }
 
   const go = (delta: number) => {
     if (press.held) press.release();
@@ -258,7 +281,7 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className 
   };
 
   return (
-    <div className={cx("ti4play", classes.layer, place, className)}>
+    <PopupLayer placement={placement} rightInset={rightInset} peeking={peeking}>
       <section
         key={shown.id}
         className={cx(classes.card, isWide(shown) && classes.wide)}
@@ -285,16 +308,27 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className 
                 </UnstyledButton>
               </span>
             )}
-            <Tooltip label="Not for me — hide this prompt" position="bottom">
-              <UnstyledButton className={classes.iconBtn} onClick={hide} aria-label="Hide this prompt">
-                <IconEyeOff size={15} />
+            <Tooltip label="Hold to look at the map" position="bottom">
+              <UnstyledButton
+                className={classes.iconBtn}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  setPeeking(true);
+                }}
+                onKeyDown={(e) => (e.key === " " || e.key === "Enter") && setPeeking(true)}
+                onKeyUp={() => setPeeking(false)}
+                aria-label="Peek at the map (hold)"
+              >
+                <IconMap size={15} />
               </UnstyledButton>
             </Tooltip>
-            <Tooltip label="Minimise — look at the map" position="bottom">
-              <UnstyledButton className={classes.iconBtn} onClick={() => setMinimized(true)} aria-label="Minimise">
-                <IconMinus size={15} />
-              </UnstyledButton>
-            </Tooltip>
+            {canHide(shown) && (
+              <Tooltip label="Not for me — hide this prompt" position="bottom">
+                <UnstyledButton className={classes.iconBtn} onClick={hide} aria-label="Hide this prompt">
+                  <IconEyeOff size={15} />
+                </UnstyledButton>
+              </Tooltip>
+            )}
           </div>
         </header>
         <div className={classes.body}>
@@ -318,6 +352,6 @@ export function DecisionPopup({ decisions, data, placement = "fixed", className 
           </div>
         )}
       </section>
-    </div>
+    </PopupLayer>
   );
 }

@@ -55,6 +55,9 @@
   --z-site-header: 2400;
   --z-play-sidebar-overlay: 2450;
 
+  /* The decision popup: what the game waits on, above drawers and the players view, under app modals. */
+  --z-decision-popup: 3450;
+
   /* MODALS - Settings, shortcuts and popovers (3000-3999) */
   --z-settings-modal: 3000;
   --z-keyboard-shortcuts-modal: 3100;
