@@ -13,6 +13,8 @@ import { CardPlanner } from "./cards.js";
 export class Brain {
   private tactical: TacticalExecutor;
   private cards: CardPlanner;
+  /** Per game, the newest prompt when our last tactical action ended. */
+  private retired = new Map<string, string>();
   /** Turn prompts already answered (message id). */
   private handled = new Set<string>();
 
@@ -36,12 +38,18 @@ export class Brain {
     if (!faction) return false;
     if (this.tactical.owns(game)) {
       const board = await this.seat.board(game, true);
-      return this.tactical.tick(board);
+      const acted = await this.tactical.tick(board);
+      // Prompts of a finished action stay on the table (the bot does not delete them all): never take them up again.
+      if (!this.tactical.owns(game)) this.retired.set(game, this.seat.prompts(game).at(-1)?.m.id ?? "0");
+      return acted;
     }
     if (await this.cards.tick(game, faction)) return true;
     const prompts = this.seat.prompts(game);
     // A tactical action under way that we do not have a plan for (e.g. after a restart): finish it.
-    const stray = [...prompts].reverse().find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockOf(c.custom_id) === faction && /^(concludeMove_|landUnits_|doneLanding|doneWithTacticalAction|tacticalActionBuild_)/.test(baseId(c.custom_id))));
+    const retired = this.retired.get(game);
+    // Our newest prompt, if it belongs to a tactical action (a later turn prompt means that action is over).
+    const newest = [...prompts].reverse().find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockOf(c.custom_id) === faction));
+    const stray = [newest].filter((p): p is Prompt => !!p && (!retired || BigInt(p.m.id) > BigInt(retired))).find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockOf(c.custom_id) === faction && /^(concludeMove_|landUnits_|doneLanding|doneWithTacticalAction|tacticalActionBuild_)/.test(baseId(c.custom_id))));
     const turnOver = prompts.some((p) => p.controls.some((c) => c.custom_id === `FFCC_${faction}_turnEnd`));
     const age = stray ? Date.now() - Date.parse(stray.m.edited_timestamp ?? stray.m.timestamp) : 0;
     if (stray && !turnOver && age > 20000 && age < 600000) {
