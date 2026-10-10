@@ -705,6 +705,10 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       scoring: { lines, mine, soHint: secretHint(ctx) },
     };
   }
+  if (has(choices, /^redistributeCCButtons/) && /Warfare/i.test(m.content) && !ctx.web?.gameState?.phase?.startsWith("action")) {
+    /* Warfare's leftover "redistribute" from the action phase: over once the phase is. */
+    return { ...base, kind: "generic", title: "Redistribute your command tokens", optional: true };
+  }
   if (has(choices, /^redistributeCCButtons/) && ctx.web?.gameState?.phase?.startsWith("action")) {
     /* Warfare's "redistribute your command tokens" (before or after its tactical action): optional, nothing waits. */
     return { ...base, kind: "generic", title: "Redistribute your command tokens", text: "Optional, from Warfare.", offer: true };
