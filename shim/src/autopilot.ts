@@ -31,6 +31,9 @@ type GameState = {
   active: string | null;
   colors: Map<string, string>;
   combat: boolean;
+  /** The current combat's round and the colors fighting it (web data). */
+  combatRound: number | null;
+  combatColors: string[];
   /** Per seated player (user id): faction and the technologies it owns. */
   players: Map<string, { faction: string; techs: number; owned: string[] }>;
 };
@@ -281,6 +284,8 @@ export class Autopilot {
           active: data.gameState?.activePlayer ? String(data.gameState.activePlayer) : null,
           colors,
           combat: !!data.gameState?.activeCombat,
+          combatRound: Number(data.gameState?.activeCombat?.round ?? 0) || null,
+          combatColors: (data.gameState?.activeCombat?.participantColors ?? []).map(String),
           players,
         };
       }
@@ -655,8 +660,11 @@ class SeatPilot {
     if (controls.some((c) => /^combatRoll_/.test(c.custom_id))) {
       // Only while the bot says a combat is on (the roll buttons stay after it ends).
       const st = await this.mgr.stateOf(game);
-      const fighting = !st || st.combat;
-      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && this.mayRoll(ch.id, c.custom_id, faction)));
+      const myColor = st?.colors.get(me);
+      // Only in a combat we fight, and the combat round from the bot's own state.
+      const fighting = !st || (st.combat && (!myColor || !st.combatColors.length || st.combatColors.includes(myColor)));
+      const round = st?.combatRound ?? null;
+      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && this.mayRoll(ch.id, c.custom_id, faction, round)));
     }
 
     let phase: string | null | undefined;
@@ -811,7 +819,7 @@ class SeatPilot {
     return at !== undefined && Date.now() - at < REPOST_MS;
   }
 
-  private mayRoll(channelId: string, customId: string, faction: string | undefined): boolean {
+  private mayRoll(channelId: string, customId: string, faction: string | undefined, round: number | null = null): boolean {
     const kind = /^combatRoll_[^_]+_[^_]+_?(\w+)?/.exec(customId)?.[1];
     if (kind && kind !== "space" && kind !== "ground") {
       // Bombardment is the attacker's choice before an invasion: a passive bot never bombards.
@@ -838,6 +846,14 @@ class SeatPilot {
     if (Date.now() - (this.recent.get(`${channelId}:roll:combat`) ?? 0) < 15000) return false;
     let mine = 0;
     let theirs = 0;
+    const myRounds = new Set<number>();
+    for (const m of this.store.messages(channelId)) {
+      const r = /rolls for .*combat \(round #(\d+)\)/i.exec(String(m.content ?? ""))?.[1];
+      const w = /^<a?:(\w+):\d+>\s*rolls for /i.exec(String(m.content ?? ""))?.[1]?.toLowerCase();
+      if (r && w && (faction.startsWith(w) || w.startsWith(faction))) myRounds.add(Number(r));
+    }
+    // Once per combat round: the bot says which round it is; we roll it unless we already did.
+    if (round) return !myRounds.has(round);
     for (const m of this.store.messages(channelId)) {
       const who = /^<a?:(\w+):\d+>\s*rolls for .*combat/i.exec(String(m.content ?? ""))?.[1]?.toLowerCase();
       if (!who) continue;
