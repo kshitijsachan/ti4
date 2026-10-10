@@ -207,3 +207,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.inlinePlayer {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 8px;
+  color: var(--play-ink);
+}

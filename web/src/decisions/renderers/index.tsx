@@ -5,6 +5,7 @@ import { CombatBody } from "./Combat";
 import { GainTokensBody, SpendBody } from "./Economy";
 import { GenericBody, TacticalBody } from "./Generic";
 import { ScoringBody } from "./Objectives";
+import { StatusBody } from "./Status";
 import { ReactionBody } from "./Reaction";
 import { ScFollowBody, ScPickBody, ScPrimaryBody } from "./Strategy";
 import { SecretDiscardBody } from "./SecretDiscard";
@@ -56,6 +57,8 @@ export function renderBody(d: Decision, props: RendererProps): ReactNode {
       return <GainTokensBody {...props} />;
     case "reaction":
       return <ReactionBody {...props} />;
+    case "status":
+      return <StatusBody {...props} />;
     case "scoring":
       return <ScoringBody {...props} />;
     case "secretDiscard":

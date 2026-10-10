@@ -1,4 +1,5 @@
 import type { Message } from "@/discord";
+import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { baseId, forwardChoices } from "./controls";
 
 /** Where one player stands on one half of status-phase scoring. */
@@ -70,15 +71,31 @@ export function scoringOpenFor(m: Message, names: (string | undefined)[]): boole
   return line.po.kind === "open" || line.so.kind === "open";
 }
 
-type Foldable = { kind: string; scoring?: { secretPick?: boolean }; steps?: Foldable[] };
+type Foldable = { id: string; kind: string; scoring?: { secretPick?: boolean }; steps?: Foldable[]; choices: { customId?: string }[] };
+
+function foldInto<T extends Foldable>(list: T[], isLead: (d: T) => boolean, isStep: (d: T) => boolean): T[] {
+  const lead = list.find(isLead);
+  const steps = list.filter((d) => d !== lead && isStep(d));
+  if (!lead || !steps.length) return list;
+  return list.filter((d) => !steps.includes(d)).map((d) => (d === lead ? { ...d, steps: [...(d.steps ?? []), ...steps] } : d));
+}
+
+/** Status homework: the bot's "Redistribute, gain & confirm command tokens" button posts the token prompt. */
+export function isHomework(d: Foldable) {
+  return d.kind === "status" && d.choices.some((c) => baseId(c.customId) === "pass_on_abilities");
+}
 
 /**
- * "Score A Secret Objective" answers with a separate prompt listing my secrets; it belongs inside the scoring
- * popup (as a step), so the list shows where I pressed rather than queued behind it.
+ * Status-phase prompts that answer a press on another one belong inside it, so they show where I pressed rather
+ * than queued behind it: the list of secrets to score (after "Score A Secret Objective") inside the scoring popup,
+ * and the command-token prompt inside the status homework.
  */
 export function foldScoring<T extends Foldable>(list: T[]): T[] {
-  const lead = list.find((d) => d.kind === "scoring" && !d.scoring?.secretPick);
-  const picks = list.filter((d) => d.kind === "scoring" && d.scoring?.secretPick);
-  if (!lead || !picks.length) return list;
-  return list.filter((d) => !picks.includes(d)).map((d) => (d === lead ? { ...d, steps: [...(d.steps ?? []), ...picks] } : d));
+  const scored = foldInto(
+    list,
+    (d) => d.kind === "scoring" && !d.scoring?.secretPick,
+    (d) => d.kind === "scoring" && !!d.scoring?.secretPick,
+  );
+  const lead = scored.find(isHomework);
+  return lead ? foldInto(scored, isHomework, (d) => d.kind === "gainTokens" && compareSnowflakes(d.id, lead.id) > 0) : scored;
 }

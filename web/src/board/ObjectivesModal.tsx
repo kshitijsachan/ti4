@@ -17,6 +17,7 @@ export function ObjectivesModal({ opened, onClose }: Props) {
       onClose={onClose}
       size="auto"
       centered
+      zIndex={3500}
       title="Objectives & table"
       classNames={{ content: classes.content, body: classes.body }}
     >

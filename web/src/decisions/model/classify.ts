@@ -455,6 +455,31 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
       position: ring.length ? undefined : active,
     };
   }
+  if (has(choices, /^(startStrategyPhase|startAgendaPhase)$/)) {
+    const agenda = has(choices, /^startAgendaPhase$/);
+    const noAgenda = /custodians token is still on mecatol rex/i.test(m.content);
+    return {
+      ...base,
+      kind: "status",
+      eyebrow: "Status phase · anyone can press",
+      title: agenda ? "Start the agenda phase" : "Start the next round",
+      text: agenda
+        ? "Everyone is done with the status phase. Start the agenda phase: the speaker reveals the first agenda."
+        : `Everyone is done with the status phase.${noAgenda ? " There is no agenda phase until someone takes the custodians token from Mecatol Rex." : ""} Start the strategy phase of the next round.`,
+      table: true,
+    };
+  }
+  if (has(choices, /(^|_)reveal_stage_/)) {
+    const stage2 = has(choices, /reveal_stage_2/) && !has(choices, /reveal_stage_1/);
+    return {
+      ...base,
+      kind: "status",
+      eyebrow: "Status phase · anyone can press",
+      title: `Reveal the next stage ${stage2 ? "II" : "I"} objective`,
+      text: "Everyone has scored. Revealing the next public objective also readies cards, returns command tokens and deals action cards (status-phase cleanup).",
+      table: true,
+    };
+  }
   if (has(choices, /^so_score_hand_/)) {
     return {
       ...base,
@@ -479,7 +504,12 @@ export function classify(prompt: PendingPrompt, ctx: ClassifyContext): Decision 
     };
   }
   if (has(choices, ID.status)) {
-    return { ...base, kind: "status", eyebrow: "", title: "Status phase — tidy up" };
+    return {
+      ...base,
+      kind: "status",
+      eyebrow: `Status phase${ctx.web?.gameRound ? ` · round ${ctx.web.gameRound}` : ""}`,
+      title: "Command tokens, then ready",
+    };
   }
   return { ...base, text: generic.rest, offer: isOffer(text) };
 }

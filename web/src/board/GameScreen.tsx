@@ -121,7 +121,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
   const mine = players.find((p) => me && p.discordId === me.id);
   let myNote: string | undefined;
   if (mine?.passed) myNote = "You passed";
-  const revealed = data?.objectives?.allObjectives?.filter((o) => o.revealed).length ?? 0;
+  const revealed = [...(data?.objectives?.stage1Objectives ?? []), ...(data?.objectives?.stage2Objectives ?? [])].filter((o) => o.revealed).length;
 
   let stage: ReactNode = takeover;
   if (!stage) {
