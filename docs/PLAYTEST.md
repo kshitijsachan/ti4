@@ -30,6 +30,10 @@ Goal: a human can play complete rounds (strategy → action → status → agend
 - Never `pkill -f`/`pgrep -f` a pattern that appears in your own command line (it kills your shell).
 - Judge like a TI4 player on a 14" laptop: is it obvious what to do, does every button do what it says, is anything
   a Discord leftover that does nothing here? Screenshot to /home/user/run/screenshots/playtest/<your-area>/ and LOOK.
+- Heavy tools one at a time machine-wide: run tsc / eslint / maven under the shared lock, e.g.
+  `flock /tmp/ti4-heavy.lock npx tsc --noEmit -p tsconfig.app.json`. At most 3 Vite servers and 4 browsers machine-wide.
+- Do NOT restart the shim or the bot yourself. Ask the integrator, who batches restarts (start-shim.sh refuses a restart
+  within 10 min without FORCE=1). A human is playing live. Never overwrite /home/user/run/bot-running.jar.
 - Final report: what you played, every bug found (fixed / not fixed + diagnosis), commits.
 
 ## LIVE PLAY, NOT ASYNC (user, emphatic)
