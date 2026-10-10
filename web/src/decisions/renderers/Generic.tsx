@@ -138,17 +138,29 @@ function produceLabel(c: Choice): Choice {
 function useExploreResult(channelId: string, promptId: string) {
   const data = usePlay((s) => s.messages[channelId]);
   if (!data) return undefined;
-  for (let i = data.ids.length - 1; i >= 0; i--) {
-    const m = data.byId[data.ids[i]];
-    if (!m?.author.bot || m.id === promptId) continue;
-    /* Another prompt between this step and the explore: the explore belongs to an earlier step. */
-    if ((m.components ?? []).length) return undefined;
-    if (/\bactivated \d+/.test(m.content)) return undefined;
+  const at = data.ids.indexOf(promptId);
+  const resultOf = (id: string): string | null | undefined => {
+    const m = data.byId[id];
+    if (!m?.author.bot) return undefined;
+    /* Another prompt or a new activation in between: the explore belongs to another step. */
+    if ((m.components ?? []).length || /\bactivated \d+/.test(m.content)) return null;
     const embed = m.embeds?.[0];
-    if (!/\bexplored\b/i.test(m.content) || !embed?.title) continue;
+    if (!/\bexplored\b/i.test(m.content) || !embed?.title) return undefined;
     const name = cleanLabel(embed.title).replace(/[_*]/g, "").trim();
     const what = cleanLabel(embed.description ?? "").replace(/[_*]/g, "").trim();
     return what ? `${name}: ${what}` : name;
+  };
+  /* The explore that led to this step: the nearest one before it, else the first one right after it (the bot can
+     post the result after the next prompt). */
+  for (let i = at - 1; i >= 0 && at >= 0; i--) {
+    const r = resultOf(data.ids[i]);
+    if (r === null) break;
+    if (r) return r;
+  }
+  for (let i = at + 1; i < data.ids.length && at >= 0; i++) {
+    const r = resultOf(data.ids[i]);
+    if (r === null) return undefined;
+    if (r) return r;
   }
   return undefined;
 }
@@ -199,7 +211,7 @@ export function TacticalBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
         </div>
       )}
       {moved && <p className={classes.hint}>Moving in: {movedSummary(moved)}</p>}
-      {explored && !/^Explore /.test(d.title) && <p className={classes.cardText}>Explored — {explored}</p>}
+      {explored && !/^Explore /.test(d.title) && !/exploration$/i.test(d.eyebrow) && <p className={classes.cardText}>Explored — {explored}</p>}
       {d.title === "Land ground forces" && data.web?.gameState?.activeCombat && data.web.gameState.activeCombat.system === d.position && (
         <p className={cx(classes.hint, classes.warn)}>The space combat here is not over yet. Ground forces land once it is won.</p>
       )}

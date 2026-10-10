@@ -42,7 +42,7 @@ function enemyShips(
 /**
  * Hex distance from every system to `target` for my ships, by the map's geometry and wormholes, around systems
  * ships cannot pass (supernovas, nebulas, asteroid fields without Antimass Deflectors, other players' ships).
- * A hint only — hyperlanes, gravity rifts and abilities are left to the bot. Unreachable systems are absent.
+ * A hint only (gravity rifts count their +1 move; hyperlanes and abilities are left to the bot). Unreachable systems are absent.
  */
 export function distancesTo(
   target: string,
@@ -101,7 +101,9 @@ export function distancesTo(
     const d = dist.get(t.position)!;
     if (d >= 6) continue;
     for (const n of neighbours(t)) {
-      const nd = lane(n) ? d : d + 1;
+      /* A ship leaving a gravity rift (starting in it or passing through) gets +1 move: the rift costs nothing. */
+      const rift = !!getTileById(n.systemId)?.isGravityRift;
+      const nd = lane(n) || rift ? d : d + 1;
       if ((dist.get(n.position) ?? Infinity) <= nd) continue;
       dist.set(n.position, nd);
       if (lane(n)) queue.unshift(n);
