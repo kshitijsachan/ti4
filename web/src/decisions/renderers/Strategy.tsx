@@ -119,7 +119,13 @@ export function ScPickBody({ d, data, onPress, pendingKey }: RendererProps) {
 }
 
 /** Buttons on a played card that only its holder uses (scoring with Imperial, ...). */
-const HOLDER_ONLY = /^(score_imperial|scoreAnObjective|requestAllFollow|primaryOf)/;
+const HOLDER_ONLY = /^(score_imperial|scoreAnObjective|requestAllFollow|primaryOf|constructionPrimary|diploSystem)/;
+/**
+ * The button that actually gives a follower the card's secondary (and spends the token itself). "Spend A Strategy
+ * Token" alone only pays: pressing just that one (as "Follow" used to) spent the token for nothing.
+ */
+const BENEFIT = /^(sc_ac_draw|sc_draw_so|sc_refresh|acquireATechWithSC|diploRefresh\d|construction_(?!.*primary)|warfareTeBuild|leadershipGenerateCCButtons)/i;
+const PAY_ONLY = /^(sc_follow_\d+|sc_trade_follow)$/;
 const FOLLOW_ACTION = /^(sc_follow_|sc_(?!no_)\w+_follow|leadershipGenerateCCButtons)/;
 const FOLLOW_NO = /^(sc_no_follow|preDeclineSC_.*_no|notFollowing)/i;
 
@@ -146,9 +152,14 @@ export function ScFollowBody({ d, data, onPress, pendingKey }: RendererProps) {
   const cost = leadership
     ? "Costs influence, not a strategy token."
     : `Costs 1 strategy token${strategy !== undefined ? ` — you have ${strategy}` : ""}.`;
+  const benefits = d.choices.filter((c) => BENEFIT.test(baseId(c.customId)) && !c.disabled);
   const choices = d.choices.map((c) => {
     if (d.optional) return c;
-    if (FOLLOW_ACTION.test(baseId(c.customId))) return { ...c, label: "Follow", style: 3 };
+    const id = baseId(c.customId);
+    if (benefits.length && PAY_ONLY.test(id)) return { ...c, label: "Only spend the token", rank: "more" as const };
+    if (benefits.length === 1 && c === benefits[0]) return { ...c, label: `Follow — ${c.label}`, style: 3 };
+    if (benefits.includes(c)) return { ...c, style: 3 };
+    if (!benefits.length && FOLLOW_ACTION.test(id)) return { ...c, label: "Follow", style: 3 };
     if (isDecline(c)) return { ...c, label: "Don't follow", style: 2 };
     return c;
   });
@@ -167,6 +178,7 @@ export function ScFollowBody({ d, data, onPress, pendingKey }: RendererProps) {
           if (c.rank === "undo" || c.rank === "more") return c.rank;
           const id = baseId(c.customId);
           if (HOLDER_ONLY.test(id)) return "more";
+          if (benefits.some((b) => b.key === c.key)) return "primary";
           if (FOLLOW_ACTION.test(id) || isDecline(c) || d.optional) return "primary";
           return "more";
         }}
