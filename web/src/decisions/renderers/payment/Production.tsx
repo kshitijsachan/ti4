@@ -150,6 +150,13 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
   }
 
   const over = capacity !== undefined && units > capacity;
+  /* Fleet pool: non-fighter ships in this system after the build against my fleet tokens. */
+  const shipsHere = (data.web?.tileUnitData?.[pos]?.space?.[me?.faction ?? ""] ?? [])
+    .filter((e) => e.entityType === "unit" && !["ff", "gf", "mf"].includes(e.entityId))
+    .reduce((n, e) => n + (e.count ?? 0), 0);
+  const shipsBuilt = rows.filter((r) => r.ship && r.unit !== "fighter").reduce((n, r) => n + (total[r.key] ?? 0), 0);
+  const fleet = me?.fleetCC;
+  const overFleet = fleet !== undefined && shipsBuilt > 0 && shipsHere + shipsBuilt > fleet;
   return (
     <div className={strategy.panel}>
       <div className={classes.purpose}>
@@ -234,6 +241,11 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
         </span>
       </div>
       {over && <span className={classes.short}>More units than this system's PRODUCTION ({capacity}).</span>}
+      {overFleet && (
+        <span className={classes.short}>
+          Fleet pool: {shipsHere + shipsBuilt} ships here after this build, {fleet} fleet tokens — the game will ask you to remove {shipsHere + shipsBuilt - fleet}.
+        </span>
+      )}
       <ChoiceButtons
         choices={others}
         onPress={onPress}

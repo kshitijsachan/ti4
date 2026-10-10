@@ -124,10 +124,15 @@ export function PaymentBody(props: RendererProps) {
   });
   const discount = offers.filter((o) => on.has(o.key)).reduce((n, o) => n + o.amount, 0);
   const auto = () => suggest(planets, kind, (cost ?? 0) - spent - discount, tgMax, commMax, worth);
-  const [pick, setPick] = useState(() => {
+  type Picked = { planets: Set<string>; tg: number; comm: number };
+  /* Follows the cost and the discounts (Suggest) until I pick something myself. */
+  const suggested = useMemo<Picked>(() => {
     const s = auto();
     return { planets: new Set(s.planets), tg: s.tg, comm: s.comm };
-  });
+  }, [cost, discount, spent, planets, tgMax, commMax, worth, kind]); // auto reads exactly these
+  const [manual, setManual] = useState<Picked | null>(null);
+  const pick = manual ?? suggested;
+  const setPick = (next: Picked | ((s: Picked) => Picked)) => setManual((prev) => (typeof next === "function" ? next(prev ?? suggested) : next));
 
   const planetPaid = planets.filter((p) => pick.planets.has(p.id)).reduce((n, p) => n + valueOf(p, kind), 0);
   const paid = spent + discount + planetPaid + (pick.tg + pick.comm) * worth;
@@ -155,10 +160,7 @@ export function PaymentBody(props: RendererProps) {
       else next.add(key);
       return next;
     });
-  const applySuggest = () => {
-    const s = auto();
-    setPick({ planets: new Set(s.planets), tg: s.tg, comm: s.comm });
-  };
+  const applySuggest = () => setManual(null);
   /* Trade goods still needed on top of what is picked. */
   const maxTgNeeded = cost === undefined ? 0 : Math.min(tgMax - pick.tg, Math.max(0, Math.ceil((cost - paid) / worth)));
 
