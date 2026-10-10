@@ -32,6 +32,9 @@ export type SoloJob = {
   log: { at: string; text: string }[];
 };
 
+/** The bot refuses (or warns about) players in more ongoing games than this. */
+const MAX_GAMES_PER_BOT = 3;
+
 const GREEK = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa", "Lambda", "Mu"];
 
 /** Lobby answers the bot gives instead of making the game. */
@@ -89,7 +92,7 @@ export class SoloGames {
       if (kind === "solo") {
         // Reuse existing autopilot seats (the bot's per-player limits are patched off when self-hosted), so test
         // games don't pile up new bot players; create only the shortfall.
-        const reused = this.existingBots().slice(0, seats.botCount);
+        const reused = (await this.freeBots()).slice(0, seats.botCount);
         const names = this.botNames(seats.botCount - reused.length);
         if (names.length) this.note(job, `Adding ${names.join(", ")}`);
         job.bots = [
@@ -558,6 +561,35 @@ export class SoloGames {
   }
 
   /** Autopilot seats named `Bot …`, oldest first. */
+  /**
+   * Autopilot seats with room for another game: the bot lets one player hold at most a few ongoing games, so a bot
+   * already in that many unfinished games is skipped (a new seat is created for the shortfall instead).
+   */
+  private async freeBots(): Promise<{ name: string; user_id: string }[]> {
+    const s = this.store.state;
+    const bots = this.existingBots();
+    const gamesOf = new Map<string, string[]>();
+    for (const c of Object.values(s.channels)) {
+      const m = /^Cards Info-(pbd\d+)-(.+)$/.exec(String(c.name ?? ""));
+      if (m) gamesOf.set(m[2], [...(gamesOf.get(m[2]) ?? []), m[1]]);
+    }
+    const ongoing = new Map<string, boolean>();
+    const isOngoing = async (game: string) => {
+      if (!ongoing.has(game)) {
+        const web = await this.webData(game);
+        ongoing.set(game, !!web && web.gameState?.phase !== "finished" && !web.gameState?.winner);
+      }
+      return ongoing.get(game)!;
+    };
+    const free: { name: string; user_id: string }[] = [];
+    for (const b of bots) {
+      let active = 0;
+      for (const g of gamesOf.get(b.name) ?? []) if (await isOngoing(g)) active++;
+      if (active < MAX_GAMES_PER_BOT) free.push(b);
+    }
+    return free;
+  }
+
   private existingBots(): { name: string; user_id: string }[] {
     const s = this.store.state;
     return Object.values(s.seats)
