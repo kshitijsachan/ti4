@@ -240,10 +240,25 @@
 }
 
 /* "Waiting for Bot Beta to choose a starting technology…" while the table is set up. */
+/* Setup status ("Dealing secret objectives…"): the only thing on screen while the table sets up, so it reads at a glance. */
 .waitingPill {
+  gap: 14px;
+  max-width: min(640px, 100%);
+  padding: 14px 22px 14px 18px;
   border-color: rgba(255, 255, 255, 0.16);
+  font-size: 18px;
   font-weight: 500;
-  color: var(--play-ink);
+  color: var(--play-ink-bright);
+}
+
+.waitingPill .pillText {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.waitingPill .waitingDot {
+  width: 10px;
+  height: 10px;
 }
 
 .waitingPill:hover {
