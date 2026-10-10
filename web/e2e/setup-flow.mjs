@@ -176,7 +176,11 @@ while (Date.now() < end2 && !done) {
 await shot("8-end");
 const w = await web();
 const factions = w.playerData.map((p) => `${p.userName}:${p.faction}`).join(", ");
-const noTech = w.playerData.filter((p) => p.faction && !(p.techs?.length)).map((p) => p.userName);
+// Factions that start with no technology at all.
+const NO_START_TECH = new Set(["sardakk"]);
+const noTech = w.playerData
+  .filter((p) => p.faction && !NO_START_TECH.has(p.faction) && !(p.techs?.length))
+  .map((p) => `${p.userName} (${p.faction})`);
 console.log(JSON.stringify({ game, picks, phase: w.gameState?.phase, done, decisions: seen, factions, noTech, problems: problems.slice(0, 10) }));
 await browser.close();
 if (!done || noTech.length) {
