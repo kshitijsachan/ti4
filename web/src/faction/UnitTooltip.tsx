@@ -35,7 +35,7 @@ type Props = InfoProps & { children: ReactNode; openDelay?: number; position?: "
 /** Hover a unit (map token, unit chip…) to see its stats and abilities. */
 export function UnitTooltip({ children, openDelay = 250, position = "top", ...info }: Props) {
   return (
-    <HoverCard openDelay={openDelay} closeDelay={80} position={position} withinPortal shadow="md" zIndex="calc(var(--z-app-modal) + 20)">
+    <HoverCard openDelay={openDelay} closeDelay={80} position={position} withinPortal shadow="md" classNames={{ dropdown: styles.tooltipDropdown }} zIndex="calc(var(--z-app-modal) + 20)">
       <HoverCard.Target>{children}</HoverCard.Target>
       <HoverCard.Dropdown>
         <UnitInfoCard {...info} />

@@ -233,7 +233,7 @@ function AbilityItem({ ability }: { ability: FactionAbility | { id: string; name
       {ability.permanentEffect && <p className={styles.text}>{ability.permanentEffect}</p>}
       {(ability.window || ability.windowEffect) && (
         <p className={styles.text}>
-          {ability.window && <span className={styles.window}>{ability.window}: </span>}
+          {ability.window && <span className={styles.window}>{withColon(ability.window)} </span>}
           {ability.windowEffect}
         </p>
       )}
@@ -264,7 +264,7 @@ function LeaderItem({ entry }: { entry: LeaderEntry }) {
       </div>
       {leader.abilityName && <p className={styles.condition}>{leader.abilityName}</p>}
       <p className={styles.text}>
-        {leader.abilityWindow && <span className={styles.window}>{leader.abilityWindow} </span>}
+        {leader.abilityWindow && <span className={styles.window}>{withColon(leader.abilityWindow)} </span>}
         {leader.abilityText}
       </p>
       {showCondition && (
@@ -276,6 +276,8 @@ function LeaderItem({ entry }: { entry: LeaderEntry }) {
     </div>
   );
 }
+
+const withColon = (window: string) => (/[:.]$/.test(window.trim()) ? window : `${window}:`);
 
 function upgradedUnitName(tech: FactionTech, model: FactionSheetModel) {
   const all = [...model.headlineUnits, ...model.otherUnits];

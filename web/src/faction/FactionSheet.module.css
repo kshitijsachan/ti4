@@ -529,3 +529,9 @@
 .modalBody {
   padding-top: 4px;
 }
+
+.tooltipDropdown {
+  background: var(--details-card-bg, var(--mantine-color-dark-7));
+  border: var(--details-card-border, 1px solid var(--panel-hairline-strong, rgba(148, 163, 184, 0.22)));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}

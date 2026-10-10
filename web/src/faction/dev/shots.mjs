@@ -22,6 +22,18 @@ for (const [name, query] of shots) {
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: process.env.FULL !== "0" });
   console.log("shot", name);
 }
+if (process.env.INTERACT !== "0") {
+  await page.goto(`${base}/?faction=${process.env.TOOLTIP_FACTION ?? "naaz"}`);
+  await page.waitForTimeout(1500);
+  await page.getByText("hover: mech tooltip").hover();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${out}/tooltip.png`, clip: { x: 0, y: 0, width: 900, height: 520 } });
+  await page.mouse.move(1200, 700);
+  await page.getByText("Faction sheet").first().click();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${out}/modal.png` });
+  console.log("shot tooltip, modal");
+}
 await page.goto(`${base}/?gallery=1&all=${process.env.ALL ?? "0"}`);
 await page.waitForTimeout(3000);
 const gapText = await page.locator("#gaps").innerText();
