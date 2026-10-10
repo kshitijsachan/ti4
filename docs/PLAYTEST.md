@@ -31,3 +31,12 @@ Goal: a human can play complete rounds (strategy → action → status → agend
 - Judge like a TI4 player on a 14" laptop: is it obvious what to do, does every button do what it says, is anything
   a Discord leftover that does nothing here? Screenshot to /home/user/run/screenshots/playtest/<your-area>/ and LOOK.
 - Final report: what you played, every bug found (fixed / not fixed + diagnosis), commits.
+
+## LIVE PLAY, NOT ASYNC (user, emphatic)
+
+"Remember, I'm NOT playing async here." Everyone sits at the table at the same time. Anything that exists because
+Discord games run over days is noise here and must not reach the player: pings/nudges/"waiting on you" reminders,
+auto-pass timers, "react within N hours" settings, time zones / active hours, end-of-round surveys, whispers via
+private threads, "use /command", "check #channel", onboarding/help posts. Prefer instant, synchronous flows: show
+what's happening now, who we're waiting on, and let reactions resolve immediately. New games should be created with
+the bot's async features off (auto-ping 0 etc.).
