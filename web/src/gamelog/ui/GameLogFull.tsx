@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
-import { IconChevronRight, IconSearch } from "@tabler/icons-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { IconChevronRight, IconFold, IconFoldDown, IconSearch } from "@tabler/icons-react";
 import type { Actor, GameEvent, Phase } from "../types";
 import { CATEGORIES, categoryOf, groupDigest, type CategoryId } from "../categories";
 import { PHASE_LABEL } from "../parse/timeline";
 import { actorLabel } from "../parse/markup";
 import { actorKey, useGameEvents } from "../useGameEvents";
 import { RewindProvider } from "@/rollback";
+import { useLogReveal } from "../useLogReveal";
+import { LogExpansionContext, useLogExpansion, type LogExpansion } from "./expansion";
 import { EventRow } from "./EventRow";
 import { ActorName, EmojiImg } from "./Segments";
 import classes from "./GameLogFull.module.css";
@@ -39,6 +41,12 @@ function toGroups(events: GameEvent[]): Group[] {
 }
 
 const blockTitle = (b: Block) => (b.round === 0 ? "Setup" : `Round ${b.round}`);
+const NONE: readonly GameEvent[] = [];
+const FLASH_MS = 2400;
+const groupKeys = (e: GameEvent) => {
+  const cat = categoryOf(e.kind).id;
+  return [`${e.round}:${e.phase}/${cat}`, `p:${actorKey(e.actor) || "~table"}/${cat}`];
+};
 
 /** The full game history: hierarchical by round → phase → type, by player, or as a flat timeline. */
 export function GameLogFull({ gameName, className, defaultView = "phases" }: Props) {
@@ -47,29 +55,94 @@ export function GameLogFull({ gameName, className, defaultView = "phases" }: Pro
   const [query, setQuery] = useState("");
   const [onlyPlayers, setOnlyPlayers] = useState<string[]>([]);
   const [onlyCat, setOnlyCat] = useState<CategoryId | "">("");
-  const [showAll, setShowAll] = useState(false);
+  const [allOpen, setAllOpen] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [rowOpen, setRowOpen] = useState<Record<string, boolean>>({});
+  const [flashId, setFlashId] = useState<string>();
+  const [scrollTo, setScrollTo] = useState<string>();
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const revealTarget = useLogReveal((s) => s.target);
+
+  const kidsOf = useMemo(() => {
+    const ids = new Set(events.map((e) => e.id));
+    const map = new Map<string, GameEvent[]>();
+    for (const e of events) if (e.parentId && ids.has(e.parentId)) map.set(e.parentId, [...(map.get(e.parentId) ?? []), e]);
+    return map;
+  }, [events]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return events.filter((e) => {
       if (e.kind === "phase") return true;
-      if (!showAll && e.importance < 2 && !q) return false;
+      if (!allOpen && e.importance < 2 && !q) return false;
       if (onlyCat && categoryOf(e.kind).id !== onlyCat) return false;
       if (onlyPlayers.length && !onlyPlayers.includes(actorKey(e.actor)) && !onlyPlayers.includes(actorKey(e.target))) return false;
       if (q && !e.text.toLowerCase().includes(q) && !(e.systemPosition ?? "").includes(q)) return false;
       return true;
     });
-  }, [events, query, showAll, onlyCat, onlyPlayers]);
+  }, [events, query, allOpen, onlyCat, onlyPlayers]);
 
-  const blocks = useMemo(() => toBlocks(filtered), [filtered]);
+  /** A strategy card's primary, follows and declines sit under the play (when it is listed), not beside it. */
+  const topLevel = useMemo(() => {
+    const ids = new Set(filtered.map((e) => e.id));
+    return filtered.filter((e) => !e.parentId || !ids.has(e.parentId));
+  }, [filtered]);
+
+  const blocks = useMemo(() => toBlocks(topLevel), [topLevel]);
   const narrowed = !!query.trim() || !!onlyCat || onlyPlayers.length > 0;
   const latestKey = blocks[blocks.length - 1]?.key;
-  const isOpen = (key: string, fallback: boolean) => open[key] ?? (narrowed || fallback);
+  const isOpen = (key: string, fallback: boolean) => open[key] ?? (allOpen || narrowed || fallback);
   const toggle = (key: string, fallback: boolean) => setOpen((o) => ({ ...o, [key]: !isOpen(key, fallback) }));
 
   const togglePlayer = (k: string) => setOnlyPlayers((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]));
   const usedCats = useMemo(() => new Set(events.map((e) => categoryOf(e.kind).id)), [events]);
+
+  const expansion = useMemo<LogExpansion>(
+    () => ({
+      isOpen: (id) => rowOpen[id] ?? allOpen,
+      toggle: (id) => setRowOpen((o) => ({ ...o, [id]: !(o[id] ?? allOpen) })),
+      childrenOf: (id) => kidsOf.get(id) ?? NONE,
+      flashId,
+    }),
+    [rowOpen, allOpen, kidsOf, flashId],
+  );
+
+  const toggleAll = () => {
+    setAllOpen((v) => !v);
+    setRowOpen({});
+    setOpen({});
+  };
+
+  // Asked from the ticker: show that event (under its strategy card play, if it has one) expanded and lit.
+  useEffect(() => {
+    if (!revealTarget) return;
+    const event = events.find((e) => e.id === revealTarget.eventId);
+    if (!event) return;
+    const host = (event.parentId && events.find((e) => e.id === event.parentId)) || event;
+    useLogReveal.getState().clear();
+    setQuery("");
+    setOnlyCat("");
+    setOnlyPlayers([]);
+    if (host.importance < 2) setAllOpen(true);
+    setOpen((o) => ({ ...o, ...Object.fromEntries(groupKeys(host).map((k) => [k, true])) }));
+    setRowOpen((o) => ({ ...o, [host.id]: true, [event.id]: true }));
+    setFlashId(event.id);
+    setScrollTo(event.id);
+  }, [revealTarget, events]);
+
+  useEffect(() => {
+    if (!scrollTo) return;
+    const row = bodyRef.current?.querySelector(`[data-event-id="${CSS.escape(scrollTo)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "center" });
+    setScrollTo(undefined);
+  }, [scrollTo, blocks, view, rowOpen, open]);
+
+  useEffect(() => {
+    if (!flashId) return;
+    const t = window.setTimeout(() => setFlashId(undefined), FLASH_MS);
+    return () => window.clearTimeout(t);
+  }, [flashId]);
 
   return (
     <section className={`ti4play ${classes.root} ${className ?? ""}`} aria-label="Game log">
@@ -106,15 +179,22 @@ export function GameLogFull({ gameName, className, defaultView = "phases" }: Pro
               </button>
             ))}
           </div>
-          <label className={classes.showAll} title="Include minor steps: turn starts, declined follows, card draws, offers">
-            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
-            Show all
-          </label>
+          <button
+            type="button"
+            className={classes.showAll}
+            aria-pressed={allOpen}
+            onClick={toggleAll}
+            title={allOpen ? "Collapse every section and row; hide minor steps" : "Open every section and row, including minor steps: turn starts, card draws, offers"}
+          >
+            {allOpen ? <IconFold size={13} stroke={2} aria-hidden /> : <IconFoldDown size={13} stroke={2} aria-hidden />}
+            {allOpen ? "Collapse all" : "Expand all"}
+          </button>
         </div>
       </header>
 
       <RewindProvider gameName={gameName} events={events}>
-        <div className={classes.body}>
+        <LogExpansionContext.Provider value={expansion}>
+        <div ref={bodyRef} className={classes.body}>
           {!events.length && <div className={classes.empty}>{loading ? "Reading the game's history…" : "Nothing has happened yet."}</div>}
           {!!events.length && !blocks.length && <div className={classes.empty}>No events match.</div>}
           {view === "phases" && <ByPhase blocks={blocks} latestKey={latestKey} isOpen={isOpen} toggle={toggle} />}
@@ -122,6 +202,7 @@ export function GameLogFull({ gameName, className, defaultView = "phases" }: Pro
           {view === "players" && <ByPlayer events={filtered} players={players} isOpen={isOpen} toggle={toggle} />}
           {loading && !!events.length && <div className={classes.loadingMore}>Loading older history…</div>}
         </div>
+        </LogExpansionContext.Provider>
       </RewindProvider>
     </section>
   );
@@ -211,7 +292,12 @@ type GroupProps = { group: Group; open: boolean; onToggle: () => void; showRound
 function GroupSection({ group, open, onToggle, showRound, newestFirst, perPlayer }: GroupProps) {
   const cat = CATEGORIES.find((c) => c.id === group.cat)!;
   const Icon = cat.icon;
+  const expansion = useLogExpansion();
   const rows = newestFirst ? [...group.events].reverse() : group.events;
+  const digestEvents = useMemo(
+    () => (expansion ? group.events.flatMap((e) => [e, ...expansion.childrenOf(e.id).filter((k) => categoryOf(k.kind).id === group.cat)]) : group.events),
+    [group.events, group.cat, expansion],
+  );
   const factions = useMemo(() => {
     const seen = new Map<string, Actor>();
     for (const e of group.events) if (e.actor?.factionEmoji && e.actor.faction) seen.set(e.actor.faction, e.actor);
@@ -224,7 +310,7 @@ function GroupSection({ group, open, onToggle, showRound, newestFirst, perPlayer
         <Icon className={classes.groupIcon} size={14} stroke={1.75} aria-hidden />
         <span className={classes.groupLabel}>{cat.label}</span>
         <span className={classes.count}>{group.events.length}</span>
-        {!open && <span className={classes.digest}>{groupDigest(group.cat, group.events, perPlayer)}</span>}
+        {!open && <span className={classes.digest}>{groupDigest(group.cat, digestEvents, perPlayer)}</span>}
         {!open && !perPlayer && !!factions.length && (
           <span className={classes.faces} aria-hidden>
             {factions.map((a) => (

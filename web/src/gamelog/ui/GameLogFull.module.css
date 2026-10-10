@@ -156,16 +156,30 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid var(--play-hairline);
+  background: transparent;
   color: var(--play-ink-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
 }
 
-.showAll input {
-  margin: 0;
-  accent-color: rgb(var(--play-blue));
+.showAll:hover,
+.showAll:focus-visible {
+  color: var(--play-ink-bright);
+  background: var(--play-hover-strong);
+}
+
+.showAll[aria-pressed="true"] {
+  color: var(--play-ink-bright);
+  border-color: var(--play-hairline-strong);
 }
 
 .body {

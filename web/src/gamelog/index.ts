@@ -5,6 +5,8 @@ export { useGameEvents, isLogChannel } from "./useGameEvents";
 export type { GameEventsResult } from "./useGameEvents";
 export { useLogFocus } from "./useLogFocus";
 export type { LogFocusTarget } from "./useLogFocus";
+export { useLogReveal } from "./useLogReveal";
+export type { LogRevealTarget } from "./useLogReveal";
 export { buildTimeline, toLogMessage } from "./parse/timeline";
 export type { ParseStats, Timeline } from "./parse/timeline";
 export { CATEGORIES, categoryOf } from "./categories";

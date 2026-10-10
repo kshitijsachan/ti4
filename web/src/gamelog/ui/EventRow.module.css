@@ -43,7 +43,7 @@
   box-shadow: inset 0 0 0 1px var(--play-hairline-strong);
 }
 
-.focused .main {
+.focused > .main {
   background: rgba(var(--play-blue), 0.12);
 }
 
@@ -70,15 +70,15 @@
   overflow-wrap: anywhere;
 }
 
-.row[data-importance="1"] .text {
+.row[data-importance="1"] > .main .text {
   color: var(--play-ink-muted);
 }
 
-.row[data-importance="1"] .kind {
+.row[data-importance="1"] > .main .kind {
   opacity: 0.5;
 }
 
-.row[data-importance="3"] .text {
+.row[data-importance="3"] > .main .text {
   color: var(--play-ink);
 }
 
@@ -116,6 +116,85 @@
   border-color: rgba(var(--play-blue), 0.45);
 }
 
+.hint {
+  color: var(--play-ink-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  margin-top: 3px;
+  color: var(--play-ink-muted);
+  transition: transform 0.12s ease;
+}
+
+.row[data-open] > .main > .chevron {
+  transform: rotate(180deg);
+}
+
+.main[role="button"]:hover > .chevron,
+.main[role="button"]:focus-visible > .chevron {
+  color: var(--play-ink-bright);
+}
+
+/* Revealed from the ticker: lit, then fades back. */
+.flash > .main {
+  animation: flash 2.4s ease-out;
+}
+
+@keyframes flash {
+  0%,
+  35% {
+    background: rgba(var(--play-blue), 0.26);
+    box-shadow: inset 2px 0 0 rgb(var(--play-blue));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+
+  .flash > .main {
+    animation: none;
+    background: rgba(var(--play-blue), 0.2);
+  }
+}
+
+.cardText {
+  margin: 2px 0 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--play-ink-muted);
+}
+
+.cardLabel {
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--play-ink);
+}
+
+.nested {
+  font-size: 12px;
+}
+
+.nested > .main {
+  gap: 6px;
+  padding: 2px 6px 2px 0;
+}
+
+.nested .kind {
+  margin-top: 2px;
+}
+
+.nested > .details {
+  margin-left: 20px;
+}
+
 .details {
   margin: 0 12px 6px 62px;
   padding: 4px 0 4px 10px;
@@ -145,11 +224,11 @@
 }
 
 /* Rewind (web/src/rollback): undone rows are greyed; "rewind to here" shows only on hover / focus. */
-.row[data-undone] .main {
+.row[data-undone] > .main {
   opacity: 0.4;
 }
 
-.row[data-undone] .text {
+.row[data-undone] > .main .text {
   text-decoration: line-through;
   text-decoration-color: var(--play-ink-muted);
 }
@@ -172,8 +251,8 @@
   transition: opacity 0.12s ease;
 }
 
-.row:hover .rewind,
-.row:focus-within .rewind {
+.main:hover .rewind,
+.main:focus-within .rewind {
   opacity: 1;
 }
 

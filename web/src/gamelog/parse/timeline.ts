@@ -72,6 +72,8 @@ export function buildTimeline(
   const seen = new Set<string>();
   const recent = new Map<string, number>();
   const replaced = new Map<string, string>();
+  const channelOf = new Map<string, string>();
+  const artByChannel = new Map<string, string>();
   let round = 0;
   let phase: Phase = "setup";
 
@@ -97,6 +99,8 @@ export function buildTimeline(
 
   for (const m of sorted) {
     stats.total++;
+    const art = m.content.match(/^\/art\/strat_cards\/([\w-]+)\.png$/);
+    if (art && !artByChannel.has(m.channelName)) artByChannel.set(m.channelName, art[1]);
     const result = classify(m, ctx);
     if (result.cls.type === "noise") stats.noise[result.cls.rule] = (stats.noise[result.cls.rule] ?? 0) + 1;
     if (result.cls.type === "other") {
@@ -129,6 +133,7 @@ export function buildTimeline(
       kept++;
       const id = i ? `${m.id}#${i}` : m.id;
       if (replaceKey) replaced.set(id, replaceKey);
+      channelOf.set(id, m.channelName);
       events.push({
         id,
         messageId: m.id,
@@ -155,7 +160,57 @@ export function buildTimeline(
     }
   }
   enrichActors(events, nameOf);
+  linkStrategyCards(events, channelOf, artByChannel);
   return { events, stats };
+}
+
+const scCardName = (e: GameEvent) => {
+  const label = e.summary.find((s) => s.t === "b");
+  return label?.t === "b" ? label.v.replace(/^\d+ · /, "") : "";
+};
+const sameActor = (a: GameEvent, b: GameEvent) =>
+  !!a.actor && !!b.actor && (a.actor.faction ? a.actor.faction === b.actor.faction : a.actor.userId === b.actor.userId);
+const ENDS_PRIMARY: ReadonlySet<EventKind> = new Set(["turn", "pass", "sc_play", "phase", "activate", "edit"]);
+const PRIMARY_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Fold what a strategy card play caused under it (`parentId`): the player's own effects posted right after it
+ * in the same channel (the primary), and everything in the card's round thread (who followed, with what, or
+ * declined). Also records the card's art (`scImage`), which names the exact card variant.
+ */
+function linkStrategyCards(events: GameEvent[], channelOf: Map<string, string>, artByChannel: Map<string, string>) {
+  const playsByThread = new Map<string, GameEvent[]>();
+  const threadKey = (round: number, card: string) => `${round}:${card.toLowerCase()}`;
+  events.forEach((play, i) => {
+    if (play.kind !== "sc_play") return;
+    const card = scCardName(play);
+    playsByThread.set(threadKey(play.round, card), [...(playsByThread.get(threadKey(play.round, card)) ?? []), play]);
+    const channel = channelOf.get(play.id);
+    const start = Date.parse(play.time);
+    for (const e of events.slice(i + 1)) {
+      if (Date.parse(e.time) - start > PRIMARY_WINDOW_MS) break;
+      if (channelOf.get(e.id) !== channel) continue;
+      if (ENDS_PRIMARY.has(e.kind) || !sameActor(play, e)) break;
+      e.parentId = play.id;
+    }
+  });
+  for (const e of events) {
+    const thread = roundThread(channelOf.get(e.id) ?? "");
+    if (!thread?.card || e.kind === "sc_play") continue;
+    const plays = playsByThread.get(threadKey(thread.round, thread.card));
+    if (!plays) continue;
+    const t = Date.parse(e.time);
+    const play = [...plays].reverse().find((p) => Date.parse(p.time) <= t) ?? plays[0];
+    e.parentId = play.id;
+  }
+  for (const plays of playsByThread.values())
+    for (const play of plays) {
+      const thread = [...artByChannel.keys()].find((name) => {
+        const r = roundThread(name);
+        return r?.card && threadKey(r.round, r.card) === threadKey(play.round, scCardName(play));
+      });
+      if (thread) play.scImage = artByChannel.get(thread);
+    }
 }
 
 /** Fill gaps (bare faction emoji, user-only draft lines) from fuller mentions of the same player elsewhere. */

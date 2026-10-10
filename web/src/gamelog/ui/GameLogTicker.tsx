@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { IconHistory } from "@tabler/icons-react";
 import { useGameEvents } from "../useGameEvents";
 import { useRewindIndex } from "@/rollback";
+import { useLogReveal } from "../useLogReveal";
 import { EventRow } from "./EventRow";
 import classes from "./GameLogTicker.module.css";
 
@@ -9,8 +10,8 @@ type Props = {
   gameName: string;
   /** How many recent events to show (1–3). */
   max?: number;
-  /** Opens the full log (shown as a "History" button when given). */
-  onOpen?: () => void;
+  /** Opens the full log (shown as a "Log" button when given). Transient: called with the clicked event's id. */
+  onOpen?: (eventId?: string) => void;
   className?: string;
   /** Show only the newest event, and only while it is fresh; at rest the ticker is invisible. */
   transient?: boolean;
@@ -50,6 +51,11 @@ export function GameLogTicker({ gameName, max = 3, onOpen, className, transient 
   if (transient) {
     const e = latest[0];
     const shown = !!e && !!fresh[e.id];
+    const reveal = () => {
+      if (!e) return;
+      useLogReveal.getState().reveal(e.id);
+      onOpen?.(e.id);
+    };
     return (
       <div
         className={`ti4play ${classes.transient} ${className ?? ""}`}
@@ -58,7 +64,7 @@ export function GameLogTicker({ gameName, max = 3, onOpen, className, transient 
         aria-label="Latest game event"
       >
         {e && (
-          <button type="button" className={classes.transientRow} onClick={onOpen} tabIndex={shown ? 0 : -1} title="Open the game log">
+          <button type="button" className={classes.transientRow} onClick={reveal} tabIndex={shown ? 0 : -1} title="Show this in the game log">
             <EventRow event={e} compact />
           </button>
         )}
@@ -77,7 +83,7 @@ export function GameLogTicker({ gameName, max = 3, onOpen, className, transient 
         ))}
       </div>
       {onOpen && (
-        <button type="button" className={classes.open} onClick={onOpen} title="Open the game log">
+        <button type="button" className={classes.open} onClick={() => onOpen()} title="Open the game log">
           <IconHistory size={14} stroke={1.75} aria-hidden />
           <span>Log</span>
         </button>

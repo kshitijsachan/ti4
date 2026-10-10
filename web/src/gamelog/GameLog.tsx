@@ -8,8 +8,11 @@ export type GameLogProps = {
   className?: string;
   /** Ticker only: how many events (1–3, default 3). */
   max?: number;
-  /** Ticker only: show a "Log" button that calls this (e.g. to open the drawer). */
-  onOpen?: () => void;
+  /**
+   * Ticker only: open the full log (a "Log" button; in transient mode, clicking the event). Gets the clicked
+   * event's id; the full log scrolls to that event and expands it on its own (via `useLogReveal`).
+   */
+  onOpen?: (eventId?: string) => void;
   /** Ticker only: show just the newest event, and only for a few seconds after it happens. */
   transient?: boolean;
   /** Full only: initial grouping. */

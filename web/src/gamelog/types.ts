@@ -76,6 +76,10 @@ export type GameEvent = {
   systemPosition?: string;
   /** Victory points gained (objective scored). */
   vp?: number;
+  /** The event this one follows from and is shown under (a strategy card play: its primary, follows, declines). */
+  parentId?: string;
+  /** Strategy card plays: the bot's art file for the card (`base_game_5`, `te_6`), naming the exact variant. */
+  scImage?: string;
   /** Plain text of the whole event (actor + summary + details), for search. */
   text: string;
 };
