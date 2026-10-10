@@ -1,4 +1,8 @@
 import cx from "clsx";
+import { Loader, UnstyledButton } from "@mantine/core";
+import { getPlanetData } from "@/entities/lookup/planets";
+import { FactionIcon } from "../ui/parts";
+import local from "./Agenda.module.css";
 import type { AgendaInfo } from "../model/classify";
 import { baseId, type Choice } from "../model/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
@@ -8,14 +12,15 @@ import classes from "./renderers.module.css";
 
 /** "For: …" / "Against: …" halves of an agenda's text. */
 function outcomes(a: AgendaInfo) {
-  const strip = (t?: string) => t?.replace(/^(for|against):\s*/i, "").trim();
+  /* "-# [Left means clockwise.]" is Discord's small-print markup. */
+  const strip = (t?: string) => t?.replace(/^(for|against):\s*/i, "").replace(/(^|\s)-#\s*/g, "$1").trim();
   if (/for\/against/i.test(a.target ?? "")) {
     return [
       { label: "For", text: strip(a.text1) },
       { label: "Against", text: strip(a.text2) },
     ].filter((o) => o.text);
   }
-  return [{ label: "", text: [a.text1, a.text2].filter(Boolean).join(" ") }];
+  return [{ label: "", text: strip([a.text1, a.text2].filter(Boolean).join(" ")) }];
 }
 
 /** The agenda card itself, as printed. */
@@ -42,6 +47,93 @@ export function AgendaCard({ agenda, compact }: { agenda: AgendaInfo; compact?: 
 }
 
 const VOTE_COUNT = /^resolveAgendaVote_(\d+)/;
+const OUTCOME = /^outcome_(.+)$/;
+const EXHAUST = /^exhaustForVotes_/;
+const FINALIZE = /^proceedToFinalizingVote$/;
+
+/**
+ * After choosing an outcome: exhaust planets for votes. The bot edits its message with the running tally
+ * ("> Retillion (2/3) for 3 votes. For a total of 3 votes on the outcome "Winnu"").
+ */
+function ExhaustForVotes({ d, data, onPress, pendingKey }: Pick<RendererProps, "d" | "data" | "onPress" | "pendingKey">) {
+  const content = d.prompt.message.content;
+  const outcome = content.match(/on the outcome "([^"]+)"/)?.[1] ?? content.match(/chose to vote for ([^.\n]+)/i)?.[1]?.trim();
+  const total = Number(content.match(/for a total of \*\*(\d+)\*\* votes?/i)?.[1] ?? 0);
+  const used = [...content.matchAll(/^>\s*(.+?) \(\d+\/\d+\) for (\d+) votes?/gm)].map((m) => `${m[1]} (${m[2]})`);
+  const player = data.players.find((p) => p.faction.toLowerCase() === (outcome ?? "").toLowerCase());
+  const planets = d.choices.filter((c) => /^exhaustForVotes_planet_/.test(baseId(c.customId)));
+  const all = d.choices.find((c) => /^exhaustForVotes_allPlanets/.test(baseId(c.customId)));
+  const other = d.choices.filter((c) => EXHAUST.test(baseId(c.customId)) && c !== all && !planets.includes(c));
+  const done = d.choices.find((c) => FINALIZE.test(baseId(c.customId)));
+  const rest = d.choices.filter((c) => !EXHAUST.test(baseId(c.customId)) && c !== done);
+  return (
+    <div className={classes.stack}>
+      {d.agenda && <AgendaCard agenda={d.agenda} compact />}
+      <p className={local.voteFor}>
+        Voting for{" "}
+        {player && <FactionIcon faction={player.faction} size={16} />} <b>{player ? `${player.userName} (${outcome})` : (outcome ?? "your outcome")}</b>
+        <span className={local.tally}>{total} vote{total === 1 ? "" : "s"}</span>
+      </p>
+      {used.length > 0 && <p className={classes.hint}>Exhausted: {used.join(", ")}</p>}
+      <p className={classes.hint}>{planets.length ? "Exhaust planets for their influence, then cast your votes." : "No ready planets left to exhaust."}</p>
+      {(planets.length > 0 || other.length > 0) && (
+        <div className={local.outcomes}>
+          {[...planets, ...other].map((c) => {
+            const m = c.label.match(/^(.*?)\s*\((\d+)\)\s*$/);
+            return (
+              <UnstyledButton key={c.key} className={local.outcome} disabled={!!pendingKey || c.disabled} onClick={() => onPress(c)}>
+                <span className={local.outcomeText}>
+                  <span className={local.outcomeName}>{m ? m[1] : c.label}</span>
+                  <span className={local.outcomeSub}>exhaust</span>
+                </span>
+                {m && <span className={local.outcomeVotes}>+{m[2]}</span>}
+                {pendingKey === c.key && <Loader size={14} color="currentColor" />}
+              </UnstyledButton>
+            );
+          })}
+        </div>
+      )}
+      <ChoiceButtons
+        choices={[
+          ...(done ? [{ ...done, label: total ? `Cast ${total} vote${total === 1 ? "" : "s"}` : "Done — cast no votes", style: 3 }] : []),
+          ...(all && planets.length > 1 ? [{ ...all, label: `Exhaust all (${all.label.match(/\((\d+)\)/)?.[1] ?? "?"} votes)`, style: 2 }] : []),
+          ...rest,
+        ]}
+        onPress={onPress}
+        pendingKey={pendingKey}
+        channelId={d.prompt.channelId}
+        rankOf={(c) => (c.rank === "undo" ? "undo" : /resetMyVote/.test(c.customId ?? "") ? "more" : FINALIZE.test(baseId(c.customId)) ? "primary" : "secondary")}
+      />
+    </div>
+  );
+}
+
+/** One outcome to vote for: a player (with faction icon), a planet, For / Against, … and the votes on it so far. */
+function OutcomeGrid({ choices, data, onPress, pendingKey }: { choices: Choice[] } & Pick<RendererProps, "data" | "onPress" | "pendingKey">) {
+  const counts = data.web?.gameState?.agenda?.outcomeVoteCounts ?? {};
+  return (
+    <div className={local.outcomes}>
+      {choices.map((c) => {
+        const key = baseId(c.customId).match(OUTCOME)?.[1] ?? "";
+        const player = data.players.find((p) => p.faction === key || p.color === key);
+        const planet = player ? undefined : getPlanetData(key);
+        const votes = counts[key] ?? counts[c.label] ?? counts[c.label.toLowerCase()];
+        return (
+          <UnstyledButton key={c.key} className={local.outcome} disabled={!!pendingKey || c.disabled} onClick={() => onPress(c)}>
+            {player && <FactionIcon faction={player.faction} size={20} />}
+            <span className={local.outcomeText}>
+              <span className={local.outcomeName}>{player ? player.userName : (planet?.name ?? c.label)}</span>
+              {player && <span className={local.outcomeSub}>{c.label}{player.discordId === data.me?.discordId ? " · you" : ""}</span>}
+              {planet && <span className={local.outcomeSub}>{[planet.resources, planet.influence].join("/")}</span>}
+            </span>
+            {votes ? <span className={local.outcomeVotes}>{votes}</span> : null}
+            {pendingKey === c.key && <Loader size={14} color="currentColor" />}
+          </UnstyledButton>
+        );
+      })}
+    </div>
+  );
+}
 const ABSTAIN = /abstain/i;
 
 /** Vote on an agenda: the card, my votes, and the outcomes / vote counts. */
@@ -60,10 +152,16 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
       </div>
     );
   }
+  if (d.choices.some((c) => EXHAUST.test(baseId(c.customId)))) return <ExhaustForVotes d={d} data={data} onPress={onPress} pendingKey={pendingKey} />;
   const faction = data.me?.faction;
-  const start = faction ? data.web?.gameState?.agenda?.startVoteCounts?.[faction] : undefined;
-  const cast = faction ? data.web?.gameState?.agenda?.castVoteCounts?.[faction] : undefined;
+  /* The bot keys vote counts by colour ("camouflage"), sometimes by faction. */
+  const voteKey = (counts?: Record<string, number>) =>
+    counts ? (counts[data.me?.color ?? ""] ?? (faction ? counts[faction] : undefined)) : undefined;
+  const start = voteKey(data.web?.gameState?.agenda?.startVoteCounts);
+  const cast = voteKey(data.web?.gameState?.agenda?.castVoteCounts);
   const numeric = d.choices.filter((c) => VOTE_COUNT.test(baseId(c.customId)));
+  const outcomes = d.choices.filter((c) => OUTCOME.test(baseId(c.customId)));
+  const others = d.choices.filter((c) => !outcomes.includes(c));
   const rankOf = (c: Choice) => {
     if (c.rank === "undo" || c.rank === "more") return c.rank;
     if (ABSTAIN.test(c.label)) return "secondary";
@@ -72,15 +170,21 @@ export function AgendaBody({ d, data, onPress, pendingKey }: RendererProps) {
   return (
     <div className={classes.stack}>
       {d.agenda && <AgendaCard agenda={d.agenda} />}
-      <p className={classes.hint}>
+      <p className={classes.hint} hidden={outcomes.length > 0}>
         {start !== undefined
           ? `You have ${start} vote${start === 1 ? "" : "s"}${cast ? ` (${cast} cast)` : ""}.`
           : data.me
             ? `${data.me.influence} influence ready.`
             : ""}
       </p>
+      {outcomes.length > 0 && (
+        <>
+          <p className={classes.hint}>Choose the outcome to vote for{start ? ` with your ${start} vote${start === 1 ? "" : "s"}` : ""}.</p>
+          <OutcomeGrid choices={outcomes} data={data} onPress={onPress} pendingKey={pendingKey} />
+        </>
+      )}
       <ChoiceButtons
-        choices={d.choices.map((c) => {
+        choices={others.map((c) => {
           const id = baseId(c.customId);
           if (/^vote$/.test(id)) return { ...c, label: "Vote", style: 3 };
           if (/^resolveAgendaVote_0$/.test(id) || /choose to abstain/i.test(c.label)) return { ...c, label: "Abstain", style: 2 };
