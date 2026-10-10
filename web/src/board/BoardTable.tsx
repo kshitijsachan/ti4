@@ -60,6 +60,22 @@ function boardGeometry(contentSize: ContentSize, unscaledWidth: number, zoom: nu
   };
 }
 
+/** Share of the table kept around a zoomed board, so any point of it can be brought under the cursor. */
+const ZOOM_ROOM = 0.6;
+
+/** Margins for a zoomed-in board: room on every side to zoom about any point and pan past the edges. */
+function roomyMargins(contentSize: ContentSize, zoom: number, area: { w: number; h: number }) {
+  const { bleed } = contentSize;
+  const padX = Math.max(CLEARANCE, area.w * ZOOM_ROOM);
+  const padY = Math.max(CLEARANCE, area.h * ZOOM_ROOM);
+  return {
+    marginLeft: bleed.left * zoom + padX,
+    marginRight: bleed.right * zoom + padX,
+    marginTop: bleed.top * zoom + padY,
+    marginBottom: bleed.bottom * zoom + padY,
+  };
+}
+
 const VIEWPORT_MARGIN = 60;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -291,7 +307,9 @@ export function BoardTable({ gameName, docked = false }: Props) {
           transition: "margin-left 240ms ease",
         },
       }
-    : { width: board.width, height: board.height, margins: board.margins };
+    : fit
+      ? { width: board.width, height: board.height, margins: roomyMargins(contentSize, zoom, area) }
+      : { width: board.width, height: board.height, margins: board.margins };
 
   useBoardShortcuts({ zoomIn, zoomOut, fit: fitBoard });
   useScrollToReplayHighlight(containerRef);
