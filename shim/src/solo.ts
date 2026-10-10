@@ -210,7 +210,8 @@ export class SoloGames {
     const web = await this.webData(job.game!);
     const seated = new Set<string>((web?.playerData ?? []).map((x: Json) => String(x.discordId)));
     const notInGame = want.filter((id) => !seated.has(id));
-    if (web && notInGame.length) throw new Error(`the bot did not seat ${this.names(notInGame)} in the game`);
+    // Before the draft the bot lists no players in its web data at all; only a partial list means someone is missing.
+    if (web && seated.size && notInGame.length) throw new Error(`the bot did not seat ${this.names(notInGame)} in the game`);
     const current = () => this.store.findMessage(actionsId, settings.id) ?? settings;
     const listed = () => {
       const line = /`\s*Players`:\s*\[([^\]]*)\]/.exec(String(current().content ?? ""))?.[1] ?? "";
