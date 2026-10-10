@@ -60,9 +60,13 @@ const later = (r1: number, p1: Phase, r2: number, p2: Phase) =>
  * Messages (any order, any of the game's channels) → chronological game events with round and phase,
  * plus coverage stats. Pure; safe to run in node.
  */
-export function buildTimeline(messages: LogMessage[], nameOf: (userId: string) => string | undefined = () => undefined): Timeline {
+export function buildTimeline(
+  messages: LogMessage[],
+  nameOf: (userId: string) => string | undefined = () => undefined,
+  exploreText?: (cardName: string) => string | undefined,
+): Timeline {
   const sorted = [...messages].sort((x, y) => compareIds(x.id, y.id));
-  const ctx: ParseContext = { nameOf };
+  const ctx: ParseContext = { nameOf, exploreText };
   const stats: ParseStats = { total: 0, events: {}, noise: {}, other: 0, duplicates: 0, otherSamples: [] };
   const events: GameEvent[] = [];
   const seen = new Set<string>();

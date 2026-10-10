@@ -23,11 +23,19 @@
 }
 
 .actor {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  vertical-align: -3px;
+  display: inline;
   white-space: nowrap;
+}
+
+.actor .icon {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 4px;
+}
+
+.actor .dot {
+  margin-left: 4px;
+  vertical-align: 1px;
 }
 
 .actorName {

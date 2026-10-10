@@ -5,6 +5,12 @@ import type { Message } from "@/discord";
 import type { Actor, GameEvent } from "./types";
 import type { LogMessage } from "./parse/classify";
 import { buildTimeline, toLogMessage, type ParseStats } from "./parse/timeline";
+import { explorations } from "@/entities/data/explorations";
+
+/** Exploration card text by card name (the bot's explores data), for explores posted without their text. */
+const exploreTextByName = new Map<string, string>();
+for (const card of explorations) if (!exploreTextByName.has(card.name)) exploreTextByName.set(card.name, card.text);
+const exploreText = (name: string) => exploreTextByName.get(name);
 
 export type GameEventsResult = {
   /** Chronological (oldest → newest). */
@@ -71,7 +77,7 @@ export function useGameEvents(gameName: string): GameEventsResult {
       for (const id of c.ids) msgs.push(convert(c.byId[id], channelNames[i]));
     });
     const nameOf = (id: string) => (users[id] ? displayName(users[id]) : undefined);
-    const built = buildTimeline(msgs, nameOf);
+    const built = buildTimeline(msgs, nameOf, exploreText);
     timelineCache.set(users, { buckets, names: channelNames, timeline: built });
     return built;
   }, [buckets, channelNames, users]);

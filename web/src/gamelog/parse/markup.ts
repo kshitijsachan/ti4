@@ -185,3 +185,17 @@ export function unitWord(name: string, count: number): string {
   if (count === 1 || word === "Infantry" || word === "PDS") return word;
   return `${word}s`;
 }
+
+const edgeText = (s: Seg | undefined): string | null => {
+  if (!s) return null;
+  if (s.t === "text" || s.t === "b") return s.v;
+  return s.t === "actor" ? "A" : null; // emoji carry their own margin
+};
+
+/** Two segments that would otherwise run together ("Bob" + "explored", "Sol" + "Bob"). */
+export function needsGap(prev: Seg | undefined, next: Seg | undefined): boolean {
+  const a = edgeText(prev);
+  const b = edgeText(next);
+  if (a === null || b === null || !a || !b) return false;
+  return /[\p{L}\p{N})\]”"'*]$/u.test(a) && /^[\p{L}\p{N}(\[“"]/u.test(b);
+}

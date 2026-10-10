@@ -55,8 +55,15 @@ export type ParseContext = {
   agenda?: string;
   lastActivation?: { actor?: Actor; position: string };
   /** The newest explore, so the bot's follow-ups (attachment, "removing an infantry…", declined) fold into its row. */
-  lastExplore?: { faction?: string; card: string; summary: Seg[]; settled: boolean };
+  lastExplore?: { faction?: string; card: string; summary: Seg[]; settled: boolean; channelId: string; at: number };
+  /** Card text from the bot's exploration data, for an explore posted without its card text. */
+  exploreText?: (cardName: string) => string | undefined;
 };
+
+/** How long after an explore the bot's posts about the same player still count as its follow-ups. */
+const EXPLORE_FOLLOW_MS = 10 * 60_000;
+/** What the player then chose or got: "gained 1 commodity (0->1/4)", "placed 1 infantry on Bereg", "drew 2 action cards". */
+const EXPLORE_RESULT = /^(gained|gains|drew|draws|placed|places|spent|replenished|converted|purged|received|readied|produced|researched|chose|put|added|got)\b/i;
 
 export type Marker = { round?: number; phase?: Phase };
 
@@ -457,14 +464,14 @@ const rules: Rule[] = [
     if (!hit || !x) return null;
     const planet = x[2].trim();
     const card = embedTitle(m.embeds[0]?.title);
-    const desc = m.embeds[0]?.description ?? "";
+    const desc = m.embeds[0]?.description || (card && ctx.exploreText?.(card.name)) || "";
     const summary: Seg[] = [txt("explored "), b(planet)];
     if (x[1] && /^(hazardous|industrial|cultural|frontier)$/i.test(x[1])) summary.push(txt(` (${x[1].toLowerCase()})`));
     if (card) {
       summary.push(txt(" → "), b(card.name));
       const effect = exploreEffect(card.name, plain(desc), planet);
       if (effect) summary.push(txt(`: ${effect}`));
-      ctx.lastExplore = { faction: hit.actor.faction, card: card.name, summary, settled: false };
+      ctx.lastExplore = { faction: hit.actor.faction, card: card.name, summary, settled: false, channelId: m.channelId, at: Date.parse(m.time) || 0 };
     }
     return ev({ kind: "explore", actor: hit.actor, systemPosition: x[3], summary, details: desc ? [richText(desc)] : undefined });
   },
@@ -473,13 +480,13 @@ const rules: Rule[] = [
     const x = hit?.rest.match(/^explored the frontier token in (.+?)(?:[:.]|$)/s);
     if (!hit || !x) return null;
     const card = embedTitle(m.embeds[0]?.title);
-    const desc = m.embeds[0]?.description ?? "";
+    const desc = m.embeds[0]?.description || (card && ctx.exploreText?.(card.name)) || "";
     const summary: Seg[] = [txt("explored the frontier in "), b(plain(x[1]))];
     if (card) {
       summary.push(txt(" → "), b(card.name));
       const effect = exploreEffect(card.name, plain(desc));
       if (effect) summary.push(txt(`: ${effect}`));
-      ctx.lastExplore = { faction: hit.actor.faction, card: card.name, summary, settled: false };
+      ctx.lastExplore = { faction: hit.actor.faction, card: card.name, summary, settled: false, channelId: m.channelId, at: Date.parse(m.time) || 0 };
     }
     return ev({ kind: "explore", actor: hit.actor, summary, details: desc ? [richText(desc)] : undefined });
   },
@@ -487,6 +494,11 @@ const rules: Rule[] = [
   (m, ctx) => {
     const last = ctx.lastExplore;
     if (!last || last.settled) return null;
+    if (m.channelId !== last.channelId) return null;
+    if ((Date.parse(m.time) || 0) - last.at > EXPLORE_FOLLOW_MS) {
+      last.settled = true;
+      return null;
+    }
     const a = m.content.match(/^Attachment _([^_]+)_ added to /);
     if (a && a[1] === last.card) return noise("explore attachment (folded)");
     const hit = actorAt(m.content, true);
@@ -502,6 +514,16 @@ const rules: Rule[] = [
       const gained = plain(r[2]).replace(/\s*->\s*/g, " → ").replace(/\.$/, "");
       last.summary.push(txt(` — removed 1 infantry${gained ? `; ${lowerFirstWord(gained)}` : ""}`));
       return noise("explore resolved (folded)");
+    }
+    if (/^ended turn/.test(hit.rest)) {
+      last.settled = true;
+      return null;
+    }
+    if (EXPLORE_RESULT.test(hit.rest.trim())) {
+      last.settled = true;
+      const got = plain(hit.rest).replace(/\s*->\s*/g, " → ").replace(/\.$/, "");
+      last.summary.push(txt(` — ${lowerFirstWord(got)}`));
+      return noise("explore result (folded)");
     }
     return null;
   },

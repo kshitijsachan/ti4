@@ -10,7 +10,8 @@ import { resolve } from "node:path";
 import type { Message } from "../../discord/types.ts";
 import { classify, type LogMessage } from "../parse/classify.ts";
 import { buildTimeline, toLogMessage } from "../parse/timeline.ts";
-import { segText, actorLabel } from "../parse/markup.ts";
+import { segText, actorLabel, needsGap, txt, b as bold } from "../parse/markup.ts";
+import { exploreEffect } from "../parse/explore.ts";
 import { FIXTURE_DIR, fixtureMessages, gameMessages, hasState, nameOf } from "./realData.ts";
 
 function fixture(name: string, channelName = ""): LogMessage {
@@ -197,8 +198,8 @@ void test("explores (real bot messages): card, plain effect, and the follow-ups 
     "Mentak explored Lazul Rex (industrial) → Cybernetic Research Facility: attached — Lazul Rex gains a yellow (cybernetic) technology specialty (or +1 resource and +1 influence if it already had one)",
     "Muaat explored Meer (hazardous) → Volatile Fuel Source: gain 1 command token (needs a mech there, or 1 infantry removed) — declined",
     "Muaat explored Bereg (cultural) → Dyson Sphere: attached — Bereg gets +2 resources, +1 influence",
-    "Muaat explored Arinam (hazardous) → Hazardous Relic Fragment: gains a hazardous relic fragment",
-    "Muaat explored Arinam (industrial) → Functioning Base: may gain 1 commodity, or you may spend 1 trade good or 1 commodity to draw 1 action card",
+    "Muaat explored Arinam (hazardous) → Hazardous Relic Fragment: gained a hazardous relic fragment",
+    "Muaat explored Arinam (industrial) → Functioning Base: may gain 1 commodity, or spend 1 trade good or 1 commodity to draw 1 action card",
   ]);
   // The full card text stays one click away.
   assert.match(segText(events.find((e) => e.kind === "explore")!.details![0]), /If you have at least 1 mech/);
@@ -217,4 +218,65 @@ void test("live play: async nudges, reminders and Discord housekeeping never rea
   }
   const limit = one(bot("<@1558155013916852224> you are exceeding the action card hand limit of 7. Please discard down to the limit. Check your #cards-info thread for the blue discard buttons."));
   assert.match(limit.line, /over the action card hand limit of 7/);
+});
+
+void test("explores: the player's follow-up choice folds in; another channel, a later turn or a stale result does not", () => {
+  const base = exploreMsg(MUAAT, "Industrial", "Arinam", "Functioning Base", "You may gain 1 commodity, or you may spend 1 trade good or 1 commodity to draw 1 action card.", "200");
+  const gained = bot("<:Muaat:1558154709301329920>Kai <:magma:1558154789794217984>**Magma** gained 1 commodity (0->1/4).", { id: "201" });
+  const line = (msgs: LogMessage[]) =>
+    buildTimeline(msgs).events.filter((e) => e.kind === "explore").map((e) => segText(e.summary));
+  assert.deepEqual(line([base, gained]), [
+    "explored Arinam (industrial) → Functioning Base: may gain 1 commodity, or spend 1 trade good or 1 commodity to draw 1 action card — gained 1 commodity (0 → 1/4)",
+  ]);
+  // Posted in a combat thread, or half an hour later: not this explore's result.
+  assert.doesNotMatch(line([base, { ...gained, channelId: "other" }])[0], /gained 1 commodity/);
+  assert.doesNotMatch(line([base, { ...gained, time: "2026-10-09T16:30:00Z" }])[0], /gained 1 commodity/);
+  const ended = bot("<:Muaat:1558154709301329920>Kai <:magma:1558154789794217984>**Magma** ended turn.", { id: "201" });
+  assert.doesNotMatch(line([base, ended, { ...gained, id: "202" }])[0], /gained 1 commodity/);
+});
+
+void test("explores: card text from the bot's data when the post carries none; frontier explores", () => {
+  const bare = exploreMsg(MUAAT, "Hazardous", "Bereg", "Warfare Research Facility", "", "300");
+  bare.embeds[0].description = undefined;
+  const text = (name: string) =>
+    name === "Warfare Research Facility" ? "This planet has a red technology specialty. If this planet already has a technology specialty, this planet's resource and influence values are each increased by 1 instead." : undefined;
+  const e = buildTimeline([bare], () => undefined, text).events.find((x) => x.kind === "explore")!;
+  assert.equal(
+    segText(e.summary),
+    "explored Bereg (hazardous) → Warfare Research Facility: attached — Bereg gains a red (warfare) technology specialty (or +1 resource and +1 influence if it already had one)",
+  );
+  assert.match(segText(e.details![0]), /red technology specialty/);
+  const frontier = bot(`${MUAAT} explored the frontier token in tile 305:`, { id: "301", embeds: [{ title: "<:Frontier:1>__Lost Crew__", description: "Draw 2 action cards." }] });
+  const f = buildTimeline([frontier]).events.find((x) => x.kind === "explore")!;
+  assert.equal(segText(f.summary), "explored the frontier in tile 305 → Lost Crew: draw 2 action cards");
+});
+
+void test("explore effects for every PoK card read as one plain line", () => {
+  assert.equal(exploreEffect("Industrial Relic Fragment", "ACTION: Purge 3 of your industrial relic fragments to gain 1 relic."), "gained an industrial relic fragment");
+  assert.equal(exploreEffect("Mining World", "This planet's resource value is increased by 2.", "Bereg"), "attached — Bereg gets +2 resources");
+  assert.equal(exploreEffect("Mercenary Outfit", "You may place 1 infantry from your reinforcements on this planet.", "Bereg"), "may place 1 infantry from your reinforcements on Bereg");
+  assert.equal(
+    exploreEffect("Enigmatic Device", "Place this card faceup in your play area. ACTION: You may spend 6 resources and purge this card to research 1 technology."),
+    "kept in play — action: spend 6 resources and purge this card to research 1 technology",
+  );
+  assert.equal(exploreEffect("Merchant Station", "You may replenish your commodities, or you may convert your commodities to trade goods."), "may replenish your commodities, or convert your commodities to trade goods");
+});
+
+void test("explores in the live games (state.json) say what happened", { skip: !hasState() }, () => {
+  const lines = ["pbd1", "pbd7"].flatMap((g) =>
+    buildTimeline(gameMessages(g), nameOf).events.filter((e) => e.kind === "explore").map((e) => `${actorLabel(e.actor)} ${segText(e.summary)}`),
+  );
+  if (!lines.length) return; // state reset
+  for (const l of lines) assert.match(l, /^\S.* explored .+ → .+: .+/, l);
+  const base = lines.find((l) => l.includes("Functioning Base"));
+  if (base) assert.match(base, /— gained 1 commodity/);
+});
+
+void test("segments that would run together get a space", () => {
+  const actor = { t: "actor" as const, actor: { faction: "sardakk", name: "Kshitij" } };
+  assert.equal(needsGap(actor, txt("explored")), true);
+  assert.equal(needsGap(bold("Warfare Research Facility"), txt(": gain")), false);
+  assert.equal(needsGap(txt("explored "), bold("Bereg")), false);
+  assert.equal(needsGap(bold("Hazardous"), bold("Warfare Research Facility")), true);
+  assert.equal(needsGap({ t: "emoji", id: "1", name: "Hazardous" }, txt("Warfare")), false);
 });

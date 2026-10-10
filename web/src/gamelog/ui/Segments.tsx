@@ -1,6 +1,7 @@
+import { Fragment } from "react";
 import { colors } from "@/entities/data/colors";
 import type { Actor, Seg } from "../types";
-import { actorLabel, titleCase } from "../parse/markup";
+import { actorLabel, needsGap, titleCase } from "../parse/markup";
 import classes from "./Segments.module.css";
 
 type RGB = { red: number; green: number; blue: number };
@@ -82,7 +83,7 @@ export function EmojiImg({ id, name, size = "text", decorative }: EmojiProps) {
   );
 }
 
-/** Faction icon + name (faction) + colour swatch: "Kshitij (Sardakk)". */
+/** Faction icon + name (faction) + colour swatch: "Kshitij (Sardakk)". Real spaces, so copied text reads right too. */
 export function ActorName({ actor, iconless }: { actor: Actor; iconless?: boolean }) {
   const label = actorLabel(actor) || "Someone";
   const faction = actor.name && actor.faction ? factionLabel(actor.faction) : undefined;
@@ -90,7 +91,12 @@ export function ActorName({ actor, iconless }: { actor: Actor; iconless?: boolea
     <span className={classes.actor} title={[actor.name, actor.faction, actor.color].filter(Boolean).join(" · ")}>
       {!iconless && actor.factionEmoji && <EmojiImg id={actor.factionEmoji.id} name={actor.faction ?? ""} size="icon" decorative />}
       <span className={classes.actorName}>{label}</span>
-      {faction && <span className={classes.actorFaction}>({faction})</span>}
+      {faction && (
+        <>
+          {" "}
+          <span className={classes.actorFaction}>({faction})</span>
+        </>
+      )}
       <ColorDot color={actor.color} />
     </span>
   );
@@ -100,10 +106,18 @@ export function Segments({ segs }: { segs: Seg[] }) {
   return (
     <>
       {segs.map((s, i) => {
-        if (s.t === "text") return <span key={i}>{s.v}</span>;
-        if (s.t === "b") return <strong key={i} className={classes.key}>{s.v}</strong>;
-        if (s.t === "emoji") return <EmojiImg key={i} id={s.id} name={s.name} />;
-        return <ActorName key={i} actor={s.actor} />;
+        const gap = needsGap(segs[i - 1], s) ? " " : null;
+        let el;
+        if (s.t === "text") el = <span>{s.v}</span>;
+        else if (s.t === "b") el = <strong className={classes.key}>{s.v}</strong>;
+        else if (s.t === "emoji") el = <EmojiImg id={s.id} name={s.name} />;
+        else el = <ActorName actor={s.actor} />;
+        return (
+          <Fragment key={i}>
+            {gap}
+            {el}
+          </Fragment>
+        );
       })}
     </>
   );
