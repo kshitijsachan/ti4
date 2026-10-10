@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { usePlayConnection } from "@/discord";
 import { usePressButton, type PressResult } from "@/play/usePressButton";
 import type { Decision } from "./classify";
-import type { Choice } from "./controls";
+import { baseId, type Choice } from "./controls";
 
 const TIMEOUT_MS = 20000;
 
@@ -55,6 +55,8 @@ export function useDecisionPress() {
     const result = values
       ? await selectAndWait(target, choice, values)
       : await pressButton(target.prompt.channelId, target.id, choice.customId);
+    /* "Dismiss" / "Delete these buttons": gone for good on this message, whatever the bot does with it. */
+    if (/^deleteButtons$/.test(baseId(choice.customId)) || /^(dismiss|delete these buttons)/i.test(choice.label)) conn.actions.dismissPrompt(target.id);
     if (result.error) {
       /* The press did not go through: the prompt is still unanswered, so keep it in the queue. */
       const { pressed } = conn.store.getState();
