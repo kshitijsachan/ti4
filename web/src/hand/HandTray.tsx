@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CardFace } from "./CardFace";
 import { CardPopup } from "./CardPopup";
-import { timingOf, type CardGroup, type HandCard } from "./model";
+import { timingOf, type CardGroup, type HandCard, type Timing } from "./model";
 import { useHand, type HandState } from "./useHand";
 import { actionsFor, useRunCardAction } from "./useHandActions";
 import classes from "./HandTray.module.css";
@@ -69,10 +69,19 @@ function fanBudgets(groups: CardGroup[], viewport: number): Map<string, number> 
   return out;
 }
 
+/** Over the hand limit the bot refuses every action card until you discard down. */
+function cardTiming(card: HandCard, hand: HandState): Timing {
+  if (card.kind === "ac" && hand.acHeld > hand.acLimit) return "blocked";
+  const timing = timingOf(card, hand.gameState, hand.myColor);
+  // One action per turn: once it is spent, "Action:" cards wait for your next turn.
+  if (timing === "now" && card.kind !== "so" && card.window === "Action" && hand.actionTaken) return "later";
+  return timing;
+}
+
 function isPlayableNow(card: HandCard, hand: HandState) {
   const actions = actionsFor(card, hand);
   if (!actions.some((a) => a.id === "play" || a.id === "score")) return false;
-  return timingOf(card, hand.gameState, hand.myColor) === "now";
+  return cardTiming(card, hand) === "now";
 }
 
 /**
@@ -111,6 +120,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
   const liveCard = selected && allCards.find((c) => c.key === selected.key && c.scored === selected.scored);
   const selectedCard = liveCard ?? selected;
   const playableCount = allCards.filter((c) => isPlayableNow(c, hand)).length;
+  const overBy = Math.max(0, hand.acHeld - hand.acLimit);
   const total = allCards.length;
   const budgets = fanBudgets(hand.groups, useViewportWidth());
 
@@ -132,6 +142,12 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
             />
           ))}
         </div>
+        {overBy > 0 && (
+          <div className={classes.limitNote}>
+            {hand.acHeld} action cards, hand limit {hand.acLimit}: discard {overBy} (open a card → Discard). The bot
+            refuses action card plays until you do.
+          </div>
+        )}
         {hand.unnumbered > 0 && hand.index.refresh && (
           <div className={classes.syncNote}>Some cards are not listed by the bot yet — open one and press Sync with bot.</div>
         )}
@@ -148,6 +164,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
         {hand.groups.map((group) => (
           <BarCount key={group.id} group={group} />
         ))}
+        {overBy > 0 && <span className={classes.barLimit}>Discard {overBy}</span>}
         {playableCount > 0 && (
           <span className={classes.barLive}>
             <span className={classes.liveDot} />
@@ -162,7 +179,8 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
         <CardPopup
           card={selectedCard}
           number={hand.numbers.get(selectedCard.key)}
-          timing={timingOf(selectedCard, hand.gameState, hand.myColor)}
+          timing={cardTiming(selectedCard, hand)}
+          overBy={selectedCard.kind === "ac" ? Math.max(0, hand.acHeld - hand.acLimit) : 0}
           actions={liveCard ? actionsFor(selectedCard, hand) : []}
           gone={!liveCard}
           players={hand.players}
@@ -210,11 +228,15 @@ function GroupFan({ group, hand, budget, onPick }: GroupFanProps) {
       {group.cards.length === 0 ? (
         <div className={classes.emptyFan}>None</div>
       ) : (
-        <div className={classes.fan} style={{ ["--n" as string]: group.cards.length, ["--budget" as string]: `${budget}px` }}>
+        <div
+          className={classes.fan}
+          data-crowded={budget < group.cards.length * CARD_STEP || undefined}
+          style={{ ["--n" as string]: group.cards.length, ["--budget" as string]: `${budget}px` }}
+        >
           {group.cards.map((card, i) => {
             const actions = actionsFor(card, hand);
             const actionable = actions.some((a) => a.id === "play" || a.id === "score");
-            const timing = timingOf(card, hand.gameState, hand.myColor);
+            const timing = cardTiming(card, hand);
             return (
               <button
                 type="button"

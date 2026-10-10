@@ -26,6 +26,8 @@ type Props = {
   onClose: () => void;
   /** The card has left the hand (played, discarded...). */
   gone?: boolean;
+  /** Action cards over the hand limit. */
+  overBy?: number;
 };
 
 type Sent = { action: CardAction; baseline?: string; error?: string; busy: boolean };
@@ -38,7 +40,9 @@ const DONE_TEXT: Record<string, string> = {
   sync: "Asked the bot to refresh your hand.",
 };
 
-function timingLine(card: HandCard, timing: Timing, hasPlay: boolean): string {
+function timingLine(card: HandCard, timing: Timing, hasPlay: boolean, overBy: number): string {
+  if (timing === "blocked")
+    return `Over your action card hand limit — discard ${overBy} first; the bot refuses action cards until then.`;
   if (card.scored) return `Scored — worth ${card.vp ?? 1} VP.`;
   if (card.inPlayArea) return "Face up in your play area.";
   if (card.kind === "pn" && !hasPlay)
@@ -54,12 +58,14 @@ function timingLine(card: HandCard, timing: Timing, hasPlay: boolean): string {
 
 /** The focused view of one card: big face, its timing, and what the bot lets you do with it. */
 export function CardPopup(props: Props) {
-  const { card, number, timing, actions, players, myColor, threadId, actionsId, meId, run, onClose, gone } = props;
+  const { card, number, timing, actions, players, myColor, threadId, actionsId, meId, run, onClose, gone, overBy = 0 } = props;
   const [sent, setSent] = useState<Sent | null>(null);
   const [picking, setPicking] = useState<CardAction | null>(null);
   const thread = useChannelMessages(threadId);
   const actionsChannel = useChannelMessages(actionsId);
-  const replies = botReplies(thread, actionsChannel, sent?.baseline, meId);
+  const replies = botReplies(thread, actionsChannel, sent?.baseline, meId).filter(
+    (m) => cleanReply(m.content ?? "") || replyButtons(m, meId, threadId).length > 0,
+  );
   const refused = replies.some(isRefusal);
   const press = usePressButton();
 
@@ -101,7 +107,7 @@ export function CardPopup(props: Props) {
             </div>
           )}
           <p className={`${classes.popupTiming} ${timing === "now" && hasPlay && !gone ? classes.popupTimingNow : ""}`}>
-            {gone ? "This card has left your hand." : timingLine(card, timing, hasPlay)}
+            {gone ? "This card has left your hand." : timingLine(card, timing, hasPlay, overBy)}
           </p>
 
           {actions.length > 0 && (
@@ -142,10 +148,10 @@ export function CardPopup(props: Props) {
               <div className={classes.pickerLabel}>The bot</div>
               {replies.map((message) => (
                 <div key={message.id} className={classes.ask}>
-                  {message.content && <Markdown content={message.content} className={classes.askText} />}
-                  {replyButtons(message, meId).length > 0 && (
+                  {cleanReply(message.content ?? "") && <Markdown content={cleanReply(message.content ?? "")} className={classes.askText} />}
+                  {replyButtons(message, meId, threadId).length > 0 && (
                     <div className={classes.pickerRow}>
-                      {replyButtons(message, meId).map((b) => (
+                      {replyButtons(message, meId, threadId).map((b) => (
                         <ReplyButton
                           key={b.custom_id}
                           label={b.label || b.custom_id!}
@@ -166,11 +172,25 @@ export function CardPopup(props: Props) {
   );
 }
 
-const NOT_FOR_ME = /^(ultimateUndo|sabotage_|no_sabotage)/;
+/** Undo lives in the top bar; others' reactions are theirs; "Delete These Buttons" is Discord housekeeping. */
+/**
+ * Bot replies minus Discord-only noise: role pings, "use buttons…" hints and pointers to channels that do not
+ * exist here.
+ */
+function cleanReply(content: string): string {
+  return content
+    .replace(/<@&\d+>\s*,?\s*/g, "")
+    .replace(/\s*Check your `?#?cards-info`? thread for the blue discard buttons\.?/gi, " Use Discard on the cards in your hand.")
+    .replace(/^Use buttons to end turn or do another action\.?$/gim, "")
+    .trim();
+}
 
-/** Buttons of a reply that are mine to press: only on posts that name me, never undo or others' reactions. */
-function replyButtons(message: Message, meId: string | undefined): Component[] {
-  const addressed = message.ephemeral || (!!meId && (message.content ?? "").includes(`<@${meId}>`));
+const NOT_FOR_ME = /^(ultimateUndo|sabotage_|no_sabotage|deleteButtons)/;
+
+/** Buttons of a reply that are mine to press: in my private cards thread or on posts that name me. */
+function replyButtons(message: Message, meId: string | undefined, threadId: string | undefined): Component[] {
+  const addressed =
+    message.ephemeral || message.channel_id === threadId || (!!meId && (message.content ?? "").includes(`<@${meId}>`));
   if (!addressed) return [];
   return messageButtons(message).filter((b) => !NOT_FOR_ME.test(b.custom_id ?? ""));
 }

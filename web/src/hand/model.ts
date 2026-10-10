@@ -239,7 +239,8 @@ function dedupeKeys(cards: HandCard[]): HandCard[] {
   });
 }
 
-export type Timing = "now" | "later" | "reaction";
+/** "blocked": its window may be open, but the bot refuses it (over the action card hand limit). */
+export type Timing = "now" | "later" | "reaction" | "blocked";
 
 /**
  * Whether a card's timing window is open right now, judged from the public game

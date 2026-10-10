@@ -8,7 +8,7 @@ import { config } from "@/config";
 import { getToken } from "@/play/session";
 import type { PlayerDataResponse } from "@/entities/data/types";
 import { buildHand, type CardGroup, type HandResponse } from "./model";
-import { assignNumbers, indexThread, type ThreadIndex } from "./botThread";
+import { actionTakenThisTurn, assignNumbers, indexThread, type ThreadIndex } from "./botThread";
 import { useCardData } from "./cardData";
 
 const POLL_MS = 45_000;
@@ -41,6 +41,11 @@ export type HandState = {
   error?: string;
   /** Cards the bot has not listed with a number yet (its listing is stale). */
   unnumbered: number;
+  /** Action cards held and the hand limit; the bot refuses every action card play while over it. */
+  acHeld: number;
+  acLimit: number;
+  /** This turn's action is spent, so "Action:" cards wait for the next turn. */
+  actionTaken: boolean;
 };
 
 /**
@@ -61,6 +66,7 @@ export function useHand(gameName: string, token?: string): HandState {
     return undefined;
   });
   const thread = useChannelMessages(threadId);
+  const actionsChannel = useChannelMessages(actionsId);
   const web = usePlayerData(gameName);
 
   const hand = useQuery({
@@ -119,6 +125,9 @@ export function useHand(gameName: string, token?: string): HandState {
     .filter((c) => c.kind === "ac" || (c.kind === "so" && !c.scored))
     .filter((c) => !numbers.has(c.key)).length;
 
+  const actionTaken = useMemo(() => actionTakenThisTurn(actionsChannel), [actionsChannel]);
+  const acHeld = groups.find((g) => g.id === "ac")?.cards.length ?? 0;
+
   return {
     groups,
     numbers,
@@ -132,5 +141,8 @@ export function useHand(gameName: string, token?: string): HandState {
     loading: hand.isLoading || web.isLoading,
     error: hand.error ? String(hand.error.message) : undefined,
     unnumbered,
+    acHeld,
+    acLimit: index.acLimit ?? 7,
+    actionTaken,
   };
 }

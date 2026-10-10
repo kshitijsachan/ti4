@@ -26,6 +26,8 @@ export type ThreadIndex = {
   openSoScore?: BotButton;
   openSoDiscard?: BotButton;
   refresh?: BotButton;
+  /** The action card hand limit, from the bot's newest hand listing (`__Action Cards__ (9/7)`). */
+  acLimit?: number;
   /** Lower-cased card name → numbers, from the newest listing of each kind. */
   acNumbers: Map<string, number[]>;
   soNumbers: Map<string, number[]>;
@@ -109,6 +111,8 @@ export function indexThread(channel: ChannelMessages | undefined): ThreadIndex {
     if (!acSeen && content.startsWith("__Action Cards__")) {
       acSeen = true;
       index.acNumbers = numbersIn(content);
+      const limit = /^__Action Cards__ \((\d+)\/(\d+)\)/.exec(content);
+      if (limit) index.acLimit = Number(limit[2]);
     }
     if (!soSeen && content.includes("__Unscored Secret Objectives")) {
       soSeen = true;
@@ -263,7 +267,7 @@ export function botReplies(
   ].sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
 }
 
-const REFUSAL = /denied|cannot|can't|not able|unable|not allowed|no such|does not think|please retry|something went wrong/i;
+const REFUSAL = /denied|cannot|can't|not able|unable|not allowed|will not allow|over the limit|no such|does not think|please retry|something went wrong/i;
 
 /** True when a bot reply reads as a refusal. */
 export function isRefusal(message: Message): boolean {
@@ -272,4 +276,23 @@ export function isRefusal(message: Message): boolean {
 
 export function messageButtons(message: Message): Component[] {
   return buttonsOf(message);
+}
+
+/**
+ * Whether the active player has already taken this turn's action: the bot's newest turn prompt in the
+ * actions channel offers "End Turn" but no longer a fresh "Tactical Action".
+ */
+export function actionTakenThisTurn(actions: ChannelMessages | undefined): boolean {
+  if (!actions) return false;
+  const stop = Math.max(0, actions.ids.length - 60);
+  for (let i = actions.ids.length - 1; i >= stop; i--) {
+    const message = actions.byId[actions.ids[i]];
+    if (!message?.author?.bot) continue;
+    const ids = buttonsOf(message).map((b) => (b.custom_id ?? "").replace(/^FFCC_[^_]+_/, ""));
+    const fresh = ids.some((id) => /^tacticalAction(?!Build)/.test(id));
+    const end = ids.some((id) => /^(turnEnd|endOfTurnAbilities)/.test(id));
+    if (fresh) return false;
+    if (end) return true;
+  }
+  return false;
 }

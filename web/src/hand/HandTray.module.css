@@ -243,11 +243,30 @@
   margin-left: max(-72px, min(8px, calc((var(--budget, 520px) - var(--n) * var(--hand-card-w)) / max(1, var(--n) - 1))));
 }
 
+/* Overlapping cards lie straight: a tilted, stacked fan reads as clutter. */
+.fan[data-crowded] .slot {
+  transform: none;
+}
+
 .slot:hover,
-.slot:focus-visible {
+.slot:focus-visible,
+.fan[data-crowded] .slot:hover,
+.fan[data-crowded] .slot:focus-visible {
   z-index: 2;
   transform: translateY(-14px) rotate(0deg);
   outline: none;
+}
+
+.limitNote {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--hand-so);
+}
+
+.barLimit {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--hand-so);
 }
 
 .syncNote {
