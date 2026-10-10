@@ -306,7 +306,7 @@ export class Autopilot {
     if (hit && Date.now() - hit.at < 20000) return undefined;
     const map = new Map<string, string>();
     try {
-      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`);
+      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
         const data = (await res.json()) as Json;
         for (const p of data.playerData ?? []) if (p.discordId && p.faction && p.faction !== "null") map.set(String(p.discordId), String(p.faction));
@@ -324,7 +324,7 @@ export class Autopilot {
     if (hit && Date.now() - hit.at < maxAgeMs) return hit.data;
     let data: Json | null = null;
     try {
-      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/draft`);
+      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/draft`, { signal: AbortSignal.timeout(8000) });
       if (res.ok) data = (await res.json()) as Json;
     } catch {
       data = null;
@@ -448,8 +448,16 @@ class SeatPilot {
     }, delay);
   }
 
+  /** When the current think() began: one hung far longer than any step should is abandoned (never a silent seat). */
+  private busySince = 0;
+
   private async think() {
+    if (this.busy && Date.now() - this.busySince > 120000) {
+      log.warn(`autopilot ${this.name}: a decision has hung for 2 minutes; starting over`);
+      this.busy = false;
+    }
     if (this.busy || this.stopped || !this.mgr.hub.gateway.botReady) return;
+    this.busySince = Date.now();
     if (Date.now() < this.restUntil) return;
     this.busy = true;
     try {
