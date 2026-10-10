@@ -114,7 +114,7 @@ function pressesNeeded(m: Message) {
 function isMultiPress(m: Message) {
   const ids = choicesOf(m).map((c) => baseId(c.customId));
   return (
-    ids.some((id) => /^(place_|spend_|reduceTG_|reduceComm_|increase_\w+_cc|riftUnit_|riftAllUnits_|wormholeUnit_|wormholeAllShips_)/.test(id)) &&
+    ids.some((id) => /^(place_|spend_|reduceTG_|reduceComm_|increase_\w+_cc|addIngressToken_|riftUnit_|riftAllUnits_|wormholeUnit_|wormholeAllShips_)/.test(id)) &&
     ids.some((id) => /^(deleteButtons|resetProducedThings|resetSpend_|resetCCs|doneRifting$)/.test(id))
   );
 }

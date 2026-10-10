@@ -289,3 +289,9 @@ void test("the Fracture roll says what was rolled and whether it appeared", () =
   const auto = one(bot(`${SOL_NOPING} has _Styx and Stones_ so The Fracture enters automatically! Ingress tokens…`));
   assert.match(auto.line, /The Fracture entered play \(Styx and Stones\)/);
 });
+
+void test("the Fracture's automatic ingress tokens are listed", () => {
+  const r = classify(bot("## <@&1558508132278337536> - The Fracture is now in play. Automatically added ingress tokens to the following tiles:\n- 000 (Mecatol Rex)\n- 105 (Arinam/Meer)"), ctx());
+  assert.equal(r.cls.type, "event");
+  assert.match(segText(r.drafts[0].summary), /ingress tokens placed automatically in 000 \(Mecatol Rex\), 105 \(Arinam\/Meer\)/);
+});

@@ -1,0 +1,60 @@
+/* What my last presses did: quiet notes in their own slot left of the decision card, under the ticker line. */
+.stack {
+  position: fixed;
+  top: 140px;
+  right: calc(12px + var(--decision-right-inset, 0px) + 392px);
+  z-index: var(--z-decision-popup, 3450);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toast {
+  max-width: 340px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
+  background: var(--details-card-bg, #0b1020);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  color: var(--play-ink);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  animation: outcomeIn 160ms var(--play-ease), outcomeOut 400ms ease 5.6s forwards;
+}
+
+.you {
+  color: var(--play-ink-bright);
+  font-weight: 600;
+}
+
+@keyframes outcomeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes outcomeOut {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .stack {
+    top: auto;
+    bottom: 120px;
+    right: 8px;
+    left: 8px;
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

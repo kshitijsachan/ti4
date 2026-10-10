@@ -269,6 +269,14 @@ function genericTitle(text: string): { title: string; rest: string } {
 }
 
 /**
+ * Buttons that do nothing useful at a live table: Discord views of what is always on screen, admin escape hatches
+ * (Undo and rewind cover mistakes), the bot's own trade flow (the Trade drawer does it), async nudges, and the
+ * component-action "Generic" fallback (declare by hand).
+ */
+const DEAD_HERE =
+  /^(showMap|showPlayerAreas|refreshViewOfSystem|refreshInfoButtons|cardsInfo|getModifyTiles|transaction|announceReadyForDice|requestAllFollow|endTurnWhenAllReactedTo|componentActionRes_generic)(_|$)/;
+
+/**
  * Async-Discord housekeeping that means nothing at a live table: the new-player survey, auto-pass timers in hours,
  * AFK hours, per-user preferences. Never a decision.
  */
@@ -295,8 +303,7 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       return !f || !mine || f === mine;
     })
     /* Discord conveniences with no meaning here (the map and player areas are always on screen). */
-    .filter((c) => !/^(showMap|showPlayerAreas|refreshViewOfSystem|refreshInfoButtons|cardsInfo)$|^showMap|^refreshViewOfSystem_/.test(baseId(c.customId)))
-    .map((c) => (baseId(c.customId) === "getModifyTiles" ? { ...c, label: "Edit units (manual fix)" } : c));
+    .filter((c) => !DEAD_HERE.test(baseId(c.customId)));
   const names = namesFrom(ctx.state, (n) => scName(ctx, n));
   const embedText = (m.embeds ?? [])
     .map((e) => [e.title, e.description].filter(Boolean).join("\n"))
@@ -632,11 +639,29 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       eyebrow: "Component action",
       title: "Component action — what do you use?",
       choices: choices.map((c) => (baseId(c.customId) === "deleteButtons" ? { ...c, label: "Cancel", rank: "undo" as const } : c)),
-      text: "Pick the card, technology, leader or ability whose ACTION you use. “Generic” is for anything not listed (you then resolve it by hand).",
+      text: "",
     };
   }
   const exploreCard = m.content.match(/please resolve _([^_]+)_/i)?.[1];
   if (exploreCard && has(choices, /^decline_explore$/)) return exploreResolution(base, exploreCard, choices, m.content, ctx);
+  if (has(choices, /^addIngressToken_/)) {
+    const skip = (choices.find((c) => /^addIngressToken_/.test(baseId(c.customId)))?.emojiName ?? "").replace(/tech$/i, "");
+    const many = /not place more ingress tokens than legal|place 3|three/i.test(m.content);
+    return {
+      ...base,
+      kind: "tactical",
+      eyebrow: "The Fracture",
+      title: `Place an ingress token${skip ? ` — ${skip.toLowerCase()} skip` : ""}`,
+      text: `Pick a system with a ${skip ? `${skip.toLowerCase()} ` : ""}technology skip for an ingress token (ships move between it and The Fracture). Systems with only one legal choice were filled automatically.${many ? "" : ""} Press “Done” when finished.`,
+      choices: choices.map((c) =>
+        /^addIngressToken_/.test(baseId(c.customId))
+          ? { ...c, label: c.label.replace(/^Add Ingress To\s*/i, ""), style: 2 }
+          : baseId(c.customId) === "deleteButtons"
+            ? { ...c, label: "Done" }
+            : c,
+      ),
+    };
+  }
   if (has(choices, /^rollFracture_/)) {
     const spawn = choices.some((c) => /spawn/i.test(c.label));
     return {

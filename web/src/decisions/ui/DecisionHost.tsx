@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { UnstyledButton, Tooltip } from "@mantine/core";
-import { IconBolt, IconEyeOff, IconMap, IconAlertTriangle, IconX } from "@tabler/icons-react";
+import { IconBolt, IconChevronDown, IconChevronUp, IconEyeOff, IconMap, IconAlertTriangle, IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import cx from "clsx";
 import { usePlay, usePlayConnection } from "@/discord";
@@ -10,6 +10,7 @@ import { usePlayerData } from "@/api/usePlayerData";
 import type { PlayerDataResponse } from "@/entities/data/types";
 import { getToken } from "@/play/session";
 import { useMovementUI } from "@/mapactions/store";
+import { useReserveRect } from "@/state/reservedArea";
 import { findGame } from "../detect/games";
 import { turnMenuFallback, usePendingPrompts } from "../detect/pending";
 import { useSetupWaiting } from "../detect/waiting";
@@ -21,6 +22,7 @@ import { useDecisionFocus } from "../model/focus";
 import { useDecisionPress } from "../model/usePress";
 import { renderBody, isWide } from "../renderers";
 import type { DecisionData } from "../renderers/types";
+import { OutcomeToast } from "./OutcomeToast";
 import classes from "./DecisionHost.module.css";
 
 export type DecisionHostProps = {
@@ -175,7 +177,7 @@ const MAP_STEP = /(^| )(tacticalMoveFrom_|unitTacticalMove_|landUnits_)/;
 
 /** Position of the system a choice is about ("ringTile_301"), for the map highlight while hovering. */
 function choicePosition(c: Choice | null) {
-  return c ? (baseId(c.customId).match(/^ringTile_(\w+)/)?.[1] ?? null) : null;
+  return c ? (baseId(c.customId).match(/^(?:ringTile|addIngressToken)_(\w+)/)?.[1] ?? null) : null;
 }
 
 /**
@@ -238,7 +240,12 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
       </div>
     );
   }
-  return <DecisionPopup decisions={decisions} offers={offers} data={data} placement={placement} className={className} rightInset={rightInset} />;
+  return (
+    <>
+      <DecisionPopup decisions={decisions} offers={offers} data={data} placement={placement} className={className} rightInset={rightInset} />
+      <OutcomeToast gameName={gameName} faction={mePlayer?.faction} rightInset={rightInset} />
+    </>
+  );
 }
 
 export type DecisionPopupProps = {
@@ -283,25 +290,49 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
   const [peeking, setPeeking] = useState(false);
   const [offerId, setOfferId] = useState<string | null>(null);
   const [offerList, setOfferList] = useState(false);
+  const [collapsedId, setCollapsedId] = useState<string | null>(null);
+  /* The board keeps clear of the card and the pill (state/reservedArea). */
+  const cardRef = useReserveRect("decision-card");
+  const offersRef = useReserveRect("decision-offers");
+  /* Peek: hold the button to see the map while held, or click it to keep peeking until the next click anywhere. */
+  const peekStart = useRef(0);
+  const [peekMode, setPeekMode] = useState<"hold" | "toggle" | null>(null);
   useEffect(() => {
     if (!peeking) return;
-    const stop = () => setPeeking(false);
-    window.addEventListener("pointerup", stop);
+    const release = () => {
+      if (peekMode === "hold" && Date.now() - peekStart.current < 300) setPeekMode("toggle");
+      else if (peekMode === "hold") {
+        setPeeking(false);
+        setPeekMode(null);
+      }
+    };
+    const anyClick = () => {
+      if (peekMode !== "toggle") return;
+      setPeeking(false);
+      setPeekMode(null);
+    };
+    const stop = () => {
+      setPeeking(false);
+      setPeekMode(null);
+    };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointerdown", anyClick);
     window.addEventListener("pointercancel", stop);
     window.addEventListener("blur", stop);
     return () => {
-      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointerdown", anyClick);
       window.removeEventListener("pointercancel", stop);
       window.removeEventListener("blur", stop);
     };
-  }, [peeking]);
+  }, [peeking, peekMode]);
 
   /* One thing at a time: the head of the queue (or the one whose press is still settling). */
   const openOffer = offers.find((d) => d.id === offerId);
   const shown = press.held ?? openOffer ?? decisions[0];
   const more = decisions.filter((d) => d.id !== shown?.id).length;
   const offerPill = offers.length > 0 && (
-    <div className={classes.offers}>
+    <div ref={offersRef} className={classes.offers}>
       {offerList && (
         <div className={classes.offerList} role="menu" aria-label="Abilities available now">
           {offers.map((o) => (
@@ -354,12 +385,17 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
     conn.actions.dismissPrompt(shown.id);
     press.release();
   };
+  /* Optional cards fold down to their header to free the map; a required choice always stays open. */
+  const collapsible = canHide(shown) || shown === openOffer;
+  const collapsed = collapsible && collapsedId === shown.id && !press.error;
 
   return (
     <PopupLayer placement={placement} rightInset={rightInset} peeking={peeking}>
       <section
         key={shown.id}
-        className={cx(classes.card, isWide(shown) && classes.wide)}
+        ref={cardRef}
+        data-collapsed={collapsed || undefined}
+        className={cx(classes.card, isWide(shown) && classes.wide, collapsed && classes.collapsed)}
         aria-label={shown.title}
         role="dialog"
         aria-modal="false"
@@ -371,24 +407,60 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
               <h2 className={classes.title}>{shown.title}</h2>
             </div>
             {more > 0 && (
-              <span className={classes.pagerText} title="More decisions wait after this one">
-                +{more} next
-              </span>
+              <Tooltip
+                multiline
+                w={260}
+                position="bottom"
+                label={
+                  <>
+                    <b>Waiting after this one:</b>
+                    {decisions
+                      .filter((x) => x.id !== shown.id)
+                      .slice(0, 6)
+                      .map((x) => (
+                        <div key={x.id}>· {x.title}</div>
+                      ))}
+                  </>
+                }
+              >
+                <span className={classes.moreText} tabIndex={0}>
+                  {more === 1 ? "1 more after this" : `${more} more waiting`}
+                </span>
+              </Tooltip>
             )}
-            <Tooltip label="Hold to look at the map" position="bottom">
+            <Tooltip label="Hold to see the map, or click to toggle" position="bottom">
               <UnstyledButton
-                className={classes.iconBtn}
+                className={classes.peekBtn}
                 onPointerDown={(e: PointerEvent) => {
                   e.preventDefault();
+                  e.stopPropagation();
+                  peekStart.current = Date.now();
+                  setPeekMode("hold");
                   setPeeking(true);
                 }}
-                onKeyDown={(e: KeyboardEvent) => (e.key === " " || e.key === "Enter") && setPeeking(true)}
-                onKeyUp={() => setPeeking(false)}
-                aria-label="Peek at the map (hold)"
+                onKeyDown={(e: KeyboardEvent) => {
+                  if (e.key !== " " && e.key !== "Enter") return;
+                  setPeekMode("toggle");
+                  setPeeking((v) => !v);
+                }}
+                aria-label="Peek at map (hold, or click to toggle)"
               >
-                <IconMap size={15} />
+                <IconMap size={14} />
+                <span>Peek at map</span>
               </UnstyledButton>
             </Tooltip>
+            {collapsible && (
+              <Tooltip label={collapsed ? "Show this prompt" : "Fold down to the title"} position="bottom">
+                <UnstyledButton
+                  className={classes.iconBtn}
+                  onClick={() => setCollapsedId(collapsed ? null : shown.id)}
+                  aria-label={collapsed ? "Expand" : "Collapse"}
+                  aria-expanded={!collapsed}
+                >
+                  {collapsed ? <IconChevronDown size={15} /> : <IconChevronUp size={15} />}
+                </UnstyledButton>
+              </Tooltip>
+            )}
             {openOffer && shown === openOffer && (
               <Tooltip label="Close — the offer stays under “Available now”" position="bottom">
                 <UnstyledButton className={classes.iconBtn} onClick={() => setOfferId(null)} aria-label="Close">
@@ -405,7 +477,7 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
             )}
           </div>
         </header>
-        <div className={classes.body}>
+        <div className={classes.body} hidden={collapsed}>
           {renderBody(shown, {
             d: shown,
             data,

@@ -535,6 +535,18 @@ const rules: Rule[] = [
 
   // The Fracture (Thunder's Edge): a breakthrough's roll, 1 or 10 brings it into play ---------------------------
   (m) => {
+    const f = m.content.match(/The Fracture is now in play\.(?:\s*Automatically added ingress tokens to the following tiles:\s*([\s\S]+))?/);
+    if (!f || !/^#+\s*<@&/.test(m.content)) return null;
+    const tiles = (f[1] ?? "").split("\n").map((l) => l.replace(/^[-\s]+/, "").trim()).filter(Boolean);
+    return ev({
+      kind: "explore",
+      importance: 3,
+      summary: tiles.length
+        ? [b("The Fracture"), txt(" is in play — ingress tokens placed automatically in "), b(tiles.join(", ")), txt(" (the only legal systems)")]
+        : [b("The Fracture"), txt(" is in play")],
+    });
+  },
+  (m) => {
     const hit = actorAt(m.content, true);
     const auto = hit?.rest.match(/^has _([^_]+)_ so The Fracture enters automatically/);
     if (hit && auto) return ev({ kind: "explore", importance: 3, actor: hit.actor, summary: [b("The Fracture"), txt(` entered play (${auto[1]})`)] });
