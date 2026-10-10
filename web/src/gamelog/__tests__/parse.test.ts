@@ -280,3 +280,12 @@ void test("segments that would run together get a space", () => {
   assert.equal(needsGap(bold("Hazardous"), bold("Warfare Research Facility")), true);
   assert.equal(needsGap({ t: "emoji", id: "1", name: "Hazardous" }, txt("Warfare")), false);
 });
+
+void test("the Fracture roll says what was rolled and whether it appeared", () => {
+  const miss = one(bot(`${SOL} rolled <:d10green_7:1558154700000000000>, better luck next time.`));
+  assert.match(miss.line, /rolled 7 for The Fracture — it did not appear/);
+  const hit = one(bot(`${SOL_NOPING} rolled a <:d10green_0:1558154700000000001>! The Fracture is now in play! Ingress tokens will automatically have been placed.`));
+  assert.match(hit.line, /rolled 10 for The Fracture — it entered play/);
+  const auto = one(bot(`${SOL_NOPING} has _Styx and Stones_ so The Fracture enters automatically! Ingress tokens…`));
+  assert.match(auto.line, /The Fracture entered play \(Styx and Stones\)/);
+});

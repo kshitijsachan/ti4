@@ -533,6 +533,25 @@ const rules: Rule[] = [
     return ev({ kind: "explore", importance: 1, summary: [b(a[1]), txt(" attached to "), b(plain(a[2]))] });
   },
 
+  // The Fracture (Thunder's Edge): a breakthrough's roll, 1 or 10 brings it into play ---------------------------
+  (m) => {
+    const hit = actorAt(m.content, true);
+    const auto = hit?.rest.match(/^has _([^_]+)_ so The Fracture enters automatically/);
+    if (hit && auto) return ev({ kind: "explore", importance: 3, actor: hit.actor, summary: [b("The Fracture"), txt(` entered play (${auto[1]})`)] });
+    const r = hit?.rest.match(/^rolled (?:a )?((?:<a?:d10\w*?_(\d+):(\d+)>\s*)+)/);
+    if (!hit || !r || !/Fracture|better luck next time/.test(m.content)) return null;
+    const dice = [...r[1].matchAll(/<a?:(d10\w*?_(\d+)):(\d+)>/g)];
+    const values = dice.map((d) => (d[2] === "0" ? 10 : Number(d[2])));
+    const entered = /Fracture (is now in play|is entering play)/i.test(m.content);
+    const faces: Seg[] = dice.flatMap((d, i) => [{ t: "emoji" as const, id: d[3], name: d[1] }, txt(` ${values[i]}${i < dice.length - 1 ? ", " : ""}`)]);
+    return ev({
+      kind: "explore",
+      importance: 3,
+      actor: hit.actor,
+      summary: [txt("rolled "), ...faces, txt(" for "), b("The Fracture"), txt(entered ? " — it entered play (new tiles on the map)" : " — it did not appear")],
+    });
+  },
+
   // Combat -----------------------------------------------------------------------------------------------
   (m) => {
     const c = m.content.match(/^(.+?), please resolve the interaction here\./s);

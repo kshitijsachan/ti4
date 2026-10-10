@@ -646,7 +646,7 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       title: spawn ? "Spawn The Fracture?" : "Roll for The Fracture",
       text: spawn
         ? "Your breakthrough can bring The Fracture into play. You may roll for other breakthroughs first."
-        : "A breakthrough was unlocked while The Fracture is not in play: roll one die. On a 1 or a 0 (10), The Fracture appears.",
+        : "A breakthrough was unlocked while The Fracture is not in play: roll one die. On a 1 or a 10, The Fracture enters play. The result shows in the game log.",
       setup: (ctx.web?.gameState?.phase ?? "").startsWith("setup"),
     };
   }
