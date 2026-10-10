@@ -139,10 +139,14 @@ export class SoloGames {
       job.game = /^([a-z]+\d+)-actions$/i.exec(actions.name)![1];
       this.jobs.set(job.game, job);
       this.note(job, `Game ${job.game} created`, "setting_up");
-      void this.setup(job, p, actions.id, expansion, factions)
-        .finally(() => p.close())
+      const setup = this.setup(job, p, actions.id, expansion, factions).finally(() => p.close());
+      void setup
         .then(() => (job.state === "drafting" ? this.steward(job, actions.id) : undefined))
         .catch((e) => log.warn(`solo ${job.game}: steward stopped: ${(e as Error).message}`));
+      // Answer the caller once the draft runs (usually seconds), so a broken setup is an error, not a game that
+      // looks fine; a slow bot still gets an answer after 45s and the rest is reported by the status endpoint.
+      await Promise.race([setup, sleep(45 * SECOND)]);
+      if (job.state === "error") throw new Error(`Game ${job.game} could not be set up: ${job.error}`);
       return job;
     } catch (e) {
       p.close();
@@ -174,6 +178,7 @@ export class SoloGames {
         this.newer(actionsId, sinceMilty, userId).find((m) => hasControl(m, /^jmfA_main_startMilty$/)),
       );
       if (factions.length) await this.prioritise(job, p, actionsId, settings, factions);
+      await this.ensureSeated(job, p, actionsId, settings);
       this.note(job, "Starting the draft with default settings");
       await this.retry(job, "Start Draft", () => p.click(settings, "jmfA_main_startMilty"));
 
@@ -181,10 +186,62 @@ export class SoloGames {
         const draft = await this.draft(job.game!);
         return draft?.status === "drafting" || draft?.status === "finished" ? draft : undefined;
       });
+      const drafted = await this.draft(job.game!);
+      const inDraft = new Set<string>((drafted?.players ?? []).map((x: Json) => String(x.userId)));
+      const missing = [job.user_id, ...job.others].filter((id) => !inDraft.has(id));
+      if (missing.length) throw new Error(`the draft started without ${this.names(missing)}`);
       this.note(job, "Drafting", "drafting");
     } catch (e) {
       this.fail(job, e);
     }
+  }
+
+  private names(ids: string[]) {
+    return ids.map((id) => String(this.store.state.users[id]?.global_name ?? id)).join(", ");
+  }
+
+  /**
+   * Every invited seat must be in the game and on the draft settings' player list before the draft starts: the bot
+   * drafts only the listed players and drops the rest from the game (pbd61 started with only its human). Missing
+   * seats are added through the settings' own "Add player" selection; if that does not work, setup fails loudly.
+   */
+  private async ensureSeated(job: SoloJob, p: Player, actionsId: string, settings: StoredMessage) {
+    const want = [job.user_id, ...job.others];
+    const web = await this.webData(job.game!);
+    const seated = new Set<string>((web?.playerData ?? []).map((x: Json) => String(x.discordId)));
+    const notInGame = want.filter((id) => !seated.has(id));
+    if (web && notInGame.length) throw new Error(`the bot did not seat ${this.names(notInGame)} in the game`);
+    const current = () => this.store.findMessage(actionsId, settings.id) ?? settings;
+    const listed = () => {
+      const line = /`\s*Players`:\s*\[([^\]]*)\]/.exec(String(current().content ?? ""))?.[1] ?? "";
+      const names = line.split(",").map((x) => x.trim());
+      return want.filter((id) => !names.includes(String(this.store.state.users[id]?.global_name ?? "")));
+    };
+    let missing = listed();
+    if (!missing.length) return;
+    this.note(job, `The draft settings left out ${this.names(missing)}; adding them`);
+    for (let attempt = 1; attempt <= 3 && missing.length; attempt++) {
+      if (hasControl(current(), "jmfN_main.players_0")) await p.click(current(), "jmfN_main.players_0");
+      await this.waitFor(job, "the Players and Factions page", 10 * SECOND, () => hasControl(current(), "jmfA_main.players_includePlayers") || undefined).catch(() => undefined);
+      if (hasControl(current(), "jmfA_main.players_includePlayers")) {
+        const since = this.lastId(actionsId);
+        await p.click(current(), "jmfA_main.players_includePlayers");
+        const boxes = await this.waitFor(job, "the player selection box", 10 * SECOND, () =>
+          this.newer(actionsId, since, job.user_id).find((m) => m._ephemeral_for === job.user_id && selects(m).length),
+        ).catch(() => undefined);
+        const box = boxes && selects(boxes).find((x) => x.values.some((v) => missing.includes(v)));
+        if (boxes && box) {
+          await p.op({ op: "select", channel_id: actionsId, message_id: boxes.id, custom_id: box.custom_id, values: box.values.filter((v) => missing.includes(v)), component_type: 3 });
+          await sleep(1500);
+        }
+      }
+      for (let i = 1; i <= 3 && !hasControl(current(), "jmfA_main_startMilty"); i++) {
+        if (hasControl(current(), "jmfN_main_0")) await p.click(current(), "jmfN_main_0");
+        await this.waitFor(job, "the main settings page", 8 * SECOND, () => hasControl(current(), "jmfA_main_startMilty") || undefined).catch(() => undefined);
+      }
+      missing = listed();
+    }
+    if (missing.length) throw new Error(`the draft settings would leave out ${this.names(missing)}; not starting a draft without them`);
   }
 
   /**
