@@ -107,9 +107,16 @@ function pressesNeeded(m: Message) {
   return choicesOf(m).some((c) => TWO_PRESS_PRIMARY.test(baseId(c.customId))) ? 2 : 1;
 }
 
+/**
+ * Prompts answered with many presses on one message and closed by their own Done button (which deletes it or strips
+ * its buttons): produce units, exhaust planets / spend TG, gain command tokens. They stay open while their buttons do.
+ */
 function isMultiPress(m: Message) {
   const ids = choicesOf(m).map((c) => baseId(c.customId));
-  return ids.some((id) => /^place_/.test(id)) && ids.some((id) => /^(deleteButtons_tacticalAction|deleteButtons_construction|resetProducedThings)/.test(id));
+  return (
+    ids.some((id) => /^(place_|spend_|reduceTG_|reduceComm_|increase_\w+_cc)/.test(id)) &&
+    ids.some((id) => /^(deleteButtons|resetProducedThings|resetSpend_|resetCCs)/.test(id))
+  );
 }
 
 /** How many of the newest messages of a channel a role-wide prompt stays relevant for. */
@@ -293,8 +300,13 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
       const midway = ping && thisTurn && pressesNeeded(m) > 1 && pressCount(me.id, m, pressedAt) === 1;
       if (!midway) return;
     }
-    /* The when / after queue prompt stays until the bot deletes it (it keeps it when I asked to play but have no card). */
-    const queuePrompt = forwardChoices(m).some((c) => /^declineToQueueA(When|nAfter)$/.test(baseId(c.customId)));
+    /*
+     * Prompts the bot deletes once acted on stay until it does: the when / after queue (kept when I asked to play but
+     * hold no card), the speaker's tie-break, resolution and agenda reveal (a press lost to a restart must not hide them).
+     */
+    const queuePrompt = forwardChoices(m).some((c) =>
+      /^(declineToQueueA(When|nAfter)$|resolveAgendaVote_outcomeTie|agendaResolution_|flip_agenda$)/.test(baseId(c.customId)),
+    );
     if (answered && !queuePrompt) return;
     /* The list of secrets to score, left over after I answered the secret half another way. */
     if (scoringClosed && forwardChoices(m).some((c) => /^so_score_hand_/.test(baseId(c.customId)))) return;
