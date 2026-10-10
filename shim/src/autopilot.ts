@@ -170,7 +170,7 @@ const RULES: Rule[] = [
 
 /** Optional ability offers: never the fallback answer (a rule must score them explicitly). */
 const OPTIONAL_LABEL = /\b(use|using|agent|commander|hero|promissory|exhaust|play|purge|spend|pay|ability|on someone else|activate|trigger|steal|swap)\b/i;
-const OPTIONAL_ID = /(reveal_stage|agent|commander|hero|leader|^play|^use|getAgentSelection|^pn_|_pn_|resolvePNPlay|steal)/i;
+const OPTIONAL_ID = /(reveal_stage|getKeleresTechOptions|agent|commander|hero|leader|^play|^use|getAgentSelection|^pn_|_pn_|resolvePNPlay|steal)/i;
 
 /** Confirmations that offer a way to take the choice back: their lone button is not a question for us. */
 const TAKE_BACK_TEXT = /change your mind|if this was an accident|can change (that|your decision)|to undo|remove the preset|be asked (again|to decide)/i;
