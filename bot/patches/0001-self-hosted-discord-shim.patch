@@ -2537,10 +2537,10 @@ index 0000000..0ff478c
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoService.java b/src/main/java/ti4/spring/api/selfhost/UndoService.java
 new file mode 100644
-index 0000000..61847c0
+index 0000000..518cbf8
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoService.java
-@@ -0,0 +1,416 @@
+@@ -0,0 +1,421 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.io.BufferedReader;
@@ -2734,6 +2734,7 @@ index 0000000..61847c0
 +    private static void retirePrompts(Game game, long restoredSavedAt, long rollbackStart) {
 +        long from = restoredSavedAt + PROMPT_SLACK_MS;
 +        java.util.concurrent.CompletableFuture.runAsync(() -> {
++          try {
 +            List<net.dv8tion.jda.api.entities.channel.middleman.MessageChannel> channels = new ArrayList<>();
 +            try {
 +                if (game.getActionsChannel() != null) channels.add(game.getActionsChannel());
@@ -2773,6 +2774,9 @@ index 0000000..61847c0
 +                }
 +            }
 +            if (active != null && !activeHasPrompt) restoreTurnPrompt(game, active);
++          } catch (Throwable t) {
++            BotLogger.error("Could not tidy prompts after a roll-back in " + game.getName(), t);
++          }
 +        });
 +    }
 +
@@ -2787,7 +2791,8 @@ index 0000000..61847c0
 +    /** The player whose action-phase turn it is, when no tactical action is under way (that has its own prompts). */
 +    private static Player activeTurnPlayer(Game game) {
 +        if (game.isFowMode() || !"action".equalsIgnoreCase(game.getPhaseOfGame())) return null;
-+        String system = game.getActiveSystem();
++        // getActiveSystem() falls back to the last activated system; the current one is blank between actions.
++        String system = game.getCurrentActiveSystem();
 +        if (system != null && !system.isBlank() && !"null".equals(system)) return null;
 +        Player p = game.getActivePlayer();
 +        return p == null || !p.isRealPlayer() || p.isPassed() ? null : p;
