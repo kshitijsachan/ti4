@@ -218,7 +218,8 @@ export class Hub {
   /** The newest press in this channel (or its parent / threads) within the last few seconds. */
   private recentPress(msg: StoredMessage): Interaction | undefined {
     const ch = this.store.channel(msg.channel_id);
-    const related = new Set([msg.channel_id, ch?.parent_id].filter(Boolean));
+    /* A thread's parent is its channel; a channel's parent is a category shared by other games: not related. */
+    const related = new Set([msg.channel_id, ch && [10, 11, 12].includes(ch.type) ? ch.parent_id : undefined].filter(Boolean));
     const now = Date.now();
     let newest: Interaction | undefined;
     for (const inter of this.store.interactions.values()) {
