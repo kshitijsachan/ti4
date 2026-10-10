@@ -228,7 +228,10 @@ function tradeOf(text: string): TradeInfo {
       continue;
     }
     const it = line.match(ITEM);
-    if (it && sides.length) sides[sides.length - 1].items.push(it[1].replace(/(^|\s)_(.+?)_(?=\s|$)/g, "$1$2").replace(/\*\*/g, "").trim());
+    if (it && sides.length)
+      sides[sides.length - 1].items.push(
+        it[1].replace(/(^|\s)_(.+?)_(?=\s|$)/g, "$1$2").replace(/\*\*/g, "").trim().replace(/^(TG|commodity)$/i, "1 $1"),
+      );
   }
   return { from, sides };
 }
@@ -262,7 +265,7 @@ function genericTitle(text: string): { title: string; rest: string } {
  * AFK hours, per-user preferences. Never a decision.
  */
 const NOISE_ID = /^(answerSurvey_|offerSurvey|setAutoPass|setHourAsAFK_|playerPref|offerPlayerPref|sandbagPref_|setOptIn|setPersonalAutoPing|offerAFK)/;
-const NOISE_TEXT = /automatically pass on sabos|median time \(in hours\)|your afk times|complete a 1 time survey/i;
+const NOISE_TEXT = /^\W*(promissory notes|action cards) in your hand|automatically pass on sabos|median time \(in hours\)|your afk times|complete a 1 time survey/i;
 
 export function isNoise(d: Decision): boolean {
   if (d.choices.some((c) => NOISE_ID.test(baseId(c.customId)))) return true;

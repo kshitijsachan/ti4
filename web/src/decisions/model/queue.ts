@@ -32,7 +32,10 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   const waiting = owed.filter((d) => d.kind === "combat" && !combatWaitsOnMe(d));
   const rest = owed.filter((d) => d.kind !== "combat");
   /* A combat that waits on the opponent never blocks what I can do, my turn included (landing warns while it is unresolved). */
-  return [...combat, ...rest.filter(continuation), ...rest.filter((d) => !continuation(d)), ...turn, ...waiting];
+  /* A trade offered to me is time-sensitive: right after any combat. */
+  const trades = rest.filter((d) => d.kind === "transaction");
+  const others = rest.filter((d) => d.kind !== "transaction");
+  return [...combat, ...trades, ...others.filter(continuation), ...others.filter((d) => !continuation(d)), ...turn, ...waiting];
 }
 
 /**

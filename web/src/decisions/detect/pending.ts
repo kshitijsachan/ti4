@@ -439,8 +439,22 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
     if (stale) retireStep(me.id, it.message.id);
     return stale;
   };
+  /* My fresh turn menu is spent once I acted: a later step of mine, an activation, a card played (the bot leaves it up). */
+  const actionsMarks = laterFlowMarks(state, [game.actions.id]).get(game.actions.id) ?? [];
+  const playedSince = (id: string) =>
+    (state.messages[game.actions.id]?.ids ?? []).some(
+      (x) => compareSnowflakes(x, id) > 0 && /\bplayed by\b/i.test(state.messages[game.actions.id]?.byId[x]?.content ?? "") && (state.messages[game.actions.id]?.byId[x]?.mentions ?? []).some((u) => u.id === me.id),
+    );
+  const spentTurnMenu = (it: PendingPrompt) => {
+    if (it.channelId !== game.actions.id) return false;
+    if (!choicesOf(it.message).some((c) => /^tacticalAction(?!Build)/.test(baseId(c.customId)))) return false;
+    if (retired.has(it.message.id)) return true;
+    const spent = actionsMarks.some((id) => compareSnowflakes(id, it.message.id) > 0) || playedSince(it.message.id);
+    if (spent) retireStep(me.id, it.message.id);
+    return spent;
+  };
   return all
-    .filter((it) => !staleHit(it))
+    .filter((it) => !staleHit(it) && !spentTurnMenu(it))
     .filter((it) => !isStep(it) || !stepRetired(it))
     .filter((it) => !roundStart || compareSnowflakes(it.message.id, roundStart) > 0)
     .filter((it) =>

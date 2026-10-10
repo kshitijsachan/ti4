@@ -203,7 +203,9 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
     if (!game) return { decisions: [], offers: [] };
     const all = prompts
       .map((p) => classify(p, { state: { users, channels, messages }, game, web, me: mePlayer }))
-      .filter((d) => !isNoise(d));
+      .filter((d) => !isNoise(d))
+      /* My turn menus (left live by an undo) only while it is my turn. */
+      .filter((d) => d.kind !== "turn" || myTurn);
     /* "Decide now whether to follow X" is moot once X has been played. */
     const played = new Set((web?.strategyCards ?? []).filter((sc) => sc.played).map((sc) => sc.initiative));
     const live = all.filter(
