@@ -35,7 +35,7 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
   const status = chooseStatus(d, state, me, all.filter((x) => x.target?.userId === me));
   if (status !== undefined) return status;
   if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, all) : null;
-  const cards = chooseCards(d, state, me, all);
+  const cards = chooseCards(d, state, me, all, ctx.history);
   if (cards !== undefined) return cards;
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
   // (command_tokens.adjust belongs to the status area; only its Leadership panel is answered here.)

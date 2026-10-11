@@ -50,8 +50,14 @@ export type ActionCardDiscard = DecisionBase<
 
 export type ActionCardDraw = DecisionBase<"action_card.draw", { count: number; upTo: boolean }>;
 
-/** "Resolve <card>" right after playing it. step = engine handler id naming the card's automation. */
-export type ActionCardResolve = DecisionBase<"action_card.resolve", { step: string }>;
+/**
+ * "Resolve <card>" right after playing it. step = engine handler id naming the card's automation; actionCard = the
+ * card being resolved (the most recently discarded card with that automation), automation = its automationID.
+ */
+export type ActionCardResolve = DecisionBase<
+  "action_card.resolve",
+  { step: string; actionCard?: string | null; automation?: string | null }
+>;
 
 /** Target steps of a card's resolution. Only fields present in the option id are set. */
 export type ActionCardTarget = DecisionBase<
@@ -64,7 +70,52 @@ export type ActionCardTarget = DecisionBase<
     system?: string;
     holder?: "space";
     strategyCard?: number;
+    /** The card being resolved. */
+    actionCard?: string | null;
   }
+>;
+
+/**
+ * Any other follow-up step of a card's resolution (scuttle / lucky shot / counterstroke / Thunder's Edge cards /
+ * homebrew decks). Typed from the option id's tokens; args = remaining raw id tokens (ids, not labels).
+ */
+export type ActionCardStep = DecisionBase<
+  "action_card.step",
+  {
+    step: string;
+    /** The card being resolved (null when the engine cannot tell). */
+    actionCard: string | null;
+    /** "done" = finish / cancel / decline this step; "choose" = a choice that moves the card on. */
+    role: "choose" | "done";
+    player?: FactionId;
+    players?: FactionId[];
+    planet?: string;
+    system?: string;
+    holder?: "space";
+    unit?: string;
+    damaged?: boolean;
+    tech?: string;
+    /** An action card id named by the option (e.g. the card to take from the discard). */
+    actionCardRef?: string;
+    promissoryNote?: string;
+    count?: number;
+    args?: string[];
+  }
+>;
+
+/**
+ * Non-queued agenda "when" / "after" windows (actions channel). scope "table", window kind "when" | "after"
+ * (responded = reacted on the message or passed for the whole agenda).
+ */
+export type ActionCardWhenAfter = DecisionBase<
+  "action_card.when_after",
+  { timing: "when" | "after"; action: "play" | "pass" | "pass_agenda"; rider?: string }
+>;
+
+/** Promissory-note steps outside the hand tray (Acquiescence follow, Malevolency pass, ...). */
+export type PromissoryNoteResolve = DecisionBase<
+  "promissory_note.resolve",
+  { promissoryNote: string; step: string; strategyCard?: number; player?: FactionId; planet?: string }
 >;
 
 /** Play a promissory note (hand tray, or "this is the window to play X" offers with a Decline). */
@@ -91,7 +142,10 @@ export type CardsDecision =
   | ActionCardResolve
   | ActionCardTarget
   | ActionCardPreassign
-  | PromissoryNotePlay;
+  | ActionCardStep
+  | ActionCardWhenAfter
+  | PromissoryNotePlay
+  | PromissoryNoteResolve;
 
 /** Pre-play an action card for a later window (resolvePreassignment_<what>[_<target>]); agenda ones are agenda.preassign. */
 export type ActionCardPreassign = DecisionBase<"action_card.preassign", { preassignment: string; target: string | null }>;
