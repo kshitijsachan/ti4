@@ -172,6 +172,8 @@ const sameActor = (a: GameEvent, b: GameEvent) =>
   !!a.actor && !!b.actor && (a.actor.faction ? a.actor.faction === b.actor.faction : a.actor.userId === b.actor.userId);
 const ENDS_PRIMARY: ReadonlySet<EventKind> = new Set(["turn", "pass", "sc_play", "phase", "activate", "edit"]);
 const PRIMARY_WINDOW_MS = 10 * 60_000;
+/** Board changes a card caused that still read as their own section (units built with Construction or Warfare). */
+const STANDS_ALONE: ReadonlySet<EventKind> = new Set(["produce"]);
 
 /**
  * Fold what a strategy card play caused under it (`parentId`): the player's own effects posted right after it
@@ -191,12 +193,13 @@ function linkStrategyCards(events: GameEvent[], channelOf: Map<string, string>, 
       if (Date.parse(e.time) - start > PRIMARY_WINDOW_MS) break;
       if (channelOf.get(e.id) !== channel) continue;
       if (ENDS_PRIMARY.has(e.kind) || !sameActor(play, e)) break;
+      if (STANDS_ALONE.has(e.kind)) continue;
       e.parentId = play.id;
     }
   });
   for (const e of events) {
     const thread = roundThread(channelOf.get(e.id) ?? "");
-    if (!thread?.card || e.kind === "sc_play") continue;
+    if (!thread?.card || e.kind === "sc_play" || STANDS_ALONE.has(e.kind)) continue;
     const plays = playsByThread.get(threadKey(thread.round, thread.card));
     if (!plays) continue;
     const t = Date.parse(e.time);

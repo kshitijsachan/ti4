@@ -295,3 +295,25 @@ void test("the Fracture's automatic ingress tokens are listed", () => {
   assert.equal(r.cls.type, "event");
   assert.match(segText(r.drafts[0].summary), /ingress tokens placed automatically in 000 \(Mecatol Rex\), 105 \(Arinam\/Meer\)/);
 });
+
+void test("production lists its units (one emoji per unit) and the system", () => {
+  const content =
+    "<:Jolnar:1558154805598355456>Solo <:ethereal:1558154695846002688>**Ethereal** is producing units in 316 (Nar/Jol - Jol-Nar) in the space area.\n> <:cruiser:1558154650002259968>\nAnd is producing units in 316 (Nar/Jol - Jol-Nar) on the planet Nar (2/3).\n> <:infantry:1558154644117651456><:infantry:1558154644117651456>\nProducing a total of 3 units (PRODUCTION limit is 4) for a total cost of 3 resources.";
+  const e = one(bot(content, { channelName: "pbd1-round-1-Warfare" }));
+  assert.equal(e.kind, "produce");
+  assert.equal(e.line, "Solo produced 1 Cruiser, 2 Infantry in Nar/Jol");
+  assert.equal(e.systemPosition, "316");
+});
+
+void test("production in a strategy card's thread stays its own event", () => {
+  const play = bot(`<:sc_4_1:1558154794831577088> played by ${SOL}.\n\n<@&1>, please indicate your choice with these buttons.`, { id: "100", channelName: "pbd1-actions" });
+  const built = bot(`${SOL_NOPING} is producing units in 316 (Nar/Jol - Jol-Nar) in the space area.\n> <:fighter:1558154773298020352>\nProducing a total of 1 units for a total cost of 1 resources.`, {
+    id: "200",
+    channelName: "pbd1-round-1-Construction",
+    time: "2026-10-09T16:01:00Z",
+  });
+  const { events } = buildTimeline([play, built]);
+  const produce = events.find((e) => e.kind === "produce");
+  assert.ok(produce);
+  assert.equal(produce.parentId, undefined);
+});

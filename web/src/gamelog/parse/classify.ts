@@ -134,6 +134,20 @@ function unitTally(lines: string[]): { counts: Map<string, number>; emoji: Map<s
   return { counts, emoji };
 }
 
+/** Units listed as repeated emoji ("<:fighter:…><:fighter:…>"), or "2 <:fighter:…>": counts per unit. */
+function producedTally(lines: string[]): ReturnType<typeof unitTally> {
+  const counts = new Map<string, number>();
+  const emoji = new Map<string, { id: string; name: string }>();
+  for (const line of lines) {
+    for (const m of line.matchAll(/(?:(\d+)\s*)?<a?:(\w+):(\d+)>/g)) {
+      const unit = m[2].toLowerCase();
+      counts.set(unit, (counts.get(unit) ?? 0) + (m[1] ? Number(m[1]) : 1));
+      emoji.set(unit, { name: m[2], id: m[3] });
+    }
+  }
+  return { counts, emoji };
+}
+
 function tallySegs(t: ReturnType<typeof unitTally>): Seg[] {
   const out: Seg[] = [];
   for (const [unit, n] of t.counts) {
@@ -425,13 +439,16 @@ const rules: Rule[] = [
     const hit = actorAt(m.content, true);
     const p = hit?.rest.match(/^is producing units in (.+?)(?: in the space area| on the planet (.+?))?\.\n/s);
     if (!hit || !p) return null;
-    const lines = m.content.split("\n").slice(1).filter((l) => /\d/.test(l));
-    const tally = unitTally(lines);
-    const where = plain(p[2] ?? p[1]);
+    /* One "> <:infantry:…><:infantry:…>" line per place (space, each planet): every emoji is one unit. */
+    const lines = m.content.split("\n").slice(1).filter((l) => /^>/.test(l));
+    const tally = producedTally(lines);
+    const where = plain(p[1]).replace(/\s*\([^)]*\)\s*$/, "") || plain(p[1]);
+    const names = plain(p[1]).match(/\(([^)]*)\)\s*$/)?.[1]?.split(/\s+-\s+/)[0];
     return ev({
       kind: "produce",
       actor: hit.actor,
-      summary: tally.counts.size ? [txt("produced "), ...tallySegs(tally), txt(" in "), b(where)] : [txt("is producing in "), b(where)],
+      systemPosition: /^\w+$/.test(where) ? where : undefined,
+      summary: tally.counts.size ? [txt("produced "), ...tallySegs(tally), txt(" in "), b(names ?? where)] : [txt("is producing in "), b(names ?? where)],
       details: lines.map((l) => richText(l.replace(/^>\s*/, ""))),
     });
   },
