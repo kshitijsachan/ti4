@@ -192,7 +192,8 @@ export function pastTense(label: string): string {
   /* "Done Exhausting Planets", "No Sabotage": a status, said in sentence case. */
   if (/^no\b/i.test(text) || /^done\b/i.test(text)) return text.charAt(0) + text.slice(1).toLowerCase();
   if (/^ready\b/i.test(text)) return text.length > 5 ? text.charAt(0) + text.slice(1).toLowerCase() : "Marked ready";
-  if (/^system \d/.test(text)) return `Chose ${text}`;
+  /* A system or a planet ("Nestphar (3/2)") is a name, not a command. */
+  if (/^system \d/.test(text) || /\(\d+\/\d+\)\s*$/.test(label)) return `Chose ${text}`;
   const [first, ...rest] = text.split(" ");
   const past = PAST[first.toLowerCase()];
   if (!past) return `Chose “${text}”`;
