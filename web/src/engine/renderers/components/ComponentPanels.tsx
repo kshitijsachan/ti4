@@ -222,6 +222,8 @@ const RELIC_EFFECT: Record<string, string> = {
   look_relic_deck: "Look at the relic deck",
   move_from_command_token_systems: "Move ships from systems with your tokens",
   ready_agent: "Ready an agent",
+  purge_for_technology: "Purge: exhaust all planets, gain a technology",
+  purge_for_point: "Purge for 1 victory point",
 };
 
 /** A relic use offer. */

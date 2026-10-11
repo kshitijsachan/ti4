@@ -4,7 +4,8 @@
  * this seat (never leaves it to a person), never presses another seat's option (optionsFor). Defaults, no lookahead:
  *  - component.action: purge fragments for a relic when offered, else Cancel (the planner opens the menu only to
  *    look for that; leaders/relics/PNs are not planned).
- *  - relic.use: Prophet's Tears draws an action card; exhaust/use effects that help us are used (Temporal Command
+ *  - relic.use: Crown of Emphidia is purged for the point (Maw of Worlds is not: it exhausts every planet);
+ *    Prophet's Tears draws an action card; exhaust/use effects that help us are used (Temporal Command
  *    Suite only on our own agent); peeking at decks is declined.
  *  - leader.agent: the "who uses the agent" menu → ourselves, else the first; optional "use agent" offers → decline.
  *  - choose.confirm: yes (Silver Flame: take the point); choose.amount (commodities): convert when we hold enough,
@@ -84,9 +85,13 @@ export function chooseComponents(d: ComponentsDecision, state: GameState | null,
     }
     case "choose.player": {
       const t = typed as Live<ChoosePlayer["options"][number]["value"]>;
+      if (t[0]?.value!.source === "titanprototype") return pick(t.find((o) => o.value!.faction === self?.faction) ?? t[0], "ourselves") ?? decline("none");
       return pick(t.find((o) => o.value!.faction !== self?.faction) ?? t[0], "first other player") ?? decline("none");
     }
     case "choose.card":
+      // Neuraloop replaces a public objective at the cost of a relic: not planned.
+      if (typed[0]?.value?.source === "neuraloop" && typed[0]?.value?.step === 1) return decline("keep the objective");
+      return pick(typed[0], "first offered") ?? decline("none");
     case "choose.system":
     case "choose.unit":
       return pick(typed[0], "first offered") ?? decline("none");
@@ -103,6 +108,7 @@ function componentAction(t: Live<ComponentAction["options"][number]["value"]>, p
 
 function relicUse(t: Live<RelicUse["options"][number]["value"]>, self: PlayerState | undefined, pick: Pick): ComponentsChoice | null {
   return (
+    pick(t.find((o) => o.value!.effect === "purge_for_point"), "Crown of Emphidia: purge for a victory point") ??
     pick(t.find((o) => o.value!.effect === "draw_action_card"), "Prophet's Tears: draw an action card") ??
     pick(t.find((o) => o.value!.effect === "ready_agent" && o.value!.faction === self?.faction), "ready our agent") ??
     pick(t.find((o) => o.value!.effect === "exhaust" || o.value!.effect === "use"), `use ${t.find((o) => o.value!.effect === "exhaust" || o.value!.effect === "use")?.value?.relic ?? "relic"}`)

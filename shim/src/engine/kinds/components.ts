@@ -112,6 +112,8 @@ export type RelicUse = DecisionBase<
       | "look_relic_deck"
       | "move_from_command_token_systems"
       | "ready_agent"
+      | "purge_for_technology"
+      | "purge_for_point"
       | string;
     leader?: string;
     faction?: string;
