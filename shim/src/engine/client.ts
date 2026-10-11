@@ -131,12 +131,13 @@ export class EngineClient {
   }
 
   /**
-   * A kind-specific direct action on a decision (POST …/decisions/{id}/{verb}, e.g. "move" / "land" for tactical
-   * decisions; body per kind, userId included). Same AnswerResult shape as answer().
+   * A kind's direct action (`POST …/decisions/{id}/{action}`, e.g. tactical `move` / `land`): the body's fields plus
+   * userId / expectedSeq / requestId, answered with the same AnswerResult shape.
    */
-  async act(game: string, decisionId: string, verb: string, body: Record<string, unknown> & { userId: string }): Promise<AnswerResult | null> {
+  async act(game: string, decisionId: string, action: string, body: Record<string, unknown>): Promise<AnswerResult | null> {
+    if (!/^[a-z][a-z_-]*$/.test(action) || action === "answer") return null;
     try {
-      const res = await fetch(this.url(`/${encodeURIComponent(game)}/decisions/${encodeURIComponent(decisionId)}/${verb}`), {
+      const res = await fetch(this.url(`/${encodeURIComponent(game)}/decisions/${encodeURIComponent(decisionId)}/${action}`), {
         method: "POST",
         headers: this.headers(true),
         body: JSON.stringify(body),

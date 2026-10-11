@@ -21,7 +21,21 @@ export type EngineSeat = { userId: string; send(frame: Record<string, unknown>):
 
 type Sub = { game: string; ready: boolean; queue: EngineEvent[] };
 
-export type AnswerOp = { nonce?: string; game?: string; decisionId?: string; optionId?: string; expectedSeq?: number; requestId?: string };
+/**
+ * `{op:"answer"}` from a browser. One of: `optionId` (press an option), `payload` (+ optional `optionId`: a structured
+ * answer, e.g. a vote ballot), or `action` + `body` (a kind's direct action route, e.g. tactical move / land).
+ */
+export type AnswerOp = {
+  nonce?: string;
+  game?: string;
+  decisionId?: string;
+  optionId?: string;
+  payload?: unknown;
+  action?: string;
+  body?: Record<string, unknown>;
+  expectedSeq?: number;
+  requestId?: string;
+};
 
 export function visibleTo(d: Decision, userId: string) {
   return d.visibility !== "private" || d.target?.userId === userId;
@@ -100,7 +114,8 @@ export class EngineFanout {
     const engine = this.engine;
     if (!engine) return reply({ ok: false, status: "unsupported", error: "The engine is off on this server." });
     const game = String(op.game ?? this.subs.get(seat)?.game ?? "");
-    if (!game || !op.decisionId || !op.optionId) return reply({ ok: false, status: "bad_option", error: "game, decisionId and optionId are required" });
+    const what = op.action ? `${op.action}` : (op.optionId ?? (op.payload !== undefined ? "payload" : ""));
+    if (!game || !op.decisionId || !what) return reply({ ok: false, status: "bad_option", error: "game, decisionId and an option, payload or action are required" });
     const snap = await engine.decisionsSnapshot(game);
     const d = snap?.decisions.find((x) => x.id === op.decisionId);
     if (!d) return reply({ ok: false, status: "not_found", error: "That prompt is no longer open." });
@@ -108,14 +123,12 @@ export class EngineFanout {
     if (refusal === "not_found") return reply({ ok: false, status: refusal, error: "That prompt is no longer open." });
     if (refusal === "answered") return reply({ ok: false, status: "refused", error: "You already answered this." });
     if (refusal) return reply({ ok: false, status: "forbidden", error: "That prompt is for another player." });
-    const result = await engine.answer(game, d.id, {
-      optionId: op.optionId,
-      expectedSeq: op.expectedSeq,
-      requestId: op.requestId,
-      userId: seat.userId,
-    });
+    const common = { expectedSeq: op.expectedSeq, requestId: op.requestId, userId: seat.userId };
+    const result = op.action
+      ? await engine.act(game, d.id, op.action, { ...(op.body ?? {}), ...common })
+      : await engine.answer(game, d.id, { optionId: op.optionId, payload: isObject(op.payload) ? op.payload : undefined, ...common });
     if (!result) return reply({ ok: false, status: "error", error: "The game server did not answer." });
-    log.info(`engine answer ${seat.userId} ${game} ${d.kind} ${op.optionId} -> ${result.status}${result.error ? `: ${result.error}` : ""}`);
+    log.info(`engine answer ${seat.userId} ${game} ${d.kind} ${what} -> ${result.status}${result.error ? `: ${result.error}` : ""}`);
     reply(result);
   }
 
@@ -169,4 +182,8 @@ export class EngineFanout {
       this.stateFlight.delete(key);
     }
   }
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
 }

@@ -329,6 +329,15 @@ answer path, SSE, shim client, autopilot uses engine for faction + SC pick / sta
 * **W-INFRA-2 Stream to web**: shim fans `EngineEvent`s to browsers over the existing ws as `t:"engine"` frames
   (filtered by `EngineController.visibleTo` rules), `op:"answer"`; web `useEngine()` store (state + decisions from
   one stream); decision popup driven by `Decision` (legacy kind renders as generic buttons from options).
+  **Landed** (`shim/src/engine/fanout.ts`, `web/src/engine/`): browser sends `{op:"engine_sub", game, after?}` on
+  every hello; shim answers `snapshot {seq, state, decisions}` (or `events` when its ring covers `after`), then live
+  `event` / `state` (per-viewer GameState after each `state.changed`) / `answer {nonce, result}` / `unavailable`.
+  Private decisions reach only their target; events racing a snapshot are queued and flushed above its seq. Web:
+  `useEngine`, `useMyDecisions` (`awaits`), `useEngineMode(game)`; flag = `?engine=1|0` (remembered) or Settings →
+  Advanced → "Engine-driven prompts", default from shim `TI4_ENGINE_WEB=1`; falls back to legacy when the engine is
+  unavailable. Renderers: `web/src/engine/renderers/<area>/index.ts` exporting `renderers` (picked up by
+  `import.meta.glob`, props `EngineRendererProps`); `answer(optionId)` sends `op:"answer"` (select `#value` and
+  `needsInput` options take the legacy press so modals still open).
 * **W-INFRA-3 Interaction abstraction** (enables true direct invocation and deletes JDA from the action path):
   introduce `ti4.selfhost.engine.Interaction` (game, player, channel/"reply to", message-buttons ops) and a
   `ButtonInteractionEvent` adapter; migrate the helper layer (`ButtonHelper.deleteMessage`, `MessageHelper.send…`)

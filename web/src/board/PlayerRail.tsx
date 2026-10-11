@@ -41,7 +41,7 @@ export function PlayerRail({ gameName, myUserId, actionPhase = true, onAllPlayer
   /* Engine flag on and live: seats come from the engine's state; the full player area still opens the web-data board. */
   const seats: Seat[] = engineState
     ? engineState.players
-        .filter((p) => p.faction)
+        .filter((p) => p.real && !!p.faction && p.faction !== "neutral")
         .map((p) => ({
           summary: { ...summarizeEnginePlayer(p, engineState), passed: p.passed && actionPhase },
           isMe: !!myUserId && p.userId === myUserId,
