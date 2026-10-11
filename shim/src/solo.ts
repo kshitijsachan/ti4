@@ -499,9 +499,10 @@ export class SoloGames {
       const opt = d?.options.find((o) => o.handler === customId || o.id === customId);
       if (d && opt) {
         const r = await engine.answer(game, d.id, { optionId: opt.id, expectedSeq: d.seq, userId: job.user_id });
-        // Done, or final (stale prompt / not this seat): stop here. Refused / unsupported / needs input / error: the
-        // engine's pre-check is not the last word (the handler validates again), so press the button as before.
-        if (r && (r.ok || r.status === "stale" || r.status === "forbidden" || r.status === "not_found")) {
+        // Done, or a final answer (refused under the game lock, stale prompt, not this seat): stop here — pressing
+        // anyway after a refusal dealt secret objectives twice (pbd99). Unsupported / needs input / error: the engine
+        // could not run it, so press the button as before.
+        if (r && (r.ok || r.status === "refused" || r.status === "stale" || r.status === "forbidden" || r.status === "not_found")) {
           if (!r.ok) this.note(job, `${customId}: ${r.error ?? r.status}`);
           return;
         }

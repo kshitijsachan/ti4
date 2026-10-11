@@ -71,6 +71,22 @@ index a54a239..1731da8 100644
          String lastGameName = CreateGameService.getLastPbdGameName();
          if (lastGameName == null) return false;
  
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/objective/SecretObjectiveButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/objective/SecretObjectiveButtonHandler.java
+index a513e12..da1e360 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/objective/SecretObjectiveButtonHandler.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/objective/SecretObjectiveButtonHandler.java
+@@ -147,6 +147,11 @@ class SecretObjectiveButtonHandler {
+                 return;
+             }
+         }
++        // Self-hosted: two presses racing (a person and a bot, or the web and the engine) dealt twice (live pbd99).
++        if (ti4.selfhost.SelfHosted.isEnabled() && ti4.selfhost.engine.SetupStateBuilder.secretsDealt(game)) {
++            MessageHelper.sendMessageToChannel(event.getChannel(), "Secret objectives have already been dealt.");
++            return;
++        }
+         boolean allPlayersSetup = true;
+         StringBuilder message = new StringBuilder(
+                 "🛑 Cannot deal secret objectives yet as some players still need to pick their starting technologies. If you wish to proceed anyways, just press the button again.");
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java
 index 507d7b5..c3c5ee4 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java
@@ -834,10 +850,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..0c05283
+index 0000000..1422959
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,516 @@
+@@ -0,0 +1,531 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -1008,8 +1024,22 @@ index 0000000..0c05283
 +        if (!inFlight.add(flightKey)) return fail("busy", "An answer to this decision is in progress.", decisionId);
 +        long before = DecisionRegistry.currentSeq();
 +        Decision form = null;
++        KindSpec lockedSpec = Forms.KIND.equals(d.kind()) ? null : DecisionKinds.byKind(d.kind());
++        // Check again under the game's lock, on the game as it is now: the checks above ran unlocked, and a press
++        // queued just before ours may have changed it (live pbd99: secret objectives dealt twice). The handler takes the
++        // same (reentrant) lock, so nothing runs between this check and the press.
++        ExecutionLockManager.lock(gameName, ExecutionLockType.WRITE);
 +        try {
-+            if (nativePath) form = runNative(d, plan, game, player, userId, req);
++            if (DecisionRegistry.get(decisionId) == null) return fail("stale", "That decision is no longer open.", decisionId);
++            ManagedGame lockedMg = GameManager.getManagedGame(gameName);
++            Game lockedGame = lockedMg == null ? null : lockedMg.getGame();
++            Player lockedPlayer = lockedGame == null ? null : lockedGame.getPlayer(userId);
++            if (lockedPlayer == null) return fail("forbidden", "You are not a player of this game.", decisionId);
++            if (lockedSpec != null) {
++                String err = lockedSpec.validate(lockedGame, lockedPlayer, d, req.optionId());
++                if (err != null) return fail("refused", err, decisionId);
++            }
++            if (nativePath) form = runNative(d, plan, lockedGame, lockedPlayer, userId, req);
 +            else runSynthetic(d, plan.componentId(), userId);
 +        } catch (MessageGone e) {
 +            // The prompt's message no longer exists (a delete capture missed): close it so nobody answers it again.
@@ -1022,6 +1052,7 @@ index 0000000..0c05283
 +            BotLogger.error("engine: answer " + decisionId + " / " + plan.componentId() + " by " + userId + " failed", e);
 +            return fail("error", String.valueOf(e.getMessage()), decisionId);
 +        } finally {
++            ExecutionLockManager.unlock(gameName, ExecutionLockType.WRITE);
 +            inFlight.remove(flightKey);
 +        }
 +        recordWindowResponse(d, userId, plan.componentId());
@@ -12714,10 +12745,10 @@ index 0000000..a11aff7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java b/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java
 new file mode 100644
-index 0000000..c3bd902
+index 0000000..a9f7f9d
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,78 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -12765,6 +12796,35 @@ index 0000000..c3bd902
 +        }
 +        v.put("redraw", redraw);
 +        return v;
++    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    /** Setup: once the player keeps one secret objective, the rest of the discard prompt is a leftover (pbd99). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        ti4.game.Player p = ctx.player();
++        if (p == null || ti4.selfhost.engine.SetupStateBuilder.build(ctx.game()) == null) return false;
++        return ti4.selfhost.engine.SetupStateBuilder.secretsDealt(ctx.game())
++                && ti4.selfhost.engine.SetupStateBuilder.secretsToDiscard(ctx.game(), p) == 0;
++    }
++
++    /** A handle no longer in hand changes nothing when pressed: refuse it instead of reporting "done". */
++    @Override
++    public String validate(
++            ti4.game.Game game,
++            ti4.game.Player answering,
++            ti4.selfhost.engine.EngineModels.Decision decision,
++            String optionId) {
++        for (ti4.selfhost.engine.EngineModels.Option o : decision.options()) {
++            if (!o.id().equals(optionId) || o.value() == null) continue;
++            if (o.value().get("handle") instanceof Integer h && !answering.getSecrets().containsValue(h))
++                return "That secret objective is no longer in your hand.";
++        }
++        return null;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/SetupKindSupport.java b/src/main/java/ti4/selfhost/engine/kinds/SetupKindSupport.java
