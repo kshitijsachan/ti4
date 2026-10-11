@@ -92,6 +92,7 @@ const draft = async () =>
 
 let picks = 0;
 const deadline = Date.now() + 15 * 60000;
+let stuckSince;
 for (;;) {
   if (Date.now() > deadline) throw new Error("draft did not finish in 15 minutes");
   const d = await draft();
@@ -106,9 +107,11 @@ for (;;) {
   if (await ready.count()) {
     say(`my pick: ${await ready.textContent()}`);
     await ready.click();
+    stuckSince = undefined;
   } else if (await order.count()) {
     say(`my pick: speaker order ${await order.getAttribute("title")}`);
     await order.click();
+    stuckSince = undefined;
   } else {
     const cards = page.locator('[class*="sliceCard"], [class*="factionCard"]');
     const n = await cards.count();
@@ -117,11 +120,17 @@ for (;;) {
       await page.waitForTimeout(400);
     }
     if (!(await ready.count())) {
+      // The board may not have caught up with the previous pick yet: look again for a while before giving up.
+      if (Date.now() - (stuckSince ??= Date.now()) < 10000) {
+        await page.waitForTimeout(1000);
+        continue;
+      }
       await shot("stuck");
       throw new Error("my turn, but no pick button found");
     }
     say(`my pick: ${await ready.textContent()}`);
     await ready.click();
+    stuckSince = undefined;
   }
   picks++;
   await page.waitForTimeout(1500);
