@@ -361,7 +361,10 @@ function checkSave(p: ParsedSave, web: Json | null, add: Add) {
       ...real.map((x) => [`${x.kv.get("faction")}'s hand`, cardIds(x.kv.get("secret_objectives"))] as [string, string[]]),
       ...real.map((x) => [`${x.kv.get("faction")}'s scored`, cardIds(x.kv.get("secret_objectives_scored"))] as [string, string[]]),
     ],
-    web?.cardPool?.secretObjectiveFullDeckSize,
+    // Monuments mode shuffles its 2 secrets (dagw, tam) into the deck; the web data's size is the deck model's.
+    web?.cardPool?.secretObjectiveFullDeckSize && g.get("monuments_mode") === "true"
+      ? web.cardPool.secretObjectiveFullDeckSize + 2
+      : web?.cardPool?.secretObjectiveFullDeckSize,
   );
   zoneCheck(
     "agenda",
