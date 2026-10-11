@@ -450,8 +450,8 @@ export class CardPlanner {
       const p = prompts[i];
       if (await this.primary(game, faction, p)) return true;
       if (await this.follow(game, faction, p)) return true;
-      if (await this.scoring(game, faction, p)) return true;
-      if (await this.statusTokens(game, p)) return true;
+      if (!this.seat.engine && (await this.scoring(game, faction, p))) return true;
+      if (!this.seat.engine && (await this.statusTokens(game, p))) return true;
       if (await this.vote(game, faction, p)) return true;
     }
     return false;

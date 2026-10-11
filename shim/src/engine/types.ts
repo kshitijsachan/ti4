@@ -4,6 +4,8 @@
  * "../../../shim/src/engine/types"` or a path alias).
  */
 
+import type { StatusDecision, StatusState } from "./kinds/status.js";
+
 export const CONTRACT_VERSION = 1;
 
 // ---------------------------------------------------------------- state
@@ -29,6 +31,8 @@ export interface GameState {
   publicObjectives: Record<string, string[]>;
   laws: string[];
   draft: DraftState | null;
+  /** Status phase facts (scoring declarations, token gain, readiness); null outside the status phase. */
+  status: StatusState | null;
 }
 
 export interface PlayerState {
@@ -119,6 +123,7 @@ export type ResolvedBy =
   | "private_channel"
   | "interaction_user" // reply/followup/ephemeral to that player's interaction
   | "draft_turn"
+  | "speaker" // the speaker acts (e.g. reveal the next public objective)
   | "mention" // weak: exactly one seated player mentioned
   | "mixed_owners"
   | "none";
@@ -178,7 +183,7 @@ export interface Progress<A = Record<string, unknown>> {
   canCommit: boolean;
 }
 
-interface DecisionBase<K extends string, V> {
+export interface DecisionBase<K extends string, V> {
   /** Stable for the life of the prompt message; edits in place keep it and bump `revision`. */
   id: string;
   game: string;
@@ -213,10 +218,12 @@ export type MiltyDraftPick = DecisionBase<
   "draft.milty.pick",
   { category: "slice" | "faction" | "order" | string; pick: string }
 >;
+/** For area kind files (shim/src/engine/kinds/*.ts). */
+export type DecisionBaseOf<K extends string, V> = DecisionBase<K, V>;
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
 
-export type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraftPick | LegacyDecision;
+export type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraftPick | StatusDecision | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
 
@@ -230,6 +237,8 @@ export interface AnswerRequest {
   requestId?: string;
   /** Trusted (bot-token) route only: the seat answering. */
   userId?: UserId;
+  /** Typed answer for options whose value says payload: true (e.g. final command token pools). */
+  payload?: Record<string, unknown>;
 }
 
 export type AnswerStatus =

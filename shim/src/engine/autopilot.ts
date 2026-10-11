@@ -3,13 +3,16 @@
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
 import type { Decision, GameState, Option } from "./types.js";
+import { chooseStatus } from "./policy/status.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
-export type TypedChoice = { option: Option<any>; why: string };
+export type TypedChoice = { option: Option<any>; why: string; payload?: Record<string, unknown> };
 
-export function chooseTyped(d: Decision, state: GameState | null, me: string): TypedChoice | null {
+export function chooseTyped(d: Decision, state: GameState | null, me: string, mine: Decision[] = []): TypedChoice | null {
+  const status = chooseStatus(d, state, me, mine);
+  if (status !== undefined) return status;
   if (d.target?.userId !== me || d.scope !== "player") return null;
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   if (!live.length) return null;

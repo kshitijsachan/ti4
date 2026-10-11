@@ -110,8 +110,8 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
   const active = players.find((p) => p.active);
   const mine = players.find((p) => me && p.discordId === me.id);
   let myNote: string | undefined;
-  /* The bot keeps "passed" set through the status and agenda phases; it only means something in the action phase. */
-  const actionPhase = !turn.phase || turn.phase.startsWith("Action");
+  /* The bot keeps "passed" set through the status and agenda phases (and the phase can be unknown while loading): only say it in a known action phase. */
+  const actionPhase = !!turn.phase && turn.phase.startsWith("Action");
   if (mine?.passed && actionPhase) myNote = "You passed";
   const revealed = [...(data?.objectives?.stage1Objectives ?? []), ...(data?.objectives?.stage2Objectives ?? [])].filter((o) => o.revealed).length;
 
