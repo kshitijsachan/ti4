@@ -19,8 +19,13 @@ export function combatWaitsOnMe(d: Decision) {
  * does not wait on are listed apart (`offersOf`).
  */
 export function orderQueue(oldestFirst: Decision[]): Decision[] {
-  const live = oldestFirst.filter((d) => !d.optional && !d.offer);
-  const owed = live.filter((d) => d.kind !== "turn");
+  const all = oldestFirst.filter((d) => !d.optional && !d.offer);
+  /* My own status homework or scoring comes before the table-wide step that moves the phase on: the bot may post
+     "Start Strategy Phase" as soon as everyone has touched their tokens, before I said I am ready. */
+  const homework = all.some((d) => !d.table && (d.kind === "status" || d.kind === "scoring"));
+  const live = all.filter((d) => !(homework && d.table && d.kind === "status"));
+  const tableSteps = live.filter((d) => d.table && d.kind !== "turn");
+  const owed = live.filter((d) => d.kind !== "turn" && !d.table);
   const turn = live.filter((d) => d.kind === "turn").reverse();
   /* The next step of something I just pressed (only-you prompts, replies to my press, my hand thread) comes first:
      Leadership's pay-then-gain must finish before the next card's follow, which may need the token it buys. */
@@ -47,7 +52,7 @@ export function orderQueue(oldestFirst: Decision[]): Decision[] {
   /* Status-phase steps before the next agenda's "when / after" window the bot opens early (it waits on them anyway). */
   const phaseRank = (d: Decision) => (d.kind === "status" || d.kind === "scoring" ? 0 : 1);
   const owedRest = steps.filter((d) => !continuation(d)).sort((a, b) => phaseRank(a) - phaseRank(b));
-  return [...combat, ...trades, ...steps.filter(continuation), ...owedRest, ...hubs, ...turn, ...waiting];
+  return [...combat, ...trades, ...steps.filter(continuation), ...owedRest, ...hubs, ...tableSteps, ...turn, ...waiting];
 }
 
 /**
