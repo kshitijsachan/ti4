@@ -6,6 +6,7 @@ import { awaits, type Decision, type GameState, type Option } from "./types.js";
 import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
+import { chooseStatus } from "./policy/status.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -14,6 +15,9 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 export type TypedChoice = { option: Option<any>; why: string; payload?: Record<string, unknown> };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string, open: Decision[] = []): TypedChoice | null {
+  const mine = open.filter((x) => x.target?.userId === me);
+  const status = chooseStatus(d, state, me, mine);
+  if (status !== undefined) return status;
   if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, open) : null;
   const cards = chooseCards(d, state, me, open);
   if (cards !== undefined) return cards;

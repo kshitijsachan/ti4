@@ -5,6 +5,8 @@ import type { Control, Prompt } from "./prompts.js";
 export interface Seat {
   readonly userId: string;
   readonly name: string;
+  /** The typed engine API is on: status scoring/tokens are answered by engine/policy, not by the jobs here. */
+  readonly engine: boolean;
   /** This seat's faction in a game (lower case, as in the bot's ids), once known. */
   faction(game: string): Promise<string | undefined>;
   /** Bot messages with enabled controls in the game's channels that this seat may see, oldest first. */

@@ -65,6 +65,8 @@ type Rule = {
   last?: boolean;
   /** May be pressed on a message we already answered (scoring asks for a public and a secret objective). */
   again?: boolean;
+  /** Answered by a typed engine kind (engine/policy/*) when the engine is on: the rule only runs without it. */
+  typed?: boolean;
   /** Ranks matching controls (lower first). */
   rank?: (c: Control) => number;
   /**
@@ -157,7 +159,7 @@ const RULES: Rule[] = [
   { id: /^sandbagPref_bot$/, score: 40, why: "preferences: let the bot auto-pass secret scoring" },
   // Status phase: after everyone scored, someone reveals the next public objective (once per game per round; see
   // revealOnce).
-  { id: /(^|_)reveal_stage_(1|2)(position_\d+)?$/, score: 63, table: true, phase: /^status/, why: "status: reveal the next public objective" },
+  { id: /(^|_)reveal_stage_(1|2)(position_\d+)?$/, score: 63, table: true, typed: true, phase: /^status/, why: "status: reveal the next public objective" },
   // Trades offered to us.
   { id: /^rejectOffer_/, score: 74, why: "reject transaction" },
   // Reaction windows everyone answers.
@@ -165,12 +167,12 @@ const RULES: Rule[] = [
   { id: /^no_sabotage$/, score: 70, table: true, why: "no sabotage" },
   { id: /^no_when(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no whens" },
   { id: /^no_after(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no afters" },
-  { id: /^po_no_scoring$/, score: 66, table: true, again: true, phase: /^status/, why: "status: no public objective" },
-  { id: /^so_no_scoring$/, score: 65, table: true, again: true, phase: /^status/, why: "status: no secret objective" },
-  { id: /^pass_on_abilities$/, score: 60, table: true, phase: /^status/, why: "status: ready for strategy phase" },
+  { id: /^po_no_scoring$/, score: 66, table: true, typed: true, again: true, phase: /^status/, why: "status: no public objective" },
+  { id: /^so_no_scoring$/, score: 65, table: true, typed: true, again: true, phase: /^status/, why: "status: no secret objective" },
+  { id: /^pass_on_abilities$/, score: 60, table: true, typed: true, phase: /^status/, why: "status: ready for strategy phase" },
   // The table-wide "Start Strategy Phase" (posted after the last "Redistribute Command Tokens" when there is no agenda
   // phase): one autopilot presses it once every player said ready (see mayStartStrategy).
-  { id: /^startStrategyPhase$/, score: 59, table: true, phase: /^status/, why: "status: everyone is ready; start the strategy phase" },
+  { id: /^startStrategyPhase$/, score: 59, table: true, typed: true, phase: /^status/, why: "status: everyone is ready; start the strategy phase" },
   // Prompts addressed to us: move on.
   {
     label: /^(done|confirm|ready|no\b|decline|skip|pass\b|not following|end turn|continue|finish|none|no thanks)/i,
@@ -714,6 +716,7 @@ class SeatPilot {
 
     let phase: string | null | undefined;
     for (const rule of RULES) {
+      if (rule.typed && this.mgr.engine) continue;
       if (!rule.table && !ctx.direct) continue;
       if (rule.addressed && !ctx.addressed) continue;
       const retryPhase = rule.retry && lost ? String((await this.mgr.phaseOf(game)) ?? "") : "";
@@ -1185,6 +1188,7 @@ class SeatPilot {
 
   private seat(): Seat {
     const self = this;
+    const engineOn = !!this.mgr.engine;
     const collect = (game: string, withControls: boolean): Prompt[] => {
       const s = self.store.state;
       const out: Prompt[] = [];
@@ -1202,6 +1206,7 @@ class SeatPilot {
     };
     return {
       userId: this.userId,
+      engine: engineOn,
       get name() {
         return self.name;
       },

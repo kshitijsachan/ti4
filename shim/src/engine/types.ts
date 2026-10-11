@@ -5,10 +5,14 @@
  */
 
 import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
+import type { CardsDecision } from "./kinds/cards.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
+import type { StatusDecision, StatusState } from "./kinds/status.js";
 
 export type * from "./kinds/agenda.js";
+export type * from "./kinds/cards.js";
 export type * from "./kinds/explore.js";
+export type * from "./kinds/status.js";
 
 export const CONTRACT_VERSION = 1;
 
@@ -39,6 +43,8 @@ export interface GameState {
   exploration?: ExplorationState | null;
   /** The agenda in play (agenda phase); null otherwise. See kinds/agenda.ts. */
   agenda?: AgendaState | null;
+  /** Status phase facts (scoring declarations, token gain, readiness); null outside the status phase. */
+  status?: StatusState | null;
 }
 
 export interface PlayerState {
@@ -129,7 +135,7 @@ export type ResolvedBy =
   | "private_channel"
   | "interaction_user" // reply/followup/ephemeral to that player's interaction
   | "draft_turn"
-  | "speaker" // agenda tie-break / resolution: the speaker
+  | "speaker" // the speaker acts: agenda tie-break / resolution, reveal the next public objective
   | "agenda_voter" // a vote step: the current voter
   | "mention" // weak: exactly one seated player mentioned
   | "mixed_owners"
@@ -217,8 +223,6 @@ export interface DecisionBase<K extends string, V> {
 
 // ---- typed kinds (add one member per KindSpec; keep alphabetical within an area) ----
 
-import type { CardsDecision } from "./kinds/cards.js";
-export type * from "./kinds/cards.js";
 
 export type StrategyCardPick = DecisionBase<"strategy_card.pick", { strategyCard: number; tradeGoods: number }>;
 export type TechGain = DecisionBase<"tech.gain", { tech: string; free: boolean; starting: boolean; flags: string[] }>;
@@ -230,6 +234,8 @@ export type MiltyDraftPick = DecisionBase<
   "draft.milty.pick",
   { category: "slice" | "faction" | "order" | string; pick: string }
 >;
+/** For area kind files (shim/src/engine/kinds/*.ts). */
+export type DecisionBaseOf<K extends string, V> = DecisionBase<K, V>;
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
 
@@ -241,6 +247,7 @@ export type Decision =
   | CardsDecision
   | ExploreDecision
   | AgendaDecision
+  | StatusDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -250,7 +257,11 @@ export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
 export interface AnswerRequest {
   /** The option to press. Omit when sending a structured `payload` instead. */
   optionId?: string;
-  /** Structured answer the kind executes as several engine steps (e.g. agenda.vote: VotePayload). */
+  /**
+   * Structured answer the kind executes as one or more engine steps under the game lock (KindSpec.acceptsPayload):
+   * agenda.vote VotePayload, payment.spend, production.produce, final command token pools (options whose value says
+   * payload: true).
+   */
   payload?: Record<string, unknown>;
   /** The decision seq you saw; a mismatch answers 409 stale instead of acting on a changed prompt. */
   expectedSeq?: number;
