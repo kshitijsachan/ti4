@@ -32,8 +32,12 @@ export function controlsOf(components: Json[] | undefined): Control[] {
   return out;
 }
 
-/** The custom id without its `FFCC_<faction>_` lock. */
-export const baseId = (id: string) => id.replace(/^FFCC_[^_]+_/, "");
+/**
+ * The custom id without its `FFCC_<faction>_` lock, and without the bot's DoneRole tag on deleteButtons closers
+ * (`deleteButtons_<ctx>~pay`, `~prod`, `~ccgain`, `~ccredist`, `~cclose`, `~fleetlose`): those say what the closer
+ * finishes in the id instead of the label, and every match here is on the plain closer id.
+ */
+export const baseId = (id: string) => id.replace(/^FFCC_[^_]+_/, "").replace(/~(pay|prod|ccgain|ccredist|cclose|fleetlose)$/, "");
 
 /** The faction a control is locked to, if any. */
 export const lockOf = (id: string) => /^FFCC_([^_]+)_/.exec(id)?.[1];

@@ -42,7 +42,7 @@ export function pointButtonId(point: UndoPoint): string {
 }
 
 /** A press that only closes a prompt ("Done Readying Planets"): undone alone, it changes nothing. */
-const CLOSER = /^deleteButtons(_|$)/;
+const CLOSER = /^deleteButtons(_|~|$)/;
 /** How soon after my previous press a closing press counts as part of it (the web pressed both). */
 const CLOSER_GAP_MS = 3000;
 /** A recorded flow matches saves made around when it ran (the browser's clock and the bot's can differ a little). */
