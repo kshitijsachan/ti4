@@ -1,5 +1,7 @@
 import type { Board } from "./board.js";
 import type { Control, Prompt } from "./prompts.js";
+import type { AnswerResult, Decision } from "../engine/types.js";
+import type { LandRequest, MoveRequest } from "../engine/kinds/tactical.js";
 
 /** What the planner needs from the seat it plays (the autopilot's virtual client, or a remote test harness). */
 export interface Seat {
@@ -18,4 +20,17 @@ export interface Seat {
   /** POST /api/game/{g}/movement as this seat; resolves with an error text on failure. */
   movement(game: string, target: string, displacement: Record<string, { unitType: string; colorID: string; counts: number[] }[]>): Promise<string | undefined>;
   log(text: string): void;
+  /** The typed engine API for this seat (docs/ENGINE.md); absent when the engine is off or unreachable. */
+  engine?: SeatEngine;
+}
+
+/** Typed decisions and actions as this seat. Every method resolves null when the engine is unavailable. */
+export interface SeatEngine {
+  /** Open decisions waiting on this seat in a game. */
+  decisions(game: string): Promise<Decision[] | null>;
+  answer(game: string, d: Decision, optionId: string, why: string): Promise<AnswerResult | null>;
+  /** tactical.move direct action (stage these units, finish movement unless conclude=false). */
+  move(game: string, d: Decision, req: Omit<MoveRequest, "userId">, why: string): Promise<AnswerResult | null>;
+  /** tactical.land direct action. */
+  land(game: string, d: Decision, req: Omit<LandRequest, "userId">, why: string): Promise<AnswerResult | null>;
 }

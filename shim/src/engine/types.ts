@@ -178,7 +178,7 @@ export interface Progress<A = Record<string, unknown>> {
   canCommit: boolean;
 }
 
-interface DecisionBase<K extends string, V> {
+export interface DecisionBase<K extends string, V> {
   /** Stable for the life of the prompt message; edits in place keep it and bump `revision`. */
   id: string;
   game: string;
@@ -203,6 +203,9 @@ interface DecisionBase<K extends string, V> {
 
 // ---- typed kinds (add one member per KindSpec; keep alphabetical within an area) ----
 
+import type { TacticalDecision } from "./kinds/tactical.js";
+export type * from "./kinds/tactical.js";
+
 export type StrategyCardPick = DecisionBase<"strategy_card.pick", { strategyCard: number; tradeGoods: number }>;
 export type TechGain = DecisionBase<"tech.gain", { tech: string; free: boolean; starting: boolean; flags: string[] }>;
 export type SecretObjectiveDiscard = DecisionBase<
@@ -216,7 +219,13 @@ export type MiltyDraftPick = DecisionBase<
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
 
-export type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraftPick | LegacyDecision;
+export type Decision =
+  | StrategyCardPick
+  | TechGain
+  | SecretObjectiveDiscard
+  | MiltyDraftPick
+  | TacticalDecision
+  | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
 

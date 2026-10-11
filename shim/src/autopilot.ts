@@ -5,10 +5,11 @@ import { log } from "./log.js";
 import { Brain } from "./botplay/brain.js";
 import { parseBoard, type Board } from "./botplay/board.js";
 import { controlsOf, type Control, type Prompt } from "./botplay/prompts.js";
-import type { Seat } from "./botplay/seat.js";
+import type { Seat, SeatEngine } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
 import type { EngineClient } from "./engine/client.js";
 import { chooseTyped } from "./engine/autopilot.js";
+import { awaits, type AnswerResult } from "./engine/types.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -1245,6 +1246,25 @@ class SeatPilot {
         }
       },
       log: (text) => log.info(`autopilot ${self.name}: ${text}`),
+      engine: this.mgr.engine ? this.seatEngine(this.mgr.engine) : undefined,
+    };
+  }
+
+  /** The planner's typed engine access as this seat (answers go through the same serial queue as presses). */
+  private seatEngine(engine: EngineClient): SeatEngine {
+    const me = this.userId;
+    const report = (what: string, game: string, r: AnswerResult | null) => {
+      log.info(`autopilot ${this.name}: engine ${what} in ${game} -> ${r ? r.status : "unavailable"}${r?.error ? `: ${r.error}` : ""}`);
+      return r;
+    };
+    return {
+      decisions: async (game) => (await engine.openDecisions(game))?.filter((d) => awaits(d, me)) ?? null,
+      answer: (game, d, optionId, why) =>
+        this.mgr.serial(async () => report(`${d.kind} (${why})`, game, await engine.answer(game, d.id, { optionId, expectedSeq: d.seq, userId: me }))),
+      move: (game, d, req, why) =>
+        this.mgr.serial(async () => report(`tactical move (${why})`, game, await engine.act(game, d.id, "move", { ...req, expectedSeq: d.seq, userId: me }))),
+      land: (game, d, req, why) =>
+        this.mgr.serial(async () => report(`tactical land (${why})`, game, await engine.act(game, d.id, "land", { ...req, expectedSeq: d.seq, userId: me }))),
     };
   }
 }
