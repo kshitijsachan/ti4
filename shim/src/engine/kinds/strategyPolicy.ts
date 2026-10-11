@@ -123,7 +123,11 @@ function resolveCard(d: StrategyCardResolve, state: GameState | null, self: Play
 function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["options"][number]["value"]>[], self: PlayerState, ctx: PolicyCtx): StrategyChoice | null {
   const v = opts[0].value!;
   const mine = opts.filter((o) => o.value!.who !== "others");
-  const pressed = (part: PrimaryPart) => ctx.history.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length;
+  // This seat's presses (in memory) or the engine's record (survives a shim restart: live pbd114 re-resolved every
+  // primary after a restart, Leadership 4x), whichever saw more.
+  const recorded = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
+  const done = (part: PrimaryPart) => (Array.isArray(recorded) ? recorded : []).filter((p) => p === part).length;
+  const pressed = (part: PrimaryPart) => Math.max(done(part), ctx.history.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length);
   // Wait for the sub-prompt a previous part opened (a system to choose, a planet for a structure).
   if (ctx.open.some((x) => x.kind === "strategy_card.diplomacy_system" || x.kind === "strategy_card.construction_place")) return null;
   const needed: Record<string, number> = {};
@@ -223,7 +227,8 @@ function commandTokens(d: Decision, state: GameState | null, self: PlayerState |
   const origRaw = d.progress?.required?.original ?? opts.find((o) => isPools(o.value?.original))?.value?.original;
   const original = isPools(origRaw) ? origRaw : null;
   const gained = original ? sum(current) - sum(original) : ctx.history.filter((id) => isGain(opts.find((o) => o.id === id))).length;
-  const reinforcements = Number(opts.find((o) => typeof o.value?.reinforcements === "number")?.value?.reinforcements ?? Infinity);
+  // Tokens left to gain (the engine refuses a gain at 16 in play): progress.required.reinforcements on newer bots.
+  const reinforcements = Number(d.progress?.required?.reinforcements ?? opts.find((o) => typeof o.value?.reinforcements === "number")?.value?.reinforcements ?? Infinity);
   const leadership = state?.strategyCards.find((c) => c.card === "pok1leadership" && c.played && c.holder === me);
   const allowance = leadership ? 3 : 0;
   if (gained < allowance && reinforcements > 0) {

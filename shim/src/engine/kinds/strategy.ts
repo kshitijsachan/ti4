@@ -58,7 +58,9 @@ export type ScAction =
 /**
  * A played strategy card: one table message with the holder's primary buttons and everyone else's follow /
  * secondary / decline buttons. window.kind = "strategy_card", window.subject = {strategyCard, name, card, holder},
- * window.responses: userId → "holder" | "pending" | "followed" | "declined". copy = the same buttons re-posted in
+ * window.responses: userId → "holder" | "pending" | "followed" | "declined". window.subject.primaryDone: the primary
+ * parts the holder already resolved since this play (kept in the game, so it survives a client restart; the engine
+ * refuses a part pressed more often than primaryParts lists it; absent on older bots). copy = the same buttons re-posted in
  * the card's thread (answer one of the two).
  */
 export type StrategyCardResolve = DecisionBaseOf<

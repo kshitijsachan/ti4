@@ -374,6 +374,14 @@ export class Autopilot {
     return Date.now() - d.createdAt < ENGINE_GRACE_MS;
   }
 
+  /**
+   * The game is over (web-data phase "finished": ended or won). Autopilots never press in it (live pbd114: ended at
+   * 21:42, then 12 more autopilot saves).
+   */
+  async ended(game: string): Promise<boolean> {
+    return (await this.stateOf(game))?.phase === "finished";
+  }
+
   async phaseOf(game: string): Promise<string | null> {
     return (await this.stateOf(game))?.phase ?? null;
   }
@@ -574,7 +582,7 @@ class SeatPilot {
     if (Date.now() < this.restUntil) return;
     this.busy = true;
     try {
-      for (const game of this.liveGames()) {
+      for (const game of await this.liveGames()) {
         // A planner error must never keep the rule table from answering (it would stall the game).
         const acted = async (name: string, fn: () => Promise<boolean>) => {
           try {
@@ -672,7 +680,7 @@ class SeatPilot {
     this.lastStallScan = Date.now();
     const s = this.store.state;
     const me = this.userId;
-    for (const game of this.liveGames()) {
+    for (const game of await this.liveGames()) {
       if (Date.now() - (this.lastPressIn.get(game) ?? 0) < STALL_MS) continue;
       const st = await this.mgr.stateOf(game);
       if (!st?.active || st.active !== st.colors.get(me)) continue;
@@ -740,7 +748,7 @@ class SeatPilot {
       }
       for (const m of list.slice(-WINDOW)) {
         const c = await this.consider(m, ch, game);
-        if (c) choices.push(c);
+        if (c && !(await this.mgr.ended(game))) choices.push(c);
       }
     }
     if (!choices.length) return null;
@@ -1276,6 +1284,7 @@ class SeatPilot {
     // The prompt may have gone while we waited for our turn.
     const fresh = this.store.findMessage(msg.channel_id, msg.id);
     if (!fresh || !controlsOf(fresh.components).some((c) => c.custom_id === control.custom_id)) return "the prompt is gone";
+    if (await this.mgr.ended(gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "")) return "the game has ended";
     // Another pilot may have revealed the objective while we were deciding.
     if (/reveal_stage_/.test(control.custom_id)) {
       const game = gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "";
@@ -1423,7 +1432,7 @@ class SeatPilot {
     const engine = this.mgr.engine;
     if (!engine) return false;
     const now = Date.now();
-    for (const game of this.liveGames()) {
+    for (const game of await this.liveGames()) {
       const own = await engine.decisionsFor(game, this.userId);
       // Plus the table-wide setup steps (deal secrets, reveal objectives): no target and no window, any seat may
       // take them; the policy answers only when GameState.setup says the table is ready, the engine refuses otherwise.
@@ -1502,13 +1511,16 @@ class SeatPilot {
   }
 
   /** Games this seat sits in with something happening in the last hour (by their actions channel). */
-  private liveGames(): string[] {
+  /** Games with activity in the last hour that have not ended. */
+  private async liveGames(): Promise<string[]> {
     const out: string[] = [];
     for (const ch of Object.values(this.store.state.channels)) {
       if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? "")) || !this.store.canView(this.userId, ch.id)) continue;
       const last = this.store.messages(ch.id).at(-1);
       if (!last || Date.now() - Date.parse(last.timestamp) > 3600000) continue;
-      out.push(/^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1]);
+      const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
+      if (await this.mgr.ended(game)) continue;
+      out.push(game);
     }
     return out;
   }
