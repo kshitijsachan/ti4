@@ -308,7 +308,7 @@ dismiss-only) or an info menu carrying action shortcuts is typed `ui.*` with val
 it is open (clickable, answerable through the engine) but no one is awaited (`isAffordance`, `AFFORDANCE_KINDS`).
 A prompt whose kind is `obsolete()` at capture is closed (reason `obsolete`, metric `capture.obsolete`) instead of
 reopening as legacy, the same as dynamic kinds that go obsolete later.
-| C6 components | `component.action` (component action menu), `relic.use`, generic single-choice `choose.{planet,system,player,unit,card,confirm}` (agent exhaust steps are c1's `leader.use`; commodity gain/convert is c8's `commodities.gain`) (rule tables in bot `Choose*Kind.RULES`: add a regex with named groups to type a one-step prompt; policy `policy/components.ts` + renderer `renderers/components` handle it) | — |
+| C6 components | `component.action` (component action menu), `relic.use`, generic single-choice `choose.{planet,system,player,unit,card,confirm}` (agent exhaust steps are c1's `leader.use`; commodity gain/convert is c8's `commodities.gain`) (rule tables in bot `Choose*Kind.RULES`: add a regex with named groups to type a one-step prompt; policy `policy/components.ts` + renderer `renderers/components` handle it), `tech.step` (generic technologies' follow-up steps: exhaust offers, Bio-Stims, Transit Diodes, Sling Relay, Self-Assembly Routines, Integrated Economy, Magen / Dacxive offers + ground hit target, Psychoarchaeology, "Get a Technology", Entropic Scar; rule table in bot `TechStepKind.RULES`) | — |
 
 **Official-only web games.** The self-hosted bot refuses homebrew / alternate-mode controls (Supported Homebrew,
 Galactic Events / Dane modes, Twilight's Fall, Franken, TK Nova / Twilight DS / O++ setups, homebrew sources and Alliance in

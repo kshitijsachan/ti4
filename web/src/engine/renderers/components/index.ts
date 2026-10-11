@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { ChoosePanel, ComponentActionPanel, RelicUsePanel, type RendererProps } from "./ComponentPanels";
+import { ChoosePanel, ComponentActionPanel, RelicUsePanel, TechStepPanel, type RendererProps } from "./ComponentPanels";
 
 /** Components (C6) renderers by decision kind: component menu, relic uses, generic choose.* steps. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -12,4 +12,5 @@ export const renderers: Record<string, ComponentType<RendererProps<any>>> = {
   "choose.confirm": ChoosePanel,
   "component.action": ComponentActionPanel,
   "relic.use": RelicUsePanel,
+  "tech.step": TechStepPanel,
 };
