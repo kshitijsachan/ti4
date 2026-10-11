@@ -7,6 +7,7 @@ import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
 import { chooseStatus } from "./policy/status.js";
+import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -15,6 +16,7 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 export type TypedChoice = { option: Option<any>; why: string; payload?: Record<string, unknown> };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string, open: Decision[] = []): TypedChoice | null {
+  if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);
   const mine = open.filter((x) => x.target?.userId === me);
   const status = chooseStatus(d, state, me, mine);
   if (status !== undefined) return status;
@@ -38,6 +40,9 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, op
       return opts[0] ? { option: opts[0], why: "setup: first starting technology not owned" } : null;
     }
     case "secret_objective.discard": {
+      // Mecatol Rex (Thunder's Edge legendary, already exhausted): swap one secret for a fresh draw; the newest goes.
+      const swaps = d.options.filter((o) => !o.disabled && o.value?.redraw);
+      if (swaps.length) return { option: swaps.at(-1)!, why: "Mecatol Rex: swap a secret objective" };
       // Setup (round 1, holding more than one): keep the first, discard the last. Later discards: not ours to guess.
       if ((state?.round ?? 99) > 1 || (self?.secretObjectiveCount ?? 0) < 2) return null;
       const opts = d.options.filter((o) => !o.disabled && o.value && !o.value.redraw);

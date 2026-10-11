@@ -9,12 +9,14 @@ import type { CardsDecision } from "./kinds/cards.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { StatusDecision, StatusState } from "./kinds/status.js";
 import type { TacticalDecision } from "./kinds/tactical.js";
+import type { ThundersEdgeDecision, ThundersEdgeState } from "./kinds/te.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
 export type * from "./kinds/explore.js";
 export type * from "./kinds/status.js";
 export type * from "./kinds/tactical.js";
+export type * from "./kinds/te.js";
 
 export const CONTRACT_VERSION = 1;
 
@@ -47,6 +49,8 @@ export interface GameState {
   agenda?: AgendaState | null;
   /** Status phase facts (scoring declarations, token gain, readiness); null outside the status phase. */
   status?: StatusState | null;
+  /** Thunder's Edge state; null for games without it (G10, kinds/te.ts). */
+  thundersEdge?: ThundersEdgeState | null;
 }
 
 export interface PlayerState {
@@ -250,6 +254,7 @@ export type Decision =
   | AgendaDecision
   | StatusDecision
   | TacticalDecision
+  | ThundersEdgeDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
