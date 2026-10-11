@@ -96,6 +96,8 @@ type Rule = {
 
 /** Strategy cards an autopilot likes, best first (1 Leadership, 7 Technology, 8 Imperial, 6 Warfare, ...). */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
+/** How long a typed decision belongs to the engine path before the legacy rules may answer it (see engineOwns). */
+const ENGINE_GRACE_MS = 90_000;
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
@@ -330,6 +332,22 @@ export class Autopilot {
 
   forgetState(game: string) {
     this.states.delete(game);
+  }
+
+  /**
+   * Whether the typed engine path owns this prompt, so the legacy rules / jobs must not press it as well. Mandatory
+   * fallback rule (every area): only when the engine is reachable (its event stream is live), the message is an open
+   * typed decision waiting on this seat, and the decision is younger than ENGINE_GRACE_MS (the typed policy had its
+   * chance; a prompt it leaves alone for longer goes back to the legacy rules). Engine off, down or restarting →
+   * false → the legacy paths play exactly as before.
+   */
+  async engineOwns(game: string, messageId: string, userId: string): Promise<boolean> {
+    const engine = this.engine;
+    if (!engine?.isLive) return false;
+    const d = (await engine.openDecisions(game))?.find((x) => x.source.messageId === messageId);
+    if (!d || d.kind === "legacy") return false;
+    if (d.scope === "player" ? d.target?.userId !== userId : !!d.window && !awaits(d, userId)) return false;
+    return Date.now() - d.createdAt < ENGINE_GRACE_MS;
   }
 
   async phaseOf(game: string): Promise<string | null> {
@@ -837,7 +855,7 @@ class SeatPilot {
 
     let phase: string | null | undefined;
     for (const rule of RULES) {
-      if (rule.typed && this.mgr.engine) continue;
+      if (rule.typed && (await this.mgr.engineOwns(game, m.id, me))) continue;
       if (!rule.table && !ctx.direct) continue;
       if (rule.addressed && !ctx.addressed) continue;
       const retryPhase = rule.retry && lost ? String((await this.mgr.phaseOf(game)) ?? "") : "";
@@ -1091,7 +1109,7 @@ class SeatPilot {
   private async milty(m: StoredMessage, controls: Control[], game: string): Promise<Choice | null> {
     // With the engine up, drafting is typed (draft.milty.pick in engineStep): the engine validates turn, category and
     // availability, so a pick cannot be doubled. Pressing board buttons here as well would race it.
-    if (this.mgr.engine && (await this.mgr.engine.state(game, this.userId, 1000))?.draft) {
+    if ((await this.mgr.engineOwns(game, m.id, this.userId)) && (await this.mgr.engine?.state(game, this.userId, 1000))?.draft) {
       this.draftingSeenAt = Date.now();
       return null;
     }
@@ -1398,6 +1416,7 @@ class SeatPilot {
       },
       log: (text) => log.info(`autopilot ${self.name}: ${text}`),
       engine: this.mgr.engine ? this.seatEngine(this.mgr.engine) : undefined,
+      engineOwns: (game, messageId) => self.mgr.engineOwns(game, messageId, self.userId),
       engineProduce: async (game, messageId, build) => {
         const engine = self.mgr.engine;
         if (!engine) return null;

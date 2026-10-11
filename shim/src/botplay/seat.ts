@@ -23,6 +23,11 @@ export interface Seat {
   /** The typed engine API for this seat (docs/ENGINE.md); absent when the engine is off or unreachable. */
   engine?: SeatEngine;
   /**
+   * The typed engine path owns this prompt (engine reachable, typed decision waiting on this seat, within its grace
+   * period): legacy jobs must not press it. False whenever the engine is off/down, so the legacy jobs keep working.
+   */
+  engineOwns?(game: string, messageId: string): Promise<boolean>;
+  /**
    * Produce this build list (unit ids, one per unit) on the engine's typed production decision for this message in
    * one atomic answer. undefined = done; null = no typed decision (use the buttons); string = the engine's refusal.
    */

@@ -36,9 +36,12 @@ export class TradeDesk {
     private engine: () => EngineClient | undefined,
   ) {}
 
-  /** Prompts the rule table must leave alone while the engine answers trades. */
+  /**
+   * Prompts the rule table must leave alone while the engine answers trades: only while the engine is reachable (its
+   * stream is live). Engine off or down: the rule table answers offers as before (bots just don't propose).
+   */
   owns(_game: string, p: Prompt): boolean {
-    return !!this.engine() && p.controls.some((c) => OWNED_ID.test(baseId(c.custom_id)));
+    return !!this.engine()?.isLive && p.controls.some((c) => OWNED_ID.test(baseId(c.custom_id)));
   }
 
   /** One trading step for a game. Returns true when it sent an offer. */
