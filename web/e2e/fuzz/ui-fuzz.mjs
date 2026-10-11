@@ -27,6 +27,7 @@ import {
   makeRecorder,
   makeRng,
   myDecisions,
+  awaits,
   now,
   parseArgs,
   seatSummary,
@@ -74,6 +75,13 @@ await oracle.connect();
 for (let i = 0; i < 30 && oracle.view.status !== "live"; i++) await sleep(300);
 // The oracle must be right even when the live stream is not (see engine:stream-silent): re-snapshot every 20 s.
 setInterval(() => oracle.subscribeEngine(true), 20000).unref();
+/** Re-snapshots the oracle now and waits for the snapshot (the live stream may be silent). */
+async function freshOracle() {
+  let got = false;
+  oracle.onSnapshot = () => (got = true);
+  oracle.subscribeEngine(true);
+  for (let i = 0; i < 40 && !got; i++) await sleep(250);
+}
 let undoAt = 0;
 const answered = new Map(); // decision id -> at
 oracle.onReopen = (e) => {
@@ -136,7 +144,9 @@ async function popupState(p = page) {
     const selected = (await d.locator('[aria-selected=true], [aria-pressed=true], [aria-checked=true], input:checked').allTextContents()).map((s) => s.trim().slice(0, 40)).sort();
     const inputs = await d.locator("input[type=number], input[type=text], textarea").evaluateAll((els) => els.map((e) => e.value));
     const alert = (await d.locator("[role=alert]").allTextContents()).join(" ").trim();
-    return { title, queue, selected, inputs, alert };
+    // A panel the player opened from "Available now" (legacy UI: header has Close) is not a pending decision.
+    const offer = (await d.locator('header [aria-label="Close"]').count()) > 0;
+    return { title, queue, selected, inputs, alert, offer };
   } catch {
     return { title: "?", queue: [], selected: [], inputs: [], alert: "", unstable: true };
   }
@@ -156,7 +166,7 @@ async function settledPopup(p = page, ms = 20000) {
 
 const BODY_CONTROLS = ":scope > :not(header) button:enabled, :scope > :not(header) [role=option]:not([aria-disabled=true])";
 // Same spirit as ws-fuzz SKIP: controls that end the game or re-configure players / the game wholesale.
-const AVOID = /^(Peek at map|Dismiss|Hide this prompt|Collapse|Expand|Close)$|concede|end game|eliminate|^Setup a Player$|Franken|Base Game Only|Supported Homebrew|Player Settings|List My Games/i;
+const AVOID = /^(Peek at map|Dismiss|Hide this prompt|Collapse|Expand|Close)$|concede|end game|eliminate|^Setup a Player$|Franken|Base Game Only|Supported Homebrew|Player Settings|List My Games|PoK$|^Thunder.s Edge \+|Galactic Events|Remove All Queues/i;
 
 async function mySeat() {
   const w = await webData(game);
@@ -229,8 +239,9 @@ async function doJump() {
   const items = d.locator("[role=menuitem]");
   const n = await items.count();
   if (!n) return false;
-  const i = rng.int(n);
-  const t = ((await items.nth(i).textContent()) ?? "").trim();
+  const titles = (await items.allTextContents()).map((x) => x.trim());
+  const i = rng.weighted(titles.map((t, k) => [/^(Your move|Open to everyone)$/.test(t) ? 1 : 5, k]));
+  const t = titles[i];
   note(`jump to "${t}" (${i + 1}/${n})`);
   await items.nth(i).click({ timeout: 3000 }).catch(() => {});
   await page.waitForTimeout(800);
@@ -276,6 +287,7 @@ async function act(p = page, label = "tab1") {
 }
 
 async function doReload() {
+  await freshOracle();
   const s0 = await engineState(game);
   const mine0 = myDecisions(oracle.view, ME).map((d) => `${d.id}@${d.revision}`).sort().join();
   const before = await settledPopup(page, 6000);
@@ -284,20 +296,22 @@ async function doReload() {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForTimeout(3000);
   const after = await settledPopup(page, 20000);
+  await freshOracle();
   const s1 = await engineState(game);
   const mine1 = myDecisions(oracle.view, ME).map((d) => `${d.id}@${d.revision}`).sort().join();
   const seat1 = await mySeat();
   const quiet = s0 && s1 && s0.stateVersion === s1.stateVersion && mine0 === mine1;
   if (!quiet) return note(`  (state moved during the reload: not compared)`);
-    if (!!before !== !!after) return violation("reload-popup-changed", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after (engine state unchanged)`);
+    if (!!before !== !!after && ENGINE && listOf(after) === expectedList()) return violation("live-view-behind", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after, as the engine says (the open tab was out of date)`);
+  if (!!before !== !!after) return violation("reload-popup-changed", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after (engine state unchanged)`);
   if (before && after) {
     const a = listOf(before);
     const b = listOf(after);
     const want = expectedList(before);
     if (a !== b) {
       // Which side is wrong? In engine mode the oracle's decisions give the titles the popup must list.
-      const which = !ENGINE ? "reload-pending-changed" : b === want && a !== want ? "live-view-behind" : a === want && b !== want ? "reload-pending-changed" : "reload-pending-changed";
-      await violation(which, `pending decisions before the reload ${a}, after ${b}${ENGINE ? `; the engine says ${want}` : ""}`);
+      const which = before.offer ? "reload-closed-opened-panel" : !ENGINE ? "reload-pending-changed" : b === want && a !== want ? "live-view-behind" : a === want && b !== want ? "reload-pending-changed" : "reload-pending-changed";
+      await violation(which, `pending decisions before the reload ${a}, after ${b}${ENGINE ? `; the engine says ${want}` : ""}`, before.offer ? { severity: "warn" } : {});
     }
     if (before.title === after.title && (JSON.stringify(before.selected) !== JSON.stringify(after.selected) || JSON.stringify(before.inputs) !== JSON.stringify(after.inputs)))
       await violation("reload-selection-lost", `"${before.title}": selections ${JSON.stringify(before.selected)} inputs ${JSON.stringify(before.inputs)} before, ${JSON.stringify(after.selected)} / ${JSON.stringify(after.inputs)} after`);
@@ -353,14 +367,21 @@ async function checks() {
     const have = listOf(p);
     const want = expectedList(p);
     if (p && !p.unstable && have !== want) {
-      if (++countMismatch >= 3) {
+      if (countMismatch >= 2) await freshOracle();
+      if (++countMismatch >= 3 && listOf(p) !== expectedList(p)) {
         await violation("live-view-behind", `popup lists ${have}, the engine has ${want} waiting on me (persisted over 3 checks)`);
         countMismatch = -10;
       }
     } else if (countMismatch > 0) countMismatch = 0;
   }
   // The legacy UI pops up what its message heuristics call a decision: hold it only to the typed, required kinds.
-  const mine = myDecisions(oracle.view, ME).filter((d) => ENGINE || (d.kind !== "legacy" && !/preassign|pre_decline|queue|game_settings|info|draft\.milty/.test(d.kind)));
+  // (No holder-resolves-own-card prompts and no status prompts outside the status phase: the legacy UI need not pop those.)
+  const phase = String(oracle.view.state?.phase ?? "");
+  const mine = myDecisions(oracle.view, ME).filter(
+    (d) =>
+      ENGINE ||
+      (d.kind !== "legacy" && !/preassign|pre_decline|queue|game_settings|info|draft\.milty/.test(d.kind) && awaits(d, ME) && !(d.kind.startsWith("status.") && !phase.startsWith("status"))),
+  );
   const pop = await popupState(page);
   if (mine.length && !pop) {
     waitingSince ??= Date.now();
@@ -404,7 +425,7 @@ try {
     try {
       if (action === "act" && sameTitle >= 3 && (await doJump())) sameTitle = 0;
       else if (action === "act") {
-        if (!(await act()) && !(await doDraft())) await page.waitForTimeout(2500);
+        if (!(await act()) && !(await doDraft()) && !(await doJump())) await page.waitForTimeout(2500);
       } else if (action === "jump") await doJump();
       else if (action === "draft") await doDraft();
       else if (action === "reload") await doReload();
