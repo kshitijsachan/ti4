@@ -413,7 +413,8 @@ export class SoloGames {
             BigInt(m.id) > BigInt(deal.id) - (60n * 1000n << 22n) &&
             !Object.keys(m._presses ?? {}).length &&
             controlIds(m.components).some((id) => !/^(deleteButtons|ultimateUndo|undo)/i.test(id)) &&
-            (/starting tech/i.test(String(m.content ?? "")) || hasControl(m, /(^|_)getTech_.*noPay|^setupStep5_\d+_keleres|(^|_)getKeleresTechOptions$/)),
+            (/starting tech/i.test(String(m.content ?? "")) || hasControl(m, /(^|_)getTech_.*noPay|^setupStep5_\d+_keleres|(^|_)getKeleresTechOptions$/)) &&
+            !this.staleFlavorPrompt(web, m),
         );
         if (choosing.length) {
           const who = [...new Set(choosing.map((m) => this.whoIsAsked(web, m)))];
@@ -528,6 +529,12 @@ export class SoloGames {
   }
 
   /** The player a setup prompt is for: by its faction-locked buttons, else by its mention. */
+  /** A "choose a flavor of Keleres" prompt whose player already set up as Keleres (a leftover copy). */
+  private staleFlavorPrompt(web: Json, m: StoredMessage) {
+    const id = controlIds(m.components).map((x) => /^setupStep5_(\d+)_keleres/.exec(x)?.[1]).find(Boolean);
+    return !!id && this.realPlayers(web).some((p: Json) => String(p.discordId) === id && String(p.faction ?? "").startsWith("keleres"));
+  }
+
   private whoIsAsked(web: Json, m: StoredMessage) {
     const faction = controlIds(m.components).map((id) => /^FFCC_([^_]+)_/.exec(id)?.[1]).find(Boolean);
     if (faction) return this.factionName(web, faction);
