@@ -85,6 +85,9 @@ export type State = {
 export const PERMS_ALL = "2251799813685247";
 export const PERMS_EVERYONE = "1071698660929";
 
+/** How long a canView answer is reused (see Store.canView). */
+const VIEW_TTL_MS = 3000;
+
 export class Store {
   state: State;
   private dir: string;
@@ -191,7 +194,8 @@ export class Store {
         this.saveTimer = null;
         this.saveNow();
       },
-      Math.min(15000, Math.max(1000, 4 * this.lastSaveMs)),
+      // A full save blocks the event loop for lastSaveMs (live: ~2 s for a 60 MB state): keep it under ~10% of the time.
+      Math.min(30000, Math.max(1000, 10 * this.lastSaveMs)),
     );
   }
 
@@ -294,6 +298,7 @@ export class Store {
       delete ch.topic;
     }
     this.state.channels[id] = ch;
+    this.invalidateViews();
     this.state.messages[id] ??= [];
     this.scheduleSave();
     return ch;
@@ -345,14 +350,36 @@ export class Store {
   // ---- visibility ----
 
   /** Mirrors Discord's VIEW_CHANNEL resolution closely enough for our use. */
+  /**
+   * canView answers, cached for VIEW_TTL_MS: the autopilot asks for every seat x channel on every pass (live profile:
+   * ~20% of the shim's CPU). Permission changes (roles, overwrites, thread members) show within the TTL.
+   */
+  private viewCache = new Map<string, { at: number; ok: boolean }>();
+
   canView(userId: string, channelId: string): boolean {
+    const key = `${userId}|${channelId}`;
+    const now = Date.now();
+    const hit = this.viewCache.get(key);
+    if (hit && now - hit.at < VIEW_TTL_MS) return hit.ok;
+    const ok = this.computeCanView(userId, channelId);
+    if (this.viewCache.size > 200_000) this.viewCache.clear();
+    this.viewCache.set(key, { at: now, ok });
+    return ok;
+  }
+
+  /** Forget cached canView answers (channel / thread / member / role / overwrite changed). */
+  invalidateViews() {
+    this.viewCache.clear();
+  }
+
+  private computeCanView(userId: string, channelId: string): boolean {
     const ch = this.state.channels[channelId];
     if (!ch) return false;
     if (ch.type === 1) return (ch.recipients ?? []).some((r: Json) => r.id === userId);
     if (ch.type === 12) {
       return (this.state.thread_members[channelId] ?? []).includes(userId) || ch.owner_id === userId;
     }
-    if (ch.type === 10 || ch.type === 11) return ch.parent_id ? this.canView(userId, ch.parent_id) : true;
+    if (ch.type === 10 || ch.type === 11) return ch.parent_id ? this.computeCanView(userId, ch.parent_id) : true;
     const member = this.state.members[userId];
     if (!member) return false;
     if (this.memberHasPerm(member, 8n)) return true;

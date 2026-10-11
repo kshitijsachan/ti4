@@ -329,6 +329,7 @@ export class Hub {
     const list = (this.store.state.thread_members[threadId] ??= []);
     if (list.includes(userId)) return;
     list.push(userId);
+    this.store.invalidateViews();
     const ch = this.store.channel(threadId);
     if (ch) ch.member_count = list.length;
     this.store.scheduleSave();
