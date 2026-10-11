@@ -6,6 +6,7 @@ import { awaits, type Decision, type GameState, type Option } from "./types.js";
 import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
+import { chooseFaction } from "./policy/faction.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
@@ -37,6 +38,9 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
   if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, all) : null;
   const cards = chooseCards(d, state, me, all);
   if (cards !== undefined) return cards;
+  // Faction leaders / abilities (shared kinds leader.use, faction.ability; phase C faction areas).
+  const faction = chooseFaction(d, state, me);
+  if (faction !== undefined) return faction;
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
   // (command_tokens.adjust belongs to the status area; only its Leadership panel is answered here.)
   const kind: string = d.kind;
