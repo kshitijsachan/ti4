@@ -92,7 +92,7 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|getDamageButtons|^assignHits_|^assign_|^remove_|removeThisTypeOfUnit|removeNCaptureThisTypeOfUnit|removeAll|^destroy|^sustain|cancelSpaceHits|cancelGroundHits|blessBoonCC|placeCCBack_|spendAStratCC)/i;
+  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|getDamageButtons|^assignHits_|^assign_|^remove_|removeThisTypeOfUnit|removeNCaptureThisTypeOfUnit|removeAll|^destroy|^sustain|cancelSpaceHits|cancelGroundHits|blessBoonCC|placeCCBack_|spendAStratCC|getToggleGalvanizeTiles|toggleGalvanize_|^ungalvanize_)/i;
 const BLOCKED_LABEL = /^(sustain|destroy|remove all|done removing|manually assign|cancel a hit|undo|un-|unqueue|spend|exhaust|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -206,6 +206,18 @@ const MAX_STREAK = 8;
 const REPOST_MS = 60000;
 /** A lost press on a `retry` prompt is tried again after this long (at most MAX_RETRIES times). */
 const RETRY_MS = 20000;
+/** The inverse of a control we pressed (X / UnX) is not pressed in the same channel within this time. */
+const INVERSE_MS = 60000;
+/** Prefix pairs that make one control the take-back of another ("galvanize_..." / "ungalvanize_..."). */
+const INVERSE_PREFIXES: [string, string][] = [
+  ["un", ""],
+  ["un-", ""],
+  ["un ", ""],
+  ["add", "remove"],
+  ["enable", "disable"],
+  ["show", "hide"],
+  ["activate", "deactivate"],
+];
 /** How long to wait for our own draft pick to register before picking again. */
 const MILTY_WAIT_MS = 15000;
 const MAX_RETRIES = 3;
@@ -367,6 +379,8 @@ class SeatPilot {
   private factions = new Map<string, string>();
   /** When we last pressed a control by `${channel}:${custom id}:${content}`: the bot often re-posts a prompt. */
   private recent = new Map<string, number>();
+  /** Controls we pressed lately, per channel: their inverse (X / UnX) is not pressed for INVERSE_MS. */
+  private inversePresses: { channel: string; id: string; label: string; at: number }[] = [];
   /** Messages we pressed on, with their controls then: answered until the bot changes them. */
   private answered = new Map<string, { sig: string; at: number }>();
   /** Per channel, when the bot last nudged us there ("the queue is currently waiting on you"). */
@@ -618,6 +632,13 @@ class SeatPilot {
     // Combat rolls are pressed once per combat round on the same message (mayRoll decides).
     const reusable = (c: Control) => /^combatRoll_/.test(c.custom_id);
     controls = controls.filter((c) => reusable(c) || (!this.pressed.has(`${m.id}:${c.custom_id}`) && (sibling || !this.pressedRecently(m, c))));
+    // Never undo what we just did: the inverse (X / UnX, add / remove, ...) of a control we pressed here lately.
+    controls = controls.filter((c) => !this.invertsRecentPress(m.channel_id, c));
+    // A galvanize menu (Bastion agent: "choose the unit that should be galvanized") stays up after a press, edited to
+    // offer the next unit: one galvanize per menu is the answer, never a run through every unit.
+    if ((m._presses?.[me] || [...this.pressed].some((k) => k.startsWith(`${m.id}:`))) && controls.some((c) => /(^|_)galvanize_/i.test(c.custom_id))) {
+      controls = controls.filter((c) => !/(^|_)(un)?galvanize_/i.test(c.custom_id));
+    }
 
     const faction = await this.faction(game, m);
     const content = String(m.content ?? "");
@@ -873,6 +894,15 @@ class SeatPilot {
     return `${m.channel_id}:${signature(controls)}:${String(m.content ?? "").slice(0, 200)}`;
   }
 
+  /** Whether `c` would take back (X / UnX, add / remove, ...) a control we pressed in this channel within INVERSE_MS. */
+  private invertsRecentPress(channel: string, c: Control) {
+    const now = Date.now();
+    this.inversePresses = this.inversePresses.filter((p) => now - p.at < INVERSE_MS);
+    const id = normId(c.custom_id);
+    const label = normLabel(c.label);
+    return this.inversePresses.some((p) => p.channel === channel && (areInverse(p.id, id) || (!!label && areInverse(p.label, label))));
+  }
+
   /** The same control on a re-posted copy of a prompt we answered within the last minute. */
   private pressedRecently(m: StoredMessage, c: Control) {
     const at = this.recent.get(this.repostKey(m, c));
@@ -1039,6 +1069,7 @@ class SeatPilot {
     this.pressed.add(key);
     this.answered.set(msg.id, { sig: signature(controlsOf(fresh.components)), at: Date.now() });
     this.recent.set(`${msg.channel_id}:label:${control.label}`, Date.now());
+    this.inversePresses.push({ channel: msg.channel_id, id: normId(control.custom_id), label: normLabel(control.label), at: Date.now() });
     if (/reveal_stage_/.test(control.custom_id)) this.mgr.lastReveal.set(gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "", Date.now());
     const rollKind = /^combatRoll_[^_]+_[^_]+_(\w+)/.exec(control.custom_id)?.[1];
     if (rollKind) this.recent.set(`${msg.channel_id}:roll:${rollKind}`, Date.now());
@@ -1201,4 +1232,26 @@ function signature(controls: Control[]) {
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function normId(customId: string) {
+  return customId.replace(/^FFCC_[^_]+_/, "").toLowerCase();
+}
+
+function normLabel(label: string | undefined) {
+  return String(label ?? "").trim().toLowerCase();
+}
+
+/** One control undoes the other: they differ only by an inverse prefix pair ("Galvanize 1 carrier" / "Ungalvanize 1 carrier"). */
+export function areInverse(a: string, b: string) {
+  if (!a || !b || a === b) return false;
+  for (const [x, y] of INVERSE_PREFIXES) {
+    for (const [p, q] of [[a, b], [b, a]]) {
+      if (p.startsWith(x) && q.startsWith(y)) {
+        const rest = p.slice(x.length);
+        if (rest.length >= 4 && rest === q.slice(y.length)) return true;
+      }
+    }
+  }
+  return false;
 }
