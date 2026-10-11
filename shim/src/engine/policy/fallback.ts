@@ -81,7 +81,8 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "agenda.rider": "blocking",
   "agenda.next": "planner",
   // G7 status
-  "status.score": "planner",
+  // The table scoring prompt carries a window (so it is blocking); Imperial's own scoring list is an offer.
+  "status.score": "optional",
   "status.score_secret": "blocking",
   "status.reveal_objective": "blocking",
   "status.homework": "planner",
@@ -175,14 +176,19 @@ export function fallbackCandidates(d: Decision, state: GameState | null, me: str
     if (!mayPress(o, d, state, me)) return false;
     const action = typeof o.value?.action === "string" ? (o.value.action as string) : null;
     if (action && DESTRUCTIVE_ACTIONS.has(action)) return false;
+    // Claims the engine says we cannot make (an objective we do not meet, a secret not met).
+    if (Array.isArray(o.value?.eligible) && !(o.value.eligible as unknown[]).includes(me)) return false;
+    if (o.value?.met === false) return false;
     const handler = (o.handler || o.id).replace(/^FFCC_[^_]+_/, "");
-    if (DESTRUCTIVE_HANDLER.test(handler)) {
+    // A discard prompt's options are discards: that is the answer it asks for.
+    const discardKind = d.kind.endsWith(".discard") && /discard/i.test(handler);
+    if (DESTRUCTIVE_HANDLER.test(handler) && !discardKind) {
       // deleteButtons… doubles as "Done" / "Decline"; it is fine when the label says so.
       if (!/^deleteButtons/i.test(handler) || !PASSIVE_LABEL.test(o.label.trim())) return false;
     }
     // "No Sabotage", "Done Removing Units": a passive answer may name what it declines.
     const passive = (!!action && PASSIVE_ACTIONS.includes(action)) || PASSIVE_LABEL.test(o.label.trim());
-    if (DESTRUCTIVE_LABEL.test(o.label) && !passive) return false;
+    if (DESTRUCTIVE_LABEL.test(o.label) && !passive && !discardKind) return false;
     return true;
   });
   const rank = (o: Option<any>) => {
@@ -190,6 +196,10 @@ export function fallbackCandidates(d: Decision, state: GameState | null, me: str
     const i = action ? PASSIVE_ACTIONS.indexOf(action) : -1;
     if (i >= 0) return i;
     if (PASSIVE_LABEL.test(o.label.trim())) return PASSIVE_ACTIONS.length;
+    // Turn menu: a strategy card owed is played first; starting a tactical / component action we did not plan is
+    // the very last thing to do.
+    if (action === "strategic") return 50;
+    if (action === "tactical" || action === "component") return 300;
     // Typed options before untyped ones; otherwise keep the engine's order.
     return o.value ? 100 : 200;
   };

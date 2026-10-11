@@ -158,3 +158,30 @@ test("command token panel outside the status phase (no specific policy): Done, g
   ]);
   assert.equal(chooseTyped(d, state, ME, { history: [], open: [], all: [d], force: true })?.option?.id, "FFCC_sol_deleteButtons");
 });
+
+test("claims the engine says we cannot make are never pressed (objective not met)", () => {
+  const d = decision("status.imperial", [opt("FFCC_sol_po_scoring_1", "(1) Improve Infrastructure", { action: "score_public", eligible: [OTHER] }), opt("FFCC_sol_po_scoring_3", "(3) Lead", { action: "score_public", eligible: [ME] })]);
+  assert.equal(chooseFallback(d, state, ME)?.option.id, "FFCC_sol_po_scoring_3");
+});
+
+test("Imperial's own scoring list (no window) is an offer: left alone", () => {
+  const d = decision("status.score", [opt("FFCC_sol_po_scoring_1", "(1) Improve Infrastructure", { action: "score_public", eligible: [] }), opt("deleteButtons", "Delete These Buttons")]);
+  assert.equal(chooseTyped(d, state, ME, { history: [], open: [], all: [d], force: true }), null);
+});
+
+test("a discard prompt may discard; elsewhere discards are never pressed", () => {
+  const discard = opt("ac_discard_from_hand_894", "(894) Fighter Conscription", null);
+  assert.equal(chooseFallback(decision("action_card.discard", [discard]), state, ME)?.option.id, discard.id);
+  assert.equal(chooseFallback(decision("action_card.resolve", [discard]), state, ME), null);
+});
+
+test("turn menu: play the owed strategy card rather than start an unplanned tactical action", () => {
+  const d = decision("turn.action", [
+    opt("FFCC_sol_tacticalAction", "Tactical Action (3)", { action: "tactical", tacticTokens: 3 }),
+    opt("FFCC_sol_componentAction", "Component Action (0)", { action: "component" }),
+    opt("FFCC_sol_strategicAction_6", "Play Warfare", { action: "strategic", strategyCard: 6 }),
+    opt("transaction", "Transaction"),
+    opt("ultimateUndo_174", "UNDO"),
+  ]);
+  assert.equal(chooseFallback(d, state, ME)?.option.id, "FFCC_sol_strategicAction_6");
+});

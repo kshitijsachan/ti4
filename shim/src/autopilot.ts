@@ -111,6 +111,8 @@ const ENGINE_STALL_ERROR_MS = 180_000;
  * only button left ("Restart Queue") and filled it again, forever (pbd26). */
 const BLOCKED_ID =
   /(ultimateUndo|^undo|deleteButtons|queueScPick_|restartSCQueue|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|getDamageButtons|^assignHits_|^assign_|^remove_|removeThisTypeOfUnit|removeNCaptureThisTypeOfUnit|removeAll|^destroy|^sustain|cancelSpaceHits|cancelGroundHits|blessBoonCC|placeCCBack_|spendAStratCC|getToggleGalvanizeTiles|toggleGalvanize_|^ungalvanize_)/i;
+/** A Decline / Done / No button (deleteButtons…) a seat may press on its own prompt when nothing else is pressable. */
+const LAST_RESORT_LABEL = /^(decline|done|no\b|pass\b|skip|not now|dismiss)/i;
 const BLOCKED_LABEL = /^(sustain|destroy|remove all|done removing|manually assign|cancel a hit|undo|un-|unqueue|spend|exhaust|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -835,8 +837,21 @@ class SeatPilot {
     const ours = controls.filter((c) => !ffcc(c) || ffcc(c) === faction);
     controls = ours.filter((c) => !BLOCKED_ID.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && !BLOCKED_LABEL.test(c.label.trim()));
     if (!controls.length) {
+      const certainlyOurs = ffccMine || (m._ephemeral_for === me && !BUSY_WRONG.test(content)) || calledOut;
+      // Last resort (never leave a prompt that is certainly ours to a person): its own Decline / Done / No closes it
+      // without doing anything (agent offers "Use X / Decline", "Remove infantry / Done", ...). Only when the typed
+      // engine path does not own the prompt (its fallback answers those).
+      // Never on a command-token panel: "Done" there forfeits the gain (the planner / typed policies handle those).
+      const tokenPanel = ours.some((c) => /(increase|decrease)_(tactic|fleet|strategy)_cc|redistributeCC|resetCCs/i.test(c.custom_id));
+      const decline = certainlyOurs && !tokenPanel
+        ? ours.find((c) => /^deleteButtons/i.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && LAST_RESORT_LABEL.test(c.label.trim()) && !this.pressed.has(`${m.id}:${c.custom_id}`))
+        : undefined;
+      if (decline && !(await this.mgr.engineOwns(game, m.id, me))) {
+        log.warn(`autopilot ${this.name}: last resort in #${ch.name}: nothing else we may press on "${content.slice(0, 60).replace(/\s+/g, " ")}"; pressing "${decline.label}"`);
+        return { msg: m, control: decline, score: 20, why: "last resort: decline / done" };
+      }
       // Say so (once) when a prompt that is certainly ours offers nothing we may press: a likely stall.
-      if ((ffccMine || (m._ephemeral_for === me && !BUSY_WRONG.test(content)) || calledOut) && !this.answered.has(m.id) && !this.skipped.has(m.id) && Date.now() - Date.parse(m.timestamp) < 600000) {
+      if (certainlyOurs && !this.answered.has(m.id) && !this.skipped.has(m.id) && Date.now() - Date.parse(m.timestamp) < 600000) {
         this.skipped.add(m.id);
         const labels = ours.map((c) => c.label || c.custom_id).filter((l) => !/^undo$/i.test(l));
         if (labels.length) log.info(`autopilot ${this.name}: leaving "${content.slice(0, 80).replace(/\s+/g, " ")}" in #${ch.name} to a person (only ${labels.slice(0, 6).join(" / ")})`);
