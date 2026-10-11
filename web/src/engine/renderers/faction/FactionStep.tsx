@@ -43,6 +43,12 @@ function optionLabel(state: GameState | null, v: Value): string {
   if (v.planet) parts.push(planetName(v.planet));
   else if (v.holder === "space") parts.push("space");
   if (v.tile) parts.push(`System ${v.tile}`);
+  const extra = v as Value & { wormhole?: string; what?: string; tech?: string; pn?: string };
+  if (extra.wormhole) parts.push(`${words(extra.wormhole)} wormhole`);
+  if (extra.what) parts.push(extra.what === "tg" ? "take 1 trade good" : "take 1 commodity");
+  if (extra.tech) parts.push(`technology ${extra.tech}`);
+  if (extra.pn) parts.push(`note ${extra.pn}`);
+  if (v.from) parts.push(`from ${planetName(v.from)}`);
   if (v.strategyCard != null) parts.push(`take strategy card ${v.strategyCard}`);
   if (v.amount) parts.push(`+${v.amount}`);
   if (v.cost) parts.push(`costs ${v.cost}`);
