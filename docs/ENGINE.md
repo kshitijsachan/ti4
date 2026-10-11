@@ -289,9 +289,9 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 | Area | Kinds | GameState section |
 |---|---|---|
 | G1 setup / draft | `draft.milty.{pick,queue,info}`, `setup.{player,keleres_flavor,keleres_tech,deal_secrets,reveal_objectives,preference,game_settings}`, `tech.choose_type`, `tech.gain`, `secret_objective.discard` | `draft`, `setup` |
-| G2 strategy cards | `strategy_card.{pick,queue_pick,resolve (window),strategic_action,diplomacy_system,politics_speaker,politics_agenda,construction_place}`, `planet.ready` | `strategyCards[].reactions` |
+| G2 strategy cards | `strategy_card.{pick,queue_pick,resolve (window),strategic_action,diplomacy_system,politics_speaker,politics_agenda,construction_place,construction_build}`, `planet.ready` | `strategyCards[].reactions` |
 | G3 tactical | `turn.action`, `tactical.{activate,move,land,rift,conclude}`; direct actions `move`, `land` | — |
-| G4 combat | `combat.round` (window `combat_roll`), `combat.hits`, `combat.assign_units` (progress), `combat.retreat`, `combat.bombard` (progress: assigned bombardment dice), `units.remove` (stand-alone getDamageButtons_ openers); direct action `combat-plan` {plan: [{holder, unit, damaged, action: sustain/destroy, count}]} | `combat` |
+| G4 combat | `combat.round` (window `combat_roll`), `combat.hits`, `combat.assign_units` (progress), `combat.retreat`, `combat.bombard` (progress: assigned bombardment dice), `units.remove` (stand-alone getDamageButtons_ openers), `units.modify` (Modify Units menu: genericModify*/modifyUnitsAllTiles/genericBuild_), `combat.automate` (automateGroundCombat_ vote / confirm), `combat.modifier` (applytempcombatmod__ on its own message; on the controls it is a combat.round `temp_mod` option); direct action `combat-plan` {plan: [{holder, unit, damaged, action: sustain/destroy, count}]} | `combat` |
 | G5 production / payment | `payment.spend` (payload {planets, tg, commodities, sarween}), `production.produce` (payload {units}), `production.place` (placeOneNDone_ free placements, Mitosis), `commodities.gain` (gain/convert commodities) | — |
 | G6 agenda | `agenda.{when,after,preassign,shenanigans,vote,vote_step,tiebreak,resolve,rider,next}` (vote: payload) | `agenda` |
 | G7 status | `status.{score,score_secret,reveal_objective,homework,advance,imperial}`, `command_tokens.adjust` (payload pools) | `status` |
@@ -302,7 +302,7 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 | INFRA-3 | `input.form` (forms opened by `needsInput` buttons) | — |
 
 **Official-only web games.** The self-hosted bot refuses homebrew / alternate-mode controls (Supported Homebrew,
-Galactic Events / Dane modes, Twilight's Fall, Franken, TK Nova / Twilight DS / O++ setups, homebrew sources and Alliance in
+Galactic Events / Dane modes, Twilight's Fall, Franken, TK Nova / Twilight DS / O++ setups, the new draft system (startDraftSystem_*: Nucleus, TF presets; jwds_ drafts never start), homebrew sources and Alliance in
 the Milty settings): `ti4.selfhost.engine.WebContent`, switch `TI4_OFFICIAL_ONLY` (default on when self-hosted; `off` disables).
 `WebContent.officialOnly(game)` / `violations(game)` is the invariant (checked on every state change: error log + metric
 `invariant.homebrew`; tests/engine `content.no-homebrew` on save files). Homebrew / DS / TF / Monuments / FoW handlers are
