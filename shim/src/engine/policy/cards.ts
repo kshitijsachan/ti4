@@ -140,6 +140,6 @@ function chooseStep(d: ActionCardStep, self: PlayerState | null, history: string
     return { option: pick, why: `action card step ${pick.value!.step}: choose` };
   }
   if (done.length) return { option: done[0], why: "action card step: finish" };
-  const any = d.options.find((o) => live(o) && !history.includes(o.id)) ?? d.options.find(live);
-  return any ? { option: any, why: "action card step: move on" } : null;
+  // Only untyped options left (undo / shortcuts / a plain Done): the fallback picks a safe one.
+  return null;
 }

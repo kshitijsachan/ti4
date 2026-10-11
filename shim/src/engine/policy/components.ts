@@ -28,6 +28,8 @@ export function isComponentsKind(d: Decision): d is ComponentsDecision {
 
 type Live<V> = Option<V>[];
 
+const DECLINE_LABEL = /^(cancel|decline|no\b|done|close|dismiss|not now|skip)/i;
+
 /** Answer a components-area decision; null only when the seat has no pressable option at all. */
 export function chooseComponents(d: ComponentsDecision, state: GameState | null, me: string): ComponentsChoice | null {
   const self = state?.players.find((p) => p.userId === me);
@@ -35,8 +37,10 @@ export function chooseComponents(d: ComponentsDecision, state: GameState | null,
   if (!opts.length) return null;
   const typed = opts.filter((o) => o.value);
   const untyped = opts.filter((o) => !o.value);
-  const decline = (why: string): ComponentsChoice =>
-    untyped[0] ? { option: untyped[0], why: `${d.kind}: ${why}` } : { option: opts[0], why: `${d.kind}: ${why} (no decline offered)` };
+  // Decline = the message's Cancel / Decline / No / Done (deleteButtons…), never an undo or an unrelated shortcut; none
+  // offered → null and the fallback decides.
+  const no = untyped.find((o) => /^deleteButtons/i.test(o.handler || o.id) || DECLINE_LABEL.test(o.label.trim()));
+  const decline = (why: string): ComponentsChoice | null => (no ? { option: no, why: `${d.kind}: ${why}` } : null);
   const pick = (o: Option<any> | undefined, why: string): ComponentsChoice | null => (o ? { option: o, why: `${d.kind}: ${why}` } : null);
 
   switch (d.kind) {

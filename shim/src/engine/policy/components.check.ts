@@ -24,8 +24,8 @@ const state = {
 const pick = (d: Decision) => chooseTyped(d, state, ME)?.option?.id;
 
 // Component menu: fragments → relic, else cancel.
-assert.equal(pick(base("component.action", [opt("a", { component: "tech", id: "sar" }), opt("b", { component: "getRelic", id: null }), opt("x", null)])), "b");
-assert.equal(pick(base("component.action", [opt("a", { component: "leader", id: "hacanagent" }), opt("x", null)])), "x");
+assert.equal(pick(base("component.action", [opt("a", { component: "tech", id: "sar" }), opt("b", { component: "getRelic", id: null }), opt("deleteButtons", null)])), "b");
+assert.equal(pick(base("component.action", [opt("a", { component: "leader", id: "hacanagent" }), opt("deleteButtons", null)])), "deleteButtons");
 // Relics.
 assert.equal(pick(base("relic.use", [opt("ac", { relic: "prophetstears", effect: "draw_action_card" }), opt("ts", { relic: "prophetstears", effect: "tech_skip" })])), "ac");
 assert.equal(pick(base("relic.use", [opt("l", { relic: null, effect: "look_relic_deck" }), opt("no", null)])), "no");
@@ -34,8 +34,8 @@ assert.equal(pick(base("choose.planet", [opt("mine", { source: "stellarconverter
 assert.equal(pick(base("choose.planet", [opt("theirs", { source: "nanoforge", planet: "jord" }), opt("mine", { source: "nanoforge", planet: "arretze" })])), "mine");
 assert.equal(pick(base("choose.player", [opt("h", { source: "quantum_entangler", faction: "hacan" }), opt("s", { source: "quantum_entangler", faction: "sol" })])), "s");
 assert.equal(pick(base("choose.confirm", [opt("p", { source: "thesilverflame", confirm: true, choice: "Purge" }), opt("q", { source: "thesilverflame", confirm: true, choice: "Point" })])), "q");
-assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card", position: 1 }), opt("x", null)])), "one");
+assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card", position: 1 }), opt("deleteButtons", null)])), "one");
 // Always answers when only untyped options remain; never answers someone else's prompt.
-assert.equal(pick(base("choose.system", [opt("x", null)])), "x");
+assert.equal(pick(base("choose.system", [opt("deleteButtons", null)])), "deleteButtons");
 assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card" })], { target: { userId: "u2", faction: "sol", color: "red", resolvedBy: "owner_prefix" } })), undefined);
 console.log("components policy: ok");
