@@ -88,3 +88,30 @@ export async function waitForStack(timeoutMs = 600000, log: (s: string) => void 
 export function fileExists(p: string) {
   return existsSync(p);
 }
+
+/** The bot token (engine API: `Authorization: Bot …`): $BOT_TOKEN, else DISCORD_BOT_TOKEN from $BOT_ENV (/home/user/run/bot.env). */
+export function botToken(): string {
+  if (process.env.BOT_TOKEN) return process.env.BOT_TOKEN;
+  const file = process.env.BOT_ENV ?? "/home/user/run/bot.env";
+  const m = /^DISCORD_BOT_TOKEN=(.*)$/m.exec(readFileSync(file, "utf8"));
+  if (!m) throw new Error(`no DISCORD_BOT_TOKEN in ${file}`);
+  return m[1].trim().replace(/^["']|["']$/g, "");
+}
+
+/** GET/POST on the bot's trusted engine API (/api/public/selfhost/engine…). Returns {status, body}; never throws on HTTP errors. */
+export async function engineApi(path: string, body?: Json, timeoutMs = 60000): Promise<{ status: number; body: any }> {
+  const r = await fetch(`${BOT_URL}/api/public/selfhost/engine${path}`, {
+    method: body ? "POST" : "GET",
+    headers: { authorization: `Bot ${botToken()}`, accept: "application/json", ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const text = await r.text();
+  let parsed: any = text;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    /* plain text */
+  }
+  return { status: r.status, body: parsed };
+}
