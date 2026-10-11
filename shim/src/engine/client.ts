@@ -126,12 +126,15 @@ export class EngineClient {
           const { value, done } = await reader.read();
           if (done) break;
           buf += value;
+          // Linear in the chunk: a burst (e.g. thousands of decision.opened after a bot restart rebuild) arrives as
+          // one multi-MB chunk; re-slicing the remaining buffer per event was quadratic and froze the event loop.
+          let start = 0;
           let i: number;
-          while ((i = buf.indexOf("\n\n")) >= 0) {
-            const block = buf.slice(0, i);
-            buf = buf.slice(i + 2);
-            this.handleBlock(block);
+          while ((i = buf.indexOf("\n\n", start)) >= 0) {
+            this.handleBlock(buf.slice(start, i));
+            start = i + 2;
           }
+          buf = start ? buf.slice(start) : buf;
         }
       } catch (e) {
         if (this.live) log.warn(`engine stream lost: ${(e as Error).message}`);
