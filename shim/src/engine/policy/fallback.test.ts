@@ -185,3 +185,9 @@ test("turn menu: play the owed strategy card rather than start an unplanned tact
   ]);
   assert.equal(chooseFallback(d, state, ME)?.option.id, "FFCC_sol_strategicAction_6");
 });
+
+test("a weakly resolved target waits for the watchdog", () => {
+  const d = decision("explore.outcome", [opt("x", "Proceed", { action: "resolve" })], { target: { userId: ME, faction: "sol", color: "blue", resolvedBy: "mention" } });
+  assert.equal(fallbackDue(d, ME, { waitedMs: FALLBACK_GRACE_MS }), false);
+  assert.equal(fallbackDue(d, ME, { force: true }), true);
+});

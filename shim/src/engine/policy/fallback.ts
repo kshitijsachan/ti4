@@ -34,13 +34,13 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "draft.milty.queue": "optional",
   "draft.milty.info": "optional",
   "setup.player": "blocking",
-  "setup.keleres_flavor": "blocking",
-  "setup.keleres_tech": "blocking",
+  "setup.keleres_flavor": "planner", // the draft-time preset is optional; after the draft the setup policy answers
+  "setup.keleres_tech": "planner",
   "setup.deal_secrets": "planner",
   "setup.reveal_objectives": "planner",
   "setup.preference": "optional",
   "setup.game_settings": "optional",
-  "tech.choose_type": "blocking",
+  "tech.choose_type": "planner",
   "tech.gain": "planner",
   "secret_objective.discard": "planner",
   // G2 strategy cards
@@ -92,8 +92,8 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   // G8 cards
   "action_card.play": "optional",
   "action_card.sabotage": "blocking",
-  "action_card.discard": "blocking",
-  "action_card.draw": "blocking",
+  "action_card.discard": "optional", // an owed discard is answered by the cards policy at once; the rest are stale asks
+  "action_card.draw": "planner",
   "action_card.resolve": "blocking",
   "action_card.target": "blocking",
   "action_card.preassign": "optional",
@@ -108,7 +108,7 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   // G10 Thunder's Edge
   "te.fracture.roll": "blocking",
   "te.fracture.ingress": "blocking",
-  "te.galvanize": "blocking",
+  "te.galvanize": "planner",
   "te.expedition": "blocking",
   "te.thunders_edge.place": "blocking",
   "te.visionaria.respond": "blocking",
@@ -117,6 +117,8 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "trade.offer_sent": "optional",
   "trade.force_replenish": "blocking",
 };
+
+const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);
 
 /** Typed answers that move on without doing anything costly. Ranked: earlier is preferred. */
 const PASSIVE_ACTIONS = ["decline", "pass", "no_public", "no_secret", "no_effect", "abstain", "reject", "done", "end_turn", "ready", "continue", "conclude", "decline_space_cannon"];
@@ -225,6 +227,8 @@ export function isBlocking(d: Decision): boolean {
 export function fallbackDue(d: Decision, me: string, opts: { waitedMs?: number; force?: boolean }): boolean {
   if (!waitsOn(d, me) || !isBlocking(d)) return false;
   if (opts.force) return true;
+  // A weakly resolved target (a mention, whoever pressed last) is not certainly ours: only the watchdog answers it.
+  if (!d.window && WEAK_TARGET.has(d.target?.resolvedBy ?? "none")) return false;
   const waited = opts.waitedMs ?? 0;
   return KIND_CLASS[d.kind] === "planner" ? waited >= FALLBACK_FORCE_MS : waited >= FALLBACK_GRACE_MS;
 }
