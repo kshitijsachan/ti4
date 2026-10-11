@@ -83,6 +83,7 @@ export class EngineClient {
       const map = new Map(snap.decisions.map((d) => [d.id, d]));
       for (const e of this.ring) if (e.game === game && e.seq > snap.seq) applyTo(map, e);
       this.decisions.set(game, map);
+      this.snapCache.delete(game);
       this.primed.add(game);
       return this.mirrorSnapshot(game);
     } catch {
@@ -90,8 +91,16 @@ export class EngineClient {
     }
   }
 
+  /** game → its sorted open decisions, reused until an event touches the game (callers do not mutate it). */
+  private snapCache = new Map<string, Decision[]>();
+
   private mirrorSnapshot(game: string): DecisionsSnapshot {
-    return { seq: this.seq, decisions: [...(this.decisions.get(game)?.values() ?? [])].sort((a, b) => a.seq - b.seq) };
+    let decisions = this.snapCache.get(game);
+    if (!decisions) {
+      decisions = [...(this.decisions.get(game)?.values() ?? [])].sort((a, b) => a.seq - b.seq);
+      this.snapCache.set(game, decisions);
+    }
+    return { seq: this.seq, decisions };
   }
 
   /** Last stream seq applied. */
@@ -182,6 +191,7 @@ export class EngineClient {
     this.ring = [];
     this.ringFloor = seq;
     this.decisions.clear();
+    this.snapCache.clear();
     this.primed.clear();
     this.stateCache.clear();
     for (const l of this.resetListeners) {
@@ -272,6 +282,7 @@ export class EngineClient {
     const map = this.decisions.get(e.game) ?? new Map<string, Decision>();
     this.decisions.set(e.game, map);
     applyTo(map, e);
+    this.snapCache.delete(e.game);
     if (e.type === "state.changed") for (const k of this.stateCache.keys()) if (k.startsWith(`${e.game}|`)) this.stateCache.delete(k);
     for (const l of this.listeners) {
       try {

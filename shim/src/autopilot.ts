@@ -875,10 +875,13 @@ class SeatPilot {
     }
 
     let phase: string | null | undefined;
+    // Asked once per message, and only when a typed rule's own conditions hold (it reads the engine mirror + state).
+    let owned: boolean | undefined;
     for (const rule of RULES) {
-      if (rule.typed && (await this.mgr.engineOwns(game, m.id, me))) continue;
       if (!rule.table && !ctx.direct) continue;
       if (rule.addressed && !ctx.addressed) continue;
+      if (rule.typed && rule.id && !controls.some((c) => rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id))) continue;
+      if (rule.typed && (owned ??= await this.mgr.engineOwns(game, m.id, me))) continue;
       const retryPhase = rule.retry && lost ? String((await this.mgr.phaseOf(game)) ?? "") : "";
       if (
         rule.retry &&

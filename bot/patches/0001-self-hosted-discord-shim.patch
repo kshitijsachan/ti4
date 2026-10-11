@@ -9110,10 +9110,10 @@ index 0000000..0f7fb2e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java b/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java
 new file mode 100644
-index 0000000..d796066
+index 0000000..1735372
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,217 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.HashMap;
@@ -9146,7 +9146,30 @@ index 0000000..d796066
 +    private CombatPlanService() {}
 +
 +    /** One line of a plan: `count` units of `unit` in `holder`, of the damaged or undamaged ones. */
-+    public record PlanEntry(String holder, String unit, boolean damaged, String action, int count) {}
++    /** damaged / count may be omitted or null in the JSON (live: a web plan without "damaged" was a 400). */
++    public record PlanEntry(String holder, String unit, Boolean damagedOrNull, String action, Integer countOrNull) {
++        @com.fasterxml.jackson.annotation.JsonCreator
++        public PlanEntry(
++                @com.fasterxml.jackson.annotation.JsonProperty("holder") String holder,
++                @com.fasterxml.jackson.annotation.JsonProperty("unit") String unit,
++                @com.fasterxml.jackson.annotation.JsonProperty("damaged") Boolean damagedOrNull,
++                @com.fasterxml.jackson.annotation.JsonProperty("action") String action,
++                @com.fasterxml.jackson.annotation.JsonProperty("count") Integer countOrNull) {
++            this.holder = holder;
++            this.unit = unit;
++            this.damagedOrNull = damagedOrNull;
++            this.action = action;
++            this.countOrNull = countOrNull;
++        }
++
++        public boolean damaged() {
++            return Boolean.TRUE.equals(damagedOrNull);
++        }
++
++        public int count() {
++            return countOrNull == null ? 0 : countOrNull;
++        }
++    }
 +
 +    public record PlanRequest(String userId, Long expectedSeq, List<PlanEntry> plan) {}
 +
@@ -16693,6 +16716,21 @@ index 5b8e62a..91f9ae3 100644
          if (CommandHelper.hasRole(event, JdaService.bothelperRoles)) {
              return false;
          }
+diff --git a/src/main/java/ti4/service/milty/MiltyDraftHelper.java b/src/main/java/ti4/service/milty/MiltyDraftHelper.java
+index f1be344..d0c3540 100644
+--- a/src/main/java/ti4/service/milty/MiltyDraftHelper.java
++++ b/src/main/java/ti4/service/milty/MiltyDraftHelper.java
+@@ -192,8 +192,9 @@ public class MiltyDraftHelper {
+         graphics.setColor(Color.black);
+         for (TI4Emoji feature : featureEmojis) {
+             Point fPoint = featurePoints.get(index);
++            // Self-hosted: an emoji fetch can time out (busy shim); draw the slice without it instead of failing the
++            // whole draft start (live pbd112: the draft never started).
+             BufferedImage featureImage = getEmojiImage(feature);
+-            featureImage.getGraphics();
+             graphics.setColor(Color.black);
+             graphics.fillRoundRect(fPoint.x + hs.x, fPoint.y + hs.y, 40, 40, 40, 40);
+ 
 diff --git a/src/main/java/ti4/service/turn/StartTurnService.java b/src/main/java/ti4/service/turn/StartTurnService.java
 index e89c241..d891e17 100644
 --- a/src/main/java/ti4/service/turn/StartTurnService.java
