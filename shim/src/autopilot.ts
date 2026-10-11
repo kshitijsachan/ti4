@@ -1148,14 +1148,18 @@ class SeatPilot {
       const mine = await engine.decisionsFor(game, this.userId);
       if (!mine?.length) continue;
       const state = await engine.state(game, this.userId, 2000);
+      const open = (await engine.openDecisions(game)) ?? [];
       for (const d of mine) {
-        const pick = chooseTyped(d, state, this.userId, mine);
+        const pick = chooseTyped(d, state, this.userId, open);
         if (!pick) continue;
         const key = `${d.id}@${d.revision}|${pick.option.id}`;
         if (this.engineTried.has(key)) continue;
         this.engineTried.add(key);
         if (this.engineTried.size > 5000) this.engineTried.clear();
-        const r = await this.mgr.serial(() => engine.answer(game, d.id, { optionId: pick.option.id, expectedSeq: d.seq, requestId: key, userId: this.userId }));
+        const req = pick.payload
+          ? { payload: pick.payload, expectedSeq: d.seq, requestId: key, userId: this.userId }
+          : { optionId: pick.option.id, expectedSeq: d.seq, requestId: key, userId: this.userId };
+        const r = await this.mgr.serial(() => engine.answer(game, d.id, req));
         if (!r) return false;
         log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option.label}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();

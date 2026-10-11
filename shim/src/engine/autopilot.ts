@@ -2,16 +2,19 @@
  * Autopilot policy over typed decisions. Pure: (decision, state) → option. Add a case per kind as kinds are typed;
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
-import { chooseExplore } from "./policy/explore.js";
-import type { Decision, GameState, Option } from "./types.js";
+import { awaits, type Decision, type GameState, type Option } from "./types.js";
+import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
+import { chooseExplore } from "./policy/explore.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
-export type TypedChoice = { option: Option<any>; why: string };
+/** payload: answer with a structured payload instead of pressing `option` (e.g. a whole agenda vote). */
+export type TypedChoice = { option: Option<any>; why: string; payload?: Record<string, unknown> };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string, open: Decision[] = []): TypedChoice | null {
+  if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, open) : null;
   const cards = chooseCards(d, state, me, open);
   if (cards !== undefined) return cards;
   if (d.target?.userId !== me || d.scope !== "player") return null;

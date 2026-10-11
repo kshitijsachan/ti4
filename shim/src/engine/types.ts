@@ -4,8 +4,10 @@
  * "../../../shim/src/engine/types"` or a path alias).
  */
 
+import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 
+export type * from "./kinds/agenda.js";
 export type * from "./kinds/explore.js";
 
 export const CONTRACT_VERSION = 1;
@@ -35,6 +37,8 @@ export interface GameState {
   draft: DraftState | null;
   /** Exploration decks, relic deck, recent explore results / relic draws (G9). Older engines: absent. */
   exploration?: ExplorationState | null;
+  /** The agenda in play (agenda phase); null otherwise. See kinds/agenda.ts. */
+  agenda: AgendaState | null;
 }
 
 export interface PlayerState {
@@ -125,6 +129,8 @@ export type ResolvedBy =
   | "private_channel"
   | "interaction_user" // reply/followup/ephemeral to that player's interaction
   | "draft_turn"
+  | "speaker" // agenda tie-break / resolution: the speaker
+  | "agenda_voter" // a vote step: the current voter
   | "mention" // weak: exactly one seated player mentioned
   | "mixed_owners"
   | "recent_press" // weak: whoever pressed a button in that channel just before (kind fallback)
@@ -234,6 +240,7 @@ export type Decision =
   | MiltyDraftPick
   | CardsDecision
   | ExploreDecision
+  | AgendaDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -241,7 +248,10 @@ export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
 // ---------------------------------------------------------------- actions
 
 export interface AnswerRequest {
-  optionId: string;
+  /** The option to press. Omit when sending a structured `payload` instead. */
+  optionId?: string;
+  /** Structured answer the kind executes as several engine steps (e.g. agenda.vote: VotePayload). */
+  payload?: Record<string, unknown>;
   /** The decision seq you saw; a mismatch answers 409 stale instead of acting on a changed prompt. */
   expectedSeq?: number;
   /** Idempotency key: retries with the same key return the first result. */

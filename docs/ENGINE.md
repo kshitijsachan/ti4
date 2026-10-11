@@ -180,6 +180,13 @@ requestId?}`) or `POST /api/game/{game}/engine/decisions/{id}/answer` (seat Bear
 No gateway hop, no browser, no "which message is mine" inference. Not answerable yet: selects (`#value` options)
 and modal buttons (`~MDL`, `needsInput`) → keep the legacy press path for those until W-INFRA-3.
 
+**Structured answers (G6).** Instead of `optionId` an answer may carry `payload` (a JSON object). The kind's
+`KindSpec.answerPayload(game, player, decision, payload, steps)` then runs the whole flow server-side through
+`Steps` (`press(decision, optionId)` as the answering player, `await(afterSeq, predicate, timeoutMs)` for the next
+prompt), after the generic checks and under the decision's in-flight guard. First user: `agenda.vote` /
+`agenda.preassign` pre-vote — `{outcome, planets[], allPlanets?, sources[]}` runs vote → outcome → exhaust planets →
+done → confirm in one request. If a step fails, the error says where; the remaining prompts stay answerable.
+
 ### 3.5 Stream, versioning, consistency
 
 * One global `seq` orders all events (`decision.opened|updated|closed`, `state.changed`). Registry listeners run
