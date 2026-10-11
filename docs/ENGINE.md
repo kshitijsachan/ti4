@@ -254,6 +254,37 @@ prompt) override `classifies` so they never claim other areas' messages.
 Bot: engine on when self-hosted unless `TI4_ENGINE=off` (capture is passive; endpoints idle unless called).
 Shim: `TI4_ENGINE=off` → no EngineClient; autopilot/web run purely on the legacy heuristics.
 
+### 3.7 Typed kinds (engine-int)
+
+73 kinds (Java `kinds/*.java` ⇄ TS `shim/src/engine/kinds/<area>.ts`, policies in `shim/src/engine/{policy,…}`,
+renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps are resolved by priority and
+`classifies` (check with `bot/engine-smoke/run.sh overlap`).
+
+| Area | Kinds | GameState section |
+|---|---|---|
+| G1 setup / draft | `draft.milty.{pick,queue,info}`, `setup.{player,keleres_flavor,keleres_tech,deal_secrets,reveal_objectives,preference,game_settings}`, `tech.choose_type`, `tech.gain`, `secret_objective.discard` | `draft`, `setup` |
+| G2 strategy cards | `strategy_card.{pick,queue_pick,resolve (window),strategic_action,diplomacy_system,politics_speaker,politics_agenda,construction_place}`, `planet.ready` | `strategyCards[].reactions` |
+| G3 tactical | `turn.action`, `tactical.{activate,move,land,rift,conclude}`; direct actions `move`, `land` | — |
+| G4 combat | `combat.round` (window `combat_roll`), `combat.hits`, `combat.assign_units` (progress), `combat.retreat`; direct action `combat-plan` {plan: [{holder, unit, damaged, action: sustain/destroy, count}]} | `combat` |
+| G5 production / payment | `payment.spend` (payload {planets, tg, commodities, sarween}), `production.produce` (payload {units}) | — |
+| G6 agenda | `agenda.{when,after,preassign,shenanigans,vote,vote_step,tiebreak,resolve,rider,next}` (vote: payload) | `agenda` |
+| G7 status | `status.{score,score_secret,reveal_objective,homework,advance,imperial}`, `command_tokens.adjust` (payload pools) | `status` |
+| G8 cards | `action_card.{play,sabotage (window),discard,draw,resolve,target}`, `promissory_note.play` | — |
+| G9 exploration | `explore.{planet,card_pick,frontier,outcome}`, `relic.{draw,fragments}` | `exploration` |
+| G10 Thunder's Edge | `te.{fracture.roll,fracture.ingress,galvanize,expedition,thunders_edge.place,visionaria.respond}` | `thundersEdge` |
+| G11 trade | `trade.{offer,offer_sent,force_replenish}`; game action `trade.propose` | `trade` (viewer only) |
+| INFRA-3 | `input.form` (forms opened by `needsInput` buttons) | — |
+
+All GameState area sections are optional in TS (`?:`) so an older engine without them still type-checks.
+
+**Combat (G4).** `combat.round` is the combat controls message as a table window (`combat_roll`: who still has to
+roll this round); `combat.hits` asks the hit player to assign hits (options per unit + manual), answered by option or
+in one call with the `combat-plan` direct action (validated: sustain only for units that can, never more than the
+hits); `combat.assign_units` carries the running assignment as `progress`; `combat.retreat` the retreat choice.
+`GameState.combat` (active system, sides, round, units with sustain/damage) comes from `CombatSupport`, which also
+records rolls through one upstream hook in `CombatRollService`. Bot policy: `shim/src/engine/combatPolicy.ts` (never
+rolls the same dice twice; no next roll while hits are owed).
+
 ## 4. Where things are
 
 | Piece | File |
