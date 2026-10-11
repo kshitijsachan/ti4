@@ -114,6 +114,108 @@ index 507d7b5..c3c5ee4 100644
      static boolean isDeflectedStrategyCard(Game game, int scpick) {
          return game.getStoredValue("deflectedSC").equalsIgnoreCase(String.valueOf(scpick));
      }
+diff --git a/src/main/java/ti4/executors/ExecutionLockManager.java b/src/main/java/ti4/executors/ExecutionLockManager.java
+index 51b8a38..2bdea01 100644
+--- a/src/main/java/ti4/executors/ExecutionLockManager.java
++++ b/src/main/java/ti4/executors/ExecutionLockManager.java
+@@ -11,11 +11,13 @@ import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
+ import ti4.cache.CacheManager;
+ import ti4.logging.BotLogger;
+ import ti4.message.MessageHelper;
++import ti4.selfhost.SelfHosted;
+ 
+ @UtilityClass
+ public class ExecutionLockManager {
+ 
+     private static final int LOCK_EXPIRE_AFTER_ACCESS_TIME_MINUTES = 20;
++    private static final int QUEUED_LOCK_WAIT_SECONDS = 120;
+     private static final Cache<String, ReentrantReadWriteLock> locks;
+ 
+     static {
+@@ -58,7 +60,8 @@ public class ExecutionLockManager {
+     }
+ 
+     private static ReentrantReadWriteLock getLock(String lockName) {
+-        return locks.get(lockName, _ -> new ReentrantReadWriteLock());
++        // Self-hosted: fair, so presses that wait for a game's lock run in the order they arrived.
++        return locks.get(lockName, _ -> new ReentrantReadWriteLock(SelfHosted.isEnabled()));
+     }
+ 
+     public static Runnable wrapWithTryLockAndRelease(String lockName, ExecutionLockType lockType, Runnable task) {
+@@ -84,6 +87,44 @@ public class ExecutionLockManager {
+         };
+     }
+ 
++    /**
++     * Self-hosted: wait for the lock (in arrival order) instead of refusing. Upstream refuses a press that arrives
++     * while the game is busy and asks the player to press again; at a live table several players answer the same
++     * prompt within a second, so most presses were refused, and the shim's automatic re-send guesses which press was
++     * refused from the channel (the newest press there), so a refused press could be dropped while another was
++     * applied twice (pbd96: letnev's and ralnel's "No Secret Objective Scored" never ran, the game stuck in status
++     * scoring). Waiting serialises every press on one game and each handler still loads the game inside the lock, so
++     * it sees all earlier presses. A press that cannot get the lock in {@link #QUEUED_LOCK_WAIT_SECONDS} is refused
++     * with a message the shim does not re-send.
++     */
++    public static Runnable wrapWithQueuedLockAndRelease(
++            String lockName, ExecutionLockType lockType, Runnable task, MessageChannel messageChannel) {
++        if (isBlank(lockName)) throw new IllegalArgumentException("Lock name cannot be blank.");
++        return () -> {
++            var lock = getLock(lockName);
++            var typedLock = lockType == ExecutionLockType.READ ? lock.readLock() : lock.writeLock();
++            boolean gotLock;
++            try {
++                gotLock = typedLock.tryLock(QUEUED_LOCK_WAIT_SECONDS, TimeUnit.SECONDS);
++            } catch (InterruptedException e) {
++                Thread.currentThread().interrupt();
++                gotLock = false;
++            }
++            if (gotLock) {
++                try {
++                    task.run();
++                } finally {
++                    typedLock.unlock();
++                }
++                return;
++            }
++            String message = "The bot is still busy with an earlier action in " + lockName
++                    + ", so this action was not applied. Please try again.";
++            BotLogger.warning(message);
++            if (messageChannel != null) MessageHelper.sendMessageToChannel(messageChannel, message);
++        };
++    }
++
+     private static void runAndUnlock(String lockName, ExecutionLockType lockType, Runnable task) {
+         try {
+             task.run();
+diff --git a/src/main/java/ti4/executors/ExecutorServiceManager.java b/src/main/java/ti4/executors/ExecutorServiceManager.java
+index 0a345f1..b247718 100644
+--- a/src/main/java/ti4/executors/ExecutorServiceManager.java
++++ b/src/main/java/ti4/executors/ExecutorServiceManager.java
+@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
+ import lombok.experimental.UtilityClass;
+ import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
+ import ti4.helpers.TimedRunnable;
++import ti4.selfhost.SelfHosted;
+ 
+ @UtilityClass
+ public class ExecutorServiceManager {
+@@ -31,6 +32,16 @@ public class ExecutorServiceManager {
+             return;
+         }
+ 
++        if (isNotBlank(lockName) && SelfHosted.isEnabled()) {
++            // Self-hosted: queue for the game's lock rather than refuse (see wrapWithQueuedLockAndRelease). The task
++            // is timed inside the lock so the wait does not count as slow handling.
++            Runnable timedTask = new TimedRunnable(taskName, runnable);
++            runAsync(new TimedRunnable(
++                    taskName,
++                    Integer.MAX_VALUE,
++                    ExecutionLockManager.wrapWithQueuedLockAndRelease(lockName, lockType, timedTask, messageChannel)));
++            return;
++        }
+         if (isNotBlank(lockName)) {
+             runnable = ExecutionLockManager.wrapWithTryLockAndRelease(lockName, lockType, runnable, messageChannel);
+         }
 diff --git a/src/main/java/ti4/game/Game.java b/src/main/java/ti4/game/Game.java
 index 575a281..0f5fe34 100644
 --- a/src/main/java/ti4/game/Game.java
