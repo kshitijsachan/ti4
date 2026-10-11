@@ -2,6 +2,28 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      /*
+       * A player link (/play?t=…) stores its seat token now, before any
+       * stylesheet or the app's code loads: a page left or replaced while that
+       * code is still loading (a slow server, a second click) would otherwise
+       * lose the seat, and the next page would land on the home page signed
+       * out. Mirrors setToken in src/play/session.ts; the app still strips the
+       * token from the address bar.
+       */
+      (function () {
+        try {
+          if (!/^\/(play|game\/)/.test(location.pathname)) return;
+          var q = new URLSearchParams(location.search);
+          var t = q.get("t");
+          if (!t) return;
+          sessionStorage.setItem("ti4online.token", t);
+          if (q.get("tab") !== "1") localStorage.setItem("ti4online.token", t);
+        } catch (e) {
+          /* storage blocked: the app keeps the token for the page */
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favico.png" />
     <!--
       Text and data faces. Slider (self-hosted, styles/fonts.css) carries display;
