@@ -360,6 +360,14 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
   const [queueOpen, setQueueOpen] = useState(false);
   const shown = press.held ?? openOffer ?? decisions.find((d) => d.id === jumpId) ?? decisions[0];
   const more = decisions.filter((d) => d.id !== shown?.id).length;
+  useEffect(() => {
+    if (!queueOpen) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setQueueOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [queueOpen]);
   const offerPill = offers.length > 0 && (
     <div ref={offersRef} className={classes.offers}>
       {offerList && (
