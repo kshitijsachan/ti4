@@ -38,6 +38,7 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "setup.keleres_tech": "planner",
   "setup.deal_secrets": "planner",
   "setup.reveal_objectives": "planner",
+  "player.preference": "optional",
   "setup.game_settings": "optional",
   "tech.choose_type": "planner",
   "tech.gain": "planner",
@@ -114,10 +115,6 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "te.expedition": "blocking",
   "te.thunders_edge.place": "blocking",
   "te.visionaria.respond": "blocking",
-  // C5 Thunder's Edge faction steps: like faction.ability, often optional; fallback only when forced
-  "te.breakthrough": "planner",
-  "te.breach": "planner",
-  "te.plot": "planner",
   // G11 trade
   "trade.offer": "blocking",
   "trade.offer_sent": "optional",
@@ -125,12 +122,15 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   // C1-C5 factions: the faction policy answers; abilities / leaders are often optional, so fallback only when forced
   "faction.ability": "planner",
   "leader.use": "planner",
-  // C12 perpetual prompts: ui.* are affordances (never awaited); preferences / select-only menus are background asks
+  // C5 Thunder's Edge faction steps
+  "te.breach": "planner",
+  "te.breakthrough": "planner",
+  "te.plot": "planner",
+  // C12 perpetual prompts: affordances / info menus are never answered; select-only prompts by their policy
   "ui.undo_affordance": "optional",
   "ui.optional": "optional",
   "ui.info_menu": "optional",
-  "player.preference": "optional",
-  "choose.select": "optional",
+  "choose.select": "planner",
   // C6 components: generic single-choice steps (the components policy answers our own at once); menus / relic offers
   "choose.planet": "blocking",
   "choose.system": "blocking",

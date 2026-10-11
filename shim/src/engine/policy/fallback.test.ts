@@ -74,6 +74,8 @@ function sample(kind: DecisionKind): Decision {
 }
 
 for (const kind of Object.keys(KIND_CLASS) as DecisionKind[]) {
+  // c12: ui.* affordances are never answered; choose.select is answered from its select schema (policy/ui.check.ts).
+  if (kind.startsWith("ui.") || kind === "choose.select") continue;
   test(`fallback answers ${kind} for a bot (forced by the watchdog)`, () => {
     if (kind === "input.form") {
       // Forms: the specific policy closes them (bots never fill free-form input).

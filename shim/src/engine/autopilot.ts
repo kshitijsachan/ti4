@@ -7,8 +7,8 @@ import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
 import { chooseFaction } from "./policy/faction.js";
-import { chooseFactionB } from "./policy/factionB.js";
 import { chooseFactionGroupC } from "./policy/factionGroupC.js";
+import { chooseFactionB } from "./policy/factionB.js";
 import { choosePokFaction } from "./policy/factionPok.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
@@ -77,10 +77,10 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   const cards = chooseCards(d, state, me, all, ctx.history);
   if (cards !== undefined) return cards;
   // Faction leaders / abilities (shared kinds leader.use, faction.ability; phase C faction areas).
-  const factionB = chooseFactionB(d, state, me);
-  if (factionB !== undefined) return factionB;
   const groupC = chooseFactionGroupC(d, state, me); // Jol-Nar, Winnu, Xxcha, Yin, Yssaril, Keleres overrides
   if (groupC !== undefined) return groupC;
+  const factionB = chooseFactionB(d, state, me);
+  if (factionB !== undefined) return factionB;
   const pok = choosePokFaction(d, state, me, ctx.history);
   if (pok !== undefined) return pok;
   const faction = chooseFaction(d, state, me);

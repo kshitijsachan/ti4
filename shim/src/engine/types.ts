@@ -534,6 +534,8 @@ export function awaits(d: Decision, userId: UserId): boolean {
  * the player who played an action card may press "Pause Timer" on its sabotage window.
  */
 export function answersOutsideWindow(d: Decision, userId: UserId, state: GameState | null): boolean {
+  // Status scoring / homework: a player who declared or is ready may still press again, like the buttons.
+  if ((d.kind === "status.score" || d.kind === "status.homework") && d.window) return d.window.eligible.includes(userId);
   if (!d.window) return false;
   const me = state?.players.find((p) => p.userId === userId);
   if (d.kind === "action_card.sabotage") return !!me?.faction && d.window.subject?.faction === me.faction;
