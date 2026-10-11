@@ -6,6 +6,7 @@
  * (reading Discord messages) whenever a method returns null / the mirror is not live.
  */
 import { log } from "../log.js";
+import { awaits } from "./types.js";
 import type { AnswerRequest, AnswerResult, Decision, DecisionsSnapshot, EngineEvent, GameState } from "./types.js";
 
 export class EngineClient {
@@ -108,10 +109,10 @@ export class EngineClient {
     return this.ring.filter((e) => e.seq > after && e.game === game);
   }
 
-  /** Open decisions addressed to this seat (scope player, target = user). */
+  /** Open decisions waiting on this seat (its own prompts, and reaction windows it has not answered). */
   async decisionsFor(game: string, userId: string): Promise<Decision[] | null> {
     const all = await this.openDecisions(game);
-    return all?.filter((d) => d.target?.userId === userId) ?? null;
+    return all?.filter((d) => (d.scope === "player" ? d.target?.userId === userId : !!d.window && awaits(d, userId))) ?? null;
   }
 
   async answer(game: string, decisionId: string, req: AnswerRequest & { userId: string }): Promise<AnswerResult | null> {

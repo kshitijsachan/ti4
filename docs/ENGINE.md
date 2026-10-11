@@ -95,14 +95,16 @@ team extends it with what its UI/bot needs (e.g. agenda in play, votes; combat s
 
 ```ts
 interface DecisionBase<K, V> {
-  id; game; kind: K;               // kind = "legacy" or a typed "area.verb"
-  seq; stateVersion;               // seq = registry event seq of this revision
+  id; game; kind: K;               // id stable per prompt message; kind = "legacy" or a typed "area.verb"
+  seq; stateVersion; revision;     // seq = registry event seq of this revision; revision 1,2,3… per edit
   target: { userId, faction, color, resolvedBy } | null;
   scope: "player" | "table";       // table: every seated player may answer for themself (follow SC, sabotage…)
   visibility: "public" | "private";// private: only target sees it (cards-info thread, ephemeral, private channel)
   prompt: string;                  // display only — never parse it
   options: { id, label, style, emoji, disabled, needsInput, handler, value: V | null }[];
   source: { channelId, messageId, customIdPrefix, ephemeral };
+  window: ReactionWindow | null;   // everyone-answers prompts (§3.2.1)
+  progress: Progress | null;       // multi-step prompts edited in place (§3.2.2)
 }
 type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraftPick | LegacyDecision | …
 ```
@@ -115,6 +117,29 @@ type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraf
   player's press), `cards_thread`, `private_channel`, `draft_turn` (kind override), `mention` (weak: exactly one
   seated player mentioned, no owner prefix), `mixed_owners`, `none`. Consumers should treat `mention`/`none` as
   "not certainly mine" — exactly the cases a kind should fix with a `target()` override.
+
+#### 3.2.1 Reaction windows
+
+Follow-the-strategy-card, whens/afters, sabotage, agenda votes and similar prompts are not "one player's
+question": every eligible player answers, in parallel, and the engine moves on when all have. Today the engine
+tracks this in stored values and message reactions (~500 handlers), not per-player prompts. Contract:
+`window = { kind, subject, eligible: uid[], responded: uid[], responses: {uid: summary} }` on a `scope:"table"`
+decision. The kind computes it in `KindSpec.window(ctx)` from engine state (stored values, `Game`), and declares
+`dynamic()` so it is recomputed after every save (→ `decision.updated`). `ActionInvoker` accepts one answer per
+eligible player (403 if not eligible, 409 if already responded; in-flight guard is per user). A client is "on the
+hook" when `awaits(d, me)` (types.ts). When the engine deletes the prompt the decision closes as usual.
+
+#### 3.2.2 Multi-step decisions (accumulators)
+
+Movement, landing, hit assignment, payment, when/after queues and agenda voting edit one message in place over
+several presses (~380 handlers), and some keep running totals only in message text (agenda vote count parsed from
+labels). Contract: the decision id is stable per message (an edit in place is `decision.updated`, `revision`+1, the
+same decision), and `progress = { flow, step, accumulated, required, canCommit }` carries the typed running
+selection, computed by `KindSpec.progress(ctx)` **from engine state** (stored values, `Game`, `Player`) so it is
+reload/restart-safe. Where the engine keeps the running state *only* in message text, the area team moves it into a
+stored value first (small handler change, keep upstream-compatible) — never parse it from the text. `flow` groups
+consecutive prompts that are one logical action (e.g. `tactical:<uid>:r3`) when a step posts a new message instead
+of editing.
 
 Typed kinds in v1: `strategy_card.pick` {strategyCard, tradeGoods}; `tech.gain` {tech, free, starting, flags};
 `secret_objective.discard` {handle, secretObjective, redraw}; `draft.milty.pick` {category, pick} (target = draft's
@@ -208,6 +233,7 @@ Endpoints:
 
 ## 5. Bot repo workflow (parallel agents)
 
+* engine-core history: d5311b3 core, 33513ce windows/progress/stable ids (`dynamicTarget` → `dynamic`).
 * Work in your own git worktree of the bot: `git -C /home/user/asyncti4/ti4_map_generator_bot worktree add
   /home/user/asyncti4/<you> -b <you> engine-core` (branch **from `engine-core`**, which = upstream + patch 0001 as
   of ti4 `ebece94` + the engine core). Never edit the main checkout's index; other agents use it.
@@ -232,8 +258,10 @@ Endpoints:
      amounts). Resolve per-player handles to card ids via `ctx.player()`. Return `null` for options you don't type;
    * if the generic target is wrong or missing (`mention`/`none`), override `target(ctx, resolved)` using engine
      state (active player, speaker, combat participants…); set `dynamicTarget()` if it moves with state;
-   * `scope(ctx)` → `"table"` for "everyone may answer" windows; `validate(...)` for cheap pre-checks.
-   * Compile. Nothing else to register.
+   * `scope(ctx)` → `"table"` for "everyone may answer" prompts; better, return a `window(ctx)` (§3.2.1);
+   * multi-step prompt? return `progress(ctx)` (§3.2.2) and set `dynamic()`;
+   * `validate(...)` for cheap pre-checks.
+   * Compile. Nothing else to register. Add a case to an offline smoke test (see §9) with a recorded message JSON.
 3. **TS type** — in `shim/src/engine/types.ts` add `export type X = DecisionBase<"area.verb", {…}>` mirroring your
    map exactly, and add it to the `Decision` union. (`tsc --noEmit` in shim; the web imports the same file.)
 4. **Bot policy** — add a `case "area.verb"` to `chooseTyped` in `shim/src/engine/autopilot.ts` (pure function of
@@ -307,12 +335,18 @@ most of `rest.ts` and `store.ts` message storage, bot `DraftButtonLocator`, `Dra
 * **Racy reads**: capture reads `Game` from the REST thread while a handler may be mutating it; values are
   best-effort snapshots, validation happens again at answer time under the game lock.
 * **Registry is in memory** (restart, undo gaps above).
+* **Upstream bug found**: `ButtonHelper.resolveSpecialRex` was annotated `@ButtonHandler("buttonID.startsWith")`
+  (unreachable; its buttons are `specialRex_…`). Fixed in engine-core.
 * **Merge pressure**: 11 agents in the same bot tree → kinds are separate auto-discovered files; the 3 upstream
   hook lines live in engine-core only.
 
 ## 9. Verification status of the prototype
 
-Compiles (bot `mvn compile`, shim `tsc --noEmit`). **Not yet exercised against a running bot** (see the report):
+Compiles (bot `mvn compile`, shim `tsc --noEmit`). Offline smoke test (`EngineSmoke`: in-memory `Game`, recorded
+message JSON → `DecisionCapture.build`, registry, snapshot; classpath = `target/classes` + the running jar's
+`BOOT-INF/lib`) passes 18/18: kind scan, the four typed kinds, owner_prefix / cards_thread / mention resolution,
+legacy table, open → edit-in-place (same id, revision 2) → close, ordered event log, hand only for the viewer.
+**Not yet exercised against a running bot** (the action path needs JDA + shim):
 first deploy should check, with `TI4_ENGINE` on: `/state` returns factions for a live game; `/decisions` lists the
 SC-pick prompt with `target.resolvedBy=owner_prefix`; answering it via curl picks the card; autopilot log shows
 `engine strategy_card.pick … -> done`. With `TI4_ENGINE=off` on both sides behaviour is exactly as before.
