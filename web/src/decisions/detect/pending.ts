@@ -51,6 +51,8 @@ export type PendingPrompt = {
    * card offers only what is left.
    */
   doneSteps?: string[];
+  /** Diplomacy's readying part was closed with no planet readied (skipped). */
+  readySkipped?: boolean;
   answered?: boolean;
 };
 
@@ -197,7 +199,11 @@ function diplomacySteps(state: PlayState, m: Message, channelId: string, faction
     if (DIPLO_SYSTEM_LINE.test(x.content)) system = x;
     if (DIPLO_READY_LINE.test(x.content)) ready = x;
   }
-  return [system && "diploSystem", ready && "diploRefresh2"].filter((x): x is string => !!x);
+  return {
+    steps: [system && "diploSystem", ready && "diploRefresh2"].filter((x): x is string => !!x),
+    /* Done with nothing readied: the bot copies the prompt as it was ("please choose the planets…"), no "Readied". */
+    readySkipped: !!ready && !/\bReadied\b/.test(ready.content),
+  };
 }
 
 /**
@@ -401,10 +407,20 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
       /* Diplomacy: both parts stay on the card until the bot reports each done (an undo gives one back). */
       const diplo = diplomacySteps(state, m, channelId, opts.faction);
       if (diplo) {
-        presses = diplo.length;
-        answered = diplo.length >= 2;
+        presses = diplo.steps.length;
+        answered = diplo.steps.length >= 2;
       }
-      items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale, presses, doneSteps: diplo });
+      items.push({
+        message: m,
+        channelId,
+        where,
+        reason: "own",
+        ownCall: true,
+        answered: answered || stale,
+        presses,
+        doneSteps: diplo?.steps,
+        readySkipped: diplo?.readySkipped,
+      });
       return;
     }
     if (opts.roleCalls && isScoringSummary(m)) {

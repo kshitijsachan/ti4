@@ -50,6 +50,7 @@ const DIPLO_LEFT: Record<string, { text: string; skip: string }> = {
   diploSystem: { text: "System protected. You may still ready up to 2 exhausted planets.", skip: "Skip readying planets" },
   diploRefresh2: { text: "Planets readied. You may still choose a system to protect.", skip: "Skip protecting a system" },
 };
+const DIPLO_READY_SKIPPED = { text: "Skipped readying planets. You may still choose a system to protect.", skip: "Skip protecting a system" };
 
 function controlsMecatol(data: RendererProps["data"]) {
   return !!data.me?.planets?.some((p) => p === "mr" || p === "mrte");
@@ -126,7 +127,8 @@ export function StrategyPrimaryBody(props: RendererProps) {
   const spec = cardSpec(sc, scDefinition(sc, data.web)?.id);
   const second = /second structure/.test(d.title);
   const done = d.prompt.doneSteps ?? [];
-  const diploLeft = sc === 2 && done.length === 1 ? DIPLO_LEFT[done[0]] : undefined;
+  const diploLeft =
+    sc === 2 && done.length === 1 ? (done[0] === "diploRefresh2" && d.prompt.readySkipped ? DIPLO_READY_SKIPPED : DIPLO_LEFT[done[0]]) : undefined;
   const conn = usePlayConnection();
   const mecatol = controlsMecatol(data);
   const actions = (PRIMARY[sc] ?? [])
