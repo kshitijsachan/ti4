@@ -2,6 +2,7 @@
  * Autopilot policy over typed decisions. Pure: (decision, state) → option. Add a case per kind as kinds are typed;
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
+import { chooseCombat } from "./combatPolicy.js";
 import type { Decision, GameState, Option } from "./types.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
@@ -9,7 +10,9 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 export type TypedChoice = { option: Option<any>; why: string };
 
-export function chooseTyped(d: Decision, state: GameState | null, me: string): TypedChoice | null {
+/** open: this seat's other open decisions (combat: no next roll while hits are owed). */
+export function chooseTyped(d: Decision, state: GameState | null, me: string, open: Decision[] = []): TypedChoice | null {
+  if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, open);
   if (d.target?.userId !== me || d.scope !== "player") return null;
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   if (!live.length) return null;

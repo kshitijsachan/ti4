@@ -8,6 +8,7 @@
 import { log } from "../log.js";
 import { awaits } from "./types.js";
 import type { AnswerRequest, AnswerResult, Decision, DecisionsSnapshot, EngineEvent, GameState } from "./types.js";
+import type { CombatPlanRequest, CombatPlanResult } from "./kinds/combat.js";
 
 export class EngineClient {
   /** game → decision id → decision (only while the stream is live). */
@@ -92,6 +93,22 @@ export class EngineClient {
       });
       if (res.status === 404 && !res.headers.get("content-type")?.includes("json")) return null;
       return (await res.json()) as AnswerResult;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Assign a combat.hits decision's hits in one call (sustain / destroy per unit type); validated by the engine. */
+  async combatPlan(game: string, decisionId: string, req: CombatPlanRequest & { userId: string }): Promise<CombatPlanResult | null> {
+    try {
+      const res = await fetch(this.url(`/${encodeURIComponent(game)}/decisions/${encodeURIComponent(decisionId)}/combat-plan`), {
+        method: "POST",
+        headers: this.headers(true),
+        body: JSON.stringify(req),
+        signal: AbortSignal.timeout(90000),
+      });
+      if (res.status === 404 && !res.headers.get("content-type")?.includes("json")) return null;
+      return (await res.json()) as CombatPlanResult;
     } catch {
       return null;
     }

@@ -1149,7 +1149,7 @@ class SeatPilot {
       if (!mine?.length) continue;
       const state = await engine.state(game, this.userId, 2000);
       for (const d of mine) {
-        const pick = chooseTyped(d, state, this.userId);
+        const pick = chooseTyped(d, state, this.userId, mine);
         if (!pick) continue;
         const key = `${d.id}@${d.revision}|${pick.option.id}`;
         if (this.engineTried.has(key)) continue;
@@ -1159,6 +1159,9 @@ class SeatPilot {
         if (!r) return false;
         log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option.label}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
+        // Tell the legacy roll guard (mayRoll) about rolls made here, so it never rolls the same dice again.
+        const rolled = pick.option.value?.action === "roll" ? String(pick.option.value.rollType ?? "") : "";
+        if (r.ok && rolled) this.recent.set(`${d.source.channelId}:roll:${rolled}`, Date.now());
         if (r.ok) return true;
       }
     }
