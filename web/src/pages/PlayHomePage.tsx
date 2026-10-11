@@ -56,11 +56,6 @@ function summarize(data: PlayerDataResponse) {
   };
 }
 
-/**
- * A plain left click opens the game through useOpenGame (code first, then the
- * route, with a visible "Opening"); modified clicks keep the link's own
- * behaviour (new tab, new window).
- */
 /** Ends a game for everyone with the bot's own `/game end` (no results posted; its channels are archived). */
 function sendEndGame(conn: ReturnType<typeof usePlayConnection>, game: GameChannels) {
   conn.runCommand(game.actions.id, "game", [
@@ -98,6 +93,11 @@ function EndAllGames({ games, onEnded }: { games: GameChannels[]; onEnded: (name
   );
 }
 
+/**
+ * A plain left click opens the game through useOpenGame (code first, then the
+ * route, with a visible "Opening"); modified clicks keep the link's own
+ * behaviour (new tab, new window).
+ */
 function GameCard({
   game,
   onEnded,
