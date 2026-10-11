@@ -50,3 +50,13 @@ the bot's async features off (auto-ping 0 etc.).
 All agents work in the same checkout, so ONE vite dev server serves everyone: http://127.0.0.1:5347 (started by the
 main session; do not stop it). Do not start your own vite. If 5347 is down, tell main instead of starting another.
 Maven/bot builds and `npm run build` only under `flock /tmp/ti4-heavy.lock`, one at a time.
+
+## Continuous testing (always on)
+- **Soak (bot-only fuzz):** `/home/user/run/scripts/soak-forever.sh` plays back-to-back solo games (scripted human
+  seat via `soak-human.mjs` + 2–7 autopilot bots, random agenda setup, 4 rounds, stall = 120 s without change), then
+  ends each game. Findings (stalls with the unanswered prompts, prompts bots left "to a person", bot exceptions) are
+  appended to `/home/user/run/soak/FINDINGS.md`. The watchdog restarts it; `touch /home/user/run/soak/STOP` stops it.
+  It pauses while less than 4 GB of memory is free.
+- **Rolling human-style playtests:** one agent at a time plays a full round through the browser (Playwright against
+  the prod build) with a rotating focus, reports PASS/FAIL on known fixes plus new bugs; a fixer agent takes each
+  report, the integrator merges, rebuilds, runs `web/e2e/regress.sh`, and starts the next playtest.
