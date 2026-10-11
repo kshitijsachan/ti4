@@ -130,6 +130,26 @@ export class EngineClient {
     }
   }
 
+  /**
+   * A kind's direct action (`POST …/decisions/{id}/{action}`, e.g. tactical `move` / `land`): the body's fields plus
+   * userId / expectedSeq / requestId, answered with the same AnswerResult shape.
+   */
+  async act(game: string, decisionId: string, action: string, body: Record<string, unknown>): Promise<AnswerResult | null> {
+    if (!/^[a-z][a-z_]*$/.test(action) || action === "answer") return null;
+    try {
+      const res = await fetch(this.url(`/${encodeURIComponent(game)}/decisions/${encodeURIComponent(decisionId)}/${action}`), {
+        method: "POST",
+        headers: this.headers(true),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!res.headers.get("content-type")?.includes("json")) return null;
+      return (await res.json()) as AnswerResult;
+    } catch {
+      return null;
+    }
+  }
+
   onEvent(fn: (e: EngineEvent) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);

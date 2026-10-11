@@ -223,7 +223,10 @@ export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
 // ---------------------------------------------------------------- actions
 
 export interface AnswerRequest {
-  optionId: string;
+  /** The option pressed; may be omitted when `payload` carries the whole answer (a ballot, a token split). */
+  optionId?: string;
+  /** Structured answer for kinds that take one (agenda votes, command-token pools); see the kind's docs. */
+  payload?: unknown;
   /** The decision seq you saw; a mismatch answers 409 stale instead of acting on a changed prompt. */
   expectedSeq?: number;
   /** Idempotency key: retries with the same key return the first result. */
