@@ -18,6 +18,7 @@ import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat } from "./combatPolicy.js";
 import { planPayment } from "./policy/production.js";
 import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
+import { choosePerpetual } from "./policy/ui.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -63,6 +64,9 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   const all = ctx.all;
   // Combat (G4): ctx.open = this seat's other open decisions (no next roll while hits are owed).
   if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, ctx.open);
+  // Affordances (ui.*: never answered), preferences (defaults) and select-only prompts (c12).
+  const perpetual = choosePerpetual(d, state, me);
+  if (perpetual !== undefined) return perpetual;
   const setup = chooseSetup(d, state, me);
   if (setup !== undefined) return setup;
   if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);

@@ -288,7 +288,7 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 
 | Area | Kinds | GameState section |
 |---|---|---|
-| G1 setup / draft | `draft.milty.{pick,queue,info}`, `setup.{player,keleres_flavor,keleres_tech,deal_secrets,reveal_objectives,preference,game_settings}`, `tech.choose_type`, `tech.gain`, `secret_objective.discard` | `draft`, `setup` |
+| G1 setup / draft | `draft.milty.{pick,queue,info}`, `setup.{player,keleres_flavor,keleres_tech,deal_secrets,reveal_objectives,game_settings}`, `tech.choose_type`, `tech.gain`, `secret_objective.discard` | `draft`, `setup` |
 | G2 strategy cards | `strategy_card.{pick,queue_pick,resolve (window),strategic_action,diplomacy_system,politics_speaker,politics_agenda,construction_place}`, `planet.ready` | `strategyCards[].reactions` |
 | G3 tactical | `turn.action`, `tactical.{activate,move,land,rift,conclude}`; direct actions `move`, `land` | — |
 | G4 combat | `combat.round` (window `combat_roll`), `combat.hits`, `combat.assign_units` (progress), `combat.retreat`; direct action `combat-plan` {plan: [{holder, unit, damaged, action: sustain/destroy, count}]} | `combat` |
@@ -300,6 +300,14 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 | G10 Thunder's Edge | `te.{fracture.roll,fracture.ingress,galvanize,expedition,thunders_edge.place,visionaria.respond}` | `thundersEdge` |
 | G11 trade | `trade.{offer,offer_sent,force_replenish}`; game action `trade.propose` | `trade` (viewer only) |
 | INFRA-3 | `input.form` (forms opened by `needsInput` buttons) | — |
+| c12 perpetual | `ui.{undo_affordance,optional,info_menu}` (affordances: **not** decisions — `awaits()` false, never "mine", bots ignore; still answerable on click), `player.preference` (bots answer defaults; web background), `choose.select` (select-only fallback, answer via `inputs`) | — |
+
+**Affordances and obsolete prompts (c12).** A message made only of undo buttons (`drawSpecificSO_`, `removePreset_`,
+`retrieveAgenda_`, `eraseMyVote`, …), optional actions (round summary, objective pre-score queue, agenda help menu,
+dismiss-only) or an info menu carrying action shortcuts is typed `ui.*` with value `{action, undoes, ref, shortcut?}`:
+it is open (clickable, answerable through the engine) but no one is awaited (`isAffordance`, `AFFORDANCE_KINDS`).
+A prompt whose kind is `obsolete()` at capture is closed (reason `obsolete`, metric `capture.obsolete`) instead of
+reopening as legacy, the same as dynamic kinds that go obsolete later.
 
 All GameState area sections are optional in TS (`?:`) so an older engine without them still type-checks.
 
