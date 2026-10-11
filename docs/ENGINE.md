@@ -308,6 +308,7 @@ dismiss-only) or an info menu carrying action shortcuts is typed `ui.*` with val
 it is open (clickable, answerable through the engine) but no one is awaited (`isAffordance`, `AFFORDANCE_KINDS`).
 A prompt whose kind is `obsolete()` at capture is closed (reason `obsolete`, metric `capture.obsolete`) instead of
 reopening as legacy, the same as dynamic kinds that go obsolete later.
+| C6 components | `component.action` (component action menu), `relic.use`, generic single-choice `choose.{planet,system,player,unit,card,confirm}` (agent exhaust steps are c1's `leader.use`; commodity gain/convert is c8's `commodities.gain`) (rule tables in bot `Choose*Kind.RULES`: add a regex with named groups to type a one-step prompt; policy `policy/components.ts` + renderer `renderers/components` handle it) | — |
 
 All GameState area sections are optional in TS (`?:`) so an older engine without them still type-checks.
 

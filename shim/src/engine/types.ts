@@ -7,6 +7,7 @@
 import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
 import type { CombatDecision, CombatState } from "./kinds/combat.js";
+import type { ComponentsDecision } from "./kinds/components.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { FactionDecision } from "./kinds/faction.js";
 import type { InputFormDecision } from "./kinds/input.js";
@@ -21,6 +22,7 @@ import type { UiDecision } from "./kinds/ui.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
+export type * from "./kinds/components.js";
 export type * from "./kinds/explore.js";
 export type * from "./kinds/faction.js";
 export type * from "./kinds/input.js";
@@ -431,6 +433,7 @@ export type Decision =
   | InputFormDecision
   | FactionDecision
   | UiDecision
+  | ComponentsDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;

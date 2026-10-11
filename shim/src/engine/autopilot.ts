@@ -16,6 +16,7 @@ import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx }
 import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat } from "./combatPolicy.js";
+import { chooseComponents, isComponentsKind } from "./policy/components.js";
 import { planPayment } from "./policy/production.js";
 import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
@@ -84,6 +85,8 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   if (pok !== undefined) return pok;
   const faction = chooseFaction(d, state, me);
   if (faction !== undefined) return faction;
+  // Components (C6): component menu, relic uses, agent exhaust step, generic choose.* steps. Only our own prompts.
+  if (isComponentsKind(d)) return d.target?.userId === me ? chooseComponents(d, state, me) : null;
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
   // (command_tokens.adjust belongs to the status area; only its Leadership panel is answered here.)
   const kind: string = d.kind;
