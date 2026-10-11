@@ -1,4 +1,4 @@
-import type { PlayerData } from "@/entities/data/types";
+import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { getPlanetData } from "@/entities/lookup/planets";
 import { baseId, cleanLabel, type Choice } from "../../model/controls";
 
@@ -40,20 +40,30 @@ function planetFromLabel(c: Choice) {
   return m ? { name: m[1].trim(), res: Number(m[2]), inf: Number(m[3]) } : { name: c.label, res: 0, inf: 0 };
 }
 
+/** A planet's current resources and influence on the map, attachments included (Dyson Sphere, …). */
+export function livePlanetValues(web: PlayerDataResponse | undefined, id: string): { res: number; inf: number } | undefined {
+  for (const tile of Object.values(web?.tileUnitData ?? {})) {
+    const p = tile.planets?.[id];
+    if (p && p.resources !== null && p.influence !== null) return { res: p.resources, inf: p.influence };
+  }
+  return undefined;
+}
+
 /** Planets offered by the prompt, then my exhausted planets (greyed out) so the whole economy is visible. */
-export function payPlanets(choices: Choice[], me?: PlayerData): PayPlanet[] {
+export function payPlanets(choices: Choice[], me?: PlayerData, web?: PlayerDataResponse): PayPlanet[] {
   const offered = choices
     .filter((c) => /^spend_/.test(baseId(c.customId)))
     .map((c) => {
       const id = baseId(c.customId).split("_")[1];
-      return { id, ...planetFromLabel(c), choice: c };
+      return { id, ...planetFromLabel(c), ...livePlanetValues(web, id), choice: c };
     });
   const seen = new Set(offered.map((p) => p.id));
   const exhausted = (me?.exhaustedPlanets ?? [])
     .filter((id) => !seen.has(id) && me?.planets.includes(id))
     .map((id) => {
       const data = getPlanetData(id);
-      return { id, name: data?.name ?? id, res: data?.resources ?? 0, inf: data?.influence ?? 0, exhausted: true };
+      const live = livePlanetValues(web, id);
+      return { id, name: data?.name ?? id, res: live?.res ?? data?.resources ?? 0, inf: live?.inf ?? data?.influence ?? 0, exhausted: true };
     });
   return [...offered, ...exhausted];
 }
@@ -99,6 +109,45 @@ export function discounts(choices: Choice[]): Discount[] {
     if (d) out.push({ key: c.key, label: d.label, amount: d.amount(c), choice: c });
   }
   return out;
+}
+
+/** Discounts the bot's edited prompt says were already used ("> Used _Sarween Tools_"): counted in its total spend. */
+export function usedDiscounts(content: string): string[] {
+  return DISCOUNTS.map((d) => d.label).filter((label) => new RegExp(`Used _?${label}`, "i").test(content));
+}
+
+/** What the bot says I am producing, from its "… is producing units in 313 (…) on the planet Druaa (3/1). > <:infantry:…>" line. */
+export type ProductionNote = { units: string; where: string; cost?: number };
+
+const UNIT_NAMES: Record<string, [string, string]> = {
+  infantry: ["infantry", "infantry"],
+  fighter: ["fighter", "fighters"],
+  mech: ["mech", "mechs"],
+  destroyer: ["destroyer", "destroyers"],
+  cruiser: ["cruiser", "cruisers"],
+  carrier: ["carrier", "carriers"],
+  dreadnought: ["dreadnought", "dreadnoughts"],
+  warsun: ["war sun", "war suns"],
+  flagship: ["flagship", "flagships"],
+  spacedock: ["space dock", "space docks"],
+  pds: ["PDS", "PDS"],
+};
+
+export function parseProductionNote(content: string): ProductionNote | undefined {
+  if (!/is producing units in/i.test(content)) return undefined;
+  const counts = new Map<string, number>();
+  for (const line of content.split("\n").filter((l) => l.startsWith(">"))) {
+    for (const [, name] of line.matchAll(/<a?:(\w+):\d+>/g)) {
+      const key = name.toLowerCase();
+      if (UNIT_NAMES[key]) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  if (!counts.size) return undefined;
+  const units = [...counts].map(([k, n]) => `${n} ${UNIT_NAMES[k][n === 1 ? 0 : 1]}`).join(", ");
+  const pos = content.match(/is producing units in (\w+)/i)?.[1] ?? "";
+  const planets = [...new Set([...content.matchAll(/on the planet ([^(\n]+?)\s*\(/gi)].map((m) => m[1].trim()))];
+  const cost = content.match(/total cost of (\d+)/i)?.[1];
+  return { units, where: planets.length ? `${planets.join(", ")} (${pos})` : pos, cost: cost === undefined ? undefined : Number(cost) };
 }
 
 export function isDiscount(c: Choice) {

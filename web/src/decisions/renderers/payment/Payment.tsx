@@ -1,14 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 import cx from "clsx";
 import { usePlay } from "@/discord";
+import type { ChannelMessages } from "@/discord/client/store";
 import { baseId, type Choice } from "../../model/controls";
 import { ChoiceButton, ChoiceButtons } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { useRunner } from "../strategy/runner";
 import strategy from "../strategy/strategy.module.css";
-import { freshBuild, usePaymentIntent } from "./intent";
+import { freshBuild, readPaySelection, usePaymentIntent, writePaySelection } from "./intent";
 import {
   alreadySpent,
   commOffer,
@@ -19,6 +20,7 @@ import {
   isPlanetChoice,
   isResetChoice,
   isTgChoice,
+  parseProductionNote,
   payKind,
   payPlanets,
   statedCost,
@@ -26,8 +28,10 @@ import {
   tgChunks,
   tgOffer,
   tgWorth,
+  usedDiscounts,
   valueOf,
   type PayKind,
+  type ProductionNote,
 } from "./model";
 import { showReceipt } from "./receipt";
 import { pressOn, usePressPlan, type PlanStep } from "../../ui/pressPlan";
@@ -47,9 +51,23 @@ type Purpose = {
 
 const CUSTODIANS = /Influence_6|scored Custodians/i;
 
-function purposeOf(props: RendererProps, content: string, kind: PayKind): Purpose {
+/** The bot's "… is producing units in …" line just before this prompt in its channel: what the payment is for. */
+function productionBefore(channel: ChannelMessages | undefined, promptId: string): ProductionNote | undefined {
+  if (!channel) return undefined;
+  const at = channel.ids.indexOf(promptId);
+  const before = (at < 0 ? channel.ids : channel.ids.slice(0, at)).slice(-12).reverse();
+  for (const id of before) {
+    const m = channel.byId[id];
+    const note = m?.author.bot ? parseProductionNote(m.content ?? "") : undefined;
+    if (note) return note;
+  }
+  return undefined;
+}
+
+function purposeOf(props: RendererProps, content: string, kind: PayKind, note?: ProductionNote): Purpose {
   const { d } = props;
-  const build = freshBuild(usePaymentIntent.getState().build);
+  const intent = freshBuild(usePaymentIntent.getState().build);
+  const build = intent ?? note;
   const stated = statedCost(content);
   if (kind === "influence" && CUSTODIANS.test(content)) {
     return {
@@ -65,7 +83,7 @@ function purposeOf(props: RendererProps, content: string, kind: PayKind): Purpos
       key: "build",
       title: build ? `Pay for ${build.units}` : "Pay for the units you produced",
       sub: build ? `Produced at ${build.where}.` : undefined,
-      cost: stated,
+      cost: stated ?? note?.cost,
       done: build ? `Built ${build.units} at ${build.where}` : "Paid for the production",
     };
   }
@@ -105,23 +123,30 @@ export function PaymentBody(props: RendererProps) {
   const kind = payKind(d.choices, content);
   const unit = kind === "influence" ? "influence" : "resources";
   const me = data.me;
+  const channel = usePlay((s) => s.messages[d.prompt.channelId]);
   /* Fixed when the prompt first shows: the bot rewrites its text as things are spent. */
-  const [purpose] = useState(() => purposeOf(props, content, kind));
-  const planets = useMemo(() => payPlanets(d.choices, me), [d.choices, me]);
+  const [purpose] = useState(() => purposeOf(props, content, kind, productionBefore(channel, d.id)));
+  const planets = useMemo(() => payPlanets(d.choices, me, data.web), [d.choices, me, data.web]);
   const tgMax = tgOffer(d.choices, me);
   const commMax = commOffer(d.choices, me);
   const worth = tgWorth(me);
-  const offers = discounts(d.choices);
+  const applied = usedDiscounts(content);
+  /* A discount the bot already applied is in its total spend: shown as on, never pressed or counted again. */
+  const offers = discounts(d.choices).filter((o) => !applied.includes(o.label));
   const spent = alreadySpent(content);
   const build = freshBuild(usePaymentIntent((s) => s.build));
   const run = usePressPlan();
   const runner = useRunner();
+  const [saved] = useState(() => readPaySelection(d.id));
 
-  const [costOverride, setCost] = useState<number | undefined>(undefined);
+  const [costOverride, setCost] = useState<number | undefined>(saved?.cost);
   const cost = costOverride ?? purpose.cost;
   const [on, setOn] = useState<Set<string>>(() => {
+    if (saved) return new Set(offers.filter((o) => saved.discounts.includes(o.label)).map((o) => o.key));
     const sarween = offers.find((o) => o.label === "Sarween Tools");
-    return new Set(build?.sarween && sarween && purpose.key === "build" ? [sarween.key] : []);
+    /* The production panel uses Sarween Tools unless I turned it off there; after a reload, assume it is on. */
+    const wanted = build ? build.sarween : (cost ?? 0) > 0;
+    return new Set(wanted && sarween && purpose.key === "build" ? [sarween.key] : []);
   });
   const discount = offers.filter((o) => on.has(o.key)).reduce((n, o) => n + o.amount, 0);
   /* Spending commodities exhausts the Keleres agent: only ever by hand, never suggested. */
@@ -132,8 +157,19 @@ export function PaymentBody(props: RendererProps) {
     const s = auto();
     return { planets: new Set(s.planets), tg: s.tg, comm: s.comm };
   }, [cost, discount, spent, planets, tgMax, worth, kind]); // auto reads exactly these
-  const [manual, setManual] = useState<Picked | null>(null);
+  const [manual, setManual] = useState<Picked | null>(() =>
+    saved?.planets ? { planets: new Set(saved.planets.filter((id) => planets.some((p) => p.id === id && !p.exhausted))), tg: saved.tg ?? 0, comm: saved.comm ?? 0 } : null,
+  );
   const pick = manual ?? suggested;
+  useEffect(() => {
+    writePaySelection(d.id, {
+      discounts: offers.filter((o) => on.has(o.key)).map((o) => o.label),
+      planets: manual ? [...manual.planets] : undefined,
+      tg: manual?.tg,
+      comm: manual?.comm,
+      cost: costOverride,
+    });
+  }, [d.id, on, manual, costOverride]); // offers follow d.choices, which only change with the prompt
   const setPick = (next: Picked | ((s: Picked) => Picked)) => setManual((prev) => (typeof next === "function" ? next(prev ?? suggested) : next));
 
   const planetPaid = planets.filter((p) => pick.planets.has(p.id)).reduce((n, p) => n + valueOf(p, kind), 0);
@@ -239,8 +275,11 @@ export function PaymentBody(props: RendererProps) {
           )}
         </span>
       )}
-      {offers.length > 0 && (
+      {offers.length + applied.length > 0 && (
         <div className={classes.toggles}>
+          {applied.map((label) => (
+            <Toggle key={label} on onClick={() => undefined} label={label} meta="applied" disabled />
+          ))}
           {offers.map((o) => (
             <Toggle key={o.key} on={on.has(o.key)} onClick={() => toggleDiscount(o.key)} label={o.label} meta={`−${o.amount}`} disabled={busy} />
           ))}

@@ -19,9 +19,16 @@ const LOCAL_MS = 900;
 
 type Note = { key: string; text: string; fromLog: boolean };
 
+const SECOND_PERSON: Record<string, string> = { is: "are", was: "were", has: "have", does: "do" };
+
+/** The log's third-person line as said after "You": "is producing in 313" → "are producing in 313". */
+function asYou(text: string) {
+  return text.replace(/^(is|was|has|does)\b/i, (w) => SECOND_PERSON[w.toLowerCase()] ?? w);
+}
+
 /** "You researched Gravity Drive": the game log's own wording for an event of mine. */
 function outcomeText(events: GameEvent[]) {
-  return events.map((e) => segText(e.summary).trim()).filter(Boolean).slice(-2).join(" · ");
+  return events.map((e) => segText(e.summary).trim()).filter(Boolean).slice(-2).map(asYou).join(" · ");
 }
 
 /**
@@ -35,6 +42,7 @@ export function OutcomeToast({ gameName, faction, rightInset, web }: { gameName:
   const follow = useFollowNotices(gameName, web);
   const press = usePlay((s) => s.lastPress);
   const flowRunning = useRunner((s) => !!s.running);
+  const flowSummary = useRunner((s) => s.summary);
   const { events } = useGameEvents(gameName);
   const reply = useMemo(() => {
     if (!faction || !press) return undefined;
@@ -58,9 +66,12 @@ export function OutcomeToast({ gameName, faction, rightInset, web }: { gameName:
     if (!press) return undefined;
     const key = `press-${press.at}`;
     if (reply) return { key, text: reply, fromLog: true };
-    if (due !== press.at || flowRunning || !local) return undefined;
-    return { key, text: local, fromLog: false };
-  }, [press, reply, due, flowRunning, local]);
+    /* A flow (several presses from one panel) says what it did as a whole, in place of its last button's words. */
+    const summary = flowSummary && flowSummary.at >= press.at - 1000 && flowSummary.at - press.at < REPLY_WINDOW_MS ? flowSummary.text : undefined;
+    const text = summary ?? local;
+    if (due !== press.at || flowRunning || !text) return undefined;
+    return { key, text, fromLog: false };
+  }, [press, reply, due, flowRunning, local, flowSummary]);
 
   /* The last few notes, newest last; each leaves after a few seconds. */
   const [shown, setShown] = useState<Note[]>([]);

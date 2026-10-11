@@ -4,7 +4,7 @@ import { getStrategyCardByInitiative } from "@/entities/lookup/strategyCards";
 import { agendas } from "@/entities/data/agendas";
 import { explorations } from "@/entities/data/explorations";
 import { actionCards } from "@/entities/data/actionCards";
-import { compareSnowflakes } from "@/discord/shared/snowflake";
+import { compareSnowflakes, snowflakeTime } from "@/discord/shared/snowflake";
 import type { PendingPrompt } from "../detect/pending";
 import type { GameChannels } from "../detect/games";
 import { baseId, choicesOf, cleanLabel, idFaction, type Choice } from "./controls";
@@ -155,6 +155,17 @@ function embeddedAgenda(m: Message): AgendaInfo | undefined {
   const embed = m.embeds?.find((e) => /<:Agenda:\d+>/.test(e.title ?? ""));
   if (!embed?.title) return undefined;
   return agendaInfo(embed.title, embed.description);
+}
+
+/** Other live top / bottom agenda peeks the bot posted next to this one (Politics shows two, a second apart). */
+function peekedAlongside(ctx: ClassifyContext, channelId: string, m: Message): Message[] {
+  const data = ctx.state.messages[channelId];
+  if (!data) return [];
+  const at = snowflakeTime(m.id);
+  return data.ids
+    .filter((id) => id !== m.id && Math.abs(snowflakeTime(id) - at) <= 15_000)
+    .map((id) => data.byId[id])
+    .filter((x): x is Message => !!x?.author.bot && choicesOf(x).some((c) => !c.disabled && /^topAgenda_/.test(baseId(c.customId))));
 }
 
 function agendaInfo(title: string, description?: string): AgendaInfo {
@@ -417,11 +428,14 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   }
   if (has(choices, /^(topAgenda_|bottomAgenda_)/)) {
     const agenda = embeddedAgenda(m);
+    /* Politics shows two agendas, one prompt each, and the panel covers both. */
+    const pair = peekedAlongside(ctx, prompt.channelId, m);
+    const names = [agenda?.name, ...pair.map((x) => embeddedAgenda(x)?.name)].filter(Boolean);
     return {
       ...base,
       kind: "agendaPeek",
       eyebrow: "Only you see this",
-      title: agenda ? `${agenda.name}: top or bottom?` : "Top or bottom of the agenda deck?",
+      title: names.length > 1 ? `${names.join(" and ")}: top or bottom?` : agenda ? `${agenda.name}: top or bottom?` : "Top or bottom of the agenda deck?",
       agenda,
     };
   }

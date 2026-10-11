@@ -68,6 +68,35 @@ const PAST: Record<string, string> = {
 };
 
 const SO_DISCARD = /^(?:discardSecret_|SODISCARD_)\d+$/;
+
+const STRUCTURE_NAMES: Record<string, string> = { spacedock: "space dock", sd: "space dock", pds: "PDS", facility: "facility", monument: "monument" };
+
+/**
+ * Presses that only open the next step (an ability menu before passing, the planet picker for a structure): nothing
+ * is done yet, so the note says what is being chosen, never that it happened.
+ */
+function openingStep(id: string, label: string): string | undefined {
+  if (/^passingAbilities/.test(id) || (/^pass/i.test(label) && /\(\+\d+ abilit/i.test(label))) return "Choosing abilities before passing…";
+  /* "End Turn" alone ends it; "End Turn (+1 ability)" opens the ability menu first. */
+  if (/\(\+\d+ abilit/i.test(label)) return "Choosing end-of-turn abilities…";
+  const structure = id.match(/^construction_(\w+)$/)?.[1];
+  if (structure) return `Choosing a planet for the ${STRUCTURE_NAMES[structure.toLowerCase()] ?? structure}…`;
+  if (/^tacticalAction(?!Build)/.test(id)) return "Choosing a system to activate…";
+  if (/^componentAction(?!Res)/.test(id)) return "Choosing a component action…";
+  if (/^get_so_score_buttons$/.test(id)) return "Choosing a secret objective to score…";
+  if (/^get_so_discard_buttons$|^getDiscardButtons/.test(id)) return "Choosing a card to discard…";
+  return undefined;
+}
+
+/** Milty draft buttons carry only an emoji ("sliceD", "position3"): their words. */
+function draftPick(id: string, label: string): string | undefined {
+  const m = id.match(/^(milty|queueMilyPick)_(slice|order|faction)_(\w+)$/);
+  if (!m) return undefined;
+  const verb = m[1] === "milty" ? "Picked" : "Queued";
+  if (m[2] === "slice") return `${verb} slice ${m[3].toUpperCase()}`;
+  if (m[2] === "order") return `${verb} seat ${m[3]}`;
+  return `${verb} ${label.trim() || m[3]}`;
+}
 const NO_FOLLOW = /^(?:sc_no_follow_|preDeclineSC_)(\d+)/;
 
 /** "Discard (490) Become the Gatekeeper" → "Become the Gatekeeper". */
@@ -122,5 +151,9 @@ export function pressOutcome(m: Message | undefined, customId: string, values?: 
     return `Chose ${picked.join(", ")}`;
   }
   const label = choice?.label ?? "";
+  const opening = openingStep(id, label);
+  if (opening) return opening;
+  const draft = draftPick(id, label === choice?.emojiName ? "" : label);
+  if (draft) return draft;
   return pastTense(label) || undefined;
 }

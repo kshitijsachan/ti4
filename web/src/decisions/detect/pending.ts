@@ -115,6 +115,29 @@ function pressesNeeded(m: Message) {
   return choicesOf(m).some((c) => TWO_PRESS_PRIMARY.test(baseId(c.customId))) ? 2 : 1;
 }
 
+const PLACED_STRUCTURE = /\bplaced 1 (?:space ?dock|pds)\b/i;
+const CONSTRUCTION_BUILD = /\bis resolving the primary ability of \*{0,2}Construction\*{0,2} to build\b/i;
+
+/**
+ * My own Construction card's primary, from its thread: how many of its two steps the bot reports done (a structure
+ * placed, or a space dock's PRODUCTION used). Undefined when this is not a Construction card or its thread is not
+ * loaded.
+ */
+function constructionSteps(state: PlayState, m: Message, faction: string | undefined) {
+  if (!faction || !choicesOf(m).some((c) => /^construction_/.test(baseId(c.customId)))) return undefined;
+  const thread = state.messages[m.id];
+  if (!thread?.loaded) return undefined;
+  const f = faction.toLowerCase();
+  const mine = (x: Message) =>
+    [...x.content.matchAll(/<a?:(\w+):\d+>/g)].some(([, name]) => {
+      const n = name.toLowerCase();
+      return n === f || f.startsWith(n) || n.startsWith(f);
+    });
+  return thread.ids
+    .map((id) => thread.byId[id])
+    .filter((x) => !!x?.author.bot && mine(x) && (PLACED_STRUCTURE.test(x.content) || CONSTRUCTION_BUILD.test(x.content))).length;
+}
+
 /**
  * Prompts answered with many presses on one message and closed by their own Done button (which deletes it or strips
  * its buttons): produce units, exhaust planets / spend TG, gain command tokens. They stay open while their buttons do.
@@ -300,8 +323,15 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
       /* Only the card's own buttons are mine; the follow buttons are the other players'. */
       if (!forwardChoices(m).some((c) => !FOLLOW_ID.test(baseId(c.customId)))) answered = true;
       const stale = index < ids.length - ROLE_WINDOW || (!!newestTurnMenu && compareSnowflakes(id, newestTurnMenu) < 0);
-      const presses = pressCount(me.id, m, m.my_press ? Date.parse(m.my_press.at) : state.pressed[m.id]);
+      let presses = pressCount(me.id, m, m.my_press ? Date.parse(m.my_press.at) : state.pressed[m.id]);
       if (answered && presses > 0 && presses < pressesNeeded(m)) answered = false;
+      /* Construction: what the card's thread says I already did beats counting presses (choosing the structure type
+         is a press too, and a reload forgets the count). */
+      const built = constructionSteps(state, m, opts.faction);
+      if (built !== undefined) {
+        presses = built;
+        answered = built >= 2;
+      }
       items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale, presses });
       return;
     }
@@ -330,8 +360,10 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     if (opts.faction && reactedBy(m, opts.faction) && forwardChoices(m).some((c) => SC_CALL_ID.test(baseId(c.customId)))) {
       const pressedAt = m.my_press ? Date.parse(m.my_press.at) : state.pressed[m.id];
       const thisTurn = !newestTurnMenu || compareSnowflakes(id, newestTurnMenu) > 0;
-      const midway = ping && thisTurn && pressesNeeded(m) > 1 && pressCount(me.id, m, pressedAt) === 1;
+      const built = constructionSteps(state, m, opts.faction);
+      const midway = ping && thisTurn && pressesNeeded(m) > 1 && (built !== undefined ? built === 1 : pressCount(me.id, m, pressedAt) === 1);
       if (!midway) return;
+      answered = false;
     }
     /*
      * Prompts the bot deletes once acted on stay until it does: the when / after queue (kept when I asked to play but

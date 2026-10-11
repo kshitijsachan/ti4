@@ -52,7 +52,26 @@ export function planUndo(points: readonly UndoPoint[], me: Me): UndoPlan {
 export function asMine(label: string, point: UndoPoint): string {
   const picked = /scPick_\d+/.test(point.command) ? /“(.+)”/.exec(label)?.[1] : undefined;
   if (picked) return `your pick of ${picked}`;
-  return point.actor && label.startsWith(point.actor + " ") ? `you${label.slice(point.actor.length)}` : label;
+  const readable = readableLabel(label, point);
+  return point.actor && readable.startsWith(point.actor + " ") ? `you${readable.slice(point.actor.length)}` : readable;
+}
+
+/**
+ * A press on a button with no words (the draft's slice and seat buttons are emoji only) reads "X pressed “”": name it
+ * from the button id the bot logged ("… (milty_slice_D)") instead, or just say a button was pressed.
+ */
+export function readableLabel(label: string, point: UndoPoint): string {
+  if (!/“\s*”/.test(label)) return label;
+  const id = /\(([^()]*)\)\s*$/.exec(point.command)?.[1]?.replace(/^FFCC_[^_]+_/, "") ?? "";
+  const draft = /^(?:milty|queueMilyPick)_(slice|order|faction)_(\w+)$/.exec(id);
+  const what = draft
+    ? draft[1] === "slice"
+      ? `picked slice ${draft[2].toUpperCase()}`
+      : draft[1] === "order"
+        ? `picked seat ${draft[2]}`
+        : `picked ${draft[2]}`
+    : "pressed a button";
+  return label.replace(/pressed “\s*”/, what);
 }
 
 /** "Bot Beta and Bot Alpha" / "Bot Beta, Bot Alpha and Tess" from the actors of `points`. */

@@ -13,6 +13,8 @@ type RunnerState = {
   label: string;
   error: string | null;
   startedAt: number;
+  /** What the last finished flow did, in a few words: the outcome note for its presses. */
+  summary: { text: string; at: number } | null;
   set: (s: Partial<RunnerState>) => void;
 };
 
@@ -27,6 +29,7 @@ export const useRunner = create<RunnerState>((set) => ({
   label: "",
   error: null,
   startedAt: 0,
+  summary: null,
   set: (s) => set(s),
 }));
 
