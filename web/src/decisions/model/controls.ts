@@ -41,7 +41,7 @@ const HAND_ID = /^(ac_play_from_hand_|resolvePNPlay_|ac_discard_from_hand_|so_sc
 
 /** Draft and pre-draft configuration prompts: the draft view (and the game's creator) own those. */
 const DRAFT_ID =
-  /^(milty|queueMilyPick|jwds|draftPreset|setupStep|restartMiltyQueue|showMiltyDraft|miltyFactionInfo|startTFDraft|jmf[A-Z]|chooseExp|startDraftSystem|frankenSetup|setupBaseGameMode|startTFGame|toggleTfHomebrew|editTFHomebrew|getHomebrewButtons|offerGameOptionButtons|offerTEOptionButtons|miltySetup|addMapString|drawSpecificSO)/;
+  /^(milty|queueMilyPick|jwds|draftPreset|setupStep(?!5_\d+_keleres)|restartMiltyQueue|showMiltyDraft|miltyFactionInfo|startTFDraft|jmf[A-Z]|chooseExp|startDraftSystem|frankenSetup|setupBaseGameMode|startTFGame|toggleTfHomebrew|editTFHomebrew|getHomebrewButtons|offerGameOptionButtons|offerTEOptionButtons|miltySetup|addMapString|drawSpecificSO)/;
 
 /**
  * Table-wide steps that move the game from setup into round 1. The bot posts them in the action log addressed to

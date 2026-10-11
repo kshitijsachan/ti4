@@ -203,6 +203,8 @@ const MAX_STREAK = 8;
 const REPOST_MS = 60000;
 /** A lost press on a `retry` prompt is tried again after this long (at most MAX_RETRIES times). */
 const RETRY_MS = 20000;
+/** How long to wait for our own draft pick to register before picking again. */
+const MILTY_WAIT_MS = 15000;
 const MAX_RETRIES = 3;
 const BUSY_TEXT = /hasn't finished processing the last task/i;
 
@@ -354,6 +356,8 @@ class SeatPilot {
   private nonce = 0;
   private waiting: { nonce: string; resolve: (err?: string) => void } | null = null;
   private lastPressed: string | null = null;
+  /** Per game: how many draft picks we had when we last pressed a draft button, and when. */
+  private miltyPress = new Map<string, { picks: number; at: number }>();
   private factions = new Map<string, string>();
   /** When we last pressed a control by `${channel}:${custom id}:${content}`: the bot often re-posts a prompt. */
   private recent = new Map<string, number>();
@@ -875,6 +879,10 @@ class SeatPilot {
     if (!draft || draft.status !== "drafting" || String(draft.currentPlayer) !== this.userId) return null;
     const mine = (draft.players ?? []).find((p: Json) => String(p.userId) === this.userId);
     const have = new Set<string>((mine?.picks ?? []).map((p: Json) => (p.type === "speakerOrder" ? "order" : p.type)));
+    // Our last pick is still on its way (the draft says it is our turn until the bot records it): pressing again on a
+    // refreshed draft board would pick twice, and a doubled last pick finishes the draft (and sets everyone up) twice.
+    const last = this.miltyPress.get(game);
+    if (last && last.picks === have.size && Date.now() - last.at < MILTY_WAIT_MS) return null;
     const open = controls.filter((c) => {
       const kind = /^milty_(slice|faction|order)_/.exec(c.custom_id)?.[1];
       return kind && !have.has(kind);
@@ -882,6 +890,7 @@ class SeatPilot {
     if (!open.length) return null;
     const kind = /^milty_(\w+?)_/.exec(open[0].custom_id)![1];
     const rule = RULES.find((r) => r.id?.test(open[0].custom_id))!;
+    this.miltyPress.set(game, { picks: have.size, at: Date.now() });
     return { msg: m, control: open[0], score: rule.score, why: `draft: first ${kind}` };
   }
 
