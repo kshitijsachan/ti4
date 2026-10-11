@@ -40,6 +40,33 @@ export const usePaymentIntent = create<IntentState>((set) => ({
   },
 }));
 
+/** My toggles and picks on one payment prompt, kept per message so a reload shows them as I left them. */
+export type PaySelection = { discounts: string[]; planets?: string[]; tg?: number; comm?: number; cost?: number };
+
+const SELECTION_KEY = "ti4.payment.selection";
+
+function selections(): Record<string, PaySelection> {
+  try {
+    return JSON.parse(sessionStorage.getItem(SELECTION_KEY) ?? "{}") as Record<string, PaySelection>;
+  } catch {
+    return {};
+  }
+}
+
+export function readPaySelection(messageId: string): PaySelection | undefined {
+  return selections()[messageId];
+}
+
+export function writePaySelection(messageId: string, sel: PaySelection) {
+  try {
+    const all = { ...selections(), [messageId]: sel };
+    const keep = Object.keys(all).slice(-20);
+    sessionStorage.setItem(SELECTION_KEY, JSON.stringify(Object.fromEntries(keep.map((k) => [k, all[k]]))));
+  } catch {
+    /* storage blocked: memory only */
+  }
+}
+
 /** A build intent still worth applying to a payment prompt (the bot posts it within seconds). */
 export function freshBuild(b: BuildIntent | null) {
   return b && Date.now() - b.at < 5 * 60_000 ? b : null;
