@@ -144,6 +144,11 @@ export interface Option<V = Record<string, unknown> | null> {
   handler: string;
   /** Typed meaning for the decision's kind; null for options outside its vocabulary ("Done", "Cancel"). */
   value: V | null;
+  /**
+   * Who may press this option, set only on menus whose options belong to different players
+   * (decision.target.resolvedBy === "mixed_owners"); the answer endpoint refuses anyone else. null otherwise.
+   */
+  owner?: Target | null;
 }
 
 /**
@@ -276,7 +281,14 @@ export interface DecisionsSnapshot {
 export function awaits(d: Decision, userId: UserId): boolean {
   if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
   if (d.scope === "player") return d.target?.userId === userId;
+  // Mixed-owner menu: only the options owned by this user (or by nobody) are theirs.
+  if (d.target?.resolvedBy === "mixed_owners") return optionsFor(d, userId).length > 0;
   return true;
+}
+
+/** The options of `d` this user may press (per-option owner on mixed-owner menus; all options otherwise). */
+export function optionsFor<D extends Decision>(d: D, userId: UserId): D["options"] {
+  return d.options.filter((o) => !o.owner?.userId || o.owner.userId === userId) as D["options"];
 }
 
 /** Narrow helpers. */
