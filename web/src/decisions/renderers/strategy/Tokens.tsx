@@ -68,7 +68,7 @@ const sum = (c: Counts) => c.tactic + c.fleet + c.strategy;
  * Cybernetic Enhancements, minus Malevolency), never beyond the tokens left in reinforcements; otherwise tokens only
  * move between pools. One confirm presses the bot's lose / gain buttons (losses first), then its Done.
  */
-export function TokensBody({ d, data }: RendererProps) {
+export function TokensBody({ d, data, onConfirmed }: RendererProps & { onConfirmed?: () => void }) {
   const run = useRunSequence();
   const runner = useRunner();
   const notes = useHandNotes(data.gameName);
@@ -157,7 +157,10 @@ export function TokensBody({ d, data }: RendererProps) {
         customId: done.customId,
         label: "Done",
       });
-    void run(`tokens:${d.id}`, presses, (dismiss) => dismiss(d.id));
+    void run(`tokens:${d.id}`, presses, (dismiss) => {
+      dismiss(d.id);
+      onConfirmed?.();
+    });
   };
 
   const reset = () => {
