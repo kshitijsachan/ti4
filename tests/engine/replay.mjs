@@ -15,6 +15,7 @@
 // (differs without dice: a determinism or rules bug), skipped (not replayable from the log: selections, modals,
 // web API calls, system saves), resync (chain: state reset to the recording), error.
 // --only <regex> (step mode): replay only the steps whose custom id (or label) matches; the rest are skipped.
+// --steps 141,145 (step mode): replay only these step indexes.
 // --via engine: instead of pressing, find the engine decision the carrier opened and answer it through the engine
 //       API as the recorded presser's replay seat, then diff exactly like step mode. Extra statuses: not_typed (no typed
 //       decision: pressed like the original, its outcome in engine.legacyStatus), refused (the engine refused an answer
@@ -50,6 +51,7 @@ const results = await replay(rec, fork, {
   to: opt("--to") ? Number(opt("--to")) : undefined,
   resync: !argv.includes("--no-resync"),
   stopOnFirst: argv.includes("--stop-on-first"),
+  steps: opt("--steps") ? new Set(opt("--steps").split(",").map(Number)) : undefined,
   only: opt("--only") ? new RegExp(opt("--only")) : undefined,
   ignore: (opt("--ignore", "") || "").split(",").filter(Boolean),
   web: !argv.includes("--no-web"),
