@@ -237,28 +237,7 @@ export class Hub {
     if (press) msg._prompted_for = press.user_id;
   }
 
-  /**
-   * "The bot hasn't finished processing the last task for <game>" means the bot refused a press because it
-   * was still busy with that game; the press did nothing. Rather than post that to the whole table and make
-   * the player press again, re-send the press shortly (a few times), and only then tell that player alone.
-   * Returns true when the message was handled here and must not be posted.
-   */
-  private retryBusyPress(msg: StoredMessage): boolean {
-    if (!BUSY.test(msg.content ?? "") || !this.store.state.users[msg.author?.id]?.bot) return false;
-    const press = this.recentPress(msg);
-    if (!press) return false;
-    if (press.replay && (press.retries ?? 0) < BUSY_RETRIES) {
-      log.info(`bot busy; re-sending ${press.user_id}'s press in ${BUSY_RETRY_MS}ms`);
-      setTimeout(press.replay, BUSY_RETRY_MS * ((press.retries ?? 0) + 1));
-      return true;
-    }
-    msg._ephemeral_for = press.user_id;
-    msg.flags = (msg.flags ?? 0) | 64;
-    return false;
-  }
-
   postMessage(msg: StoredMessage) {
-    if (this.retryBusyPress(msg)) return;
     this.attributePrompt(msg);
     this.autoJoinMentioned(msg);
     this.store.insertMessage(msg);
@@ -435,9 +414,6 @@ export function textDisplays(comps: Json[], out: string[] = []): string[] {
 /** Removes our private bookkeeping fields before a message leaves the shim. */
 /** How long after a press the bot's posts in that channel count as answers to it. */
 const PROMPT_WINDOW_MS = 8000;
-const BUSY = /^The bot hasn't finished processing the last task for \S+\. Please wait\.$/;
-const BUSY_RETRIES = 4;
-const BUSY_RETRY_MS = 1200;
 
 export function stripPrivate(msg: StoredMessage): Json {
   const out: Json = {};

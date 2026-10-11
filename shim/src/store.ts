@@ -57,10 +57,6 @@ export type Interaction = {
   modal?: Json;
   created: number;
   acked: boolean;
-  /** Presses the same component again as the same player (component interactions only). */
-  replay?: () => void;
-  /** How many times the shim re-sent this press because the bot was busy with the game. */
-  retries?: number;
 };
 
 export type State = {

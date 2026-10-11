@@ -503,7 +503,7 @@ class SeatPilot {
             this.forgetFaction(game);
           }
         }
-        // The bot refused our press because it was busy (the shim re-sends a few times first): let `retry`
+        // The bot refused our press because it was busy (upstream only; self-hosted presses queue for the lock): let `retry`
         // prompts be pressed again soon rather than after RETRY_MS.
         if (f.message?.ephemeral && BUSY_TEXT.test(f.message.content ?? "") && this.lastPressed) {
           const a = this.answered.get(this.lastPressed);
