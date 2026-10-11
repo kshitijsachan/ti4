@@ -4,6 +4,10 @@
  * "../../../shim/src/engine/types"` or a path alias).
  */
 
+import type { TradeForceReplenish, TradeOffer, TradeOfferSent, TradeState } from "./kinds/trade.js";
+
+export type * from "./kinds/trade.js";
+
 export const CONTRACT_VERSION = 1;
 
 // ---------------------------------------------------------------- state
@@ -29,6 +33,8 @@ export interface GameState {
   publicObjectives: Record<string, string[]>;
   laws: string[];
   draft: DraftState | null;
+  /** The viewer's trade view (null without a viewer). See kinds/trade.ts. */
+  trade: TradeState | null;
 }
 
 export interface PlayerState {
@@ -119,6 +125,7 @@ export type ResolvedBy =
   | "private_channel"
   | "interaction_user" // reply/followup/ephemeral to that player's interaction
   | "draft_turn"
+  | "sc_holder" // the player holding the strategy card the prompt is about
   | "mention" // weak: exactly one seated player mentioned
   | "mixed_owners"
   | "none";
@@ -146,7 +153,7 @@ export interface Option<V = Record<string, unknown> | null> {
   value: V | null;
 }
 
-interface DecisionBase<K extends string, V> {
+export interface DecisionBase<K extends string, V> {
   id: string;
   game: string;
   kind: K;
@@ -179,7 +186,15 @@ export type MiltyDraftPick = DecisionBase<
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
 
-export type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraftPick | LegacyDecision;
+export type Decision =
+  | StrategyCardPick
+  | TechGain
+  | SecretObjectiveDiscard
+  | MiltyDraftPick
+  | TradeOffer
+  | TradeOfferSent
+  | TradeForceReplenish
+  | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
 

@@ -3,6 +3,7 @@
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
 import type { Decision, GameState, Option } from "./types.js";
+import { chooseTrade } from "./tradePolicy.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -40,6 +41,10 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string): T
       const cats = new Set(d.options.filter((o) => !o.disabled && o.value).map((o) => o.value!.category));
       return cats.size === 1 ? { option: d.options.find((o) => !o.disabled && o.value)!, why: "draft: only category left" } : null;
     }
+    case "trade.offer":
+    case "trade.offer_sent":
+    case "trade.force_replenish":
+      return chooseTrade(d, state, self);
     default:
       return null;
   }
