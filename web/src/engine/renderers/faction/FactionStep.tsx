@@ -1,6 +1,7 @@
 import type { DecisionOf, GameState } from "../../contract";
 import type { EngineRendererProps } from "../../registry";
 import { AnswerButton, ExtraOptions, Head } from "../cards/parts";
+import { getTechData } from "@/entities/lookup/tech";
 import { planetName, playerLabel } from "../cards/labels";
 import classes from "../cards/Cards.module.css";
 
@@ -39,6 +40,11 @@ function optionLabel(state: GameState | null, v: Value): string {
   if (v.reset) return "Start over";
   if (v.hits) parts.push(`${v.hits} hit${v.hits > 1 ? "s" : ""}`);
   if (v.unit) parts.push(`${v.count && v.count > 1 ? `${v.count} ` : ""}${v.damaged ? "damaged " : ""}${UNIT[v.unit] ?? v.unit}`);
+  if (v.techOut) parts.push(`swap out ${getTechData(v.techOut)?.name ?? v.techOut}`);
+  if (v.tech) parts.push(`${v.techOut ? "for " : ""}${getTechData(v.tech)?.name ?? v.tech}`);
+  if (v.what) parts.push(`look at ${{ ac: "action cards", pn: "promissory notes", so: "secret objectives" }[v.what]}`);
+  if (v.who) parts.push(v.who === "self" ? "look and choose yourself" : "Yssaril chooses for you");
+  if (v.cardName ?? v.actionCard) parts.push(String(v.cardName ?? v.actionCard));
   if (v.target) parts.push(playerLabel(state, v.target));
   if (v.planet) parts.push(planetName(v.planet));
   else if (v.holder === "space") parts.push("space");

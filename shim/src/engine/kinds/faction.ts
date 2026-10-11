@@ -44,6 +44,14 @@ export type FactionStepFields = {
   ownStrategyCard?: number;
   /** Raw id segments the kind does not type further. */
   args?: string[];
+  /** Group C: Jol-Nar hero swap (tech in / out), Yssaril commander (what) / Spy Net (who) / hand cards, Yin hits. */
+  tech?: string;
+  techOut?: string;
+  what?: "ac" | "pn" | "so";
+  who?: "self" | "yssaril";
+  actionCard?: string;
+  cardName?: string;
+  exo?: boolean;
 };
 
 /** Agents, commanders, heroes. Generic ids: exhaustAgent_<agent>[_<target>], getAgentSelection_<agent>. */
