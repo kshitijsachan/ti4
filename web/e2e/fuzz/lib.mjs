@@ -1,7 +1,7 @@
 // Shared pieces of the fuzzers (ws-fuzz.mjs, ui-fuzz.mjs): args, seeded PRNG, fuzz seats, the shim's ws protocol
 // (messages + the engine stream), state invariants (tests/engine/lib/invariants.ts), bot-error tail, violation log.
 import { createRequire } from "node:module";
-import { appendFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, closeSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, closeSync, statSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { checkSnapshot, checkSequence } from "../../../tests/engine/lib/invariants.ts";
 
@@ -131,30 +131,67 @@ export const readSave = (game) => {
 /** Starts a solo game for a seat and waits until the shim's setup reports drafting/playing. */
 export async function createSoloGame(token, bots = 3, log = console.log) {
   for (let attempt = 0; attempt < 6; attempt++) {
+    const t0 = Date.now();
     const r = await fetch(`${SHIM}/app/solo-game`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token, bots, expansion: "te" }),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(360000), // creation is slow on a loaded stack; a timed-out request may still create the game (sweep.mjs ends orphans)
     }).catch((e) => ({ ok: false, json: async () => ({ message: String(e) }) }));
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
+      // A request that timed out may still have created the game (slow stack): adopt it instead of making another.
+      const adopted = gameCreatedSince(token, t0);
+      if (adopted) {
+        log(`solo-game request failed (${JSON.stringify(j).slice(0, 120)}) but ${adopted} was created for this seat: using it`);
+        return waitSoloSetup(adopted, log);
+      }
       log(`solo-game refused: ${JSON.stringify(j).slice(0, 200)}; retrying in 30s`);
       await sleep(30000);
       continue;
     }
-    const game = j.game;
-    log(`created ${game}; waiting for setup`);
-    const until = Date.now() + 10 * 60000;
-    while (Date.now() < until) {
-      const st = await getJson(`${SHIM}/app/solo-game/status?game=${game}`);
-      if (st?.state === "error") throw new Error(`solo setup of ${game} failed: ${st.error}`);
-      if (st?.state === "drafting" || st?.state === "playing") return game;
-      await sleep(3000);
-    }
-    throw new Error(`solo setup of ${game} did not reach the draft`);
+    log(`created ${j.game}; waiting for setup`);
+    return waitSoloSetup(j.game, log);
   }
   throw new Error("could not create a solo game");
+}
+
+async function waitSoloSetup(game, log) {
+  const until = Date.now() + 10 * 60000;
+  while (Date.now() < until) {
+    const st = await getJson(`${SHIM}/app/solo-game/status?game=${game}`);
+    if (st?.state === "error") throw new Error(`solo setup of ${game} failed: ${st.error}`);
+    if (st?.state === "drafting" || st?.state === "playing") return game;
+    // The shim forgets a job's status after a restart: a game with a draft (running or done) is set up.
+    const d = await draftData(game);
+    if (d?.status === "drafting" || d?.status === "finished") return game;
+    await sleep(3000);
+  }
+  log(`solo setup of ${game} did not reach the draft`);
+  throw new Error(`solo setup of ${game} did not reach the draft`);
+}
+
+/** The newest not-ended game saved since `since` in which the seat with this token plays (or null). */
+function gameCreatedSince(token, since) {
+  let seats = [];
+  try {
+    seats = JSON.parse(readFileSync(SEATS_FILE, "utf8"));
+  } catch {
+    return null;
+  }
+  const uid = seats.find((x) => x.token === token)?.user_id;
+  if (!uid) return null;
+  let best = null;
+  for (const f of readdirSync(MAPS)) {
+    if (!/^pbd\d+\.txt$/.test(f)) continue;
+    const st = statSync(`${MAPS}/${f}`);
+    if ((st.birthtimeMs || st.mtimeMs) < since - 5000) continue;
+    const save = readFileSync(`${MAPS}/${f}`, "utf8");
+    if (!save.includes(uid) || Number(/^ended_date (\d+)/m.exec(save)?.[1] ?? 0) > 0) continue;
+    const n = Number(f.match(/\d+/)[0]);
+    if (!best || n > best.n) best = { n, game: f.replace(/\.txt$/, "") };
+  }
+  return best?.game ?? null;
 }
 
 /**
@@ -580,6 +617,7 @@ export function foldViolations() {
     md.push(`## [${v.severity ?? "error"}] ${v.tool} ${v.kind} (x${g.n}, ${g.games.size} game(s))`);
     md.push("");
     md.push(`- detail: ${String(v.detail).replace(/\n/g, " ").slice(0, 600)}`);
+    if (v.triage_note) md.push(`- triage: ${v.triage_note}`);
     if (v.context) md.push(`- context: ${String(v.context).slice(0, 300)}`);
     md.push(`- first: ${g.first.at} ${g.first.game} seed ${g.first.seed}; last: ${v.at} ${v.game} seed ${v.seed}${v.step ? ` step ${v.step}` : ""}`);
     md.push(`- replay: \`${replayCommand(v)}\``);
