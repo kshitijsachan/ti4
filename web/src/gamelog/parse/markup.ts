@@ -158,7 +158,8 @@ export function segText(segs: Seg[]): string {
 
 export function actorLabel(a: Actor | undefined): string {
   if (!a) return "";
-  return a.name ?? (a.faction ? titleCase(a.faction) : a.color ?? "");
+  /* The bot's Keleres ids carry the flavor (keleresx): players just say "Keleres". */
+  return a.name ?? (a.faction ? titleCase(a.faction.replace(/^keleres[amx]$/, "keleres")) : a.color ?? "");
 }
 
 export function titleCase(s: string): string {
