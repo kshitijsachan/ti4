@@ -85,6 +85,37 @@ function openingStep(id: string, label: string): string | undefined {
   if (/^componentAction(?!Res)/.test(id)) return "Choosing a component action…";
   if (/^get_so_score_buttons$/.test(id)) return "Choosing a secret objective to score…";
   if (/^get_so_discard_buttons$|^getDiscardButtons/.test(id)) return "Choosing a card to discard…";
+  if (/^diploSystem$/.test(id)) return "Choosing a system to protect…";
+  if (/^diploRefresh2$/.test(id)) return "Choosing planets to ready…";
+  if (/^redistributeCCButtons$/.test(id)) return "Choosing command tokens…";
+  return undefined;
+}
+
+/** "Nar, Jol" → "Nar and Jol"; three or more keep their commas. */
+function listed(names: string[]) {
+  return names.length === 2 ? `${names[0]} and ${names[1]}` : names.join(", ");
+}
+
+/**
+ * Bot buttons whose label is a command or a status ("Done Readying Planets", "No Secret Objective Scored"), as what
+ * happened. `content` is the pressed message as it stood (the readying prompt lists what it readied).
+ */
+function doneOutcome(id: string, label: string, content: string): string | undefined {
+  const system = id.match(/^diplo_\w+?_diploP$/) && label.match(/^(\w+)\s*\(/)?.[1];
+  if (system) return `Protected system ${system}`;
+  if (/^deleteButtons_diplomacy$/.test(id) || /^done readying planets$/i.test(label)) {
+    const readied = content.match(/\bReadied\b(.*)$/s)?.[1] ?? "";
+    const names = readied
+      .replace(/<a?:\w+:\d+>/g, "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return names.length ? `Readied ${listed(names)}` : "Readied no planets";
+  }
+  if (/^done exhausting planets$/i.test(label)) return "Finished paying";
+  if (/^no secret objective scored$/i.test(label)) return "Didn't score a secret";
+  if (/^no public objective scored$/i.test(label)) return "Didn't score a public objective";
+  if (/^done (redistributing|gaining|losing) command tokens$/i.test(label)) return "Command tokens confirmed";
   return undefined;
 }
 
@@ -153,6 +184,8 @@ export function pressOutcome(m: Message | undefined, customId: string, values?: 
   const label = choice?.label ?? "";
   const opening = openingStep(id, label);
   if (opening) return opening;
+  const done = doneOutcome(id, label, m.content);
+  if (done) return done;
   const draft = draftPick(id, label === choice?.emojiName ? "" : label);
   if (draft) return draft;
   return pastTense(label) || undefined;
