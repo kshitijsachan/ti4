@@ -247,6 +247,7 @@ class ScoreBillJob implements Job {
  */
 class VoteJob implements Job {
   name = "Agenda vote";
+  private confirmed = false;
   started = Date.now();
   progressAt = Date.now();
   private steps: Steps;
@@ -264,9 +265,10 @@ class VoteJob implements Job {
     if (!board || !me) return "wait";
     const s = this.steps;
     const confirm = s.find(faction, (b) => /^resolveAgendaVote_\d+$/.test(b) && b !== "resolveAgendaVote_0");
-    if (confirm && !s.wasPressed(confirm.p, confirm.c)) {
+    if (confirm && (!s.wasPressed(confirm.p, confirm.c) || Date.now() - s.lastPress > 12000)) {
       await s.press(confirm.p, confirm.c, `agenda: ${confirm.c.label}`);
-      return "done";
+      this.confirmed = true;
+      return "acted";
     }
     const planets = s.find(faction, (b) => /^exhaustForVotes_planet_/.test(b) || b === "proceedToFinalizingVote");
     if (planets) {
@@ -303,11 +305,13 @@ class VoteJob implements Job {
       if (c && (await s.press(outcome.p, c, `agenda: vote for ${c.label}`))) return "acted";
       return "wait";
     }
+    // Still there well after our press: the press was lost (the bot was busy); press again.
     const start = s.find(faction, (b) => b === "vote");
-    if (start && !s.wasPressed(start.p, start.c)) {
+    if (start && (!s.wasPressed(start.p, start.c) || Date.now() - s.lastPress > 12000)) {
       await s.press(start.p, start.c, "agenda: vote");
       return "acted";
     }
+    if (this.confirmed && !confirm) return "done";
     return Date.now() - this.started > 60000 ? "done" : "wait";
   }
 }
@@ -537,7 +541,15 @@ export class CardPlanner {
   private async vote(game: string, faction: string, p: Prompt): Promise<boolean> {
     const c = p.controls.find((x) => x.custom_id === `FFCC_${faction}_vote`);
     if (!c) return this.resumeVote(game, faction, p);
-    if (p.m._presses?.[this.seat.userId] || Date.now() - Date.parse(p.m.timestamp) > 10 * 60000) return false;
+    if (Date.now() - Date.parse(p.m.timestamp) > 10 * 60000) return false;
+    const pressedAt = p.m._presses?.[this.seat.userId]?.at;
+    if (pressedAt) {
+      // Pressed before (e.g. before a restart) yet still up: the press was lost if it is still our vote.
+      if (Date.now() - Date.parse(pressedAt) < 20000) return false;
+      const board = await this.seat.board(game);
+      const me = board ? playerOf(board, this.seat.userId) : undefined;
+      if (!board || !me || board.phase !== "agenda.voting" || board.activePlayer !== me.color) return false;
+    }
     if (!this.once(`vote:${p.m.id}`)) return false;
     this.add(game, new VoteJob(this.seat, game, String(BigInt(p.m.id) - 1n)));
     this.seat.log("agenda: voting");
