@@ -1,5 +1,5 @@
 import type { Json } from "../store.js";
-import { playerOf } from "./board.js";
+import { playerOf, type Board, type PlayerView } from "./board.js";
 import { baseId, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 
@@ -10,7 +10,9 @@ import type { Seat } from "./seat.js";
  * - Offers to us: accept anything fair (we end up at most 1 behind when we send commodities, the "N for N-1" wash,
  *   otherwise not behind at all); reject the rest. Never give away promissory notes, action cards, relics, fragments
  *   or debt.
- * - N-1 washes: at most one proposal per partner per round (neighbours in the action phase, anyone outside it), a few seconds apart at most once per ~25s per seat and
+ * - Only with neighbours (TI4: transactions are between neighbours in every phase but the agenda phase, unless an
+ *   ability such as Guild Ships or Trade Convoys says otherwise); offers from anyone else are rejected.
+ * - N-1 washes: at most one proposal per partner per round, a few seconds apart at most once per ~25s per seat and
  *   once a minute per partner across all seats: swap commodities when both have some, else "N commodities for N-1 TG".
  * - The Trade strategy card: when we hold it and it has been played, offer each player we may force-replenish a free
  *   replenish in exchange for an N-1 wash with us; when they accept (or ask us), press their faction on the bot's
@@ -174,6 +176,7 @@ export class TradeDesk {
     const board = await this.seat.board(game);
     const holder = board?.players.find((p) => p.scs.includes(5));
     const me = board ? playerOf(board, this.seat.userId) : undefined;
+    const opts = (await this.call(game, "GET", "options")) as Options | null;
     for (const p of open) {
       const offer = pending.incoming.find((o) => o.accept?.messageId === p.m.id);
       if (!offer) continue;
@@ -181,10 +184,15 @@ export class TradeDesk {
       if (!offer.current) continue;
       const iHold = !!me && holder?.userId === me.userId;
       const theyHold = holder?.faction === offer.otherFaction;
-      const verdict = judge(offer.items, offer.otherFaction, {
-        holderAsks: iHold && this.canStillForce(game, offer.otherFaction, board),
-        holderOffers: theyHold && !!me && me.commodities < commTotal(me.raw),
-      });
+      const cp = opts?.counterparties?.find((c) => c.faction === offer.otherFaction);
+      // Only neighbours may transact (see mayTransact); unknown counts as no.
+      const verdict: Verdict =
+        !board || !cp || !mayTransact(board, this.seat.userId, cp)
+          ? { accept: false, why: cp && board ? "we are not neighbours" : "cannot tell whether we are neighbours", replenish: false }
+          : judge(offer.items, offer.otherFaction, {
+              holderAsks: iHold && this.canStillForce(game, offer.otherFaction, board),
+              holderOffers: theyHold && !!me && me.commodities < commTotal(me.raw),
+            });
       const button = verdict.accept ? findControl(p, /^acceptOffer_/) : findControl(p, /^rejectOffer_/);
       if (!button) continue;
       const err = await this.seat.press(p, button, `trade: ${verdict.accept ? "accept" : "reject"} offer from ${offer.otherUserName} (${verdict.why})`);
@@ -234,10 +242,12 @@ export class TradeDesk {
     if (Date.now() - (this.lastPropose.get(game) ?? 0) < 4000) return false;
     const opts = (await this.call(game, "GET", "options")) as Options | null;
     if (!opts || opts.blockedReason || !opts.me || !opts.counterparties) return false;
+    const board = await this.seat.board(game);
+    if (!board) return false;
     for (const faction of fresh) {
       this.offeredReplenish.add(`${game}:${force.m.id}:${faction}`);
       const cp = opts.counterparties.find((c) => c.faction === faction);
-      if (!cp || !cp.canTrade || cp.commodities >= cp.commoditiesTotal || !cp.canSendCommodities) continue;
+      if (!cp || !mayTransact(board, this.seat.userId, cp) || cp.commodities >= cp.commoditiesTotal || !cp.canSendCommodities) continue;
       const n = Math.min(cp.commoditiesTotal, opts.me.tg + 1);
       const note = `Trade card deal: accept and I replenish your commodities for free now (no strategy token). Then wash them with me: your ${n} commodities for ${n - 1} TG.`;
       const ok = await this.send(game, cp, { give: {}, receive: {}, note }, `free replenish for an N-1 wash (${n} for ${n - 1})`);
@@ -279,7 +289,8 @@ export class TradeDesk {
     due.delete(faction);
     const opts = (await this.call(game, "GET", "options")) as Options | null;
     const cp = opts?.counterparties?.find((c) => c.faction === faction);
-    if (!opts || !opts.me || !cp || !cp.canTrade || !cp.canSendCommodities || cp.commodities < 2 || opts.me.tg < 1) return false;
+    const board = await this.seat.board(game);
+    if (!opts || !opts.me || !cp || !board || !mayTransact(board, this.seat.userId, cp) || !cp.canSendCommodities || cp.commodities < 2 || opts.me.tg < 1) return false;
     const n = Math.min(cp.commodities, opts.me.tg + 1);
     this.proposed.set(`${game}:${faction}`, opts.round);
     return this.send(game, cp, { give: { tg: n - 1 }, receive: { commodities: n }, note: `The wash for the free replenish: your ${n} commodities for ${n - 1} TG.` }, `the wash for the free replenish (${n} for ${n - 1})`);
@@ -292,8 +303,6 @@ export class TradeDesk {
     this.lastPropose.set(game, Date.now() - PROPOSE_GAP_MS + 8000 + Math.random() * 6000);
     const board = await this.seat.board(game);
     if (!board || !/^(action|strategy|status|agenda)/.test(board.phase)) return false;
-    // Neighbours only in the action phase; outside it anyone may trade.
-    const anyone = !/^action/.test(board.phase);
     const opts = (await this.call(game, "GET", "options")) as Options | null;
     if (!opts || opts.blockedReason || !opts.me) return false;
     const me = opts.me;
@@ -309,7 +318,7 @@ export class TradeDesk {
       if (cp && Date.now() - owed.ready > OWE_WAIT_MS && !offering.has(cp.color)) {
         this.owe.delete(game);
         const n = Math.min(me.commodities, cp.tg + 1);
-        if (cp.canTrade && n >= 2) {
+        if (mayTransact(board, this.seat.userId, cp) && n >= 2) {
           this.proposed.set(`${game}:${cp.faction}`, opts.round);
           return this.send(game, cp, { give: { commodities: n }, receive: { tg: n - 1 }, note: `The wash for your free replenish: my ${n} commodities for ${n - 1} TG.` }, `the wash we owe the Trade holder (${n} for ${n - 1})`);
         }
@@ -318,7 +327,7 @@ export class TradeDesk {
     }
     const outgoing = new Set<string>();
     const candidates = opts.counterparties
-      .filter((c) => c.canTrade && (c.neighbor || anyone) && this.proposed.get(`${game}:${c.faction}`) !== opts.round && !offering.has(c.color))
+      .filter((c) => mayTransact(board, this.seat.userId, c) && this.proposed.get(`${game}:${c.faction}`) !== opts.round && !offering.has(c.color))
       .filter((c) => Date.now() - (lastToPartner.get(c.userId) ?? 0) >= PARTNER_GAP_MS && !this.offeredLately(game, c.userName))
       .map((c) => ({ c, deal: washDeal(me, c) }))
       .filter((x): x is { c: Counterparty; deal: NonNullable<ReturnType<typeof washDeal>> } => !!x.deal);
@@ -380,6 +389,27 @@ export class TradeDesk {
     if (!v) m.set(game, (v = new Map()));
     return v;
   }
+}
+
+/** Promissory notes that let their owner's partner and them transact without being neighbours (in play area). */
+const CONVOYS = new Set(["convoys", "sigma_trade_convoys", "viability_trade_convoys"]);
+
+/**
+ * Whether we may transact with this counterparty now. TI4: only neighbours transact, in every phase (the bot's own
+ * check, `canTrade`, lets anyone trade outside the action phase), except in the agenda phase (any two players) and
+ * with an ability that says so: Guild Ships, Trade Convoys in play. In the action phase the bot's `canTrade` already
+ * covers those exceptions (and more); outside it we check the ones the web data shows.
+ */
+export function mayTransact(board: Board, myUserId: string, cp: Counterparty): boolean {
+  if (!cp.canTrade) return false;
+  if (cp.neighbor) return true;
+  if (/^agenda/.test(board.phase)) return true;
+  if (/^action/.test(board.phase)) return true;
+  const me = playerOf(board, myUserId);
+  const them = board.players.find((p) => p.faction === cp.faction);
+  const afar = (p: PlayerView | undefined) =>
+    !!p && (((p.raw?.abilities ?? []) as string[]).includes("guild_ships") || ((p.raw?.promissoryNotesInPlayArea ?? []) as string[]).some((n) => CONVOYS.has(n)));
+  return afar(me) || afar(them);
 }
 
 function findControl(p: Prompt, re: RegExp): Control | undefined {
