@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { usePlayConnection } from "@/discord";
 import { usePressButton } from "@/play/usePressButton";
+import { recordFlow } from "@/rollback/flows";
 
 /** One bot button to press. */
 export type Press = { channelId: string; messageId: string; customId: string; label: string };
@@ -62,11 +63,14 @@ function settled(conn: Conn, p: Press, before: string) {
   });
 }
 
-/** Runs presses in order, each after the bot acknowledged the previous one; then `after`. */
+/**
+ * Runs presses in order, each after the bot acknowledged the previous one; then `after`. The presses are recorded as
+ * one action (`summary` says what it did), so the Undo button takes them back together.
+ */
 export function useRunSequence() {
   const press = usePressButton();
   const conn = usePlayConnection();
-  return async (key: string, presses: Press[], after?: (dismiss: (id: string) => void) => void) => {
+  return async (key: string, presses: Press[], after?: (dismiss: (id: string) => void) => void, summary?: string) => {
     const runner = useRunner.getState();
     /* A run whose promise was lost (socket swap, hot reload) must not block the panels for good. */
     if (runner.running && Date.now() - runner.startedAt < 60_000) {
@@ -74,6 +78,7 @@ export function useRunSequence() {
       return;
     }
     runner.set({ running: key, step: 0, total: presses.length, label: "", error: null, startedAt: Date.now() });
+    const done: string[] = [];
     for (const [i, p] of presses.entries()) {
       useRunner.getState().set({ step: i + 1, label: p.label });
       const before = stamp(conn, p);
@@ -81,10 +86,14 @@ export function useRunSequence() {
       const result = await press(p.channelId, p.messageId, p.customId);
       if (!result.error && i < presses.length - 1) await settled(conn, p, before);
       if (result.error) {
+        recordFlow(done, summary);
         useRunner.getState().set({ running: null, error: result.error });
         return;
       }
+      done.push(p.customId);
     }
+    recordFlow(done, summary);
+    if (summary) useRunner.getState().set({ summary: { text: summary, at: Date.now() } });
     after?.((id) => conn.actions.dismissPrompt(id));
     useRunner.getState().set({ running: null, step: 0, total: 0, label: "" });
   };
