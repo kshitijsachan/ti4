@@ -69,7 +69,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   const status = chooseStatus(d, state, me, all.filter((x) => x.target?.userId === me));
   if (status !== undefined) return status;
   if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, all) : null;
-  const cards = chooseCards(d, state, me, all);
+  const cards = chooseCards(d, state, me, all, ctx.history);
   if (cards !== undefined) return cards;
   // Faction leaders / abilities (shared kinds leader.use, faction.ability; phase C faction areas).
   const factionB = chooseFactionB(d, state, me);

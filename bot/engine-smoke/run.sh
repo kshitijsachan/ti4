@@ -14,7 +14,7 @@ if [ "$1" = overlap ]; then
   timeout 300 $J/java -cp "$OUT:$CP" ti4.selfhost.engine.KindOverlap ${MESSAGES:-$S/int-smoke/messages.tsv} 2>&1 | grep -v "^Info\|JAVA_TOOL\|Reflections"
   exit
 fi
-for M in ti4.selfhost.engine.EngineSmoke ti4.selfhost.engine.interaction.InteractionSmoke; do
+for M in ti4.selfhost.engine.EngineSmoke ti4.selfhost.engine.interaction.InteractionSmoke ti4.selfhost.engine.CardsTailSmoke; do
   echo "== $M"
   timeout 300 $J/java -cp "$OUT:$CP" $M 2>&1 | grep -E "PASS|FAIL|Exception|at ti4|ALL|FAILURES|passed|failed" | grep -v "kind scan found" | head -60
 done

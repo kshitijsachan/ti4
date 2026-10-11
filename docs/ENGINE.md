@@ -295,7 +295,7 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 | G5 production / payment | `payment.spend` (payload {planets, tg, commodities, sarween}), `production.produce` (payload {units}) | — |
 | G6 agenda | `agenda.{when,after,preassign,shenanigans,vote,vote_step,tiebreak,resolve,rider,next}` (vote: payload) | `agenda` |
 | G7 status | `status.{score,score_secret,reveal_objective,homework,advance,imperial}`, `command_tokens.adjust` (payload pools) | `status` |
-| G8 cards | `action_card.{play,sabotage (window),discard,draw,resolve,target}`, `promissory_note.play` | — |
+| G8 + C7 cards | `action_card.{play,sabotage (window; card player may Pause Timer via answersOutsideWindow),discard,draw,resolve (names the card),target,step (every other follow-up step, typed id tokens + card),when_after (window: non-queued agenda when/after)}`, `promissory_note.{play,resolve}` | — |
 | G9 exploration | `explore.{planet,card_pick,frontier,outcome}`, `relic.{draw,fragments}` | `exploration` |
 | G10 Thunder's Edge | `te.{fracture.roll,fracture.ingress,galvanize,expedition,thunders_edge.place,visionaria.respond}` | `thundersEdge` |
 | G11 trade | `trade.{offer,offer_sent,force_replenish}`; game action `trade.propose` | `trade` (viewer only) |
