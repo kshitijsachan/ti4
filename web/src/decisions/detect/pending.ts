@@ -46,6 +46,11 @@ export type PendingPrompt = {
   ownCall?: boolean;
   /** Presses I made on this prompt so far (own calls whose primary takes more than one press). */
   presses?: number;
+  /**
+   * Parts of my own card's primary the bot reports done (base button ids, e.g. `diploSystem`, `diploRefresh2`), so the
+   * card offers only what is left.
+   */
+  doneSteps?: string[];
   answered?: boolean;
 };
 
@@ -118,6 +123,15 @@ function pressesNeeded(m: Message) {
 const PLACED_STRUCTURE = /\bplaced 1 (?:space ?dock|pds)\b/i;
 const CONSTRUCTION_BUILD = /\bis resolving the primary ability of \*{0,2}Construction\*{0,2} to build\b/i;
 
+/** A bot line that names this faction by its emoji (`<:Jolnar:…>`). */
+function byFaction(m: Message, faction: string) {
+  const f = faction.toLowerCase();
+  return [...m.content.matchAll(/<a?:(\w+):\d+>/g)].some(([, name]) => {
+    const n = name.toLowerCase();
+    return n === f || f.startsWith(n) || n.startsWith(f);
+  });
+}
+
 /**
  * My own Construction card's primary, from its thread: how many of its two steps the bot reports done (a structure
  * placed, or a space dock's PRODUCTION used). Undefined when this is not a Construction card or its thread is not
@@ -127,15 +141,62 @@ function constructionSteps(state: PlayState, m: Message, faction: string | undef
   if (!faction || !choicesOf(m).some((c) => /^construction_/.test(baseId(c.customId)))) return undefined;
   const thread = state.messages[m.id];
   if (!thread?.loaded) return undefined;
-  const f = faction.toLowerCase();
-  const mine = (x: Message) =>
-    [...x.content.matchAll(/<a?:(\w+):\d+>/g)].some(([, name]) => {
-      const n = name.toLowerCase();
-      return n === f || f.startsWith(n) || n.startsWith(f);
-    });
   return thread.ids
     .map((id) => thread.byId[id])
-    .filter((x) => !!x?.author.bot && mine(x) && (PLACED_STRUCTURE.test(x.content) || CONSTRUCTION_BUILD.test(x.content))).length;
+    .filter((x) => !!x?.author.bot && byFaction(x, faction) && (PLACED_STRUCTURE.test(x.content) || CONSTRUCTION_BUILD.test(x.content))).length;
+}
+
+/** "<faction> chose to Diplo the 315 (Arinam/Meer) system." (the actions channel and the card's thread). */
+const DIPLO_SYSTEM_LINE = /\bchose to (?:Diplo|make _?Sanctuary_? in) the\b/i;
+/** Done readying: the bot copies the prompt as it ended into the card's thread ("<faction> Readied Nar, Meer"). */
+const DIPLO_READY_LINE = /^(?:\s*<a?:\w+:\d+>)*\s*Readied\b|please choose the planets you wish to ready/i;
+const UNDID = /\bundid: \*\*.*?pressed “(.*?)”\*\*/;
+const REWOUND = /\brewound the game to just after\b/i;
+
+/**
+ * My own Diplomacy card's primary has two parts on the card's own buttons (protect a system, ready up to 2 planets),
+ * each answered in a prompt only I see, and the bot leaves both buttons up after either. Which parts are done comes
+ * from what the bot reports (the card's thread and the action log after it), less what an undo or rewind took back.
+ * Undefined when this is not a Diplomacy card or its thread is not loaded.
+ */
+function diplomacySteps(state: PlayState, m: Message, channelId: string, faction: string | undefined) {
+  if (!faction || !choicesOf(m).some((c) => baseId(c.customId) === "diploSystem")) return undefined;
+  /* A card re-posted by an undo has no thread of its own: the card's thread is the newest Diplomacy one before it. */
+  const threadId = state.messages[m.id]
+    ? m.id
+    : Object.values(state.channels)
+        .filter((c) => /-round-\d+-diplomacy$/i.test(c.name ?? "") && compareSnowflakes(c.id, m.id) <= 0)
+        .map((c) => c.id)
+        .sort(compareSnowflakes)
+        .pop();
+  const thread = threadId ? state.messages[threadId] : undefined;
+  if (!threadId || !thread?.loaded) return undefined;
+  const channel = state.messages[channelId];
+  const later = (channel?.ids ?? []).filter((id) => compareSnowflakes(id, threadId) > 0).map((id) => channel.byId[id]);
+  const lines = [...thread.ids.map((id) => thread.byId[id]), ...later]
+    .filter((x): x is Message => !!x?.author.bot)
+    .sort((a, b) => compareSnowflakes(a.id, b.id));
+  let system: Message | undefined;
+  let ready: Message | undefined;
+  const plain = (x: Message) => x.content.replace(/<a?:\w+:\d+>/g, "").replace(/\s+/g, " ");
+  for (const x of lines) {
+    if (REWOUND.test(x.content)) {
+      system = ready = undefined;
+      continue;
+    }
+    const undone = x.content.match(UNDID)?.[1];
+    if (undone !== undefined) {
+      const label = undone.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      const names = (line?: Message) => !!line && !!label && plain(line).includes(label);
+      if (ready && (/\bread(y|ied)\b/i.test(undone) || names(ready))) ready = undefined;
+      else if (system && (/\bdiplo\b/i.test(undone) || names(system))) system = undefined;
+      continue;
+    }
+    if (!byFaction(x, faction) && !x.content.includes(`<@${state.me?.id}>`)) continue;
+    if (DIPLO_SYSTEM_LINE.test(x.content)) system = x;
+    if (DIPLO_READY_LINE.test(x.content)) ready = x;
+  }
+  return [system && "diploSystem", ready && "diploRefresh2"].filter((x): x is string => !!x);
 }
 
 /**
@@ -175,13 +236,7 @@ const COMBAT_ID = /^(combatRoll|getDamageButtons|assignHits|retreat_|rollForAmbu
 
 /** After a homework prompt: the bot's "<faction> … is ready for strategy phase." line for this faction. */
 export function declaredReady(after: (Message | undefined)[], faction: string) {
-  const f = faction.toLowerCase();
-  const mine = (m: Message) =>
-    [...m.content.matchAll(/<a?:(\w+):\d+>/g)].some(([, name]) => {
-      const n = name.toLowerCase();
-      return n === f || f.startsWith(n) || n.startsWith(f);
-    });
-  return after.some((m) => !!m?.author.bot && /\bis ready for (?:strategy|agenda) phase\b/i.test(m.content) && mine(m));
+  return after.some((m) => !!m?.author.bot && /\bis ready for (?:strategy|agenda) phase\b/i.test(m.content) && byFaction(m, faction));
 }
 
 /** The bot marks who has answered a table-wide prompt with that faction's emoji as a reaction. */
@@ -219,6 +274,16 @@ type ScanOptions = {
   hand: boolean;
   setupOpen: boolean;
 };
+
+/**
+ * My own strategy card, just played: the bot's "X played by <me>" call to my role, or the same card re-posted by an
+ * undo (no role call, no "please indicate your choice"). Never a follow prompt for me.
+ */
+function isOwnCard(m: Message, meId: string, ping: boolean, myRoles: Set<string>) {
+  if (!ping || !forwardChoices(m).some((c) => SC_CALL_ID.test(baseId(c.customId)))) return false;
+  if (m.prompted_user_id === meId && (m.mention_roles ?? []).some((r) => myRoles.has(r))) return true;
+  return new RegExp(`\\bplayed by\\b[^\\n]*<@!?${meId}>`, "i").test(m.content);
+}
 
 /** When I pressed something on a message, and whether the bot's edit since made it a new step. */
 function answeredState(state: PlayState, m: Message, ping: boolean) {
@@ -319,7 +384,7 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
       items.push({ message: m, channelId, where, reason: "table" });
       return;
     }
-    if (m.prompted_user_id === me.id && ping && (m.mention_roles ?? []).some((r) => myRoles.has(r))) {
+    if (isOwnCard(m, me.id, ping, myRoles)) {
       /* Only the card's own buttons are mine; the follow buttons are the other players'. */
       if (!forwardChoices(m).some((c) => !FOLLOW_ID.test(baseId(c.customId)))) answered = true;
       const stale = index < ids.length - ROLE_WINDOW || (!!newestTurnMenu && compareSnowflakes(id, newestTurnMenu) < 0);
@@ -332,7 +397,13 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
         presses = built;
         answered = built >= 2;
       }
-      items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale, presses });
+      /* Diplomacy: both parts stay on the card until the bot reports each done (an undo gives one back). */
+      const diplo = diplomacySteps(state, m, channelId, opts.faction);
+      if (diplo) {
+        presses = diplo.length;
+        answered = diplo.length >= 2;
+      }
+      items.push({ message: m, channelId, where, reason: "own", ownCall: true, answered: answered || stale, presses, doneSteps: diplo });
       return;
     }
     if (opts.roleCalls && isScoringSummary(m)) {

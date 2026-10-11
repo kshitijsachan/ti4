@@ -7,6 +7,7 @@ import { scDefinition } from "../../ui/parts";
 import { CardHeader, playerLabel } from "./shared";
 import type { Objective } from "@/entities/data/types";
 import { useRunner, useRunSequence } from "./runner";
+import { usePlayConnection } from "@/discord";
 import classes from "./strategy.module.css";
 
 type PrimaryAction = { id: RegExp; label: string | ((data: RendererProps["data"]) => string); hint?: string };
@@ -41,8 +42,14 @@ const FOLLOWERS = /^(sc_follow_|sc_no_follow_|sc_trade_follow|sc_refresh|request
 
 const SPEAKER = /^sc_3_assign_speaker_to_(\w+)/;
 
-/** Primary buttons already pressed on a card that takes two (Diplomacy: system, then ready planets). */
+/** Imperial's primary buttons already pressed (score, then draw or Mecatol Rex). */
 const pressed = new Set<string>();
+
+/** Diplomacy, what is left once one of its two parts is done (the bot reports each; see `doneSteps`). */
+const DIPLO_LEFT: Record<string, { text: string; skip: string }> = {
+  diploSystem: { text: "System protected. You may still ready up to 2 exhausted planets.", skip: "Skip readying planets" },
+  diploRefresh2: { text: "Planets readied. You may still choose a system to protect.", skip: "Skip protecting a system" },
+};
 
 function controlsMecatol(data: RendererProps["data"]) {
   return !!data.me?.planets?.some((p) => p === "mr" || p === "mrte");
@@ -118,12 +125,15 @@ export function StrategyPrimaryBody(props: RendererProps) {
   const sc = d.sc!;
   const spec = cardSpec(sc, scDefinition(sc, data.web)?.id);
   const second = /second structure/.test(d.title);
+  const done = d.prompt.doneSteps ?? [];
+  const diploLeft = sc === 2 && done.length === 1 ? DIPLO_LEFT[done[0]] : undefined;
+  const conn = usePlayConnection();
   const mecatol = controlsMecatol(data);
   const actions = (PRIMARY[sc] ?? [])
     .filter((a) => sc !== 8 || (mecatol ? !/sc_draw_so/.test(a.id.source) : !/score_imperial/.test(a.id.source)))
     .map((a) => ({ a, choice: d.choices.find((c) => a.id.test(baseId(c.customId)) && !c.disabled) }))
     .filter((x): x is { a: PrimaryAction; choice: Choice } => !!x.choice)
-    .filter((x) => !pressed.has(`${d.id}:${baseId(x.choice.customId)}`));
+    .filter((x) => !done.includes(baseId(x.choice.customId)) && !pressed.has(`${d.id}:${baseId(x.choice.customId)}`));
   const run = useRunSequence();
   const runner = useRunner();
   const busy = !!runner.running;
@@ -136,7 +146,7 @@ export function StrategyPrimaryBody(props: RendererProps) {
       useRunner.getState().set({ error: "This button has no action." });
       return;
     }
-    if (sc === 2 || sc === 8) pressed.add(`${d.id}:${baseId(c.customId)}`);
+    if (sc === 8) pressed.add(`${d.id}:${baseId(c.customId)}`);
     void run(`primary:${d.id}:${c.key}`, [{ channelId: d.prompt.channelId, messageId: d.id, customId: c.customId, label: c.label }]);
   };
   const steps = (d.steps ?? []).filter((s) => s.choices.some((c) => !FOLLOWERS.test(baseId(c.customId)) && c.rank !== "more" && c.rank !== "undo"));
@@ -144,7 +154,13 @@ export function StrategyPrimaryBody(props: RendererProps) {
   return (
     <div className={classes.panel}>
       <CardHeader sc={sc} data={data} sub="Your strategy card">
-        <p className={classes.effect}>{second ? (scDefinition(sc, data.web)?.id === "te4construction" ? "Place one more structure (PDS or space dock) on a planet you control." : "Place one more PDS on a planet you control.") : spec?.primary}</p>
+        <p className={classes.effect}>
+          {second
+            ? scDefinition(sc, data.web)?.id === "te4construction"
+              ? "Place one more structure (PDS or space dock) on a planet you control."
+              : "Place one more PDS on a planet you control."
+            : (diploLeft?.text ?? spec?.primary)}
+        </p>
       </CardHeader>
       {steps.map((s, i) => (
         <StepView key={s.id} step={s} props={props} index={i} />
@@ -163,6 +179,14 @@ export function StrategyPrimaryBody(props: RendererProps) {
                 emphasis
               />
             ))}
+            {diploLeft && (
+              <ChoiceButton
+                choice={{ key: "diplo-skip", kind: "button", customId: "diplo-skip", label: diploLeft.skip, style: 2, disabled: false, rank: "secondary", component: { type: 2 } }}
+                onPress={() => conn.actions.dismissPrompt(d.id)}
+                pending={false}
+                busy={busy}
+              />
+            )}
           </div>
         </div>
       )}

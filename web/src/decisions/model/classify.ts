@@ -336,6 +336,9 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
     choices,
   };
 
+  /* Diplomacy's own prompts read "please choose the system you wish to Diplo": say what the choice does. */
+  if (has(choices, /^diplo_\w+?_diploP$/)) return { ...base, title: "Choose a system to protect with Diplomacy" };
+  if (has(choices, /^deleteButtons_diplomacy$/)) return { ...base, title: "Ready up to 2 planets with Diplomacy" };
   if (prompt.reason === "table" || has(choices, /^(deal2SOToAll|startOfGameObjReveal|startOfGameStrategyPhase)$/)) {
     return { ...base, ...tableSetup(choices), kind: "setup", eyebrow: "Setup · anyone can press", table: true, setup: true };
   }

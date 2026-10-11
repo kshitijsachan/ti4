@@ -238,8 +238,13 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
       .filter((d) => d.kind !== "scoring" || !web?.gameState?.phase?.startsWith("status") || web.gameState.phase === "status.scoring");
     /* "Decide now whether to follow X" is moot once X has been played. */
     const played = new Set((web?.strategyCards ?? []).filter((sc) => sc.played).map((sc) => sc.initiative));
+    /* A played card's prompt (follow or my primary) is moot once the card is not in play: an undo or rewind took the
+       play back, or the round moved on. My own card is never a follow prompt for me. */
+    const offTable = (d: Decision) =>
+      !!d.sc && !d.optional && (d.kind === "scFollow" || d.kind === "scPrimary") && (!!web?.strategyCards?.length && !played.has(d.sc));
+    const mineToFollow = (d: Decision) => d.kind === "scFollow" && !d.optional && !!d.sc && !!mePlayer?.scs?.includes(d.sc);
     const live = all.filter(
-      (d) => !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) && !(d.kind === "scFollow" && !d.optional && d.sc && (!mePlayer || mePlayer.followedSCs?.includes(d.sc))) && !(d.kind === "combat" && combatOver(d, web)) &&
+      (d) => !offTable(d) && !mineToFollow(d) && !(d.optional && d.kind === "scFollow" && d.sc && played.has(d.sc)) &&!(d.kind === "scFollow" && !d.optional && d.sc && (!mePlayer || mePlayer.followedSCs?.includes(d.sc))) && !(d.kind === "combat" && combatOver(d, web)) &&
         !(movement.active && (d.id === movement.promptId || (d.kind === "tactical" && MAP_STEP.test(d.choices.map((c) => baseId(c.customId)).join(" "))))),
     );
     const oldestFirst = foldExplores(inBursts(live)).filter((d) => !(d.kind === "combat" && combatOver(d, web)));
