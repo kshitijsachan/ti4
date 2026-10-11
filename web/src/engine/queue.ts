@@ -154,7 +154,16 @@ export function orderDecisions(
   /* Untyped leftovers the game never closed: setup prompts once the game is under way are dropped, info panels
      (nothing but utilities / undo) go behind "Available now". */
   const underWay = !!state && !state.setup && !(state.draft && state.draft.status === "drafting");
-  const shown = mine.filter((d) => !hidden?.has(d.id) && !(d.kind === "legacy" && underWay && setupOnly(d.options)));
+  /* A played strategy card is followed / resolved in the action phase only; a window left open past it is moot. */
+  const actionPhase = !state || /^action/i.test(state.phase ?? "");
+  const shown = dedupe(
+    mine.filter(
+      (d) =>
+        !hidden?.has(d.id) &&
+        !(d.kind === "legacy" && underWay && setupOnly(d.options)) &&
+        !(d.kind === "strategy_card.resolve" && !actionPhase),
+    ),
+  );
   const background = (d: Decision) => openToAll(d) || (d.kind === "legacy" && nothingToDecide(d.options));
   const offers = shown.filter(background);
   const own = shown.filter((d) => !background(d));
@@ -175,6 +184,22 @@ export function orderDecisions(
     .sort((a, b) => a.r - b.r || a.d.createdAt - b.d.createdAt || a.d.seq - b.d.seq)
     .map((x) => x.d);
   return { queue, offers };
+}
+
+/** One prompt per played strategy card (its message and its thread can both carry it): the newest. */
+function dedupe(list: Decision[]): Decision[] {
+  const newest = new Map<string, Decision>();
+  for (const d of list) {
+    const sc = d.kind === "strategy_card.resolve" ? d.window?.subject?.strategyCard : undefined;
+    if (sc === undefined) continue;
+    const key = `sc:${JSON.stringify(sc)}`;
+    const cur = newest.get(key);
+    if (!cur || d.createdAt > cur.createdAt) newest.set(key, d);
+  }
+  return list.filter((d) => {
+    const sc = d.kind === "strategy_card.resolve" ? d.window?.subject?.strategyCard : undefined;
+    return sc === undefined || newest.get(`sc:${JSON.stringify(sc)}`) === d;
+  });
 }
 
 /** My decisions in answering order, live (the popup's queue; background prompts excluded). */

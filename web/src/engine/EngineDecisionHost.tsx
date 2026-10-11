@@ -176,6 +176,18 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
                   </UnstyledButton>
                   {queueOpen && (
                     <span className={classes.queueList} role="menu" aria-label="Decisions waiting">
+                      {queue.filter((d) => d.kind === "legacy").length >= 3 && (
+                        <UnstyledButton
+                          role="menuitem"
+                          className={classes.queueItem}
+                          onClick={() => {
+                            for (const d of queue) if (d.kind === "legacy") engineStore.getState().hide(d.id);
+                            setQueueOpen(false);
+                          }}
+                        >
+                          Hide the {queue.filter((d) => d.kind === "legacy").length} untyped prompts (leftovers)
+                        </UnstyledButton>
+                      )}
                       {queue.map((d) => (
                         <UnstyledButton
                           key={d.id}
