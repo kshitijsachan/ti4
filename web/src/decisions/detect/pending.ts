@@ -13,6 +13,7 @@ import {
   isHandMenu,
   isUtilityMenu,
   isSecretDiscardPrompt,
+  isKeleresFlavorPrompt,
   isTableSetupPrompt,
   needsAnswer,
 } from "../model/controls";
@@ -275,6 +276,8 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     /* "Score A Secret Objective" pressed on the status-phase summary (not from the hand tray) answers in the action log. */
     const secretPick = !!m.ephemeral && opts.roleCalls && !opts.hand && forwardChoices(m).some((c) => /^so_score_hand_/.test(baseId(c.customId)));
     if (!m.author.bot || state.dismissedPrompts[id] || !needsAnswer(m) || isDraftPrompt(m) || (isHandMenu(m) && !secretPick) || isUtilityMenu(m)) return;
+    /* Once I have a faction, any Keleres flavor prompt left over is stale. */
+    if (opts.faction && isKeleresFlavorPrompt(m)) return;
     const tableSetup = isTableSetupPrompt(m);
     // Table-wide setup steps (deal secret objectives, start the game) are pressed by the server once everyone is
     // ready (shim/src/solo.ts steward), so they are never a decision for a person.

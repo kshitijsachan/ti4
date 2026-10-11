@@ -145,6 +145,12 @@ export function isDraftPrompt(m: Message): boolean {
   return ids.length > 0 && ids.every((id) => DRAFT_ID.test(id));
 }
 
+/** "Choose a flavor of Keleres": the Keleres player's faction setup, posted to their hand thread after the draft. */
+export function isKeleresFlavorPrompt(m: Message): boolean {
+  const ids = forwardChoices(m).map((c) => baseId(c.customId));
+  return ids.length > 0 && ids.every((id) => /^setupStep5_\d+_keleres/.test(id));
+}
+
 /** A table-wide setup step anyone may press (deal secret objectives, reveal objectives and start round 1). */
 export function isTableSetupPrompt(m: Message): boolean {
   const ids = forwardChoices(m).map((c) => baseId(c.customId));

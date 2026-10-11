@@ -470,8 +470,9 @@ export class SoloGames {
       // Games still drafting too: a restart mid-draft must not leave the game without its steward.
       const draft = await this.draft(game);
       if (!draft || (draft.status !== "finished" && draft.status !== "drafting")) continue;
-      let ids: string[] = this.realPlayers(web).map((p: Json) => String(p.discordId));
-      if (!ids.length) ids = (draft.players ?? []).map((p: Json) => String(p.userId)).filter((id: string) => id && id !== "null");
+      // Seated players plus the draft's: one still setting up (Keleres picking a flavor) has no faction yet.
+      const drafted = (draft.players ?? []).map((p: Json) => String(p.userId)).filter((id: string) => id && id !== "null");
+      const ids = [...new Set([...this.realPlayers(web).map((p: Json) => String(p.discordId)), ...drafted])];
       const humans = ids.filter((id: string) => !autopilot.has(id));
       // Every game in setup gets a steward (solo or with friends): it presses the table-wide steps as a person seated
       // at the table once everyone is ready, so nobody has to.
