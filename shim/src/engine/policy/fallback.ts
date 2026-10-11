@@ -131,6 +131,20 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "ui.info_menu": "optional",
   "player.preference": "optional",
   "choose.select": "optional",
+  // C6 components: generic single-choice steps (the components policy answers our own at once); menus / relic offers
+  "choose.planet": "blocking",
+  "choose.system": "blocking",
+  "choose.player": "blocking",
+  "choose.unit": "blocking",
+  "choose.card": "blocking",
+  "choose.confirm": "blocking",
+  "component.action": "optional",
+  "relic.use": "optional",
+  // C8 core tails
+  "combat.bombard": "planner",
+  "units.remove": "blocking",
+  "production.place": "blocking",
+  "commodities.gain": "blocking",
 };
 
 const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);

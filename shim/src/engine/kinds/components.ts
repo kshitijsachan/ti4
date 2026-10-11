@@ -9,7 +9,7 @@
  * relic asking. Add a rule to the bot's Choose*Kind.RULES to type another one-step prompt; the bot policy
  * (policy/components.ts) and the web renderer (renderers/components) then handle it with no further change.
  */
-import type { DecisionBase } from "../types.js";
+import type { DecisionBase, FactionId, PlanetId, RelicId, TileId, TilePosition } from "../types.js";
 
 /** Fields every choose.* value carries. */
 export interface ChooseBase {
@@ -21,41 +21,41 @@ export interface ChooseBase {
 
 export type ChoosePlanet = DecisionBase<
   "choose.planet",
-  ChooseBase & { planet: string; planetName?: string; tile?: string | null }
+  ChooseBase & { planet: PlanetId; planetName?: string; tile?: TilePosition | null }
 >;
 
 export type ChooseSystem = DecisionBase<
   "choose.system",
   ChooseBase & {
     /** Tile position on the map (absent when the tile is not on the map yet, see tileId). */
-    tile?: string;
+    tile?: TilePosition;
     /** Tile id from the tile data (Star Charts: a tile still to be placed). */
-    tileId?: string;
+    tileId?: TileId;
     tileName?: string | null;
   }
 >;
 
-export type ChoosePlayer = DecisionBase<"choose.player", ChooseBase & { faction: string; color?: string | null }>;
+export type ChoosePlayer = DecisionBase<"choose.player", ChooseBase & { faction: FactionId; color?: string | null }>;
 
 export type ChooseUnit = DecisionBase<
   "choose.unit",
-  ChooseBase & { unit: string; tile?: string; planet?: string; planetName?: string }
+  ChooseBase & { unit: string; tile?: TilePosition; planet?: PlanetId; planetName?: string }
 >;
 
 export type ChooseCard = DecisionBase<
   "choose.card",
   ChooseBase & {
     cardType: "relic" | "explore_deck" | "action_card" | "card" | string;
-    relic?: string;
+    relic?: RelicId;
     relicName?: string;
     relicText?: string;
-    relic2?: string;
+    relic2?: RelicId;
     relic2Name?: string;
     card?: string;
     trait?: string;
     position?: number | null;
-    faction?: string;
-    faction2?: string;
+    faction?: FactionId;
+    faction2?: FactionId;
     choice?: string;
     step?: number;
   }
@@ -91,7 +91,7 @@ export type ComponentAction = DecisionBase<
 export type RelicUse = DecisionBase<
   "relic.use",
   {
-    relic: string | null;
+    relic: RelicId | null;
     relicName?: string;
     relicText?: string;
     effect:

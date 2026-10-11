@@ -15,9 +15,9 @@ import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
 import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
-import { chooseCombat } from "./combatPolicy.js";
+import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
 import { chooseComponents, isComponentsKind } from "./policy/components.js";
-import { planPayment } from "./policy/production.js";
+import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
 import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
 
@@ -164,6 +164,12 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
       const plan = planPayment(d, state, me);
       return plan ? { payload: plan.payload as unknown as Record<string, unknown>, why: plan.why } : null;
     }
+    case "production.place":
+      return choosePlacement(d, state, me);
+    case "commodities.gain":
+      return chooseCommodities(d, state, me, ctx.history);
+    case "units.remove":
+      return chooseUnitsRemove(d, me, ctx.history, ctx.open);
     case "production.produce":
       // What to build is the planner's call (botplay BuildJob sends it as one production payload).
       return null;

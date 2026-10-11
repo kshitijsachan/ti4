@@ -3,6 +3,7 @@ import type { CombatHits } from "../../../../../shim/src/engine/kinds/combat";
 import { CombatHitsPanel } from "./CombatHitsPanel";
 import { CombatAssignUnitsPanel, CombatRetreatPanel } from "./CombatMenuPanels";
 import { CombatRoundPanel } from "./CombatRoundPanel";
+import { CombatBombardPanel, UnitsRemovePanel } from "./CombatTailPanels";
 import type { RendererProps } from "./types";
 
 export type { CombatPlanPayload } from "./types";
@@ -22,4 +23,6 @@ export const renderers: Record<string, ComponentType<RendererProps<any>>> = {
   "combat.hits": CombatHitsKeyed,
   "combat.assign_units": CombatAssignUnitsPanel,
   "combat.retreat": CombatRetreatPanel,
+  "combat.bombard": CombatBombardPanel,
+  "units.remove": UnitsRemovePanel,
 };
