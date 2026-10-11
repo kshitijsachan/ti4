@@ -17,6 +17,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import {
   BotErrorTail,
   botDecisions,
+  stackHealthy,
+  waitForStack,
   FUZZ_DIR,
   ShimClient,
   controlsOf,
@@ -60,7 +62,15 @@ if (!game) {
 writeFileSync(`${runDir}/game`, `${game}\n${created ? "created" : "attached"}\n`);
 if (created) deadline = Date.now() + minutes * 60000;
 say(`game ${game} (${created ? "created" : "attached"})`);
-const rec = makeRecorder("ws-fuzz", seed, () => game, { seat: seatName });
+const rec0 = makeRecorder("ws-fuzz", seed, () => game, { seat: seatName });
+// Findings made while the stack is down / restarting are noise: re-check health before recording.
+const rec = {
+  list: rec0.list,
+  async record(v) {
+    if (!(await stackHealthy())) return say(`   (not recorded, stack restarting: ${v.kind})`);
+    return rec0.record(v);
+  },
+};
 const trace = [];
 const tr = () => trace.slice(-12).map((t) => `#${t.step} ${t.what}${t.result ? ` -> ${t.result}` : ""}`);
 
@@ -90,6 +100,8 @@ const SKIP =
   /concede|eliminat|endGame|end_game|gameEnd|deleteGame|resign|leaveGame|kickPlayer|replacePlayer|forceAbort|startTFDraft|frankenDraft|^jmf|showGameAgain|searchMyGames|getStarted|newGame|createGame|offerPlayerPref|playerPref_|notepad|^setupStep|startPlayerSetup|^frankenSetup|^setupBaseGameMode|^chooseExp_|^enableDaneMode|^offerTEOptionButtons|^restartAllMiltyQueue|^miltyFactionInfo|setupHomebrew|getHomebrewButtons|^gameSetup|miltySetup|^draftSetup/i;
 // "Done" / dismiss buttons on a required prompt throw the prompt away; a human rarely does it, the fuzzer would
 // mostly dead-end the game, so they get a low weight (they are still tried).
+// Read-only info buttons (Cards Info thread, map views, refreshes) are pressed rarely: they don't move the game.
+const INFO = /^(cardsInfo|getModifyTiles|refresh|show|offerInfo|offerDeck|checkEmpty|checkTechSkip|chooseMapView|factionEmbedRefresh|getStarted|gameInfo|unitInfo|leaderInfo|showObj|showDeck|transaction$|newTransact|offerToTransact)/i;
 const DISMISS = /^deleteButtons|^dismiss|^deleteMessage|^ignore|^done/i;
 const UNDO = /^ultimateUndo_|undo/i;
 const stateMe = () => client.view.state?.players?.find((p) => p.userId === ME);
@@ -118,6 +130,7 @@ function legacyCandidates() {
       if (ff && fam(ff) !== fam(myFaction)) w = 0.15; // someone else's locked buttons: the bot must refuse
       if (UNDO.test(c.id)) w = 0; // undo has its own weight
       if (DISMISS.test(c.id)) w *= 0.1;
+      if (INFO.test(c.id.replace(/^FFCC_[^_]+_/, ""))) w *= 0.1;
       if (age > 20) w *= 0.3;
       out.push({ m, c, d, own, w });
     }
@@ -161,7 +174,7 @@ function randomAnswer(d) {
     return { optionId: s.id, values: randomValues(f.minValues, f.maxValues, f.choices.map((c) => c.value)) };
   }
   if (!opts.length) return null;
-  const w = (o) => (UNDO.test(o.id) ? 0.1 : DISMISS.test(o.id) ? 0.08 : 1);
+  const w = (o) => (UNDO.test(o.id) ? 0.1 : DISMISS.test(o.id) ? 0.08 : INFO.test(o.id.replace(/^FFCC_[^_]+_/, "")) ? 0.05 : 1);
   return { optionId: rng.weighted(opts.map((o) => [w(o), o])).id };
 }
 
@@ -192,7 +205,8 @@ async function engineAnswer(d, a, label) {
 async function doMine() {
   const mine = myDecisions(client.view, ME);
   if (!mine.length) return false;
-  const d = rng.chance(0.7) ? mine[0] : rng.pick(mine);
+  const dw = (d) => (/preassign|pre_decline|queue|game_settings/.test(d.kind) ? 0.3 : d.kind === "legacy" ? 1 : 5);
+  const d = rng.weighted(mine.map((x) => [dw(x), x]));
   const a = randomAnswer(d);
   if (!a) return false;
   const r = await engineAnswer(d, a, "answer");
@@ -318,6 +332,8 @@ let lastSeq = 0;
 let lastSeqAt = Date.now();
 let gameOver = false;
 let behindSince = null;
+let pollMode = false;
+let lastPoll = 0;
 let lastSave = null;
 let lastSaveAt = Date.now();
 /** The bot's registry moved on but no engine event reached me: the live stream is silent (resubscribe to keep going). */
@@ -332,6 +348,8 @@ async function checkStreamLive() {
       rec.record({ kind: "engine:stream-silent", detail: `no engine event over ws for ${Math.round((Date.now() - client.lastEngineAt) / 1000)} s while the bot's registry moved from seq ${client.view.seq} to ${bot.seq} (${differs} public decisions differ); resubscribing`, step, trace: tr() });
       behindSince = null;
       client.subscribeEngine(true);
+      if (!pollMode) say("   live stream silent: re-snapshotting every 15 s from now on (like a user reloading)");
+      pollMode = true;
     }
   } else behindSince = null;
 }
@@ -384,6 +402,20 @@ await checkAll("start");
 let idle = 0;
 while (Date.now() < deadline && step < maxSteps && !gameOver) {
   await sleep(500 + rng.int(1200));
+  if (!(await stackHealthy())) {
+    await waitForStack(say);
+    prevSnap = null; // no sequence check across a restart
+    waitingSince = null;
+    waitedSince = null;
+    lastSaveAt = Date.now();
+    client.subscribeEngine(true);
+    await sleep(3000);
+  }
+  if (pollMode && Date.now() - lastPoll > 15000) {
+    lastPoll = Date.now();
+    client.subscribeEngine(true);
+    await sleep(800);
+  }
   checkStall();
   const mine = myDecisions(client.view, ME);
   const legacy = legacyCandidates();

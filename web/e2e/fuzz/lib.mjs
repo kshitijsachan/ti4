@@ -157,6 +157,34 @@ export async function createSoloGame(token, bots = 3, log = console.log) {
   throw new Error("could not create a solo game");
 }
 
+/**
+ * Is the stack up and not just restarted? Other agents restart the bot / shim (run/{bot,shim}-restarts.log); presses
+ * that time out or fail around a restart are not findings. Returns false while down or within `graceS` of a restart.
+ */
+export async function stackHealthy(graceS = 90) {
+  for (const f of ["/home/user/run/bot-restarts.log", "/home/user/run/shim-restarts.log"]) {
+    try {
+      if (Date.now() - statSync(f).mtimeMs < graceS * 1000) return false;
+    } catch {
+      /* no log */
+    }
+  }
+  const h = await getJson(`${SHIM}/healthz`);
+  return !!h?.bot;
+}
+/** Waits (up to `maxMin`) until stackHealthy(); returns how long it waited (ms). */
+export async function waitForStack(log = console.log, maxMin = 15) {
+  const t0 = Date.now();
+  let said = false;
+  while (!(await stackHealthy()) && Date.now() - t0 < maxMin * 60000) {
+    if (!said) log("stack down or just restarted: pausing");
+    said = true;
+    await sleep(5000);
+  }
+  if (said) log(`stack back after ${Math.round((Date.now() - t0) / 1000)} s`);
+  return Date.now() - t0;
+}
+
 /** Ends a game the fuzzer created (run/scripts/end-game.mjs). */
 export function endGame(game, token, log = console.log) {
   try {

@@ -31,6 +31,8 @@ import {
   parseArgs,
   seatSummary,
   sleep,
+  stackHealthy,
+  waitForStack,
   webData,
 } from "./lib.mjs";
 
@@ -95,12 +97,14 @@ async function shot(tag) {
   return file;
 }
 async function violation(kind, detail, extra = {}) {
+  if (!(await stackHealthy())) return note(`(not recorded, stack restarting: ${kind})`);
+  if (/^(live-view-behind)$/.test(kind)) extra = { severity: "error", ...extra };
   const file = await shot(kind.replace(/[^a-z0-9]+/gi, "-"));
   rec.record({ kind: `ui:${kind}`, detail, screenshot: file, trace: trace.slice(-10), ...extra });
 }
 
 function watch(p, label) {
-  p.on("pageerror", (e) => void violation("page-error", `${label}: ${e.message.slice(0, 300)}`));
+  p.on("pageerror", (e) => void violation(Date.now() < offlineUntil ? "page-error-while-offline" : "page-error", `${label}: ${e.message.slice(0, 300)}`, { severity: Date.now() < offlineUntil ? "warn" : "error" }));
   p.on("console", (m) => {
     if (m.type() === "error" && !/Failed to load resource|net::ERR|WebSocket|favicon/i.test(m.text())) trace.push(`${now()} console.error ${label}: ${m.text().slice(0, 200)}`);
   });
@@ -151,12 +155,29 @@ async function settledPopup(p = page, ms = 20000) {
 }
 
 const BODY_CONTROLS = ":scope > :not(header) button:enabled, :scope > :not(header) [role=option]:not([aria-disabled=true])";
-const AVOID = /^(Peek at map|Dismiss|Hide this prompt|Collapse|Expand|Close)$|concede|end game|eliminate/i;
+// Same spirit as ws-fuzz SKIP: controls that end the game or re-configure players / the game wholesale.
+const AVOID = /^(Peek at map|Dismiss|Hide this prompt|Collapse|Expand|Close)$|concede|end game|eliminate|^Setup a Player$|Franken|Base Game Only|Supported Homebrew|Player Settings|List My Games/i;
 
 async function mySeat() {
   const w = await webData(game);
   return { w, me: seatSummary(w?.playerData?.find((p) => String(p.discordId) === ME)) };
 }
+
+/** The popup's title as EngineDecisionHost.decisionTitle draws it from a decision. */
+const titleOf = (d) => {
+  if (d.kind === "legacy") return d.scope === "table" ? "Open to everyone" : "Your move";
+  const w = d.kind.replace(/[._]/g, " ").trim();
+  return w.charAt(0).toUpperCase() + w.slice(1);
+};
+/** What the popup lists: the "more" list when there is one, else the one decision shown. */
+const listOf = (p) => JSON.stringify(p ? (p.queue.length ? p.queue : [p.title]) : []);
+/** What the engine says the popup must list (window-less table prompts only appear in the "more" list). */
+const expectedList = () => {
+  const own = myDecisions(oracle.view, ME);
+  if (own.length === 0) return "[]";
+  if (own.length === 1) return JSON.stringify([titleOf(own[0])]);
+  return JSON.stringify(myDecisions(oracle.view, ME, { includeOpen: true }).map(titleOf).sort());
+};
 
 // ---- actions ----
 /** My Milty draft pick on the draft board (no popup there): a ready pick button, a speaker-order token, or focus a card. */
@@ -194,6 +215,8 @@ async function doDraft() {
   return true;
 }
 let draftBlind = 0;
+let lastTitle = "";
+let sameTitle = 0;
 const clicked = new Map(); // control label -> times clicked (novelty: repeated choices get rarer)
 const oracleKinds = () => myDecisions(oracle.view, ME).map((d) => d.kind).sort();
 
@@ -233,6 +256,8 @@ async function act(p = page, label = "tab1") {
   const before = new Set(myDecisions(oracle.view, ME).map((x) => x.id));
   const title = ((await d.locator("h2").first().textContent().catch(() => "")) ?? "").trim();
   note(`${label} click "${c.t.slice(0, 60)}" in "${title}"`);
+  sameTitle = title === lastTitle ? sameTitle + 1 : 0;
+  lastTitle = title;
   await controls.nth(c.i).click({ timeout: 5000 }).catch((e) => note(`  click failed: ${e.message.split("\n")[0]}`));
   // Selecting an option often enables a confirm button: press it most of the time.
   if (rng.chance(0.75)) {
@@ -264,12 +289,16 @@ async function doReload() {
   const seat1 = await mySeat();
   const quiet = s0 && s1 && s0.stateVersion === s1.stateVersion && mine0 === mine1;
   if (!quiet) return note(`  (state moved during the reload: not compared)`);
-  const oracleNow = oracleKinds();
-  if (!!before !== !!after) return violation("reload-popup-changed", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after (engine state unchanged)`);
+    if (!!before !== !!after) return violation("reload-popup-changed", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after (engine state unchanged)`);
   if (before && after) {
-    const a = JSON.stringify({ q: before.queue, t: before.queue.length ? undefined : before.title });
-    const b = JSON.stringify({ q: after.queue, t: after.queue.length ? undefined : after.title });
-    if (a !== b) await violation("reload-pending-changed", `pending decisions before ${a} after ${b}; the engine (oracle) says ${oracleNow.length} wait on me: ${oracleNow.join(",")}`);
+    const a = listOf(before);
+    const b = listOf(after);
+    const want = expectedList(before);
+    if (a !== b) {
+      // Which side is wrong? In engine mode the oracle's decisions give the titles the popup must list.
+      const which = !ENGINE ? "reload-pending-changed" : b === want && a !== want ? "live-view-behind" : a === want && b !== want ? "reload-pending-changed" : "reload-pending-changed";
+      await violation(which, `pending decisions before the reload ${a}, after ${b}${ENGINE ? `; the engine says ${want}` : ""}`);
+    }
     if (before.title === after.title && (JSON.stringify(before.selected) !== JSON.stringify(after.selected) || JSON.stringify(before.inputs) !== JSON.stringify(after.inputs)))
       await violation("reload-selection-lost", `"${before.title}": selections ${JSON.stringify(before.selected)} inputs ${JSON.stringify(before.inputs)} before, ${JSON.stringify(after.selected)} / ${JSON.stringify(after.inputs)} after`);
   }
@@ -318,20 +347,20 @@ let waitingSince = null;
 let checkN = 0;
 let countMismatch = 0;
 async function checks() {
-  // Engine popup = my decisions (oracle), one shown + "N more": compare the counts when nothing moved for a while.
-  if (ENGINE && ++checkN % 3 === 0 && Date.now() - oracle.lastEngineAt > 8000) {
+  // Engine popup = my decisions (oracle, re-snapshotted every 20 s): the listed titles must match within ~2 checks.
+  if (ENGINE && ++checkN % 2 === 0) {
     const p = await popupState(page);
-    // With a "more" list the list shows every decision of mine (window-less table prompts too), else exactly one.
-    const want = p?.queue?.length ? myDecisions(oracle.view, ME, { includeOpen: true }).map((d) => d.kind).sort() : oracleKinds();
-    const queueKinds = p ? (p.queue.length ? p.queue.length : 1) : 0;
-    if (p && !p.unstable && queueKinds !== want.length && Date.now() - oracle.lastEngineAt > 8000) {
-      if (++countMismatch >= 2) {
-        await violation("popup-count-differs", `popup lists ${queueKinds} decision(s) ("${p.title}"; list ${JSON.stringify(p.queue)}), the engine stream (fresh ws client) has ${want.length} waiting on me: ${want.join(",")}`);
-        countMismatch = -3;
+    const have = listOf(p);
+    const want = expectedList(p);
+    if (p && !p.unstable && have !== want) {
+      if (++countMismatch >= 3) {
+        await violation("live-view-behind", `popup lists ${have}, the engine has ${want} waiting on me (persisted over 3 checks)`);
+        countMismatch = -10;
       }
     } else if (countMismatch > 0) countMismatch = 0;
   }
-  const mine = myDecisions(oracle.view, ME);
+  // The legacy UI pops up what its message heuristics call a decision: hold it only to the typed, required kinds.
+  const mine = myDecisions(oracle.view, ME).filter((d) => ENGINE || (d.kind !== "legacy" && !/preassign|pre_decline|queue|game_settings|info|draft\.milty/.test(d.kind)));
   const pop = await popupState(page);
   if (mine.length && !pop) {
     waitingSince ??= Date.now();
@@ -353,6 +382,13 @@ let steps = 0;
 try {
   while (Date.now() < deadline) {
     steps++;
+    if (!(await stackHealthy())) {
+      await waitForStack(note);
+      await page.close().catch(() => {});
+      await openPage();
+      waitingSince = null;
+      continue;
+    }
     await checks();
     const dd = await draftData(game);
     const myDraftTurn = dd?.status === "drafting" && String(dd.currentPlayer) === ME;
@@ -365,14 +401,24 @@ try {
       [7, "offline"],
       [6, "tab2"],
     ]);
-    if (action === "act") {
-      if (!(await act()) && !(await doDraft())) await page.waitForTimeout(2500);
-    } else if (action === "jump") await doJump();
-    else if (action === "draft") await doDraft();
-    else if (action === "reload") await doReload();
-    else if (action === "reopen") await doReopen();
-    else if (action === "offline") await doOffline();
-    else if (action === "tab2") await doSecondTab();
+    try {
+      if (action === "act" && sameTitle >= 3 && (await doJump())) sameTitle = 0;
+      else if (action === "act") {
+        if (!(await act()) && !(await doDraft())) await page.waitForTimeout(2500);
+      } else if (action === "jump") await doJump();
+      else if (action === "draft") await doDraft();
+      else if (action === "reload") await doReload();
+      else if (action === "reopen") await doReopen();
+      else if (action === "offline") await doOffline();
+      else if (action === "tab2") await doSecondTab();
+    } catch (e) {
+      // A navigation failing mid-restart, a closed page...: note it, get a working tab back and go on.
+      note(`step error (${action}): ${e.message.split("\n")[0]}`);
+      await context.setOffline(false).catch(() => {});
+      await waitForStack(note);
+      await page.close().catch(() => {});
+      await openPage().catch((e2) => note(`reopen failed: ${e2.message.split("\n")[0]}`));
+    }
   }
 } catch (e) {
   note(`fuzzer error: ${e.message.split("\n")[0]}`);
