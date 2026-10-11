@@ -15,7 +15,7 @@
  */
 import { log } from "../log.js";
 import type { EngineClient } from "./client.js";
-import type { AnswerResult, Decision, EngineEvent, GameState } from "./types.js";
+import { awaits, type AnswerResult, type Decision, type EngineEvent, type GameState } from "./types.js";
 
 export type EngineSeat = { userId: string; send(frame: Record<string, unknown>): void };
 
@@ -33,6 +33,7 @@ export function answerRefusal(d: Decision, userId: string, state: GameState | nu
   const seated = !!state?.players.some((p) => p.userId === userId);
   if (state && !seated) return "forbidden";
   if (d.scope === "player" && d.target?.userId !== userId) return "forbidden";
+  if (d.window && !awaits(d, userId)) return d.window.responded.includes(userId) ? "answered" : "forbidden";
   return null;
 }
 
@@ -105,6 +106,7 @@ export class EngineFanout {
     if (!d) return reply({ ok: false, status: "not_found", error: "That prompt is no longer open." });
     const refusal = answerRefusal(d, seat.userId, await engine.state(game, undefined, 5000));
     if (refusal === "not_found") return reply({ ok: false, status: refusal, error: "That prompt is no longer open." });
+    if (refusal === "answered") return reply({ ok: false, status: "refused", error: "You already answered this." });
     if (refusal) return reply({ ok: false, status: "forbidden", error: "That prompt is for another player." });
     const result = await engine.answer(game, d.id, {
       optionId: op.optionId,
