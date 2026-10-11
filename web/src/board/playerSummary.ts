@@ -54,7 +54,7 @@ function leaderState(player: PlayerData, type: string): LeaderState {
   return "ready";
 }
 
-function countTechs(techs: string[]) {
+export function countTechs(techs: string[]) {
   const counts: PlayerSummary["techs"] = { blue: 0, green: 0, red: 0, yellow: 0, unit: 0 };
   for (const id of partitionGenericTechs(techs).standardTechs) {
     const type = getTechData(id)?.types?.[0] ?? "";

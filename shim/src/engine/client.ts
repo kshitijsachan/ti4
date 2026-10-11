@@ -17,7 +17,12 @@ export class EngineClient {
   private stopped = false;
   private stateCache = new Map<string, { at: number; state: GameState }>();
   private listeners = new Set<(e: EngineEvent) => void>();
+  private resetListeners = new Set<() => void>();
   private primed = new Set<string>();
+  /** Recent events (all games), oldest first; complete for every seq > ringFloor. Lets a browser resume by seq. */
+  private ring: EngineEvent[] = [];
+  private ringFloor = 0;
+  private everLive = false;
   available = false;
 
   constructor(
@@ -60,20 +65,48 @@ export class EngineClient {
   }
 
   async openDecisions(game: string): Promise<Decision[] | null> {
-    if (this.live && this.primed.has(game)) return [...(this.decisions.get(game)?.values() ?? [])].sort((a, b) => a.seq - b.seq);
+    return (await this.decisionsSnapshot(game))?.decisions ?? null;
+  }
+
+  /**
+   * Every open decision of a game and the stream position they are current as of: events with a higher seq apply on
+   * top. From the live mirror when primed, else fetched (and the mirror primed, replaying events that raced the fetch).
+   */
+  async decisionsSnapshot(game: string): Promise<DecisionsSnapshot | null> {
+    if (this.live && this.primed.has(game)) return this.mirrorSnapshot(game);
     try {
       const res = await fetch(this.url(`/${encodeURIComponent(game)}/decisions`), { headers: this.headers(), signal: AbortSignal.timeout(8000) });
       if (!res.ok) return null;
       const snap = (await res.json()) as DecisionsSnapshot;
       this.available = true;
-      if (this.live) {
-        this.decisions.set(game, new Map(snap.decisions.map((d) => [d.id, d])));
-        this.primed.add(game);
-      }
-      return snap.decisions;
+      if (!this.live || snap.seq > this.seq) return snap;
+      const map = new Map(snap.decisions.map((d) => [d.id, d]));
+      for (const e of this.ring) if (e.game === game && e.seq > snap.seq) applyTo(map, e);
+      this.decisions.set(game, map);
+      this.primed.add(game);
+      return this.mirrorSnapshot(game);
     } catch {
       return null;
     }
+  }
+
+  private mirrorSnapshot(game: string): DecisionsSnapshot {
+    return { seq: this.seq, decisions: [...(this.decisions.get(game)?.values() ?? [])].sort((a, b) => a.seq - b.seq) };
+  }
+
+  /** Last stream seq applied. */
+  get currentSeq() {
+    return this.seq;
+  }
+
+  get isLive() {
+    return this.live;
+  }
+
+  /** One game's events with seq > after, or null when this process can't vouch for all of them (re-snapshot). */
+  since(after: number, game: string): EngineEvent[] | null {
+    if (!this.live || after < this.ringFloor || after > this.seq) return null;
+    return this.ring.filter((e) => e.seq > after && e.game === game);
   }
 
   /** Open decisions waiting on this seat (its own prompts, and reaction windows it has not answered). */
@@ -102,6 +135,43 @@ export class EngineClient {
     return () => this.listeners.delete(fn);
   }
 
+  /** The stream restarted from a new position (buffer overrun, bot restart): mirrors are gone, re-snapshot. */
+  onReset(fn: () => void): () => void {
+    this.resetListeners.add(fn);
+    return () => this.resetListeners.delete(fn);
+  }
+
+  private resetTo(seq: number) {
+    this.seq = seq;
+    this.ring = [];
+    this.ringFloor = seq;
+    this.decisions.clear();
+    this.primed.clear();
+    this.stateCache.clear();
+    for (const l of this.resetListeners) {
+      try {
+        l();
+      } catch {
+        /* listener bug must not kill the stream */
+      }
+    }
+  }
+
+  /** After a bot restart its seq starts over: resuming from ours would skip everything until it catches up. */
+  private async checkRestart() {
+    try {
+      const res = await fetch(this.url(`/_/decisions`), { headers: this.headers(), signal: AbortSignal.timeout(8000) });
+      if (!res.ok) return;
+      const { seq } = (await res.json()) as DecisionsSnapshot;
+      if (typeof seq === "number" && seq < this.seq) {
+        log.warn(`engine seq went back (${this.seq} -> ${seq}): bot restarted, re-snapshotting`);
+        this.resetTo(seq);
+      }
+    } catch {
+      /* the stream attempt below reports it */
+    }
+  }
+
   /** Follows the SSE firehose forever (reconnecting with Last-Event-ID), keeping `decisions` current. */
   start() {
     void this.loop();
@@ -115,10 +185,12 @@ export class EngineClient {
     let backoff = 1000;
     while (!this.stopped) {
       try {
+        if (this.everLive) await this.checkRestart();
         const res = await fetch(this.url(`/stream?after=${this.seq}`), { headers: { ...this.headers(), accept: "text/event-stream" } });
         if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
         this.available = true;
         this.live = true;
+        this.everLive = true;
         backoff = 1000;
         const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
         let buf = "";
@@ -152,20 +224,16 @@ export class EngineClient {
     }
     if (!data) return;
     const json = JSON.parse(data);
-    if (name === "reset") {
-      this.seq = json.seq;
-      this.decisions.clear();
-      this.primed.clear();
-      return;
-    }
+    if (name === "reset") return this.resetTo(json.seq);
     const e = json as EngineEvent;
     if (e.seq <= this.seq) return;
     this.seq = e.seq;
+    this.ring.push(e);
+    if (this.ring.length > RING_SIZE) this.ringFloor = this.ring.shift()!.seq;
     const map = this.decisions.get(e.game) ?? new Map<string, Decision>();
     this.decisions.set(e.game, map);
-    if (e.type === "decision.opened" || e.type === "decision.updated") map.set(e.decision.id, e.decision);
-    else if (e.type === "decision.closed") map.delete(e.decision.id);
-    else if (e.type === "state.changed") for (const k of this.stateCache.keys()) if (k.startsWith(`${e.game}|`)) this.stateCache.delete(k);
+    applyTo(map, e);
+    if (e.type === "state.changed") for (const k of this.stateCache.keys()) if (k.startsWith(`${e.game}|`)) this.stateCache.delete(k);
     for (const l of this.listeners) {
       try {
         l(e);
@@ -174,4 +242,11 @@ export class EngineClient {
       }
     }
   }
+}
+
+const RING_SIZE = 3000;
+
+function applyTo(map: Map<string, Decision>, e: EngineEvent) {
+  if (e.type === "decision.opened" || e.type === "decision.updated") map.set(e.decision.id, e.decision);
+  else if (e.type === "decision.closed") map.delete(e.decision.id);
 }
