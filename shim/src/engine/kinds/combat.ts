@@ -32,7 +32,9 @@ export type CombatControlValue =
   /** The combat action-card window: playing the cards belongs to the action-card kinds (G8). */
   | { action: "action_cards"; tile: string | null }
   | { action: "repair"; tile: string }
-  | { action: "retreat"; tile: string; variant: "skilled" | "foresight" | "gheminabt" | string | null };
+  | { action: "retreat"; tile: string; variant: "skilled" | "foresight" | "gheminabt" | string | null }
+  /** A temporary modifier for the presser's next roll offered on the controls (Supercharge: source "tech", card "sc"). */
+  | { action: "temp_mod"; tile: string | null; source: "action_cards" | "tech" | string; card: string };
 
 export type CombatHitsValue =
   | {
@@ -100,7 +102,34 @@ export type CombatBombard = DecisionBase<"combat.bombard", CombatBombardValue>;
 export type UnitsRemoveValue = { action: "open"; tile: string; assignType: string } | { action: "done"; tile: null; assignType: null };
 export type UnitsRemove = DecisionBase<"units.remove", UnitsRemoveValue>;
 
-export type CombatDecision = CombatRound | CombatHits | CombatAssignUnits | CombatRetreat | CombatBombard;
+/**
+ * "Automate the entire ground combat" on a message of its own: the vote (unconfirmed; no owner, table scope, no
+ * window: optional) and the opponent's confirmation (confirmed; owner = the opponent). factions = [p1, p2].
+ */
+export type CombatAutomateValue = { planet: string; factions: [FactionId, FactionId]; confirmed: boolean };
+export type CombatAutomate = DecisionBase<"combat.automate", CombatAutomateValue>;
+
+/**
+ * A temporary combat modifier for the next roll on a message of its own: "Resolve <action card>" right after playing
+ * Morale Boost / Fighter Prototype / Bunker / … (source "action_cards", card = the action card alias), or Supercharge
+ * (source "tech", card "sc"). One option; pressing it applies the modifier.
+ */
+export type CombatModifierValue = { source: "action_cards" | "tech" | string; card: string };
+export type CombatModifier = DecisionBase<"combat.modifier", CombatModifierValue>;
+
+export type CombatDecision = CombatRound | CombatHits | CombatAssignUnits | CombatRetreat | CombatBombard | CombatAutomate | CombatModifier;
+
+/**
+ * The "Modify Units" menu (a manual board edit opened from the turn-start / cards-info "Modify Units" button):
+ * system list (tile: genericModify_ = systems with your units, allTiles = every system; all_tiles = show every
+ * system), then build (opens production.produce, context "genericBuild") or remove (opens combat.assign_units) in that
+ * system; done closes the step. units = the owner's units in that system when captured.
+ */
+export type UnitsModifyValue =
+  | { action: "tile"; tile: string; allTiles: boolean; units: number }
+  | { action: "build" | "remove"; tile: string; units: number }
+  | { action: "all_tiles" | "done"; tile: null };
+export type UnitsModify = DecisionBase<"units.modify", UnitsModifyValue>;
 
 // ---------------------------------------------------------------- GameState.combat
 

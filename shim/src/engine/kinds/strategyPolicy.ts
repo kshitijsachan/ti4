@@ -13,6 +13,7 @@
 import { researchable, TECH_PREFERENCE } from "../../botplay/techs.js";
 import type { Decision, GameState, Option, PlayerState } from "../types.js";
 import type {
+  ConstructionBuild,
   ConstructionPlace,
   DiplomacySystem,
   PlanetReady,
@@ -47,6 +48,7 @@ export const STRATEGY_POLICY_KINDS = new Set([
   "strategy_card.politics_speaker",
   "strategy_card.politics_agenda",
   "strategy_card.construction_place",
+  "strategy_card.construction_build",
   "command_tokens.adjust",
 ]);
 
@@ -70,6 +72,8 @@ export function chooseStrategy(d: Decision, state: GameState | null, me: string,
       return agenda(d as PoliticsAgenda);
     case "strategy_card.construction_place":
       return constructionPlace(d as ConstructionPlace);
+    case "strategy_card.construction_build":
+      return constructionBuild(d as ConstructionBuild);
     case "command_tokens.adjust":
       return commandTokens(d, state, self, me, ctx);
     default:
@@ -121,7 +125,7 @@ function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["op
   const mine = opts.filter((o) => o.value!.who !== "others");
   const pressed = (part: PrimaryPart) => ctx.history.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length;
   // Wait for the sub-prompt a previous part opened (a system to choose, a planet for a structure).
-  if (ctx.open.some((x) => x.kind === "strategy_card.diplomacy_system" || x.kind === "strategy_card.construction_place")) return null;
+  if (ctx.open.some((x) => x.kind === "strategy_card.diplomacy_system" || x.kind === "strategy_card.construction_place" || x.kind === "strategy_card.construction_build")) return null;
   const needed: Record<string, number> = {};
   for (const p of v.primaryParts) needed[p] = (needed[p] ?? 0) + 1;
   const holdsMecatol = self.planets.some((p) => /^(mr|mrte)$/i.test(p));
@@ -238,4 +242,12 @@ export function chooseResearch(options: Option<any>[], owned: string[]): Option<
   const offered = options.filter((o) => !o.disabled && o.value?.tech && !owned.includes(o.value.tech) && researchable(o.value.tech, owned));
   offered.sort((a, b) => rank(a.value.tech) - rank(b.value.tech));
   return offered[0] ?? null;
+}
+
+/** Construction "produce" (Thunder's Edge): no decline here, so use the dock with the most PRODUCTION (home last). */
+function constructionBuild(d: ConstructionBuild): StrategyChoice | null {
+  const opts = live(d).filter((o) => o.value);
+  const score = (o: (typeof opts)[number]) => (o.value!.productionLimit ?? 0) * 10 + o.value!.spaceDocks - (o.value!.home ? 1 : 0);
+  const best = [...opts].sort((a, b) => score(b) - score(a))[0];
+  return best ? { option: best, why: `Construction: produce at ${best.value!.tile}` } : null;
 }

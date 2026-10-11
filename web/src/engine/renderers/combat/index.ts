@@ -4,6 +4,7 @@ import { CombatHitsPanel } from "./CombatHitsPanel";
 import { CombatAssignUnitsPanel, CombatRetreatPanel } from "./CombatMenuPanels";
 import { CombatRoundPanel } from "./CombatRoundPanel";
 import { CombatBombardPanel, UnitsRemovePanel } from "./CombatTailPanels";
+import { CombatAutomatePanel, CombatModifierPanel, UnitsModifyPanel } from "./UnitsModifyPanels";
 import type { RendererProps } from "./types";
 
 export type { CombatPlanPayload } from "./types";
@@ -25,4 +26,7 @@ export const renderers: Record<string, ComponentType<RendererProps<any>>> = {
   "combat.retreat": CombatRetreatPanel,
   "combat.bombard": CombatBombardPanel,
   "units.remove": UnitsRemovePanel,
+  "units.modify": UnitsModifyPanel,
+  "combat.automate": CombatAutomatePanel,
+  "combat.modifier": CombatModifierPanel,
 };
