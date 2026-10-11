@@ -1,5 +1,5 @@
 import cx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDecisionRequests } from "@/decisions";
 import { useGameData } from "@/state/useGameContext";
 import { answerTrade, proposeTrade } from "./api";
@@ -21,7 +21,8 @@ import {
 } from "./model";
 import { SELECT_PARTNER_EVENT, takeWantedPartner } from "./openTradeWith";
 import classes from "./Trade.module.css";
-import type { EngineChoice, PendingOffer } from "./types";
+import { createSocketPresser } from "./shimSocket";
+import { isEngineChoice, type PendingOffer, type PressButton, type TradeChoice } from "./types";
 import { useTradeData } from "./useTradeData";
 
 export type TradePanelProps = {
@@ -31,6 +32,11 @@ export type TradePanelProps = {
   token: string;
   /** Where the bot API is mounted (default `/bot`, the shim proxy). */
   botBase?: string;
+  /**
+   * Presses a bot button (legacy fallback, engine off: Accept / Reject / Rescind on the bot's offer message). Pass the
+   * app's PlayConnection click to reuse its socket; without it the panel opens its own `/app/ws` connection.
+   */
+  onPress?: PressButton;
   /** Preselects a trade partner (faction, color or user id). */
   initialCounterparty?: string;
   /** Any value; a change triggers an immediate refetch (e.g. the latest message id in the cards thread). */
@@ -67,6 +73,7 @@ export function TradePanel({
   gameName,
   token,
   botBase = "/bot",
+  onPress,
   initialCounterparty,
   refreshSignal,
   pollMs,
@@ -78,6 +85,8 @@ export function TradePanel({
   const [status, setStatus] = useState<Status>(null);
   const [sending, setSending] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const presser = useRef<ReturnType<typeof createSocketPresser> | null>(null);
+  useEffect(() => () => presser.current?.close(), []);
   useEffect(() => {
     if (refreshSignal !== undefined) void refresh();
   }, [refreshSignal, refresh]);
@@ -125,11 +134,17 @@ export function TradePanel({
     writeHidden(gameName, next);
   };
 
-  const pressOffer = async (choice: EngineChoice, offer: PendingOffer) => {
+  const pressOffer = async (choice: TradeChoice, offer: PendingOffer) => {
     setBusyKey(`${offer.direction}:${offer.otherFaction}:${offer.offerNumber}:${offer.createdAt}`);
     try {
-      const res = await answerTrade(botBase, gameName, token, choice);
-      if (!res.ok) throw new Error(res.error ?? "The bot refused that.");
+      if (isEngineChoice(choice)) {
+        const res = await answerTrade(botBase, gameName, token, choice);
+        if (!res.ok) throw new Error(res.error ?? "The bot refused that.");
+      } else {
+        const fn = onPress ?? (presser.current ??= createSocketPresser(token)).press;
+        const res = await fn(choice.channelId, choice.messageId, choice.customId);
+        if (res && res.error) throw new Error(res.error);
+      }
       const verb = choice === offer.accept ? "Accepted" : choice === offer.reject ? "Rejected" : "Rescinded";
       setStatus({ kind: "ok", text: `${verb} offer ${offer.direction === "incoming" ? "from" : "to"} ${offer.otherUserName}.` });
     } catch (e) {

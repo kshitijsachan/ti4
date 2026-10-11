@@ -7,6 +7,7 @@ import { parseBoard, type Board } from "./botplay/board.js";
 import { controlsOf, type Control, type Prompt } from "./botplay/prompts.js";
 import type { Seat, SeatEngine } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
+import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
 import { chooseTyped } from "./engine/autopilot.js";
 import { awaits, type AnswerResult } from "./engine/types.js";
@@ -448,6 +449,8 @@ class SeatPilot {
   private brain: Brain;
   /** Trades: proposes N-1 washes via the engine (offers are answered by chooseTyped, engine/tradePolicy.ts). */
   private trade: TradeDesk;
+  /** Engine off or unreachable: the old desk (bot /trade/pending + offer buttons) trades instead (until INFRA-4). */
+  private legacyTrade: LegacyTradeDesk;
 
   constructor(
     private mgr: Autopilot,
@@ -456,6 +459,7 @@ class SeatPilot {
     this.conn = mgr.clients.attachVirtual(userId, (f) => this.onFrame(f));
     this.brain = new Brain(this.seat());
     this.trade = new TradeDesk(this.seat(), () => mgr.engine);
+    this.legacyTrade = new LegacyTradeDesk(this.seat(), mgr.botApi, () => Object.entries(this.store.state.seats).find(([, seat]) => seat.user_id === this.userId)?.[0]);
     // Some turns change without a message this seat can see (e.g. the draft); look again now and then.
     this.poll = setInterval(() => this.schedule(), 8000);
     log.info(`autopilot ${this.name}: started`);
@@ -557,7 +561,7 @@ class SeatPilot {
             return false;
           }
         };
-        if ((await acted("planner", () => this.brain.tick(game))) || (await acted("trade desk", () => this.trade.tick(game)))) {
+        if ((await acted("planner", () => this.brain.tick(game))) || (await acted("trade desk", () => (this.mgr.engine?.isLive ? this.trade.tick(game) : this.legacyTrade.tick(game))))) {
           this.busy = false;
           this.schedule();
           return;
@@ -734,7 +738,7 @@ class SeatPilot {
     if ((this.fails.get(m.id) ?? 0) >= MAX_FAILS) return null;
     let controls = controlsOf(m.components);
     if (!controls.length) return null;
-    if (this.brain.owns(game, { ch, m, controls }) || this.trade.owns(game, { ch, m, controls })) return null;
+    if (this.brain.owns(game, { ch, m, controls }) || (this.mgr.engine?.isLive ? this.trade.owns(game, { ch, m, controls }) : this.legacyTrade.owns(game, { ch, m, controls }))) return null;
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
     // When we answered this prompt (unchanged since): this run, a re-posted copy, or before a restart.
     const sig = signature(controls);

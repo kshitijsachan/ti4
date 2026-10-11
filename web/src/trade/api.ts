@@ -137,11 +137,46 @@ function pendingFrom(state: GameState, decisions: Decision[]): PendingResponse {
   return { incoming, outgoing };
 }
 
+// ---------------------------------------------------------------- legacy fallback (engine off; until INFRA-4)
+
+const legacy = (botBase: string, game: string) => `${botBase}/api/game/${encodeURIComponent(game)}/trade`;
+
+type LegacyOffer = Omit<PendingOffer, "decisionId">;
+
+/**
+ * The bot's own trade endpoints: options, and open offers scraped from the cards-info threads (answered by pressing
+ * the bot's buttons). Used only when the engine is unavailable, so trading never breaks with the engine down.
+ */
+export async function fetchLegacyTrade(botBase: string, game: string, token: string): Promise<EngineTrade> {
+  const [options, pending] = await Promise.all([
+    call<TradeOptions>(`${legacy(botBase, game)}/options`, token),
+    call<{ incoming: LegacyOffer[]; outgoing: LegacyOffer[] }>(`${legacy(botBase, game)}/pending`, token),
+  ]);
+  const withId = (o: LegacyOffer): PendingOffer => ({
+    ...o,
+    decisionId: (o.accept ?? o.rescind)?.messageId ?? `${o.direction}:${o.otherFaction}:${o.offerNumber}`,
+  });
+  return {
+    options: { ...options, mayTransactWith: options.mayTransactWith ?? options.counterparties.filter((c) => c.canTrade).map((c) => c.faction) },
+    pending: { incoming: pending.incoming.map(withId), outgoing: pending.outgoing.map(withId) },
+  };
+}
+
+/** Engine view when the engine answers, else the legacy endpoints. */
+export async function fetchTrade(botBase: string, game: string, token: string): Promise<EngineTrade> {
+  try {
+    return await fetchEngineTrade(botBase, game, token);
+  } catch (e) {
+    if (e instanceof TradeApiError && (e.status === 401 || e.status === 403)) throw e;
+    return fetchLegacyTrade(botBase, game, token);
+  }
+}
+
 export const fetchTradeOptions = async (botBase: string, game: string, token: string) =>
-  (await fetchEngineTrade(botBase, game, token)).options;
+  (await fetchTrade(botBase, game, token)).options;
 
 export const fetchPendingTrades = async (botBase: string, game: string, token: string) =>
-  (await fetchEngineTrade(botBase, game, token)).pending;
+  (await fetchTrade(botBase, game, token)).pending;
 
 /** Answers an offer decision (Accept / Reject / Rescind). */
 export const answerTrade = (botBase: string, game: string, token: string, c: EngineChoice) =>
@@ -151,8 +186,20 @@ export const answerTrade = (botBase: string, game: string, token: string, c: Eng
     { method: "POST", body: JSON.stringify({ optionId: c.optionId, expectedSeq: c.expectedSeq, requestId: `${c.decisionId}:${c.optionId}` }) },
   );
 
-/** The typed `trade.propose` action; replaces an open offer to the same player. */
+/**
+ * The typed `trade.propose` action; replaces an open offer to the same player. Engine route missing or failing
+ * (engine off / bot restarting): the legacy `/trade/propose`.
+ */
 export async function proposeTrade(botBase: string, game: string, token: string, body: ProposeRequest): Promise<ProposeResponse> {
+  try {
+    return await proposeEngine(botBase, game, token, body);
+  } catch (e) {
+    if (!(e instanceof TradeApiError) || (e.status !== 404 && e.status < 500)) throw e;
+    return call<ProposeResponse>(`${legacy(botBase, game)}/propose`, token, { method: "POST", body: JSON.stringify(body) });
+  }
+}
+
+async function proposeEngine(botBase: string, game: string, token: string, body: ProposeRequest): Promise<ProposeResponse> {
   const res = await call<{ ok: boolean; error: string | null; offerNumber: number | null; to: string | null; items: TradeItem[] }>(
     `${engine(botBase, game)}/actions/trade.propose`,
     token,

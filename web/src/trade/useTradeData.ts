@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchEngineTrade } from "./api";
+import { fetchTrade } from "./api";
 import type { PendingResponse, TradeOptions } from "./types";
 
 type TradeData = {
@@ -11,7 +11,7 @@ type TradeData = {
 };
 
 /**
- * Polls one player's trade view and open offers from the engine (GameState.trade + trade.* decisions). Polling pauses while the tab is hidden and
+ * Polls one player's trade view and open offers: from the engine (GameState.trade + trade.* decisions), or the bot's legacy trade endpoints when the engine is unavailable. Polling pauses while the tab is hidden and
  * unchanged responses keep their previous object so React skips the re-render.
  */
 export function useTradeData(
@@ -32,7 +32,7 @@ export function useTradeData(
       return;
     }
     try {
-      const { options: o, pending: p } = await fetchEngineTrade(botBase, gameName, token);
+      const { options: o, pending: p } = await fetchTrade(botBase, gameName, token);
       const oj = JSON.stringify(o);
       const pj = JSON.stringify(p);
       if (oj !== lastJson.current.options) setOptions(o);

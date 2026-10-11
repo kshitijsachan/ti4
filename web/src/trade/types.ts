@@ -132,9 +132,32 @@ export type EngineChoice = {
   messageId: string;
 };
 
+/** Legacy fallback (engine off): a bot button, pressed through the shim's `click` op. */
+export type ButtonRef = {
+  channelId: string;
+  messageId: string;
+  customId: string;
+  label?: string | null;
+};
+
+/** How to answer an offer: an engine decision option, or (engine off) the bot's own button. */
+export type TradeChoice = EngineChoice | ButtonRef;
+
+export const isEngineChoice = (c: TradeChoice): c is EngineChoice => "decisionId" in c;
+
+/** Presses a bot button through the shim (`/app/ws` click op). Resolve `{ error }` or reject to report a failure. */
+export type PressButton = (
+  channelId: string,
+  messageId: string,
+  customId: string,
+) => Promise<{ error?: string } | void> | void;
+
 export type PendingOffer = {
   direction: "incoming" | "outgoing";
-  /** Incoming: my trade.offer decision; outgoing: the receiver's (not answerable by me). */
+  /**
+   * Incoming: my trade.offer decision; outgoing: the receiver's (not answerable by me). Legacy fallback: the offer
+   * message id.
+   */
   decisionId: string;
   otherFaction: string;
   otherUserId: string;
@@ -145,10 +168,10 @@ export type PendingOffer = {
   current: boolean;
   text: string;
   items: TradeItem[];
-  accept?: EngineChoice | null;
-  reject?: EngineChoice | null;
-  counter?: EngineChoice | null;
-  rescind?: EngineChoice | null;
+  accept?: TradeChoice | null;
+  reject?: TradeChoice | null;
+  counter?: TradeChoice | null;
+  rescind?: TradeChoice | null;
   createdAt: string;
   otherIcon?: string | null;
 };

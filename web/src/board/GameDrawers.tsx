@@ -4,6 +4,7 @@ import { IconArrowLeft } from "@tabler/icons-react";
 import { ChannelList, ChannelView, usePlay } from "@/discord";
 import { TradePanel } from "@/trade";
 import { getToken } from "@/play/session";
+import { usePressButton } from "@/play/usePressButton";
 import type { Message } from "@/discord/types";
 import type { GameChannels } from "@/play/games";
 import { LogSlot } from "./Mounts";
@@ -87,6 +88,7 @@ function TableTalk({ channelId }: { channelId: string }) {
 /** The side drawers: everything off the table that you only look at sometimes. */
 export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, tradeSignal }: Props) {
   const status = usePlay((s) => s.status);
+  const press = usePressButton();
   const token = getToken();
   // Keep the last drawer's content while it slides out.
   const [shown, setShown] = useState<DrawerName | null>(drawer);
@@ -108,7 +110,7 @@ export function GameDrawers({ game, drawer, onClose, rawChannel, onRawChannel, t
       case "trade":
         return token && game.hand ? (
           <div className={classes.scroll}>
-            <TradePanel gameName={game.name} token={token} refreshSignal={tradeSignal} />
+            <TradePanel gameName={game.name} token={token} onPress={press} refreshSignal={tradeSignal} />
           </div>
         ) : (
           <Empty>Trading opens once you have a seat in a started game.</Empty>

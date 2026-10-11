@@ -244,6 +244,11 @@ export interface Option<V = Record<string, unknown> | null> {
   handler: string;
   /** Typed meaning for the decision's kind; null for options outside its vocabulary ("Done", "Cancel"). */
   value: V | null;
+  /**
+   * Who may press this option when it differs from the decision's target: set only on menus whose options carry
+   * different owners (target.resolvedBy "mixed_owners"); null = the decision's target/scope rules.
+   */
+  owner?: Target | null;
 }
 
 /**
