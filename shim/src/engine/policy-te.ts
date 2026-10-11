@@ -42,7 +42,7 @@ export function lockedToOther(optionId: string, faction: string | null | undefin
 
 /** The commit / dismiss button of a TE prompt ("Done Resolving", "Done Galvanizing Units", "Delete These Buttons"). */
 function doneOption(d: Decision): Option<any> | undefined {
-  return (d.options as Option<any>[]).find((o) => !o.disabled && o.value === null && /^deleteButtons(_|$)/.test(o.handler));
+  return (d.options as Option<any>[]).find((o) => !o.disabled && o.value === null && /^deleteButtons(_|~|$)/.test(o.handler));
 }
 
 /** null: a TE decision we leave alone (legacy may still look at it). Only call for isThundersEdgeKind(d). */

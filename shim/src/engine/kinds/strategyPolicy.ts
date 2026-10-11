@@ -211,7 +211,8 @@ const isPools = (x: unknown): x is Pools => !!x && typeof (x as Pools).tactic ==
  */
 function commandTokens(d: Decision, state: GameState | null, self: PlayerState | null, me: string, ctx: PolicyCtx): StrategyChoice | null {
   const opts = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput);
-  const done = opts.find((o) => o.handler === "deleteButtons_leadership");
+  // Done Gaining Command Tokens is deleteButtons_leadership~ccgain (the bot's DoneRole tag).
+  const done = opts.find((o) => o.handler.replace(/~\w+$/, "") === "deleteButtons_leadership");
   if (!done || !self) return null;
   const isGain = (o?: Option<any>) => !!o?.value && (o.value.action === "gain" || (o.value.action === "adjust" && o.value.delta === 1));
   const acc = d.progress?.accumulated;
