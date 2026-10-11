@@ -36,6 +36,8 @@ ws_loop() {
       node /home/user/run/scripts/end-game.mjs "$g" "$(token_of "Fuzz 1")" >> "$LOG" 2>&1
     fi
     log "ws: seed $s done: $(grep -E '^[0-9:]+ done:' "$F/ws-current.out" | tail -1)"
+    # Orphans (a creation that timed out during a stack restart, a killed run): end them, never the UI loop's game.
+    node "$HERE/sweep.mjs" --keep "$(cat "$F/ui-game" 2>/dev/null)" >> "$LOG" 2>&1
     fold
     [ $ONCE = 1 ] && return
     sleep 20
@@ -45,7 +47,7 @@ ws_loop() {
 ui_game=""; ui_chunks=0; ui_mode=1
 ui_end_game() {
   [ -n "$ui_game" ] && node /home/user/run/scripts/end-game.mjs "$ui_game" "$(token_of "Fuzz 2")" >> "$LOG" 2>&1
-  ui_game=""; ui_chunks=0
+  ui_game=""; ui_chunks=0; rm -f "$F/ui-game"
 }
 ui_loop() {
   while [ ! -e "$STOP" ]; do
@@ -59,6 +61,7 @@ ui_loop() {
         import(process.argv[1]).then(async (m) => { const seat = await m.loadSeat("Fuzz 2"); console.log(await m.createSoloGame(seat.token, 3, () => {})); })' "$HERE/lib.mjs" 2>>"$LOG" | tail -1)
       [ -z "$ui_game" ] && { log "ui: could not create a game"; sleep 120; continue; }
       log "ui: created $ui_game"
+      echo "$ui_game" > "$F/ui-game"
     fi
     flock /tmp/ti4-heavy.lock timeout 330 node "$HERE/ui-fuzz.mjs" --seed "$s" --seat "Fuzz 2" --game "$ui_game" --engine "$ui_mode" --minutes "$UI_MINUTES" > "$F/ui-current.out" 2>&1
     pkill -f "ui-fuzz.mjs --seed $s" 2>/dev/null
