@@ -31,8 +31,7 @@ export function Stepper({ value, max, onChange, label, disabled, showMax = true 
       </button>
       <span
         className={cx(classes.stepValue, value > 0 && classes.stepValueOn)}
-        aria-label={`${label}: ${value} of ${max}`}
-        role="status"
+        title={`${label}: ${value} of ${max}`}
       >
         {value}
         {showMax && <span className={classes.stepMax}>/{Math.max(0, max)}</span>}

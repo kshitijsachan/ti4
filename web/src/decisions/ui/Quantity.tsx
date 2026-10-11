@@ -106,7 +106,8 @@ export function Quantity({
         >
           <IconMinus size={12} />
         </UnstyledButton>
-        <span className={classes.value} role="status" aria-label={`${name}: ${value}`}>
+        {/* Not a live region: each step is the player's own input, never news to announce or toast. */}
+        <span className={classes.value} title={`${name}: ${value}`}>
           {value}
           {unit && <span className={classes.unit}>{unit}</span>}
         </span>
