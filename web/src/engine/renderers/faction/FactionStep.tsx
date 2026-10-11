@@ -42,7 +42,8 @@ function optionLabel(state: GameState | null, v: Value): string {
   if (v.unit) parts.push(`${v.count && v.count > 1 ? `${v.count} ` : ""}${v.damaged ? "damaged " : ""}${UNIT[v.unit] ?? v.unit}`);
   if (v.techOut) parts.push(`swap out ${getTechData(v.techOut)?.name ?? v.techOut}`);
   if (v.tech) parts.push(`${v.techOut ? "for " : ""}${getTechData(v.tech)?.name ?? v.tech}`);
-  if (v.what) parts.push(`look at ${{ ac: "action cards", pn: "promissory notes", so: "secret objectives" }[v.what]}`);
+  const lookAt: Partial<Record<string, string>> = { ac: "action cards", pn: "promissory notes", so: "secret objectives" };
+  if (v.what && lookAt[v.what]) parts.push(`look at ${lookAt[v.what]}`);
   if (v.who) parts.push(v.who === "self" ? "look and choose yourself" : "Yssaril chooses for you");
   if (v.cardName ?? v.actionCard) parts.push(String(v.cardName ?? v.actionCard));
   if (v.target) parts.push(playerLabel(state, v.target));
@@ -51,7 +52,7 @@ function optionLabel(state: GameState | null, v: Value): string {
   if (v.tile) parts.push(`System ${v.tile}`);
   const extra = v as Value & { wormhole?: string; what?: string; tech?: string; pn?: string };
   if (extra.wormhole) parts.push(`${words(extra.wormhole)} wormhole`);
-  if (extra.what) parts.push(extra.what === "tg" ? "take 1 trade good" : "take 1 commodity");
+  if (extra.what === "tg" || extra.what === "commodity") parts.push(extra.what === "tg" ? "take 1 trade good" : "take 1 commodity");
   if (extra.tech) parts.push(`technology ${extra.tech}`);
   if (extra.pn) parts.push(`note ${extra.pn}`);
   if (v.from) parts.push(`from ${planetName(v.from)}`);

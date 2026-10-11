@@ -47,7 +47,8 @@ export type FactionStepFields = {
   /** Group C: Jol-Nar hero swap (tech in / out), Yssaril commander (what) / Spy Net (who) / hand cards, Yin hits. */
   tech?: string;
   techOut?: string;
-  what?: "ac" | "pn" | "so";
+  /** Yssaril look-at (ac/pn/so, c3) or Mentak pillage take (tg/commodity, c2). */
+  what?: "ac" | "pn" | "so" | "tg" | "commodity";
   who?: "self" | "yssaril";
   actionCard?: string;
   cardName?: string;
