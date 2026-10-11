@@ -34,6 +34,10 @@ export interface PolicyCtx {
   open: Decision[];
   /** Every open decision of the game, all seats (other areas' policies look for windows / pending prompts). */
   all: Decision[];
+  /** How long this decision has awaited this seat (the shim's watchdog clock); drives the last-resort fallback. */
+  waitedMs?: number;
+  /** Watchdog re-evaluation: the decision has waited too long; the fallback answers whatever the kind. */
+  force?: boolean;
 }
 
 /** Kinds whose prompt is edited in place after each press: wait for the new revision before answering again. */

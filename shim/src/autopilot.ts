@@ -9,10 +9,12 @@ import type { Seat, SeatEngine } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
 import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
-import { chooseTyped } from "./engine/autopilot.js";
+import { chooseTyped, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
+import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, waitsOn } from "./engine/policy/fallback.js";
+import type { Decision } from "./engine/types.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -101,12 +103,16 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 const ENGINE_GRACE_MS = 90_000;
 /** At most this many engine answers from one seat to one decision (multi-part answers walk a few options). */
 const ENGINE_MAX_ANSWERS = 8;
+/** Watchdog: a typed decision that has awaited a bot this long is logged as an error (with a dump) for the soak. */
+const ENGINE_STALL_ERROR_MS = 180_000;
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan.
  * The strategy-card pick queue too: the planner picks when it is up, and the fallback filled the queue, pressed its
  * only button left ("Restart Queue") and filled it again, forever (pbd26). */
 const BLOCKED_ID =
   /(ultimateUndo|^undo|deleteButtons|queueScPick_|restartSCQueue|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|getDamageButtons|^assignHits_|^assign_|^remove_|removeThisTypeOfUnit|removeNCaptureThisTypeOfUnit|removeAll|^destroy|^sustain|cancelSpaceHits|cancelGroundHits|blessBoonCC|placeCCBack_|spendAStratCC|getToggleGalvanizeTiles|toggleGalvanize_|^ungalvanize_)/i;
+/** A Decline / Done / No button (deleteButtons…) a seat may press on its own prompt when nothing else is pressable. */
+const LAST_RESORT_LABEL = /^(decline|done|no\b|pass\b|skip|not now|dismiss)/i;
 const BLOCKED_LABEL = /^(sustain|destroy|remove all|done removing|manually assign|cancel a hit|undo|un-|unqueue|spend|exhaust|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -364,7 +370,7 @@ export class Autopilot {
     }
     // Typed, but no bot policy answers it (now): the legacy rules may, without waiting out the grace period.
     const mine = open.filter((x) => x.id !== d.id && x.target?.userId === userId);
-    if (!chooseTyped(d, state, userId, { history: [], open: mine, all: open })) return false;
+    if (!chooseTyped(d, state, userId, { history: [], open: mine, all: open, waitedMs: Date.now() - d.createdAt })) return false;
     return Date.now() - d.createdAt < ENGINE_GRACE_MS;
   }
 
@@ -831,8 +837,21 @@ class SeatPilot {
     const ours = controls.filter((c) => !ffcc(c) || ffcc(c) === faction);
     controls = ours.filter((c) => !BLOCKED_ID.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && !BLOCKED_LABEL.test(c.label.trim()));
     if (!controls.length) {
+      const certainlyOurs = ffccMine || (m._ephemeral_for === me && !BUSY_WRONG.test(content)) || calledOut;
+      // Last resort (never leave a prompt that is certainly ours to a person): its own Decline / Done / No closes it
+      // without doing anything (agent offers "Use X / Decline", "Remove infantry / Done", ...). Only when the typed
+      // engine path does not own the prompt (its fallback answers those).
+      // Never on a command-token panel: "Done" there forfeits the gain (the planner / typed policies handle those).
+      const tokenPanel = ours.some((c) => /(increase|decrease)_(tactic|fleet|strategy)_cc|redistributeCC|resetCCs/i.test(c.custom_id));
+      const decline = certainlyOurs && !tokenPanel
+        ? ours.find((c) => /^deleteButtons/i.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && LAST_RESORT_LABEL.test(c.label.trim()) && !this.pressed.has(`${m.id}:${c.custom_id}`))
+        : undefined;
+      if (decline && !(await this.mgr.engineOwns(game, m.id, me))) {
+        log.warn(`autopilot ${this.name}: last resort in #${ch.name}: nothing else we may press on "${content.slice(0, 60).replace(/\s+/g, " ")}"; pressing "${decline.label}"`);
+        return { msg: m, control: decline, score: 20, why: "last resort: decline / done" };
+      }
       // Say so (once) when a prompt that is certainly ours offers nothing we may press: a likely stall.
-      if ((ffccMine || (m._ephemeral_for === me && !BUSY_WRONG.test(content)) || calledOut) && !this.answered.has(m.id) && !this.skipped.has(m.id) && Date.now() - Date.parse(m.timestamp) < 600000) {
+      if (certainlyOurs && !this.answered.has(m.id) && !this.skipped.has(m.id) && Date.now() - Date.parse(m.timestamp) < 600000) {
         this.skipped.add(m.id);
         const labels = ours.map((c) => c.label || c.custom_id).filter((l) => !/^undo$/i.test(l));
         if (labels.length) log.info(`autopilot ${this.name}: leaving "${content.slice(0, 80).replace(/\s+/g, " ")}" in #${ch.name} to a person (only ${labels.slice(0, 6).join(" / ")})`);
@@ -1333,6 +1352,67 @@ class SeatPilot {
   private engineAttempts = new Map<string, number>();
   /** Per decision id: the options this seat answered successfully (in order) and the revision of the last one. */
   private engineDone = new Map<string, { options: string[]; revision: number }>();
+  /** Decisions the engine says are no longer open (stale copies): never answered or watched again. */
+  private engineDead = new Set<string>();
+  /** Decisions on which an answer of ours was refused: a forced re-evaluation goes straight to the fallback. */
+  private engineRefused = new Set<string>();
+  /** Watchdog: per `${game}|${decision id}` awaiting us, since when, last forced re-evaluation, error logged. */
+  private engineWaiting = new Map<string, { since: number; forcedAt: number; errorAt: number; reported: number }>();
+
+  /**
+   * Watchdog clock for a decision awaiting this seat that the game may wait on (not optional offers, not stale
+   * copies). Every FALLBACK_FORCE_MS of waiting: force a re-evaluation (forget what we tried on it, so the specific
+   * policy answers afresh, else the last-resort fallback). After ENGINE_STALL_ERROR_MS: one ERROR with the dump.
+   */
+  private watchdog(game: string, d: Decision, now: number): { waitedMs: number; force: boolean; error: boolean } | null {
+    if (!waitsOn(d, this.userId) || !isBlocking(d)) return null;
+    const key = `${game}|${d.id}`;
+    let w = this.engineWaiting.get(key);
+    if (!w) {
+      w = { since: now, forcedAt: 0, errorAt: 0, reported: 0 };
+      this.engineWaiting.set(key, w);
+    }
+    const waitedMs = now - w.since;
+    const force = waitedMs >= FALLBACK_FORCE_MS && now - (w.forcedAt || w.since) >= FALLBACK_FORCE_MS;
+    if (force) {
+      w.forcedAt = now;
+      for (const k of [...this.engineTried]) if (k.startsWith(`${d.id}@`) || k.startsWith(`${d.id}#`)) this.engineTried.delete(k);
+      this.engineAttempts.delete(d.id);
+    }
+    const error = waitedMs >= ENGINE_STALL_ERROR_MS && !w.errorAt;
+    if (error) w.errorAt = now;
+    return { waitedMs, force, error };
+  }
+
+  /** Logs the watchdog's re-evaluations (info) and, once per decision, the stall error with a dump. */
+  private watchdogReport(game: string, d: Decision, watch: { waitedMs: number; force: boolean; error: boolean }, pick: { why: string; option?: { id: string } } | null) {
+    const secs = Math.round(watch.waitedMs / 1000);
+    const what = pick ? `answering ${pick.option?.id ?? "payload"} (${pick.why})` : "nothing legal to press";
+    if (watch.force) log.info(`autopilot ${this.name}: watchdog: ${d.kind} ${d.id} in ${game} has waited on us ${secs}s; re-evaluating: ${what}`);
+    if (!watch.error) return;
+    const dump = JSON.stringify({
+      id: d.id,
+      kind: d.kind,
+      seq: d.seq,
+      revision: d.revision,
+      scope: d.scope,
+      target: d.target,
+      window: d.window,
+      progress: d.progress,
+      source: d.source,
+      prompt: d.prompt.slice(0, 300),
+      options: d.options.map((o) => ({ id: o.id, label: o.label, disabled: o.disabled, needsInput: o.needsInput, value: o.value })),
+    });
+    log.error(`autopilot ${this.name}: Error: bot decision stalled in ${game}: ${d.kind} has waited on us ${secs}s (${what}); decision ${dump.slice(0, 6000)}`);
+  }
+
+  /** Forgets watchdog clocks of decisions in `game` that no longer await us. */
+  private watchdogSweep(game: string, mine: Decision[]) {
+    const live = new Set(mine.filter((d) => waitsOn(d, this.userId)).map((d) => `${game}|${d.id}`));
+    for (const k of [...this.engineWaiting.keys()]) if (k.startsWith(`${game}|`) && !live.has(k)) this.engineWaiting.delete(k);
+    if (this.engineDead.size > 5000) this.engineDead.clear();
+    if (this.engineRefused.size > 5000) this.engineRefused.clear();
+  }
 
   /**
    * Typed decisions addressed to this seat (engine API): answered directly, with the target resolved by the engine
@@ -1342,6 +1422,7 @@ class SeatPilot {
   private async engineStep(): Promise<boolean> {
     const engine = this.mgr.engine;
     if (!engine) return false;
+    const now = Date.now();
     for (const game of this.liveGames()) {
       const own = await engine.decisionsFor(game, this.userId);
       // Plus the table-wide setup steps (deal secrets, reveal objectives): no target and no window, any seat may
@@ -1352,15 +1433,24 @@ class SeatPilot {
       // And the strategy cards we played: their windows list only followers; we resolve the primary on them.
       const holding = open.filter((d) => answersOutsideWindow(d, this.userId, state) && !own?.some((x) => x.id === d.id));
       const mine = [...(own ?? []), ...table, ...holding];
+      this.watchdogSweep(game, mine);
       if (!mine.length) continue;
       for (const d of mine) {
+        if (this.engineDead.has(d.id)) continue;
         const done = this.engineDone.get(d.id);
-        const pick = chooseTyped(d, state, this.userId, {
+        const watch = this.watchdog(game, d, now);
+        const ctx = {
           history: done?.options ?? [],
           lastRevision: done?.revision,
           open: mine.filter((x) => x.id !== d.id),
           all: open,
-        });
+          waitedMs: watch?.waitedMs,
+          force: watch?.force,
+        };
+        // Forced, and the specific policy's answers were refused: go straight to the last resort.
+        let pick: TypedChoice | null = watch?.force && this.engineRefused.has(d.id) ? chooseFallback(d, state, this.userId) : chooseTyped(d, state, this.userId, ctx);
+        if (!pick && watch?.force) pick = chooseFallback(d, state, this.userId);
+        if (watch && (watch.force || watch.error)) this.watchdogReport(game, d, watch, pick);
         if (!pick) continue;
         // Reaction windows (table decisions) are re-revised by every save at the table, so their key leaves the revision
         // out: one answer per option per seat. Every decision gets at most ENGINE_MAX_ANSWERS answers from this seat
@@ -1382,7 +1472,13 @@ class SeatPilot {
           : { optionId: pick.option?.id, expectedSeq: d.seq, requestId, userId: this.userId };
         const r = await this.mgr.serial(() => engine.answer(game, d.id, req));
         if (!r) return false;
-        log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option?.label ?? "payload"}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
+        const line = `autopilot ${this.name}: engine ${d.kind} "${pick.option?.label ?? "payload"}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`;
+        // Fallback answers are logged loudly: each one is a kind that wants a specific policy.
+        if (pick.why.startsWith("fallback:")) log.warn(line);
+        else log.info(line);
+        // The decision is gone on the engine side (closed, or a stale copy the mirror still lists): stop answering it.
+        if (r.status === "not_found" || (r.status === "stale" && /no longer open/i.test(r.error ?? ""))) this.engineDead.add(d.id);
+        if (!r.ok && ["refused", "bad_option", "forbidden", "error", "unsupported"].includes(r.status)) this.engineRefused.add(d.id);
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
         // The decision changed under us (windows are re-revised by every save at the table): not an answer; try again
         // on the next look with the fresh revision (live: bots' "Not Following" went stale and was never re-sent).
