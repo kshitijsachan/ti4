@@ -392,6 +392,9 @@ function checkSave(p: ParsedSave, web: Json | null, add: Add) {
     ]) {
       for (const id of cardIds(x.kv.get(key))) {
         const here = `${x.kv.get("faction")}'s ${zone}`;
+        // The bot keeps a play-area note in the same player's hand map too (Player.addPromissoryNoteToPlayArea only
+        // adds to the play-area list; the hand tray skips it): that is one note in one place.
+        if (zone === "play area" && pnWhere.get(id) === `${x.kv.get("faction")}'s hand`) continue;
         if (pnWhere.has(id)) add("cards.promissory-unique", "error", `promissory note ${id} is both in ${pnWhere.get(id)} and in ${here}`);
         pnWhere.set(id, here);
       }

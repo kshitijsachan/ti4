@@ -270,6 +270,13 @@ class Runner {
       const a = await answer(this.fork.game, hit.d.id, user, { optionId: hit.o.id });
       return a.ok || a.status === "needs_input" ? { ok: true, detail: `${hit.d.kind}/${hit.o.id} ${a.path ?? ""}`, kind: hit.d.kind } : { ok: false, error: `engine refused ${hit.d.kind}/${hit.o.id}: ${a.httpStatus} ${a.status} ${a.error}`, refused: true };
     }
+    // A press chain (legacy: [...]) clicks the next button as soon as the previous click returns; give the bot's reply
+    // message a moment to arrive before falling back to a carrier reload (which reloads the fork's save and would undo
+    // a press whose save is still being written).
+    for (let i = 0; i < 20 && !carrier && st.carrier !== true; i++) {
+      await sleep(300);
+      carrier = this.carrying(customId, user);
+    }
     if (!carrier) carrier = await this.carrier(customId, user, st);
     if (!carrier) return { ok: false, error: `no message carries ${customId}` };
     const c = await clientFor(this.fork, user);

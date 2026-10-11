@@ -31,11 +31,27 @@
           "as": "nomad"
         },
         {
+          "press": "newTransact_PNs_vapourwave_copper",
+          "as": "nomad"
+        },
+        {
           "press": "offerToTransact_PNs_vapourwave_copper_36",
           "as": "nomad"
         },
         {
+          "press": "newTransact_SendDebt_vapourwave_copper",
+          "as": "nomad"
+        },
+        {
           "press": "offerToTransact_SendDebt_vapourwave_copper_1",
+          "as": "nomad"
+        },
+        {
+          "press": "getNewTransaction_copper_vapourwave",
+          "as": "nomad"
+        },
+        {
+          "press": "newTransact_PNs_copper_vapourwave",
           "as": "nomad"
         },
         {
