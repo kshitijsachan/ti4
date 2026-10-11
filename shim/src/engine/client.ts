@@ -229,10 +229,21 @@ export class EngineClient {
 
   private async loop() {
     let backoff = 1000;
+    let watchdog: ReturnType<typeof setInterval> | undefined;
     while (!this.stopped) {
       try {
         if (this.everLive) await this.checkRestart();
-        const res = await fetch(this.url(`/stream?after=${this.seq}`), { headers: { ...this.headers(), accept: "text/event-stream" } });
+        // The bot pings every 15 s: a stream silent for longer than STREAM_SILENT_MS is stalled (half-open connection,
+        // a stuck emitter) — abort and resume from our seq (live fuzz: 85 s without events while the registry moved).
+        const ctl = new AbortController();
+        let lastData = Date.now();
+        watchdog = setInterval(() => {
+          if (Date.now() - lastData > STREAM_SILENT_MS) {
+            log.warn(`engine stream silent for ${Math.round((Date.now() - lastData) / 1000)} s: reconnecting`);
+            ctl.abort();
+          }
+        }, 5000);
+        const res = await fetch(this.url(`/stream?after=${this.seq}`), { headers: { ...this.headers(), accept: "text/event-stream" }, signal: ctl.signal });
         if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
         this.available = true;
         this.live = true;
@@ -243,6 +254,7 @@ export class EngineClient {
         for (;;) {
           const { value, done } = await reader.read();
           if (done) break;
+          lastData = Date.now();
           buf += value;
           // Linear in the chunk: a burst (e.g. thousands of decision.opened after a bot restart rebuild) arrives as
           // one multi-MB chunk; re-slicing the remaining buffer per event was quadratic and froze the event loop.
@@ -256,6 +268,9 @@ export class EngineClient {
         }
       } catch (e) {
         if (this.live) log.warn(`engine stream lost: ${(e as Error).message}`);
+      } finally {
+        if (watchdog) clearInterval(watchdog);
+        watchdog = undefined;
       }
       this.live = false;
       this.primed.clear();
@@ -295,6 +310,8 @@ export class EngineClient {
 }
 
 const RING_SIZE = 3000;
+/** No bytes (not even the 15 s ping) for this long: the stream is stalled; reconnect. */
+const STREAM_SILENT_MS = 45_000;
 
 function applyTo(map: Map<string, Decision>, e: EngineEvent) {
   if (e.type === "decision.opened" || e.type === "decision.updated") map.set(e.decision.id, e.decision);
