@@ -13,6 +13,7 @@ import { Toggle } from "./Payment";
 import { buildCost, buildSummary, productionRows, productionValue, type ProduceRow } from "./production";
 import { pressOn, usePressPlan, type PlanStep } from "../../ui/pressPlan";
 import { Quantity } from "../../ui/Quantity";
+import { DecisionFooter } from "../../ui/Footer";
 import { actionChoice } from "./shared";
 import classes from "./payment.module.css";
 
@@ -252,13 +253,15 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
         pendingKey={pendingKey}
         channelId={d.prompt.channelId}
         trailing={
-          <ChoiceButton
-            choice={actionChoice("production-build", summary ? `Build ${summary} — pay ${toPay}` : "Build nothing", 3, !done)}
-            onPress={build}
-            pending={false}
-            busy={busy || !!pendingKey}
-            emphasis
-          />
+          <DecisionFooter>
+            <ChoiceButton
+              choice={actionChoice("production-build", summary ? `Build ${summary} — pay ${toPay}` : "Build nothing", 3, !done)}
+              onPress={build}
+              pending={false}
+              busy={busy || !!pendingKey}
+              emphasis
+            />
+          </DecisionFooter>
         }
       />
       {runner.error && <span className={strategy.error}>{runner.error}</span>}

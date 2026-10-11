@@ -8,6 +8,9 @@
   --army-rank-third-rgb: 205, 127, 50;
   --army-rank-first-color: rgba(255, 215, 0, 0.95);
   --unit-details-upgrade-bg: rgba(255, 255, 255, 0.02);
+  /* Scrollbar thumb of scrolling panel bodies (the decision popup): visible on every theme's dark surface. */
+  --panel-scroll-thumb: rgba(148, 163, 184, 0.4);
+  --panel-scroll-thumb-hover: rgba(148, 163, 184, 0.65);
   /*
    * The console stack above the board, as one derivation instead of six.
    *

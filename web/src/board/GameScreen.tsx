@@ -110,7 +110,9 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
   const active = players.find((p) => p.active);
   const mine = players.find((p) => me && p.discordId === me.id);
   let myNote: string | undefined;
-  if (mine?.passed) myNote = "You passed";
+  /* The bot keeps "passed" set through the status and agenda phases; it only means something in the action phase. */
+  const actionPhase = !turn.phase || turn.phase.startsWith("Action");
+  if (mine?.passed && actionPhase) myNote = "You passed";
   const revealed = [...(data?.objectives?.stage1Objectives ?? []), ...(data?.objectives?.stage2Objectives ?? [])].filter((o) => o.revealed).length;
 
   let stage: ReactNode = takeover;
@@ -134,7 +136,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
         talkUnread={talkUnread}
         incomingTrades={incomingTrades}
       />
-      {!takeover && <PlayerRail myUserId={me?.id} onAllPlayers={() => setPlayersOpen(true)} />}
+      {!takeover && <PlayerRail myUserId={me?.id} actionPhase={actionPhase} onAllPlayers={() => setPlayersOpen(true)} />}
       <main ref={stageRef} className={classes.stage} style={stageStyle}>
         {stage}
         {!takeover && (

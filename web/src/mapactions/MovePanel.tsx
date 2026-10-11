@@ -434,7 +434,7 @@ export function MovePanel({
           : sum.empty
             ? hasOrigins
               ? "Click a glowing system to pick the ships that move in (dimmed: probably out of reach)."
-              : "None of your ships can move in. Press Move to continue without moving."
+              : "None of your ships can move in. Press “Continue without moving” to go on."
             : `Moving in: ${sum.text}`}
       </div>
       {(sum.capacity > 0 || sum.cargo > 0) && (

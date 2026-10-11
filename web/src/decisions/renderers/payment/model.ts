@@ -68,9 +68,15 @@ export function tgOffer(choices: Choice[], me?: PlayerData) {
   return has ? (me?.tg ?? 0) : 0;
 }
 
+/**
+ * Commodities never pay for anything, except through the Keleres agent (Xander Alexin Victori III: exhaust it to
+ * spend commodities as if they were trade goods). The bot offers its "Spend 1 / 2 Commodities" only then, and the
+ * press exhausts the agent; without that agent ready the buttons are not a payment source.
+ */
 export function commOffer(choices: Choice[], me?: PlayerData) {
   const has = choices.some((c) => /^reduceComm_/.test(baseId(c.customId)));
-  return has ? (me?.commodities ?? 0) : 0;
+  const agent = me?.leaders?.some((l) => l.id === "keleresagent" && !l.exhausted && !l.locked);
+  return has && agent ? (me?.commodities ?? 0) : 0;
 }
 
 /** Mirror Computing doubles every trade good spent. */

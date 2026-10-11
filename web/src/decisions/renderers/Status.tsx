@@ -1,4 +1,6 @@
 import { actionCards } from "@/entities/data/actionCards";
+import { readStored, writeStored } from "@/discord/client/lastRead";
+import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { baseId } from "../model/controls";
 import { reactedBy } from "../detect/pending";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
@@ -18,6 +20,18 @@ function cardsToResolve(text: string, hand?: string[]) {
   return names.filter((name) => actionCards.some((a) => held.has(a.alias) && a.name.toLowerCase() === name.toLowerCase()));
 }
 
+const CONFIRMED = "statusTokensConfirmed";
+
+/** Homework messages whose token step I confirmed in this browser (the bot deletes the token prompt then). */
+function confirmedHere(id: string) {
+  return !!readStored<true>(CONFIRMED)[id];
+}
+
+function markConfirmed(id: string) {
+  const keep = [...Object.keys(readStored<true>(CONFIRMED)), id].sort(compareSnowflakes).slice(-50);
+  writeStored(CONFIRMED, Object.fromEntries(keep.map((k) => [k, true])));
+}
+
 /**
  * Status homework: gain and redistribute command tokens (the token prompt folds in here once opened), resolve any
  * status-phase card I hold, then say I am ready for the next phase. Shows who the table still waits on.
@@ -33,12 +47,26 @@ export function StatusBody(props: RendererProps) {
   const next = ready.label.replace(/^ready for\s*/i, "").trim() || "the next phase";
   const players = data.players.filter((p) => p.faction && p.faction !== "neutral" && p.faction !== "null");
   const waiting = players.filter((p) => p.faction !== data.me?.faction && !reactedBy(d.prompt.message, p.faction));
+  /*
+   * The bot reacts with my faction the moment I press "redistribute" and deletes the token prompt once I confirm it,
+   * leaving its button up: pressing it again would gain two more tokens. Once the token prompt is gone, it is done.
+   */
+  const tokensDone = !gain && (confirmedHere(d.id) || (!!data.me?.faction && reactedBy(d.prompt.message, data.me.faction)));
+  const onGainPress = (step: NonNullable<typeof gain>): RendererProps["onPress"] => (c, values) => {
+    if (/^deleteButtons/.test(baseId(c.customId))) markConfirmed(d.id);
+    pressOn(step)(c, values);
+  };
 
   return (
     <div className={classes.stack}>
       <Section label="1 · Command tokens">
         {gain ? (
-          isTokenStep(gain.choices) ? <TokensBody {...props} d={gain} onPress={pressOn(gain)} /> : <GainTokensBody {...props} d={gain} onPress={pressOn(gain)} />
+          isTokenStep(gain.choices) ? <TokensBody {...props} d={gain} onPress={onGainPress(gain)} onConfirmed={() => markConfirmed(d.id)} /> : <GainTokensBody {...props} d={gain} onPress={onGainPress(gain)} />
+        ) : tokensDone ? (
+          <>
+            {data.me && <ResourceStrip me={data.me} show={["tactic", "fleet", "strategy"]} />}
+            <p className={classes.done}>Command tokens gained and confirmed for this round.</p>
+          </>
         ) : (
           <>
             {data.me && <ResourceStrip me={data.me} show={["tactic", "fleet", "strategy"]} />}

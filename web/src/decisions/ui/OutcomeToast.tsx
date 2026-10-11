@@ -4,8 +4,10 @@ import { usePlay } from "@/discord";
 import { useGameEvents } from "@/gamelog";
 import { segText } from "@/gamelog/parse/markup";
 import type { GameEvent } from "@/gamelog";
+import type { PlayerDataResponse } from "@/entities/data/types";
 import { useReservedArea } from "@/state/reservedArea";
 import { useRunner } from "../renderers/strategy/runner";
+import { FollowNoticeNote, useFollowNotices } from "./FollowNotices";
 import { pressOutcome } from "./pressOutcome";
 import classes from "./OutcomeToast.module.css";
 
@@ -26,9 +28,11 @@ function outcomeText(events: GameEvent[]) {
  * What my last press did, in plain words, for a few seconds. Every press gets a note: the game-log events the bot
  * posted for my faction right after it (gained trade goods, readied planets, explored, scored…) when they arrive
  * quickly, else the pressed button's own words ("Kept Strengthen Bonds", "Passed", "Not following Technology"),
- * replaced by the bot's wording if that comes later. A multi-press flow gets one note, for its last press.
+ * replaced by the bot's wording if that comes later. A multi-press flow gets one note, for its last press. Above them,
+ * strategy cards the bot declined for me without asking (no strategy tokens), until dismissed.
  */
-export function OutcomeToast({ gameName, faction, rightInset }: { gameName: string; faction?: string; rightInset: number }) {
+export function OutcomeToast({ gameName, faction, rightInset, web }: { gameName: string; faction?: string; rightInset: number; web?: PlayerDataResponse }) {
+  const follow = useFollowNotices(gameName, web);
   const press = usePlay((s) => s.lastPress);
   const flowRunning = useRunner((s) => !!s.running);
   const { events } = useGameEvents(gameName);
@@ -85,7 +89,7 @@ export function OutcomeToast({ gameName, faction, rightInset }: { gameName: stri
 
   /* Under the decision card when it is up (inside its column), else top-right under the top bar: never over tiles. */
   const card = useReservedArea((s) => s.rects["decision-card"]);
-  if (!shown.length || typeof document === "undefined") return null;
+  if ((!shown.length && !follow.notices.length) || typeof document === "undefined") return null;
   const style = (
     card
       ? { top: `${card.bottom + 8}px`, right: `${window.innerWidth - card.right}px`, width: `${card.right - card.left}px` }
@@ -93,6 +97,9 @@ export function OutcomeToast({ gameName, faction, rightInset }: { gameName: stri
   ) as CSSProperties;
   return createPortal(
     <div className={`ti4play ${classes.stack}`} style={style} role="status" aria-live="polite">
+      {follow.notices.map((n) => (
+        <FollowNoticeNote key={n.id} notice={n} onDismiss={() => follow.dismiss(n.id)} />
+      ))}
       {shown.map((o) => (
         <div key={`${o.key}:${o.text}`} className={classes.toast}>
           {o.fromLog ? (

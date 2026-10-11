@@ -23,6 +23,7 @@ import { useDecisionPress } from "../model/usePress";
 import { renderBody, isWide } from "../renderers";
 import type { DecisionData } from "../renderers/types";
 import { OutcomeToast } from "./OutcomeToast";
+import { FooterSlot } from "./Footer";
 import { CombatOutcome } from "../renderers/combat/Outcome";
 import classes from "./DecisionHost.module.css";
 
@@ -274,7 +275,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
   return (
     <>
       <DecisionPopup decisions={decisions} offers={offers} data={data} placement={placement} className={className} rightInset={rightInset} />
-      <OutcomeToast gameName={gameName} faction={mePlayer?.faction} rightInset={rightInset} />
+      <OutcomeToast gameName={gameName} faction={mePlayer?.faction} rightInset={rightInset} web={web} />
       <CombatOutcome gameName={gameName} rightInset={rightInset} />
     </>
   );
@@ -315,6 +316,31 @@ function PopupLayer({ children, placement, rightInset, peeking }: {
   return typeof document === "undefined" ? layer : createPortal(layer, document.body);
 }
 
+/** Whether a scrolling body has more above / below its visible part, kept current as it scrolls and grows. */
+function useScrollEdges(el: HTMLElement | null) {
+  const [edges, setEdges] = useState({ above: false, below: false });
+  useEffect(() => {
+    if (!el) return;
+    const measure = () => {
+      const above = el.scrollTop > 2;
+      const below = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
+      setEdges((e) => (e.above === above && e.below === below ? e : { above, below }));
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    resize?.observe(el);
+    const mutate = new MutationObserver(measure);
+    mutate.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => {
+      el.removeEventListener("scroll", measure);
+      resize?.disconnect();
+      mutate.disconnect();
+    };
+  }, [el]);
+  return edges;
+}
+
 /** The popup itself over a list of decisions: paging, peeking at the map, presses, map focus. */
 export function DecisionPopup({ decisions, offers = [], data, placement = "fixed", rightInset = 0 }: DecisionPopupProps) {
   const conn = usePlayConnection();
@@ -323,6 +349,9 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
   const [offerId, setOfferId] = useState<string | null>(null);
   const [offerList, setOfferList] = useState(false);
   const [collapsedId, setCollapsedId] = useState<string | null>(null);
+  const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null);
+  const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
+  const edges = useScrollEdges(bodyEl);
   /* The board keeps clear of the card and the pill (state/reservedArea). */
   const cardRef = useReserveRect("decision-card");
   const offersRef = useReserveRect("decision-offers");
@@ -365,6 +394,14 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
   const [queueOpen, setQueueOpen] = useState(false);
   const shown = press.held ?? openOffer ?? decisions.find((d) => d.id === jumpId) ?? decisions[0];
   const more = decisions.filter((d) => d.id !== shown?.id).length;
+  useEffect(() => {
+    if (!queueOpen) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setQueueOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [queueOpen]);
   const offerPill = offers.length > 0 && (
     <div ref={offersRef} className={classes.offers}>
       {offerList && (
@@ -513,16 +550,25 @@ export function DecisionPopup({ decisions, offers = [], data, placement = "fixed
             )}
           </div>
         </header>
-        <div className={classes.body} hidden={collapsed}>
-          {renderBody(shown, {
-            d: shown,
-            data,
-            onPress: (c, values) => void press.press(shown, shown, c, values),
-            pressOn: (target) => (c, values) => void press.press(shown, target, c, values),
-            pendingKey: press.pendingKey,
-            onHoverChoice,
-          })}
+        <div
+          ref={setBodyEl}
+          className={classes.body}
+          hidden={collapsed}
+          data-more-above={edges.above || undefined}
+          data-more-below={edges.below || undefined}
+        >
+          <FooterSlot.Provider value={footerEl}>
+            {renderBody(shown, {
+              d: shown,
+              data,
+              onPress: (c, values) => void press.press(shown, shown, c, values),
+              pressOn: (target) => (c, values) => void press.press(shown, target, c, values),
+              pendingKey: press.pendingKey,
+              onHoverChoice,
+            })}
+          </FooterSlot.Provider>
         </div>
+        <div ref={setFooterEl} className={classes.footer} hidden={collapsed} />
         {press.error && (
           <div className={classes.error} role="alert">
             <IconAlertTriangle size={14} />
