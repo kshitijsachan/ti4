@@ -1,0 +1,20 @@
+.form {
+  padding: 8px 10px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--panel-field-flat);
+}
+
+.title {
+  font-size: 12px;
+  color: var(--mantine-color-text);
+}
+
+.number {
+  font-family: var(--mantine-font-family-monospace);
+}
+
+.error {
+  font-size: 10px;
+  color: var(--mantine-color-error);
+}

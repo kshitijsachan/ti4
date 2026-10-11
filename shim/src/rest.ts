@@ -415,6 +415,13 @@ export class Rest {
       if (!ch) return;
       const atts = this.hub.resolveAttachments(ctx.body.json, ctx.body.files) ?? [];
       const msg = this.hub.buildMessage(ch.id, s().bot_id, ctx.body.json, atts);
+      // Engine answers have no interaction token: an ephemeral reply is a channel message with nonce "eph:<user>"
+      // (bot MessageSink). Store it like an interaction ephemeral: only that user sees it.
+      const nonce = String(ctx.body.json.nonce ?? "");
+      if (nonce.startsWith("eph:") && String(ctx.req.headers.authorization ?? "") === `Bot ${s().bot_token}`) {
+        msg._ephemeral_for = nonce.slice(4);
+        msg.flags = (msg.flags ?? 0) | 64;
+      }
       this.hub.postMessage(msg);
       sendJson(ctx.res, 200, stripPrivate(msg));
     });

@@ -11,6 +11,12 @@ export type TypedChoice = { option: Option<any>; why: string };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string): TypedChoice | null {
   if (d.target?.userId !== me || d.scope !== "player") return null;
+  if (d.kind === "input.form") {
+    // Forms open only when a seat pressed a form button through the engine; bots have no policy for free-form
+    // input, so close it instead of leaving a private decision open.
+    const cancel = d.options.find((o) => o.id === "cancel");
+    return cancel ? { option: cancel, why: "form: bots do not fill free-form input" } : null;
+  }
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   if (!live.length) return null;
   const self = state?.players.find((p) => p.userId === me);
