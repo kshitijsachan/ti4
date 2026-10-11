@@ -34,6 +34,16 @@ export type OpenModal = { interactionId: Snowflake; nonce?: string; modal: Modal
 
 export type Toast = { id: number; kind: "error" | "info"; text: string };
 
+/** My newest press on a bot control: which one, and the message as it stood when I pressed it. */
+export type LastPress = {
+  at: number;
+  channelId: Snowflake;
+  messageId: Snowflake;
+  customId?: string;
+  values?: string[];
+  message?: Message;
+};
+
 export type PlayState = {
   status: ConnectionStatus;
   botOnline: boolean;
@@ -69,6 +79,8 @@ export type PlayState = {
   pressed: Record<Snowflake, number>;
   /** The controls (custom ids) a message had when I pressed it, so a mere text update is not a new step. */
   pressedControls: Record<Snowflake, string>;
+  /** My newest press in this tab (not persisted): what the outcome note reports on. */
+  lastPress: LastPress | null;
 };
 
 export const EMPTY_CHANNEL: ChannelMessages = {
@@ -109,6 +121,7 @@ export function createPlayStore(storageKey: string) {
     dismissedPrompts: readStored(`dismissed.${storageKey}`),
     pressed: readStored(`pressed.${storageKey}`),
     pressedControls: readStored(`pressedControls.${storageKey}`),
+    lastPress: null,
   }));
 
   const set = store.setState;
@@ -232,11 +245,13 @@ export function createPlayStore(storageKey: string) {
     },
     markRead,
     /** Remember that I acted on a message, so prompts at or before it count as answered. */
-    noteInteraction(channelId: Snowflake, messageId: Snowflake) {
-      const pressed = withId(get().pressed, messageId, Date.now());
+    noteInteraction(channelId: Snowflake, messageId: Snowflake, customId?: string, values?: string[]) {
+      const at = Date.now();
+      const pressed = withId(get().pressed, messageId, at);
       const message = get().messages[channelId]?.byId[messageId];
       const pressedControls = withId(get().pressedControls, messageId, controlSignature(message?.components));
-      set({ pressed, pressedControls });
+      const lastPress = customId ? { at, channelId, messageId, customId, values, message } : get().lastPress;
+      set({ pressed, pressedControls, lastPress });
       writeStored(`pressed.${storageKey}`, pressed);
       writeStored(`pressedControls.${storageKey}`, pressedControls);
       const cur = get().interacted[channelId];

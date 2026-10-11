@@ -4,6 +4,7 @@ import { Tooltip, UnstyledButton } from "@mantine/core";
 import { IconListDetails, IconMessageCircle, IconTarget, IconTransfer, IconUsers } from "@tabler/icons-react";
 import cx from "clsx";
 import { usePlay } from "@/discord";
+import { useSetupWaiting, useWaitingOnMe } from "@/decisions";
 import { UndoButton } from "@/rollback";
 import type { TurnState } from "@/play/turn";
 import { SettingsMenu } from "./SettingsMenu";
@@ -108,9 +109,19 @@ export function TopBar({
   incomingTrades,
 }: Props) {
   const toggle = (name: DrawerName) => onDrawer(drawer === name ? null : name);
+  const waitingOnMe = useWaitingOnMe((s) => s.count);
+  const firstDecision = useWaitingOnMe((s) => s.title);
+  const setup = useSetupWaiting(gameName);
+  /* A decision of mine is up (setup, agenda, a follow…): the table waits on me even when it is nobody's turn. */
+  const myMove = turn.mine || waitingOnMe > 0 || !!setup?.me;
   let turnText = "";
+  let turnTip: string | undefined;
   if (turn.mine) turnText = "Your turn";
-  else if (turn.waitingOn) turnText = `${turn.waitingOn}'s turn`;
+  else if (myMove) {
+    turnText = "Your move";
+    turnTip = firstDecision ? `Waiting on you: ${firstDecision}` : setup?.text;
+  } else if (turn.waitingOn) turnText = `${turn.waitingOn}'s turn`;
+  const note = myMove ? undefined : (myNote ?? (turnText ? undefined : setup?.text));
   const where = [round ? `Round ${round}` : null, turn.phase].filter(Boolean).join(" · ");
 
   return (
@@ -126,15 +137,20 @@ export function TopBar({
         {where && <span className={classes.where}>{where}</span>}
         {turnText && (
           <span
-            className={cx(classes.turn, turn.mine && classes.turnMine)}
+            className={cx(classes.turn, myMove && classes.turnMine)}
             style={activeColor ? ({ "--turn": activeColor } as CSSProperties) : undefined}
             role="status"
+            title={turnTip}
           >
             <span className={classes.turnDot} />
             <span className={classes.turnText}>{turnText}</span>
           </span>
         )}
-        {!turn.mine && myNote && <span className={classes.note}>{myNote}</span>}
+        {note && (
+          <span className={classes.note} role={turnText ? undefined : "status"}>
+            {note}
+          </span>
+        )}
       </div>
 
       <div className={classes.right}>

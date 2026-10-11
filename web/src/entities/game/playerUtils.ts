@@ -8,12 +8,20 @@ function cleanDisplayName(value?: string | null) {
   return trimmed;
 }
 
+/** The bot's Keleres ids carry the flavor (keleresa / keleresm / keleresx): players just say "Keleres". */
+const KELERES_FLAVOR_ID = /^keleres[amx]$/i;
+
+/** A faction id as players say it, where the raw id reads wrong ("keleresx" → "Keleres"). */
+export function factionKeyDisplayName(faction: string) {
+  return KELERES_FLAVOR_ID.test(faction) ? "Keleres" : faction;
+}
+
 export function getPlayerFactionDisplayName(player: PlayerData) {
-  return (
+  const name =
     cleanDisplayName(player.displayName) ??
     cleanDisplayName(player.flexibleDisplayName) ??
-    player.faction
-  );
+    player.faction;
+  return factionKeyDisplayName(name);
 }
 
 function hasAssignedFaction(
