@@ -178,7 +178,7 @@ export interface Progress<A = Record<string, unknown>> {
   canCommit: boolean;
 }
 
-interface DecisionBase<K extends string, V> {
+export interface DecisionBase<K extends string, V> {
   /** Stable for the life of the prompt message; edits in place keep it and bump `revision`. */
   id: string;
   game: string;
@@ -216,14 +216,29 @@ export type MiltyDraftPick = DecisionBase<
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
 
-export type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraftPick | LegacyDecision;
+export type Decision =
+  | StrategyCardPick
+  | TechGain
+  | SecretObjectiveDiscard
+  | MiltyDraftPick
+  | ProductionDecision
+  | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
+
+import type { ProductionDecision } from "./kinds/production.js";
+export type * from "./kinds/production.js";
 
 // ---------------------------------------------------------------- actions
 
 export interface AnswerRequest {
-  optionId: string;
+  /** Press one option. Omit when sending a payload. */
+  optionId?: string;
+  /**
+   * Kind-specific typed answer executed atomically by the engine (validated whole, then pressed under the game
+   * lock), e.g. payment.spend {planets, tg, commodities, sarween} or production.produce {units}.
+   */
+  payload?: Record<string, unknown>;
   /** The decision seq you saw; a mismatch answers 409 stale instead of acting on a changed prompt. */
   expectedSeq?: number;
   /** Idempotency key: retries with the same key return the first result. */

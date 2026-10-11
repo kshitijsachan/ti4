@@ -180,6 +180,15 @@ requestId?}`) or `POST /api/game/{game}/engine/decisions/{id}/answer` (seat Bear
 No gateway hop, no browser, no "which message is mine" inference. Not answerable yet: selects (`#value` options)
 and modal buttons (`~MDL`, `needsInput`) → keep the legacy press path for those until W-INFRA-3.
 
+**Whole-decision payload answers** (G5: `payment.spend`, `production.produce`): body `{payload, optionId?,
+expectedSeq?, requestId?}`. For kinds with `KindSpec.acceptsPayload()`, `ActionInvoker` takes the game's WRITE lock
+(reentrant) and calls `answerPayload(PayloadAnswer, payload)`: the kind validates the whole answer against the
+decision's options and engine state first (refusing changes nothing), then makes the same presses a player would
+(`PayloadAnswer.press`, each through `ButtonProcessor.processNow`), ending with the commit ("Done") option. A
+multi-press flow thus becomes one atomic, reload-safe answer. `optionId`, if given, names the commit option and is
+ignored. `KindSpec.classifies(handlerId)` (default = `matches`) decides which options make a message the kind, so a
+kind can type generic options such as "Done" (`deleteButtons…`) without claiming other areas' messages.
+
 ### 3.5 Stream, versioning, consistency
 
 * One global `seq` orders all events (`decision.opened|updated|closed`, `state.changed`). Registry listeners run

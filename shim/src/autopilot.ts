@@ -9,6 +9,7 @@ import type { Seat } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
 import type { EngineClient } from "./engine/client.js";
 import { chooseTyped } from "./engine/autopilot.js";
+import { productionPayload } from "./engine/policy/production.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -1151,13 +1152,13 @@ class SeatPilot {
       for (const d of mine) {
         const pick = chooseTyped(d, state, this.userId);
         if (!pick) continue;
-        const key = `${d.id}@${d.revision}|${pick.option.id}`;
+        const key = `${d.id}@${d.revision}|${pick.option ? pick.option.id : JSON.stringify(pick.payload)}`;
         if (this.engineTried.has(key)) continue;
         this.engineTried.add(key);
         if (this.engineTried.size > 5000) this.engineTried.clear();
-        const r = await this.mgr.serial(() => engine.answer(game, d.id, { optionId: pick.option.id, expectedSeq: d.seq, requestId: key, userId: this.userId }));
+        const r = await this.mgr.serial(() => engine.answer(game, d.id, { ...(pick.option ? { optionId: pick.option.id } : { payload: pick.payload }), expectedSeq: d.seq, requestId: key, userId: this.userId }));
         if (!r) return false;
-        log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option.label}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
+        log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option?.label ?? "payload"}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
         if (r.ok) return true;
       }
@@ -1245,6 +1246,17 @@ class SeatPilot {
         }
       },
       log: (text) => log.info(`autopilot ${self.name}: ${text}`),
+      engineProduce: async (game, messageId, build) => {
+        const engine = self.mgr.engine;
+        if (!engine) return null;
+        const d = (await engine.decisionsFor(game, self.userId))?.find((x) => x.kind === "production.produce" && x.source.messageId === messageId);
+        if (!d || d.kind !== "production.produce") return null;
+        const payload = productionPayload(d, build);
+        const r = await self.mgr.serial(() => engine.answer(game, d.id, { payload: payload as unknown as Record<string, unknown>, expectedSeq: d.seq, requestId: `${d.id}@${d.revision}|produce`, userId: self.userId }));
+        log.info(`autopilot ${self.name}: engine production.produce ${JSON.stringify(payload.units)} in ${game} -> ${r?.status ?? "no answer"}${r?.error ? `: ${r.error}` : ""}`);
+        if (!r) return null;
+        return r.ok ? undefined : (r.error ?? r.status);
+      },
     };
   }
 }

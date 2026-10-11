@@ -3,11 +3,13 @@
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
 import type { Decision, GameState, Option } from "./types.js";
+import { planPayment } from "./policy/production.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
-export type TypedChoice = { option: Option<any>; why: string };
+/** Either press one option, or send a typed payload the kind executes atomically (payment, production). */
+export type TypedChoice = { option: Option<any>; payload?: undefined; why: string } | { option?: undefined; payload: Record<string, unknown>; why: string };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string): TypedChoice | null {
   if (d.target?.userId !== me || d.scope !== "player") return null;
@@ -40,6 +42,14 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string): T
       const cats = new Set(d.options.filter((o) => !o.disabled && o.value).map((o) => o.value!.category));
       return cats.size === 1 ? { option: d.options.find((o) => !o.disabled && o.value)!, why: "draft: only category left" } : null;
     }
+    case "payment.spend": {
+      // Pay the whole bill in one answer when the engine knows the cost; otherwise the planner / rule table pays.
+      const plan = planPayment(d, state, me);
+      return plan ? { payload: plan.payload as unknown as Record<string, unknown>, why: plan.why } : null;
+    }
+    case "production.produce":
+      // What to build is the planner's call (botplay BuildJob sends it as one production payload).
+      return null;
     default:
       return null;
   }

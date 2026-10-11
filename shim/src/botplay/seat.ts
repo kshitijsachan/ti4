@@ -18,4 +18,9 @@ export interface Seat {
   /** POST /api/game/{g}/movement as this seat; resolves with an error text on failure. */
   movement(game: string, target: string, displacement: Record<string, { unitType: string; colorID: string; counts: number[] }[]>): Promise<string | undefined>;
   log(text: string): void;
+  /**
+   * Produce this build list (unit ids, one per unit) on the engine's typed production decision for this message in
+   * one atomic answer. undefined = done; null = no typed decision (use the buttons); string = the engine's refusal.
+   */
+  engineProduce?(game: string, messageId: string, build: string[]): Promise<string | null | undefined>;
 }
