@@ -1,0 +1,12 @@
+{
+  "name": "sc-pick-warfare",
+  "description": "Strategy phase (pbd75 r1): Deepwrought gets Gravity Drive via /tech add, then picks Warfare through strategy_card.pick.",
+  "base": { "recording": "pbd75", "index": 46 },
+  "setup": ["/tech add tech:gd faction_or_color:deepwrought"],
+  "steps": [{ "answer": { "kind": "strategy_card.pick", "value": { "strategyCard": 6 } }, "as": "deepwrought" }],
+  "expect": {
+    "invariants": true,
+    "state": [{ "path": "players[faction=deepwrought].techs", "includes": "gd" }],
+    "decision": { "kind": "strategy_card.pick", "as": "argent", "open": true }
+  }
+}
