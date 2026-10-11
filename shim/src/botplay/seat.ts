@@ -22,6 +22,11 @@ export interface Seat {
   log(text: string): void;
   /** The typed engine API for this seat (docs/ENGINE.md); absent when the engine is off or unreachable. */
   engine?: SeatEngine;
+  /**
+   * Produce this build list (unit ids, one per unit) on the engine's typed production decision for this message in
+   * one atomic answer. undefined = done; null = no typed decision (use the buttons); string = the engine's refusal.
+   */
+  engineProduce?(game: string, messageId: string, build: string[]): Promise<string | null | undefined>;
 }
 
 /** Typed decisions and actions as this seat. Every method resolves null when the engine is unavailable. */

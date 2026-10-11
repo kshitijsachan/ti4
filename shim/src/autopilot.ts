@@ -11,6 +11,7 @@ import type { EngineClient } from "./engine/client.js";
 import { chooseTyped } from "./engine/autopilot.js";
 import { awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
+import { productionPayload } from "./engine/policy/production.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -1181,23 +1182,23 @@ class SeatPilot {
           all: open,
         });
         if (!pick) continue;
-        const key = `${d.id}@${d.revision}#${done?.options.length ?? 0}|${pick.option.id}`;
+        const key = `${d.id}@${d.revision}#${done?.options.length ?? 0}|${pick.option ? pick.option.id : JSON.stringify(pick.payload)}`;
         if (this.engineTried.has(key)) continue;
         this.engineTried.add(key);
         if (this.engineTried.size > 5000) this.engineTried.clear();
         const req = pick.payload
           ? { payload: pick.payload, expectedSeq: d.seq, requestId: key, userId: this.userId }
-          : { optionId: pick.option.id, expectedSeq: d.seq, requestId: key, userId: this.userId };
+          : { optionId: pick.option?.id, expectedSeq: d.seq, requestId: key, userId: this.userId };
         const r = await this.mgr.serial(() => engine.answer(game, d.id, req));
         if (!r) return false;
-        log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option.label}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
+        log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option?.label ?? "payload"}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
         // Tell the legacy roll guard (mayRoll) about rolls made here, so it never rolls the same dice again.
-        const rolled = pick.option.value?.action === "roll" ? String(pick.option.value.rollType ?? "") : "";
+        const rolled = pick.option?.value?.action === "roll" ? String(pick.option.value.rollType ?? "") : "";
         if (r.ok && rolled) this.recent.set(`${d.source.channelId}:roll:${rolled}`, Date.now());
         if (r.ok) {
           // What we answered on this decision (multi-part answers walk it; see engine/kinds/strategyPolicy.ts).
-          this.engineDone.set(d.id, { options: [...(done?.options ?? []), pick.option.id], revision: d.revision });
+          this.engineDone.set(d.id, { options: [...(done?.options ?? []), ...(pick.option ? [pick.option.id] : [])], revision: d.revision });
           if (this.engineDone.size > 2000) this.engineDone.delete(this.engineDone.keys().next().value!);
           return true;
         }
@@ -1291,6 +1292,17 @@ class SeatPilot {
       },
       log: (text) => log.info(`autopilot ${self.name}: ${text}`),
       engine: this.mgr.engine ? this.seatEngine(this.mgr.engine) : undefined,
+      engineProduce: async (game, messageId, build) => {
+        const engine = self.mgr.engine;
+        if (!engine) return null;
+        const d = (await engine.decisionsFor(game, self.userId))?.find((x) => x.kind === "production.produce" && x.source.messageId === messageId);
+        if (!d || d.kind !== "production.produce") return null;
+        const payload = productionPayload(d, build);
+        const r = await self.mgr.serial(() => engine.answer(game, d.id, { payload: payload as unknown as Record<string, unknown>, expectedSeq: d.seq, requestId: `${d.id}@${d.revision}|produce`, userId: self.userId }));
+        log.info(`autopilot ${self.name}: engine production.produce ${JSON.stringify(payload.units)} in ${game} -> ${r?.status ?? "no answer"}${r?.error ? `: ${r.error}` : ""}`);
+        if (!r) return null;
+        return r.ok ? undefined : (r.error ?? r.status);
+      },
     };
   }
 

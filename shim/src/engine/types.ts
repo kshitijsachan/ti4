@@ -8,6 +8,7 @@ import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
 import type { CombatDecision, CombatState } from "./kinds/combat.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
+import type { ProductionDecision } from "./kinds/production.js";
 import type { SetupDecision } from "./kinds/setup.js";
 import type { StatusDecision, StatusState } from "./kinds/status.js";
 import type { StrategyDecision } from "./kinds/strategy.js";
@@ -18,6 +19,7 @@ import type { TradeForceReplenish, TradeOffer, TradeOfferSent, TradeState } from
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
 export type * from "./kinds/explore.js";
+export type * from "./kinds/production.js";
 export type * from "./kinds/setup.js";
 export type * from "./kinds/status.js";
 export type * from "./kinds/tactical.js";
@@ -341,6 +343,7 @@ export type Decision =
   | TradeOfferSent
   | TradeForceReplenish
   | CombatDecision
+  | ProductionDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -353,7 +356,8 @@ export interface AnswerRequest {
   /**
    * Structured answer the kind executes as one or more engine steps under the game lock (KindSpec.acceptsPayload):
    * agenda.vote VotePayload, payment.spend, production.produce, final command token pools (options whose value says
-   * payload: true).
+   * payload: true). Validated whole by the kind, then pressed: e.g. payment.spend {planets, tg, commodities,
+   * sarween}, production.produce {units}.
    */
   payload?: Record<string, unknown>;
   /** The decision seq you saw; a mismatch answers 409 stale instead of acting on a changed prompt. */

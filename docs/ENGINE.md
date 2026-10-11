@@ -180,12 +180,29 @@ requestId?}`) or `POST /api/game/{game}/engine/decisions/{id}/answer` (seat Bear
 No gateway hop, no browser, no "which message is mine" inference. Not answerable yet: selects (`#value` options)
 and modal buttons (`~MDL`, `needsInput`) → keep the legacy press path for those until W-INFRA-3.
 
-**Structured answers (G6).** Instead of `optionId` an answer may carry `payload` (a JSON object). The kind's
-`KindSpec.answerPayload(game, player, decision, payload, steps)` then runs the whole flow server-side through
-`Steps` (`press(decision, optionId)` as the answering player, `await(afterSeq, predicate, timeoutMs)` for the next
-prompt), after the generic checks and under the decision's in-flight guard. First user: `agenda.vote` /
-`agenda.preassign` pre-vote — `{outcome, planets[], allPlanets?, sources[]}` runs vote → outcome → exhaust planets →
-done → confirm in one request. If a step fails, the error says where; the remaining prompts stay answerable.
+**Structured (payload) answers.** Instead of `optionId` an answer may carry `payload` (a JSON object): body
+`{payload, optionId?, expectedSeq?, requestId?}`. Kinds opt in with `KindSpec.acceptsPayload()`; `ActionInvoker`
+then (after the generic checks, under the decision's in-flight guard — per user for table decisions) takes the game's
+WRITE lock (reentrant, so the presses run under it and nobody else's click interleaves) and calls
+`answerPayload(PayloadAnswer a, payload)`. `PayloadAnswer` gives `gameName/game()/player()/userId/decision()` (the
+latest revision of the answered decision) and the steps: `press(optionId)` on that decision, `press(decision,
+optionId)` on any open decision, `pressEngine(decision, customId)` for an engine-owned handler id not on the message
+(e.g. `engineStatusTokens_t_f_s`), `seq()` and `await(afterSeq, predicate, timeoutMs)` for the prompt a press opens.
+The kind validates the whole answer first (a refusal changes nothing), then makes the presses a player would. Users:
+`payment.spend` {planets, tg, commodities, sarween}, `production.produce` {units}, `agenda.vote` /
+`agenda.preassign` {outcome, planets[], allPlanets?, sources[]}, `status.homework` / `command_tokens.adjust` final
+pools. If a multi-step flow fails midway the error says where; the remaining prompts stay answerable. TODO: one
+payload answer currently makes one undo snapshot per press — group them so undo reverts the answer as one action.
+
+**Direct actions on a decision.** `POST …/decisions/{id}/{action}` with `{...body, userId, expectedSeq, requestId}`
+(`tactical.move` → `move`, `tactical.land` → `land`, `combat.hits` → `combat-plan` {plan}); shim
+`EngineClient.act(game, id, action, body)`; web renderers call `answer({action, body})`. Game-level actions (no
+decision): `POST …/engine/{g}/actions/trade.propose`.
+
+**Classification.** `KindSpec.classifies(handlerIds)` (default: any option `matches`) decides whether a message is
+the kind; `typesOption(handlerId)` (default `matches`) whether an option of a message already classified as the kind
+gets a typed value. Kinds that type generic options ("Done" = `deleteButtons…`, combat roll buttons on a hits
+prompt) override `classifies` so they never claim other areas' messages.
 
 ### 3.5 Stream, versioning, consistency
 

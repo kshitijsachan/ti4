@@ -12,12 +12,18 @@ import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx }
 import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat } from "./combatPolicy.js";
+import { planPayment } from "./policy/production.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
-/** payload: answer with a structured payload instead of pressing `option` (e.g. a whole agenda vote). */
-export type TypedChoice = { option: Option<any>; why: string; payload?: Record<string, unknown> };
+/**
+ * Press one option, or send a structured payload the kind executes atomically (payment, production, agenda vote,
+ * command tokens). option may accompany a payload (it names the option the payload belongs to, for logs).
+ */
+export type TypedChoice =
+  | { option: Option<any>; payload?: Record<string, unknown>; why: string }
+  | { option?: undefined; payload: Record<string, unknown>; why: string };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx = { history: [], open: [], all: [] }): TypedChoice | null {
   const all = ctx.all;
@@ -97,6 +103,14 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
     case "trade.offer_sent":
     case "trade.force_replenish":
       return chooseTrade(d, state, self);
+    case "payment.spend": {
+      // Pay the whole bill in one answer when the engine knows the cost; otherwise the planner / rule table pays.
+      const plan = planPayment(d, state, me);
+      return plan ? { payload: plan.payload as unknown as Record<string, unknown>, why: plan.why } : null;
+    }
+    case "production.produce":
+      // What to build is the planner's call (botplay BuildJob sends it as one production payload).
+      return null;
     default:
       return null;
   }
