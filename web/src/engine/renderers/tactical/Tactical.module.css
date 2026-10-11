@@ -1,0 +1,50 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  font-size: 13px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+}
+
+.heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mantine-color-dimmed);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  gap: var(--mantine-spacing-xs);
+  align-items: baseline;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--panel-hairline);
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+}
+
+.muted {
+  color: var(--mantine-color-dimmed);
+  font-size: 12px;
+}
+
+.grow {
+  flex: 1;
+}

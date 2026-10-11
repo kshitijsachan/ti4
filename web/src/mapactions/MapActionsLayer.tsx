@@ -400,7 +400,13 @@ export function MapActionsLayer({
     setChip(null);
     if (kind === "activate") {
       void run(() =>
-        driveActivation(position, { conn, scope, step, onProgress: setBusy }),
+        driveActivation(position, {
+          conn,
+          scope,
+          step,
+          gameName,
+          onProgress: setBusy,
+        }),
       );
       return;
     }
@@ -660,6 +666,7 @@ export function MapActionsLayer({
               />
             ) : landing && target && prompt && offer && me ? (
               <LandingPanel
+                gameName={gameName}
                 target={target}
                 targetName={names[target]}
                 offer={offer}

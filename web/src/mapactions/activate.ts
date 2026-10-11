@@ -10,6 +10,7 @@ import {
   type Scope,
 } from "./driver";
 import type { TacticalStep } from "./context";
+import { activateViaEngine } from "./engine";
 
 const CHOOSE = /^(ringTile_|ring_|getTilesThisFarAway_)/;
 const AFTER_ACTIVATION =
@@ -61,6 +62,8 @@ function ringButton(
 
 export type ActivateDeps = {
   conn: PlayConnection;
+  /** With the game name the engine's typed decisions are used first (buttons are the fallback). */
+  gameName?: string;
   scope: Scope;
   step: TacticalStep;
   onProgress?: (text: string) => void;
@@ -72,8 +75,9 @@ export type ActivateDeps = {
  */
 export async function activateSystem(
   position: string,
-  { conn, scope, step, onProgress }: ActivateDeps,
+  { conn, scope, step, onProgress, gameName }: ActivateDeps,
 ) {
+  if (gameName && (await activateViaEngine(position, { conn, gameName }, onProgress))) return;
   const isChoose = (id: string) => CHOOSE.test(id);
   let prompt =
     step.kind === "choose"
