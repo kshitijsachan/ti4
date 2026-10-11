@@ -3654,10 +3654,10 @@ index 0000000..ea2ce68
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/SetupStateBuilder.java b/src/main/java/ti4/selfhost/engine/SetupStateBuilder.java
 new file mode 100644
-index 0000000..6d20097
+index 0000000..36e5baa
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/SetupStateBuilder.java
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,200 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -3688,7 +3688,8 @@ index 0000000..6d20097
 +    public static DraftState draft(Game game) {
 +        MiltyDraftManager m = game.getMiltyDraftManager();
 +        if (m == null || m.getDraftOrder() == null || m.getDraftOrder().isEmpty()) return null;
-+        Player cur = m.isFinished() ? null : m.getCurrentDraftPlayer(game);
++        boolean finished = draftFinished(game, m);
++        Player cur = finished ? null : m.getCurrentDraftPlayer(game);
 +        List<DraftPlayer> players = new ArrayList<>();
 +        List<String> takenSlices = new ArrayList<>();
 +        List<Integer> takenOrders = new ArrayList<>();
@@ -3709,7 +3710,7 @@ index 0000000..6d20097
 +        for (int i = 1; i <= m.getPlayers().size(); i++) if (!takenOrders.contains(i)) orders.add(i);
 +        return new DraftState(
 +                "milty",
-+                m.isFinished() ? "finished" : "drafting",
++                finished ? "finished" : "drafting",
 +                cur == null ? null : cur.getUserID(),
 +                List.copyOf(m.getDraftOrder()),
 +                players,
@@ -3727,6 +3728,27 @@ index 0000000..6d20097
 +            case "order" -> pd.getPosition() != null;
 +            default -> false;
 +        };
++    }
++
++    /**
++     * The milty draft is over. MiltyDraftManager.isFinished() can stay false after the last pick (live: pbd97, every
++     * drafter had slice + faction + position, no current drafter), so also: nobody is on the clock, or every drafter
++     * has all three picks.
++     */
++    public static boolean draftFinished(Game game, @Nullable MiltyDraftManager m) {
++        if (m == null) return true;
++        if (m.isFinished()) return true;
++        boolean allPicked = !m.getPlayers().isEmpty();
++        for (String uid : m.getPlayers()) {
++            PlayerDraft pd = m.getPlayerDraft(uid);
++            if (pd == null || pd.getSlice() == null || pd.getFaction() == null || pd.getPosition() == null) allPicked = false;
++        }
++        if (allPicked) return true;
++        try {
++            return m.getCurrentDraftPlayer(game) == null;
++        } catch (Exception e) {
++            return false;
++        }
 +    }
 +
 +    @Nullable
@@ -3751,7 +3773,7 @@ index 0000000..6d20097
 +    private static SetupState compute(Game game) {
 +        if (pastSetup(game)) return null;
 +        MiltyDraftManager m = game.getMiltyDraftManager();
-+        boolean drafting = m != null && m.getDraftOrder() != null && !m.getDraftOrder().isEmpty() && !m.isFinished();
++        boolean drafting = m != null && m.getDraftOrder() != null && !m.getDraftOrder().isEmpty() && !draftFinished(game, m);
 +        Map<String, SetupPlayer> players = new LinkedHashMap<>();
 +        for (Player p : game.getPlayers().values()) {
 +            if (p == null || p.isDummy()) continue;
@@ -3791,7 +3813,7 @@ index 0000000..6d20097
 +    /** A drafter whose Keleres flavour is not chosen yet (the draft finished; the player has no faction). */
 +    public static boolean keleresDrafter(Game game, Player p) {
 +        MiltyDraftManager m = game.getMiltyDraftManager();
-+        if (m == null || !m.isFinished()) return false;
++        if (m == null || !draftFinished(game, m)) return false;
 +        PlayerDraft pd = m.getPlayerDraft(p.getUserID());
 +        return pd != null && pd.getFaction() != null && pd.getFaction().startsWith("keleres") && factionOf(p) == null;
 +    }
@@ -9854,10 +9876,10 @@ index 0000000..9ac32c4
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/DealSecretsKind.java b/src/main/java/ti4/selfhost/engine/kinds/DealSecretsKind.java
 new file mode 100644
-index 0000000..cda2d37
+index 0000000..efec590
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/DealSecretsKind.java
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,61 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -9913,7 +9935,8 @@ index 0000000..cda2d37
 +        if (SetupStateBuilder.secretsDealt(game)) return "Secret objectives have already been dealt.";
 +        SetupState s = SetupStateBuilder.build(game);
 +        if (s == null) return null;
-+        if (!"deal_secrets".equals(s.stage()))
++        // Fail open when we cannot name anyone still choosing (the handler validates again).
++        if (!"deal_secrets".equals(s.stage()) && !s.waitingOn().isEmpty())
 +            return "Not every player is set up yet (" + s.waitingOn().size() + " still choosing).";
 +        return null;
 +    }
