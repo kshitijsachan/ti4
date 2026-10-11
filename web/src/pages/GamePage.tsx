@@ -141,7 +141,7 @@ export default function GamePage() {
   let takeover = null;
   if (draft === "drafting") takeover = <Draft gameName={mapid} />;
   else if (boardKnown && !hasBoard)
-    takeover = <SetupScreen gameName={mapid} waitingOn={turn.waitingOn} />;
+    takeover = <SetupScreen gameName={mapid} waitingOn={alertTurn.waitingOn} />;
 
   return (
     <GameMapPage gameId={mapid}>

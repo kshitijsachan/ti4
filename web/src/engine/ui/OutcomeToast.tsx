@@ -40,6 +40,10 @@ export function answerOutcome(a: LastAnswer, state: GameState | null): string | 
     const name = state?.strategyCards.find((c) => c.number === value.strategyCard)?.name ?? `card ${value.strategyCard}`;
     return `Picked ${name}`;
   }
+  if (d.kind === "strategy_card.resolve" && value && typeof value.name === "string") {
+    if (value.action === "follow") return `Following ${value.name}`;
+    if (value.action === "decline") return `Not following ${value.name}`;
+  }
   if (!option) return a.optionId === "submit" || !a.optionId ? `${decisionTitle(d, state)}: sent` : undefined;
   if (option.needsInput) return undefined;
   const hash = option.id.indexOf("#");
@@ -98,13 +102,15 @@ export function EngineOutcomeToast({ gameName, rightInset }: { gameName: string;
   }, [answer]);
 
   const failed = !!answer && !!errors[answer.decision.id];
+  /* Only say what happened once the engine accepted it (a refused answer shows its error on the card instead). */
+  const inFlight = useEngine((s) => !!answer && !!s.view.pending[answer.decision.id]);
   const note: Note | undefined = useMemo(() => {
-    if (!answer || failed) return undefined;
+    if (!answer || failed || inFlight) return undefined;
     const key = `answer-${answer.at}`;
     if (reply) return { key, text: reply, fromLog: true };
     if (due !== answer.at || !local) return undefined;
     return { key, text: local, fromLog: false };
-  }, [answer, failed, reply, due, local]);
+  }, [answer, failed, inFlight, reply, due, local]);
 
   const [shown, setShown] = useState<Note[]>([]);
   const timers = useRef(new Map<string, number>());

@@ -5,6 +5,7 @@ import { Markdown, usePlay } from "@/discord";
 import { Emoji } from "@/discord/render/Emoji";
 import type { Decision, Option } from "./contract";
 import type { EngineRendererProps } from "./registry";
+import { optionRole } from "./optionKinds";
 import classes from "./GenericDecision.module.css";
 
 const STYLE_CLASS: Record<string, string | undefined> = {
@@ -12,20 +13,6 @@ const STYLE_CLASS: Record<string, string | undefined> = {
   danger: classes.stop,
   primary: classes.primary,
 };
-
-/** Handlers that take a step back (undo, reset a selection): small, after the real choices. */
-const TAKE_BACK = /^(ultimateUndo|undo|resetSpend|resetCCs|erase|unlockQueued|reversepreScore|removePreset)/i;
-/**
- * Utilities riding along on prompts (refresh, show map, player settings, ping, deck info): never the answer to the
- * question asked, so they fold under "More".
- */
-const UTILITY =
-  /^(transaction|getModifyTiles|showMap|showPlayerAreas|showGameAgain|offerPlayerPref|playerPref|searchMyGames|showObjInfo|chooseMapView|refreshInfoButtons|refreshView|notepad\w*|cardsInfo|gameInfoButtons|offerDeckButtons|requestAllFollow|pingNonresponders|editEndOfRoundSummaries|setwillPillage|setAutoPass|gmCheck\w*|showTextOfDeck|miltyFactionInfo|answerSurvey|deleteButtons$)/i;
-
-function handlerOf(o: Option<unknown>) {
-  const raw = o.handler || o.id;
-  return raw.replace(/^FFCC_[^_]+_/, "");
-}
 
 /** Not mine to press: a menu mixing several players' options (`owner` set) only shows mine. */
 function mine(o: Option<unknown>, me: string | undefined) {
@@ -52,9 +39,9 @@ export function GenericDecision({ decision, answer, pendingOptionId }: EngineRen
   const [moreOpen, setMoreOpen] = useState(false);
   const busy = !!pendingOptionId;
   const options = (decision.options as Option<unknown>[]).filter((o) => mine(o, me));
-  const back = options.filter((o) => TAKE_BACK.test(handlerOf(o)));
-  const utilities = options.filter((o) => !back.includes(o) && UTILITY.test(handlerOf(o)));
-  const main = options.filter((o) => !back.includes(o) && !utilities.includes(o));
+  const back = options.filter((o) => optionRole(o) === "back");
+  const utilities = options.filter((o) => optionRole(o) === "utility");
+  const main = options.filter((o) => optionRole(o) === "main");
   const long = (decision.prompt?.length ?? 0) > LONG_PROMPT;
 
   const button = (o: Option<unknown>, quiet = false) => (
