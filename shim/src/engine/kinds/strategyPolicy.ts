@@ -21,7 +21,6 @@ import type {
   PrimaryPart,
   StrategicAction,
   StrategyCardResolve,
-  TradeReplenish,
 } from "./strategy.js";
 
 export type StrategyChoice = { option: Option<any>; why: string };
@@ -46,7 +45,6 @@ export const STRATEGY_POLICY_KINDS = new Set([
   "strategy_card.politics_speaker",
   "strategy_card.politics_agenda",
   "strategy_card.construction_place",
-  "strategy_card.trade_replenish",
   "command_tokens.adjust",
 ]);
 
@@ -70,8 +68,6 @@ export function chooseStrategy(d: Decision, state: GameState | null, me: string,
       return agenda(d as PoliticsAgenda);
     case "strategy_card.construction_place":
       return constructionPlace(d as ConstructionPlace);
-    case "strategy_card.trade_replenish":
-      return tradeReplenish(d as TradeReplenish);
     case "command_tokens.adjust":
       return commandTokens(d, state, self, me, ctx);
     default:
@@ -199,12 +195,6 @@ function constructionPlace(d: ConstructionPlace): StrategyChoice | null {
   };
   const best = [...opts].sort((a, b) => score(b) - score(a))[0];
   return { option: best, why: `Construction: ${unit} on ${best.value!.planet}` };
-}
-
-function tradeReplenish(d: TradeReplenish): StrategyChoice | null {
-  // Free replenishes are deals between people; the autopilot grants none and closes the prompt.
-  const done = live(d).find((o) => !o.value && /^deleteButtons/.test(o.handler));
-  return done ? { option: done, why: "Trade: no free replenishes" } : null;
 }
 
 type Pools = { tactic: number; fleet: number; strategy: number };

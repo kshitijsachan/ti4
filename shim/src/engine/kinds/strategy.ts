@@ -1,7 +1,7 @@
 /**
  * G2 strategy-card decision kinds (mirror of the bot's ti4.selfhost.engine.kinds.*: StrategyCardResolveKind,
  * StrategyCardQueuePickKind, StrategicActionKind, DiplomacySystemKind, PlanetReadyKind, PoliticsSpeakerKind,
- * PoliticsAgendaKind, ConstructionPlaceKind, TradeForceReplenishKind, CommandTokenAdjustKind). Values carry ids
+ * PoliticsAgendaKind, ConstructionPlaceKind). Values carry ids
  * (card numbers, faction ids, planet ids, tile positions, amounts), never labels.
  */
 import type { DecisionBaseOf } from "../types.js";
@@ -121,11 +121,6 @@ export type ConstructionPlace = DecisionBaseOf<
   }
 >;
 
-export type TradeReplenish = DecisionBaseOf<
-  "strategy_card.trade_replenish",
-  { faction: string; color: string | null; commodities: number; commoditiesMax: number; reacted: boolean }
->;
-
 export type StrategyDecision =
   | StrategyCardResolve
   | StrategyCardQueuePick
@@ -134,8 +129,7 @@ export type StrategyDecision =
   | PlanetReady
   | PoliticsSpeaker
   | PoliticsAgenda
-  | ConstructionPlace
-  | TradeReplenish;
+  | ConstructionPlace;
 
 export const STRATEGY_KINDS = [
   "strategy_card.resolve",
@@ -146,5 +140,4 @@ export const STRATEGY_KINDS = [
   "strategy_card.politics_speaker",
   "strategy_card.politics_agenda",
   "strategy_card.construction_place",
-  "strategy_card.trade_replenish",
 ] as const;

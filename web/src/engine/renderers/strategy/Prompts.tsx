@@ -8,7 +8,6 @@ import type {
   PoliticsSpeaker,
   StrategicAction,
   StrategyCardQueuePick,
-  TradeReplenish,
 } from "../../../../../shim/src/engine/kinds/strategy";
 import { Choice, live, Meta, playerName, Title, type RendererProps } from "./shared";
 import classes from "./strategy.module.css";
@@ -188,31 +187,6 @@ export function ConstructionPlaceView({ decision, answer }: RendererProps<Constr
             </Meta>
           </Choice>
         ))}
-      </div>
-    </div>
-  );
-}
-
-/** Trade holder: grant free replenishes (deals), then Done. */
-export function TradeReplenishView({ decision, state, answer }: RendererProps<TradeReplenish>) {
-  const opts = live(decision.options);
-  return (
-    <div className={classes.panel}>
-      <Title sub="Optional: replenish another player's commodities without their strategy token.">Trade: free replenish</Title>
-      <div className={classes.choices}>
-        {opts.map((o) =>
-          o.value ? (
-            <Choice key={o.id} option={o} onPick={answer}>
-              {playerName(state, o.value.faction)}
-              <Meta>
-                {o.value.commodities}/{o.value.commoditiesMax}
-                {o.value.reacted ? " · already answered" : ""}
-              </Meta>
-            </Choice>
-          ) : (
-            <Choice key={o.id} option={o} onPick={answer} quiet />
-          ),
-        )}
       </div>
     </div>
   );

@@ -9,7 +9,6 @@ import {
   QueuePick,
   SpeakerView,
   StrategicActionView,
-  TradeReplenishView,
 } from "./Prompts";
 import type { RendererProps } from "./shared";
 
@@ -25,5 +24,4 @@ export const renderers: Record<string, ComponentType<RendererProps<any>>> = {
   "strategy_card.politics_speaker": SpeakerView,
   "strategy_card.politics_agenda": AgendaView,
   "strategy_card.construction_place": ConstructionPlaceView,
-  "strategy_card.trade_replenish": TradeReplenishView,
 };
