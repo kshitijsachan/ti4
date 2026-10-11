@@ -213,7 +213,8 @@ class Runner {
   /** Runs one step; returns {ok, error?, detail}. */
   async step(st) {
     const since = latestUndo(this.fork.game);
-    const r = await this.perform(this.via === "press" && st.legacy ? st.legacy : [st]);
+    // legacy presses act as the step's seat unless they name their own
+    const r = await this.perform(this.via === "press" && st.legacy ? st.legacy.map((l) => ({ as: st.as, ...l })) : [st]);
     const s = await this.settle(since);
     return { ...r, saves: s.saves };
   }
