@@ -90,9 +90,11 @@ type Rule = {
 /** Strategy cards an autopilot likes, best first (1 Leadership, 7 Technology, 8 Imperial, 6 Warfare, ...). */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
-/** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan. */
+/** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan.
+ * The strategy-card pick queue too: the planner picks when it is up, and the fallback filled the queue, pressed its
+ * only button left ("Restart Queue") and filled it again, forever (pbd26). */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|getDamageButtons|^assignHits_|^assign_|^remove_|removeThisTypeOfUnit|removeNCaptureThisTypeOfUnit|removeAll|^destroy|^sustain|cancelSpaceHits|cancelGroundHits|blessBoonCC|placeCCBack_|spendAStratCC|getToggleGalvanizeTiles|toggleGalvanize_|^ungalvanize_)/i;
+  /(ultimateUndo|^undo|deleteButtons|queueScPick_|restartSCQueue|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|getDamageButtons|^assignHits_|^assign_|^remove_|removeThisTypeOfUnit|removeNCaptureThisTypeOfUnit|removeAll|^destroy|^sustain|cancelSpaceHits|cancelGroundHits|blessBoonCC|placeCCBack_|spendAStratCC|getToggleGalvanizeTiles|toggleGalvanize_|^ungalvanize_)/i;
 const BLOCKED_LABEL = /^(sustain|destroy|remove all|done removing|manually assign|cancel a hit|undo|un-|unqueue|spend|exhaust|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
 
 const RULES: Rule[] = [
@@ -115,6 +117,9 @@ const RULES: Rule[] = [
     id: /_scPick_\d+$/,
     score: 80,
     retry: true,
+    // A pick button outlives its window (a second copy around an undo, a press the bot never answered): pressed in
+    // another phase, the bot handed out a third and fourth card (pbd8).
+    phase: /^strategy$/,
     why: "strategy phase: preferred card",
     rank: (c) => {
       const n = Number(/_scPick_(\d+)$/.exec(c.custom_id)?.[1]);
@@ -179,6 +184,8 @@ const RULES: Rule[] = [
 
 /** Optional ability offers: never the fallback answer (a rule must score them explicitly). */
 const OPTIONAL_LABEL = /\b(use|using|agent|commander|hero|promissory|exhaust|play|purge|spend|pay|ability|on someone else|activate|trigger|steal|swap)\b/i;
+/** The bot's word that this status phase's public objective is out (or that a reveal press found it out already). */
+const REVEALED_TEXT = /public objective has been revealed|already revealed this round/i;
 const OPTIONAL_ID = /(reveal_stage|getKeleresTechOptions|agent|commander|hero|leader|^play|^use|getAgentSelection|^pn_|_pn_|resolvePNPlay|steal)/i;
 
 /** Confirmations that offer a way to take the choice back: their lone button is not a question for us. */
@@ -827,6 +834,7 @@ class SeatPilot {
       if (
         rule.retry &&
         lost &&
+        (!rule.phase || rule.phase.test(retryPhase)) &&
         (rule.retryIn ? rule.retryIn.test(retryPhase) : this.tableStalled(m, game) || (await this.myTurn(game)))
       ) {
         const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && (rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id)));
@@ -899,10 +907,22 @@ class SeatPilot {
    */
   private mayReveal(m: StoredMessage, game: string) {
     if (Date.now() - (this.mgr.lastReveal.get(game) ?? 0) < 60000) return false;
-    for (const other of this.store.messages(m.channel_id)) {
+    const all = this.store.messages(m.channel_id);
+    for (const other of all) {
       if (BigInt(other.id) <= BigInt(m.id)) continue;
-      if (/public objective has been revealed|already revealed this round/i.test(String(other.content ?? ""))) return false;
+      if (REVEALED_TEXT.test(String(other.content ?? ""))) return false;
       if (controlsOf(other.components).some((c) => /reveal_stage_/.test(c.custom_id))) return false;
+    }
+    // The bot posts "All players have indicated scoring … Reveal Stage 1" again whenever a late "No Public/Secret
+    // Objective Scored" press comes in, also after this round's objective is out (and then only answers "already
+    // revealed"). Look back to the start of this status phase ("All players have passed."): an objective revealed
+    // there means this prompt is stale.
+    for (let i = all.length - 1; i >= 0; i--) {
+      const other = all[i];
+      if (BigInt(other.id) >= BigInt(m.id)) continue;
+      const text = String(other.content ?? "");
+      if (REVEALED_TEXT.test(text)) return false;
+      if (/^All players have passed\.|it is now your turn|strategy phase has started|an agenda has been revealed/i.test(text)) break;
     }
     return true;
   }
