@@ -12,6 +12,13 @@ import { nextTech, researchable, TECH_PREFERENCE, typeLabelOf } from "./techs.js
  * is left to the rule table.
  */
 
+/**
+ * With the typed engine on (the default; TI4_ENGINE=off disables it), strategy-card primaries and follows are
+ * answered by engine/kinds/strategyPolicy.ts. The legacy primary / follow below would press the same buttons a second
+ * time (double Leadership tokens, a second structure prompt), so they only run when the engine is off.
+ */
+const TYPED_STRATEGY = process.env.TI4_ENGINE !== "off";
+
 /** A job that has not moved for this long is dropped (its prompts go back to the rule table). */
 const JOB_MS = 75000;
 
@@ -448,8 +455,8 @@ export class CardPlanner {
     const prompts = this.seat.prompts(game);
     for (let i = prompts.length - 1; i >= 0 && i >= prompts.length - 40; i--) {
       const p = prompts[i];
-      if (await this.primary(game, faction, p)) return true;
-      if (await this.follow(game, faction, p)) return true;
+      if (!TYPED_STRATEGY && (await this.primary(game, faction, p))) return true;
+      if (!TYPED_STRATEGY && (await this.follow(game, faction, p))) return true;
       if (!this.seat.engine && (await this.scoring(game, faction, p))) return true;
       if (!this.seat.engine && (await this.statusTokens(game, p))) return true;
       if (await this.vote(game, faction, p)) return true;

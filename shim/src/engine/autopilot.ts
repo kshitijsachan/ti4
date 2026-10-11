@@ -8,6 +8,7 @@ import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
+import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -15,14 +16,22 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 /** payload: answer with a structured payload instead of pressing `option` (e.g. a whole agenda vote). */
 export type TypedChoice = { option: Option<any>; why: string; payload?: Record<string, unknown> };
 
-export function chooseTyped(d: Decision, state: GameState | null, me: string, open: Decision[] = []): TypedChoice | null {
+export function chooseTyped(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx = { history: [], open: [], all: [] }): TypedChoice | null {
+  const all = ctx.all;
   if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);
-  const mine = open.filter((x) => x.target?.userId === me);
-  const status = chooseStatus(d, state, me, mine);
+  const status = chooseStatus(d, state, me, all.filter((x) => x.target?.userId === me));
   if (status !== undefined) return status;
-  if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, open) : null;
-  const cards = chooseCards(d, state, me, open);
+  if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, all) : null;
+  const cards = chooseCards(d, state, me, all);
   if (cards !== undefined) return cards;
+  // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
+  // (command_tokens.adjust belongs to the status area; only its Leadership panel is answered here.)
+  const kind: string = d.kind;
+  const leadershipPanel = kind === "command_tokens.adjust" && (d.options as Option<any>[]).some((o) => o.handler === "deleteButtons_leadership");
+  if (STRATEGY_POLICY_KINDS.has(kind) && (kind !== "command_tokens.adjust" || leadershipPanel)) {
+    if (d.scope === "player" && d.target?.userId !== me) return null;
+    return chooseStrategy(d, state, me, ctx);
+  }
   if (d.target?.userId !== me || d.scope !== "player") return null;
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   if (!live.length) return null;
@@ -37,7 +46,14 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, op
     case "tech.gain": {
       // Only the free starting technology; paid research stays with the planner / rule table for now.
       const opts = d.options.filter((o) => !o.disabled && o.value?.starting && !self?.techs.includes(o.value.tech));
-      return opts[0] ? { option: opts[0], why: "setup: first starting technology not owned" } : null;
+      if (opts[0]) return { option: opts[0], why: "setup: first starting technology not owned" };
+      // Technology primary (our card, played): the free first technology. Paid research is not planned.
+      const tech = state?.strategyCards.find((c) => c.card === "pok7technology" && c.played && c.holder === me);
+      if (tech && self && ctx.history.length === 0) {
+        const pick = chooseResearch(d.options, self.techs);
+        if (pick) return { option: pick, why: `Technology primary: research ${pick.value.tech}` };
+      }
+      return null;
     }
     case "secret_objective.discard": {
       // Mecatol Rex (Thunder's Edge legendary, already exhausted): swap one secret for a fresh draw; the newest goes.

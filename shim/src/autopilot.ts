@@ -1139,6 +1139,8 @@ class SeatPilot {
 
   /** Engine answers already sent (decision id | option id): each is tried once; afterwards the heuristics take over. */
   private engineTried = new Set<string>();
+  /** Per decision id: the options this seat answered successfully (in order) and the revision of the last one. */
+  private engineDone = new Map<string, { options: string[]; revision: number }>();
 
   /**
    * Typed decisions addressed to this seat (engine API): answered directly, with the target resolved by the engine
@@ -1154,9 +1156,15 @@ class SeatPilot {
       const state = await engine.state(game, this.userId, 2000);
       const open = (await engine.openDecisions(game)) ?? [];
       for (const d of mine) {
-        const pick = chooseTyped(d, state, this.userId, open);
+        const done = this.engineDone.get(d.id);
+        const pick = chooseTyped(d, state, this.userId, {
+          history: done?.options ?? [],
+          lastRevision: done?.revision,
+          open: mine.filter((x) => x.id !== d.id),
+          all: open,
+        });
         if (!pick) continue;
-        const key = `${d.id}@${d.revision}|${pick.option.id}`;
+        const key = `${d.id}@${d.revision}#${done?.options.length ?? 0}|${pick.option.id}`;
         if (this.engineTried.has(key)) continue;
         this.engineTried.add(key);
         if (this.engineTried.size > 5000) this.engineTried.clear();
@@ -1167,7 +1175,12 @@ class SeatPilot {
         if (!r) return false;
         log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option.label}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
-        if (r.ok) return true;
+        if (r.ok) {
+          // What we answered on this decision (multi-part answers walk it; see engine/kinds/strategyPolicy.ts).
+          this.engineDone.set(d.id, { options: [...(done?.options ?? []), pick.option.id], revision: d.revision });
+          if (this.engineDone.size > 2000) this.engineDone.delete(this.engineDone.keys().next().value!);
+          return true;
+        }
       }
     }
     return false;

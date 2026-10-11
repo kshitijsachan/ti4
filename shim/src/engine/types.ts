@@ -8,6 +8,7 @@ import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { StatusDecision, StatusState } from "./kinds/status.js";
+import type { StrategyDecision } from "./kinds/strategy.js";
 import type { TacticalDecision } from "./kinds/tactical.js";
 import type { ThundersEdgeDecision, ThundersEdgeState } from "./kinds/te.js";
 
@@ -100,6 +101,22 @@ export interface StrategyCardState {
   holder: UserId | null;
   tradeGoods: number;
   played: boolean;
+  name: string;
+  /** Automation id the engine resolves the card as ("pok4construction", …). */
+  card: string | null;
+  holderFaction: FactionId | null;
+  /** Once played: every seated player's answer to it. */
+  reactions: ScReaction[];
+}
+
+/** A player's answer to a played strategy card. */
+export interface ScReaction {
+  faction: FactionId;
+  /** holder: played it (never follows it). */
+  status: "holder" | "pending" | "followed" | "declined";
+  /** Pending players only. */
+  canFollow: boolean;
+  cantFollowReason: "no_strategy_token" | "no_home_space_dock" | "all_secrets_scored" | null;
 }
 
 export interface TileState {
@@ -227,10 +244,29 @@ export interface DecisionBase<K extends string, V> {
   progress: Progress | null;
 }
 
+/** For area kind files (shim/src/engine/kinds/*.ts). */
+export type DecisionBaseOf<K extends string, V> = DecisionBase<K, V>;
+
 // ---- typed kinds (add one member per KindSpec; keep alphabetical within an area) ----
 
-export type StrategyCardPick = DecisionBase<"strategy_card.pick", { strategyCard: number; tradeGoods: number }>;
-export type TechGain = DecisionBase<"tech.gain", { tech: string; free: boolean; starting: boolean; flags: string[] }>;
+export type StrategyCardPick = DecisionBase<
+  "strategy_card.pick",
+  { strategyCard: number; tradeGoods: number; name?: string; card?: string | null }
+>;
+export type TechGain = DecisionBase<
+  "tech.gain",
+  {
+    tech: string;
+    free: boolean;
+    starting: boolean;
+    flags: string[];
+    /** PROPULSION | BIOTIC | CYBERNETIC | WARFARE | UNITUPGRADE | … */
+    type?: string | null;
+    /** Prerequisite letters, e.g. "GG". */
+    requirements?: string | null;
+    factionTech?: boolean;
+  }
+>;
 export type SecretObjectiveDiscard = DecisionBase<
   "secret_objective.discard",
   { handle: number; secretObjective?: string; redraw: boolean }
@@ -239,8 +275,7 @@ export type MiltyDraftPick = DecisionBase<
   "draft.milty.pick",
   { category: "slice" | "faction" | "order" | string; pick: string }
 >;
-/** For area kind files (shim/src/engine/kinds/*.ts). */
-export type DecisionBaseOf<K extends string, V> = DecisionBase<K, V>;
+
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
 
@@ -255,6 +290,7 @@ export type Decision =
   | StatusDecision
   | TacticalDecision
   | ThundersEdgeDecision
+  | StrategyDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
