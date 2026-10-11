@@ -71,6 +71,51 @@ index a54a239..1731da8 100644
          String lastGameName = CreateGameService.getLastPbdGameName();
          if (lastGameName == null) return false;
  
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java
+index 507d7b5..c3c5ee4 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java
+@@ -22,6 +22,7 @@ import ti4.helpers.Helper;
+ import ti4.helpers.StringHelper;
+ import ti4.logging.BotLogger;
+ import ti4.message.MessageHelper;
++import ti4.selfhost.SelfHosted;
+ import ti4.service.emoji.ColorEmojis;
+ import ti4.service.game.StartPhaseService;
+ import ti4.service.leader.CommanderUnlockCheckService;
+@@ -80,6 +81,14 @@ public class PickStrategyCardButtonHandler {
+     public static boolean scPick(ButtonInteractionEvent event, Game game, Player player, String buttonID) {
+         String num = buttonID.replace("scPick_", "");
+         int scpick = Integer.parseInt(num);
++        if (SelfHosted.isEnabled() && !mayPickNow(game, player)) {
++            MessageHelper.sendMessageToChannel(
++                    player.getCardsInfoThread(),
++                    player.getRepresentationNoPing()
++                            + ", that strategy card button is stale: the Strategy Phase is over or you already hold all the strategy cards you may pick.");
++            ButtonHelper.deleteMessage(event);
++            return false;
++        }
+ 
+         String pdValue = game.getStoredValue("Public Disgrace");
+         String pdOnly = game.getStoredValue("Public Disgrace Only");
+@@ -138,6 +147,17 @@ public class PickStrategyCardButtonHandler {
+         return false;
+     }
+ 
++    /**
++     * A pick button left over from an earlier window (a second copy posted around an undo, a message the bot did not
++     * delete) must not hand out a card after the Strategy Phase or beyond the per-player count (pbd8: a bot took a
++     * fourth card in a 3-player game, once after "All players have picked" and once in a later phase).
++     */
++    static boolean mayPickNow(Game game, Player player) {
++        if (game.getLaws().containsKey("checks") || game.getLaws().containsKey("absol_checks")) return true;
++        if (!"strategy".equalsIgnoreCase(game.getPhaseOfGame())) return false;
++        return player.getSCs().size() < Math.max(1, game.getStrategyCardsPerPlayer());
++    }
++
+     static boolean isDeflectedStrategyCard(Game game, int scpick) {
+         return game.getStoredValue("deflectedSC").equalsIgnoreCase(String.valueOf(scpick));
+     }
 diff --git a/src/main/java/ti4/discord/interactions/listeners/ModalListener.java b/src/main/java/ti4/discord/interactions/listeners/ModalListener.java
 index 5a14c75..830820d 100644
 --- a/src/main/java/ti4/discord/interactions/listeners/ModalListener.java
@@ -145,6 +190,49 @@ index 23c623d..5115002 100644
      private static void process(StringSelectInteractionEvent event, HandlerRegistry.Route<SelectionMenuContext> route) {
          SelectionMenuContext context = new SelectionMenuContext(event);
          if (!context.isValid()) {
+diff --git a/src/main/java/ti4/game/Game.java b/src/main/java/ti4/game/Game.java
+index 575a281..0f5fe34 100644
+--- a/src/main/java/ti4/game/Game.java
++++ b/src/main/java/ti4/game/Game.java
+@@ -4079,10 +4079,25 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
+ 
+     @Override
+     public void setOwnerID(String ownerID) {
+-        if (ownerID.length() > 18) ownerID = ownerID.substring(0, 18);
++        // Discord snowflakes are 17-20 digits now; only legacy non-numeric junk gets cut to 18 characters.
++        if (ownerID != null && ownerID.length() > 18 && !ownerID.matches("\\d+")) ownerID = ownerID.substring(0, 18);
+         super.setOwnerID(ownerID);
+     }
+ 
++    /**
++     * Saves written before the owner id stopped being truncated hold the first 18 digits of a 19-digit snowflake.
++     * Point such an owner back at the one player whose id it is a prefix of.
++     */
++    public void repairTruncatedOwnerID() {
++        String ownerID = getOwnerID();
++        if (ownerID == null || ownerID.length() != 18 || !ownerID.matches("\\d+") || players.containsKey(ownerID))
++            return;
++        List<String> matches = players.keySet().stream()
++                .filter(id -> id.length() > 18 && id.startsWith(ownerID))
++                .toList();
++        if (matches.size() == 1) super.setOwnerID(matches.getFirst());
++    }
++
+     public void setTileMap(Map<String, Tile> tileMap) {
+         this.tileMap = tileMap;
+         planets.clear();
+diff --git a/src/main/java/ti4/game/persistence/GameLoadService.java b/src/main/java/ti4/game/persistence/GameLoadService.java
+index 05ddef3..0658a64 100644
+--- a/src/main/java/ti4/game/persistence/GameLoadService.java
++++ b/src/main/java/ti4/game/persistence/GameLoadService.java
+@@ -163,6 +163,7 @@ class GameLoadService {
+             }
+             Map<String, Tile> tileMap = getTileMap(gameFileLines, game);
+             game.setTileMap(tileMap);
++            game.repairTruncatedOwnerID();
+             TransientGameInfoUpdater.update(game);
+             return game;
+         } catch (Exception e) {
 diff --git a/src/main/java/ti4/game/persistence/GameUndoService.java b/src/main/java/ti4/game/persistence/GameUndoService.java
 index d91d9d5..50e3842 100644
 --- a/src/main/java/ti4/game/persistence/GameUndoService.java
@@ -644,10 +732,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..1191cf3
+index 0000000..07435b8
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,433 @@
+@@ -0,0 +1,497 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -716,6 +804,10 @@ index 0000000..1191cf3
 +    private static final boolean NATIVE =
 +            !"off".equalsIgnoreCase(System.getenv().getOrDefault("TI4_ENGINE_NATIVE", "on"));
 +    private static final Set<String> inFlight = ConcurrentHashMap.newKeySet();
++    /** A payload answer's waits for the next prompt are capped at this (it holds the game lock meanwhile). */
++    private static final long PAYLOAD_WAIT_CAP_MS = 10_000;
++    /** And the whole payload answer at this: presses after it fail, the lock is released. */
++    private static final long PAYLOAD_DEADLINE_MS = 60_000;
 +    private static final Map<String, AnswerResult> byRequestId =
 +            Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, true) {
 +                @Override
@@ -731,7 +823,9 @@ index 0000000..1191cf3
 +            AnswerResult prev = byRequestId.get(userId + ":" + req.requestId());
 +            if (prev != null) return prev;
 +        }
++        long t0 = System.nanoTime();
 +        AnswerResult r = doAnswer(gameName, decisionId, userId, req);
++        EngineMetrics.answer(r.status(), System.nanoTime() - t0);
 +        if (req.requestId() != null && !"busy".equals(r.status()))
 +            byRequestId.put(userId + ":" + req.requestId(), r);
 +        return r;
@@ -785,6 +879,8 @@ index 0000000..1191cf3
 +            } else {
 +                if (opt == null) return fail("bad_option", "No such option.", decisionId);
 +                if (opt.disabled()) return fail("bad_option", "That option is disabled.", decisionId);
++                if (opt.owner() != null && opt.owner().userId() != null && !opt.owner().userId().equals(userId))
++                    return fail("forbidden", "That option is for someone else.", decisionId);
 +                int hash = opt.id().indexOf('#');
 +                plan = hash >= 0
 +                        ? new Plan("select", opt.id().substring(0, hash), List.of(opt.id().substring(hash + 1)), opt)
@@ -811,6 +907,13 @@ index 0000000..1191cf3
 +        try {
 +            if (nativePath) form = runNative(d, plan, game, player, userId, req);
 +            else runSynthetic(d, plan.componentId(), userId);
++        } catch (MessageGone e) {
++            // The prompt's message no longer exists (a delete capture missed): close it so nobody answers it again.
++            EngineMetrics.count("answer.message_gone");
++            DecisionRegistry.close(decisionId, "deleted");
++            return fail("stale", "That prompt is gone.", decisionId);
++        } catch (ShimUnsupported e) {
++            return fail("unsupported", e.getMessage(), decisionId);
 +        } catch (Exception e) {
 +            BotLogger.error("engine: answer " + decisionId + " / " + plan.componentId() + " by " + userId + " failed", e);
 +            return fail("error", String.valueOf(e.getMessage()), decisionId);
@@ -843,7 +946,13 @@ index 0000000..1191cf3
 +        if (!inFlight.add(flightKey)) return fail("busy", "An answer to this decision is in progress.", d.id());
 +        long before = DecisionRegistry.currentSeq();
 +        String messageId = d.source().messageId();
++        long deadline = System.currentTimeMillis() + PAYLOAD_DEADLINE_MS;
 +        KindSpec.PayloadAnswer answer = new KindSpec.PayloadAnswer() {
++            private void checkDeadline() {
++                if (System.currentTimeMillis() > deadline)
++                    throw new IllegalStateException("payload answer exceeded " + PAYLOAD_DEADLINE_MS / 1000 + " s");
++            }
++
 +            @Override
 +            public String gameName() {
 +                return gameName;
@@ -881,6 +990,7 @@ index 0000000..1191cf3
 +
 +            @Override
 +            public void press(Decision decision, String optionId) throws Exception {
++                checkDeadline();
 +                if (DecisionRegistry.get(decision.id()) == null)
 +                    throw new IllegalStateException("decision " + decision.id() + " closed before the next step");
 +                boolean known = decision.options().stream().anyMatch(o -> o.id().equals(optionId));
@@ -890,6 +1000,7 @@ index 0000000..1191cf3
 +
 +            @Override
 +            public void pressEngine(Decision decision, String customId) throws Exception {
++                checkDeadline();
 +                if (DecisionRegistry.get(decision.id()) == null)
 +                    throw new IllegalStateException("decision " + decision.id() + " closed before the next step");
 +                ActionInvoker.press(userId, decision, customId);
@@ -902,10 +1013,19 @@ index 0000000..1191cf3
 +
 +            @Override
 +            public Decision await(long afterSeq, Predicate<Decision> match, long timeoutMs) {
-+                long end = System.currentTimeMillis() + timeoutMs;
++                // Hard cap per wait and for the whole answer: we hold the game's WRITE lock while waiting. The prompt
++                // we wait for comes from message capture (JDA REST threads) and the registry, neither of which takes
++                // the game lock, so a wait can only time out, never deadlock; on timeout the kind refuses and the
++                // finally below releases the lock.
++                long end = Math.min(System.currentTimeMillis() + Math.min(timeoutMs, PAYLOAD_WAIT_CAP_MS), deadline);
 +                while (true) {
 +                    for (Decision x : DecisionRegistry.openedAfter(gameName, afterSeq)) if (match.test(x)) return x;
-+                    if (System.currentTimeMillis() >= end) return null;
++                    if (System.currentTimeMillis() >= end) {
++                        BotLogger.error("engine: payload answer " + d.id() + " (" + d.kind() + ") by " + userId
++                                + " timed out waiting for the next prompt");
++                        EngineMetrics.count("answer.payload_wait_timeout");
++                        return null;
++                    }
 +                    try {
 +                        Thread.sleep(40);
 +                    } catch (InterruptedException e) {
@@ -917,12 +1037,15 @@ index 0000000..1191cf3
 +        };
 +        String err;
 +        ExecutionLockManager.lock(gameName, ExecutionLockType.WRITE);
++        int undoBefore = UndoGroup.latest(gameName);
 +        try {
 +            err = spec.answerPayload(answer, payload);
 +        } catch (Exception e) {
 +            BotLogger.error("engine: payload answer " + d.id() + " by " + userId + " failed", e);
 +            return fail("error", String.valueOf(e.getMessage()), d.id());
 +        } finally {
++            // One undo step for the whole answer (also a partial one: undo then takes back what it did press).
++            UndoGroup.collapse(gameName, undoBefore, player.getUserName(), d.kind());
 +            ExecutionLockManager.unlock(gameName, ExecutionLockType.WRITE);
 +            inFlight.remove(flightKey);
 +        }
@@ -937,6 +1060,23 @@ index 0000000..1191cf3
 +                now == null ? 0 : now.getLastModifiedDate(),
 +                DecisionRegistry.openedAfter(gameName, before),
 +                "payload");
++    }
++
++    /**
++     * Runs a multi-press engine action (direct actions such as tactical move/land or a combat plan) as one undo step:
++     * under the game's WRITE lock (reentrant), collapsing the undo snapshots its presses made into one.
++     */
++    public static <T> T asOneUndoStep(String gameName, String userId, String label, java.util.function.Supplier<T> body) {
++        ExecutionLockManager.lock(gameName, ExecutionLockType.WRITE);
++        int undoBefore = UndoGroup.latest(gameName);
++        try {
++            return body.get();
++        } finally {
++            ManagedGame mg = GameManager.getManagedGame(gameName);
++            Player p = mg == null || mg.getGame() == null ? null : mg.getGame().getPlayer(userId);
++            UndoGroup.collapse(gameName, undoBefore, p == null ? userId : p.getUserName(), label);
++            ExecutionLockManager.unlock(gameName, ExecutionLockType.WRITE);
++        }
 +    }
 +
 +    /**
@@ -1076,17 +1216,29 @@ index 0000000..1191cf3
 +                .build();
 +        try (Response res = http.newCall(request).execute()) {
 +            String text = res.body() == null ? "" : res.body().string();
++            if (res.code() == 404 && text.contains("no route"))
++                throw new ShimUnsupported("The running shim cannot mint interactions (POST /api/v10/selfhost/interactions"
++                        + " is missing): deploy the engine shim to answer through the engine.");
++            if (res.code() == 404 && text.contains("10008")) throw new MessageGone();
 +            if (!res.isSuccessful()) throw new IllegalStateException("shim refused interaction: " + res.code() + " " + text);
 +            return DataObject.fromJson(text);
 +        }
 +    }
++
++    static final class ShimUnsupported extends Exception {
++        ShimUnsupported(String message) {
++            super(message);
++        }
++    }
++
++    static final class MessageGone extends Exception {}
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..4d3c4b1
+index 0000000..87c8365
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,443 @@
+@@ -0,0 +1,577 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -1097,6 +1249,7 @@ index 0000000..4d3c4b1
 +import java.util.Map;
 +import java.util.Objects;
 +import java.util.Set;
++import java.util.concurrent.ConcurrentHashMap;
 +import java.util.regex.Matcher;
 +import java.util.regex.Pattern;
 +import net.dv8tion.jda.api.entities.channel.Channel;
@@ -1146,11 +1299,15 @@ index 0000000..4d3c4b1
 +    public Response intercept(Chain chain) throws IOException {
 +        Request req = chain.request();
 +        Response res = chain.proceed(req);
-+        if (!Engine.enabled() || !res.isSuccessful()) return res;
++        if (!Engine.enabled() || !res.isSuccessful() || "GET".equals(req.method())) return res;
++        long t0 = System.nanoTime();
 +        try {
 +            observe(req, res);
 +        } catch (Exception e) {
++            EngineMetrics.count("capture.error");
 +            BotLogger.error("engine: decision capture failed for " + req.method() + " " + req.url().encodedPath(), e);
++        } finally {
++            EngineMetrics.captureNanos(System.nanoTime() - t0);
 +        }
 +        return res;
 +    }
@@ -1184,7 +1341,11 @@ index 0000000..4d3c4b1
 +        if ((m = HOOK_MSG.matcher(path)).matches()) {
 +            String token = m.group(2);
 +            String id = m.group(3);
-+            if ("@original".equals(id)) id = InteractionTracker.original(token);
++            if ("@original".equals(id)) {
++                id = InteractionTracker.original(token);
++                // No reply was made: @original is the message the component was on (deferEdit / UPDATE_MESSAGE).
++                if (id == null && InteractionTracker.byToken(token) != null) id = InteractionTracker.byToken(token).messageId();
++            }
 +            if ("DELETE".equals(method)) {
 +                if (id != null) DecisionRegistry.closeByMessage(id, "deleted");
 +            } else if ("PATCH".equals(method)) {
@@ -1203,10 +1364,18 @@ index 0000000..4d3c4b1
 +            DataObject body = responseJson(res); // only present with ?with_response=true
 +            if (body != null && body.hasKey("resource") && !body.isNull("resource")) {
 +                DataObject resource = body.getObject("resource");
++                int rtype = resource.getInt("type", 0);
++                if (rtype == 6) {
++                    // DEFERRED_UPDATE_MESSAGE: @original is now the message the component is on, so a later
++                    // DELETE/PATCH of @original (hook.deleteOriginal / editOriginal) must close/update its decision.
++                    InteractionTracker.Info info = InteractionTracker.byToken(m.group(2));
++                    if (info != null && info.messageId() != null) InteractionTracker.setOriginal(m.group(2), info.messageId());
++                }
 +                if (resource.hasKey("message") && !resource.isNull("message")) {
 +                    DataObject msg = resource.getObject("message");
 +                    int type = resource.getInt("type", 0);
-+                    if (type == 4 || type == 5) InteractionTracker.setOriginal(m.group(2), msg.getString("id", null));
++                    if (type == 4 || type == 5 || type == 7)
++                        InteractionTracker.setOriginal(m.group(2), msg.getString("id", null));
 +                    onMessage(msg, m.group(2));
 +                }
 +            }
@@ -1216,17 +1385,33 @@ index 0000000..4d3c4b1
 +    // ------------------------------------------------------------------ message -> decision
 +
 +    static void onMessage(DataObject msg, String interactionToken) {
++        onMessage(msg, interactionToken, null);
++    }
++
++    /** knownGame: the game the caller already loaded (rebuild), to skip a per-message game load. */
++    static void onMessage(DataObject msg, String interactionToken, Game knownGame) {
 +        if (msg == null || !msg.hasKey("id")) return;
++        EngineMetrics.count("capture.message");
 +        String messageId = msg.getString("id");
 +        String channelId = msg.getString("channel_id", null);
++        if (interactionToken != null) {
++            // An edit of the message the component is on (deferEdit + editOriginal, UPDATE_MESSAGE) is still that
++            // message's prompt, not a reply to the presser: attributing it to the presser made a table-wide
++            // "score objectives" prompt the last presser's own (found live, pbd96).
++            InteractionTracker.Info info = InteractionTracker.byToken(interactionToken);
++            if (info != null && messageId.equals(info.messageId())) interactionToken = null;
++        }
 +        List<RawControl> controls = new ArrayList<>();
 +        if (msg.hasKey("components") && !msg.isNull("components")) collect(msg.getArray("components"), controls);
 +        if (controls.isEmpty()) {
 +            DecisionRegistry.closeByMessage(messageId, "no_options");
 +            return;
 +        }
-+        Game game = gameForChannel(channelId);
-+        if (game == null) return;
++        Game game = knownGame != null ? knownGame : gameForChannel(channelId);
++        if (game == null) {
++            EngineMetrics.count("capture.no_game");
++            return;
++        }
 +        Decision d = build(game, msg, controls, interactionToken);
 +        if (d != null) DecisionRegistry.open(d);
 +    }
@@ -1241,7 +1426,8 @@ index 0000000..4d3c4b1
 +        List<String> handlerIds = new ArrayList<>();
 +        for (RawControl c : controls) handlerIds.add(ComponentIdEnvelope.decode(c.customId).handlerId());
 +
-+        Target resolved = resolveTarget(game, controls, channelId, ephemeral, interactionToken, content);
++        Target resolved =
++                resolveTarget(game, controls, channelId, ephemeral, interactionToken, interactionUser(msg), content);
 +        Player player = resolved == null || resolved.userId() == null ? null : game.getPlayer(resolved.userId());
 +        KindSpec spec = DecisionKinds.classify(handlerIds);
 +        KindSpec.CaptureContext ctx =
@@ -1256,6 +1442,7 @@ index 0000000..4d3c4b1
 +            }
 +        }
 +
++        boolean mixed = target != null && "mixed_owners".equals(target.resolvedBy());
 +        List<Option> options = new ArrayList<>();
 +        for (int i = 0; i < controls.size(); i++) {
 +            RawControl c = controls.get(i);
@@ -1276,7 +1463,8 @@ index 0000000..4d3c4b1
 +                    c.disabled,
 +                    c.customId.contains("~MDL") || (c.value == null && NativeCoverage.opensForm(h)),
 +                    h,
-+                    value));
++                    value,
++                    mixed ? optionOwner(game, c.customId) : null));
 +        }
 +        String visibility = ephemeral || isPrivateChannel(game, channelId) ? "private" : "public";
 +        ReactionWindow window = null;
@@ -1315,7 +1503,7 @@ index 0000000..4d3c4b1
 +                content,
 +                options,
 +                new Source(channelId, messageId, prefix, ephemeral),
-+                existing != null ? existing.createdAt() : System.currentTimeMillis(),
++                existing != null ? existing.createdAt() : postedAt(messageId),
 +                0,
 +                window,
 +                progress,
@@ -1327,6 +1515,18 @@ index 0000000..4d3c4b1
 +        List<RawControl> controls = new ArrayList<>();
 +        if (msg.hasKey("components") && !msg.isNull("components")) collect(msg.getArray("components"), controls);
 +        return controls;
++    }
++
++    /**
++     * When the message was first posted (its snowflake), so edits keep the original time: undo closes decisions by
++     * the time their prompt was posted, and a board edited after the restored save is still the restored state's.
++     */
++    static long postedAt(String messageId) {
++        try {
++            return (Long.parseUnsignedLong(messageId) >>> 22) + 1420070400000L;
++        } catch (Exception e) {
++            return System.currentTimeMillis();
++        }
 +    }
 +
 +    private static Decision byIdOrNull(String id) {
@@ -1345,8 +1545,32 @@ index 0000000..4d3c4b1
 +
 +    // ------------------------------------------------------------------ target resolution
 +
++    /** The user whose interaction produced this message (Discord's interaction_metadata / legacy interaction). */
++    static String interactionUser(DataObject msg) {
++        for (String key : new String[] {"interaction_metadata", "interaction"}) {
++            if (!msg.hasKey(key) || msg.isNull(key)) continue;
++            DataObject meta = msg.getObject(key);
++            if (meta.hasKey("user") && !meta.isNull("user")) return meta.getObject("user").getString("id", null);
++        }
++        return null;
++    }
++
++    /** Owner of one option of a mixed-owner menu (FFCC_/spoof prefix), null if the option has none. */
++    static Target optionOwner(Game game, String customId) {
++        ComponentIdEnvelope env = ComponentIdEnvelope.decode(customId);
++        String f = env.ownerFaction() != null ? env.ownerFaction() : env.spoofedFaction();
++        Player p = f == null ? null : game.getPlayerFromColorOrFaction(f);
++        return p == null ? null : target(p, env.ownerFaction() != null ? "owner_prefix" : "spoof_prefix");
++    }
++
 +    static Target resolveTarget(
-+            Game game, List<RawControl> controls, String channelId, boolean ephemeral, String token, String content) {
++            Game game,
++            List<RawControl> controls,
++            String channelId,
++            boolean ephemeral,
++            String token,
++            String metaUserId,
++            String content) {
 +        // 1. FFCC_<faction>_ / dummyPlayerSpoof<faction>_ on the options (2,232 of 5,495 button sites).
 +        Set<String> owners = new LinkedHashSet<>();
 +        Set<String> spoofs = new LinkedHashSet<>();
@@ -1373,6 +1597,11 @@ index 0000000..4d3c4b1
 +                if (p != null) return target(p, "interaction_user");
 +            }
 +        }
++        // 2b. Same fact from the message itself (interaction_metadata.user): survives restarts and unknown tokens.
++        if (metaUserId != null) {
++            Player p = game.getPlayer(metaUserId);
++            if (p != null) return target(p, "interaction_user");
++        }
 +        // 3. The player's own cards-info thread / private channel.
 +        for (Player p : game.getPlayers().values()) {
 +            if (channelId != null && channelId.equals(p.getCardsInfoThreadID())) return target(p, "cards_thread");
@@ -1388,8 +1617,13 @@ index 0000000..4d3c4b1
 +        return new Target(null, null, null, owners.size() > 1 ? "mixed_owners" : "none");
 +    }
 +
-+    static Target target(Player p, String how) {
-+        return new Target(p.getUserID(), p.getFaction(), p.getColor(), how);
++    public static Target target(Player p, String how) {
++        return new Target(p.getUserID(), nullIfUnset(p.getFaction()), nullIfUnset(p.getColor()), how);
++    }
++
++    /** Player.getFaction()/getColor() return the string "null" before a faction/colour is picked. */
++    static String nullIfUnset(String s) {
++        return s == null || s.isBlank() || "null".equals(s) ? null : s;
 +    }
 +
 +    private static boolean isPrivateChannel(Game game, String channelId) {
@@ -1400,14 +1634,66 @@ index 0000000..4d3c4b1
 +        return false;
 +    }
 +
++    /** channel id -> game name, for channels JDA has not cached (threads after a restart, private channels). */
++    private static final Map<String, String> channelGame = new ConcurrentHashMap<>();
++    private static volatile long lastScan;
++
 +    static Game gameForChannel(String channelId) {
 +        if (channelId == null || JdaService.jda == null) return null;
++        String name = null;
 +        Channel ch = JdaService.jda.getChannelById(Channel.class, channelId);
-+        if (ch == null) return null;
-+        String name = GameNameService.getGameNameFromChannel(ch);
++        if (ch != null) name = GameNameService.getGameNameFromChannel(ch);
++        if (name == null || !GameManager.isValid(name)) name = channelGame.get(channelId);
++        if (name == null) name = scanForChannel(channelId);
 +        if (name == null) return null;
++        return cachedGame(name);
++    }
++
++    private record Loaded(long mtime, Game game) {}
++
++    private static final Map<String, Loaded> loaded = new ConcurrentHashMap<>();
++
++    /**
++     * Capture only reads the game (players, factions, threads). GameManager loads it from disk on every access, which
++     * put a full game parse on the JDA REST thread for every message with buttons (p95 80 ms, max 2 s live). Reuse
++     * the last load until the game file changes (one stat per message).
++     */
++    static Game cachedGame(String name) {
++        java.io.File f = ti4.helpers.Storage.getGameFile(name + ti4.helpers.Constants.TXT);
++        long mtime = f.lastModified();
++        Loaded hit = loaded.get(name);
++        if (hit != null && hit.mtime() == mtime && mtime != 0) return hit.game();
 +        ManagedGame mg = GameManager.getManagedGame(name);
-+        return mg == null ? null : mg.getGame();
++        Game g = mg == null ? null : mg.getGame();
++        if (g != null) {
++            if (loaded.size() > 200) loaded.clear();
++            loaded.put(name, new Loaded(mtime, g));
++        }
++        return g;
++    }
++
++    /**
++     * A channel JDA does not know by name (uncached thread, private channel): find the live game that owns it via
++     * its players' cards-info threads / private channels. Rescans at most every 10 s.
++     */
++    private static String scanForChannel(String channelId) {
++        long now = System.currentTimeMillis();
++        if (now - lastScan < 10_000 || !JdaService.isReadyToReceiveCommands()) return null;
++        lastScan = now;
++        try {
++            for (ManagedGame mg : GameManager.getManagedGames()) {
++                if (mg.isHasEnded() || now - mg.getLastModifiedDate() > 24L * 3600 * 1000) continue;
++                Game g = cachedGame(mg.getName());
++                if (g == null) continue;
++                for (Player p : g.getPlayers().values()) {
++                    if (p.getCardsInfoThreadID() != null) channelGame.put(p.getCardsInfoThreadID(), g.getName());
++                    if (p.getPrivateChannelID() != null) channelGame.put(p.getPrivateChannelID(), g.getName());
++                }
++            }
++        } catch (Exception e) {
++            BotLogger.error("engine: channel scan failed", e);
++        }
++        return channelGame.get(channelId);
 +    }
 +
 +    // ------------------------------------------------------------------ components
@@ -1601,6 +1887,141 @@ index 0000000..0a37097
 +        return null;
 +    }
 +}
+diff --git a/src/main/java/ti4/selfhost/engine/DecisionRebuild.java b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
+new file mode 100644
+index 0000000..dad1aaf
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
+@@ -0,0 +1,129 @@
++package ti4.selfhost.engine;
++
++import java.util.ArrayList;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Set;
++import java.util.concurrent.TimeUnit;
++import net.dv8tion.jda.api.utils.data.DataArray;
++import net.dv8tion.jda.api.utils.data.DataObject;
++import okhttp3.OkHttpClient;
++import okhttp3.Request;
++import okhttp3.Response;
++import ti4.discord.JdaService;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.game.persistence.GameManager;
++import ti4.game.persistence.ManagedGame;
++import ti4.logging.BotLogger;
++
++/**
++ * The registry lives in memory, so after a bot restart it is empty although the prompts are still on screen (the
++ * shim keeps every message). On startup — and on demand per game (POST .../{game}/rebuild) — re-read the recent
++ * bot messages of each live game's channels (actions, table talk, bot-map thread, every player's cards-info thread and
++ * private channel) and feed the ones that still carry components through the normal capture path, oldest first.
++ * Targets resolve exactly as at capture time (owner prefix, cards thread, interaction_metadata.user, kind overrides).
++ * Ephemeral replies are not readable through the channel and stay lost until the engine re-asks.
++ */
++public final class DecisionRebuild {
++    private static final int PER_CHANNEL = 100;
++    /** Games saved within this window count as live (abandoned soak/test games are rarely ended). */
++    private static final long LIVE_WINDOW_MS = TimeUnit.HOURS.toMillis(24);
++
++    private DecisionRebuild() {}
++
++    /** Called once from Engine.registerListeners; waits for the bot to be ready, then rebuilds every live game. */
++    static void scheduleStartupRebuild() {
++        Thread.ofVirtual().name("engine-rebuild").start(() -> {
++            try {
++                long deadline = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(15);
++                while (!JdaService.isReadyToReceiveCommands() && System.currentTimeMillis() < deadline)
++                    Thread.sleep(2000);
++                if (!JdaService.isReadyToReceiveCommands()) {
++                    BotLogger.warning("engine: bot never became ready; decision registry not rebuilt");
++                    return;
++                }
++                long t0 = System.currentTimeMillis();
++                int games = 0, opened = 0;
++                for (ManagedGame mg : GameManager.getManagedGames()) {
++                    if (mg.isHasEnded() || System.currentTimeMillis() - mg.getLastModifiedDate() > LIVE_WINDOW_MS)
++                        continue;
++                    try {
++                        opened += rebuild(mg.getGame());
++                        games++;
++                        Thread.sleep(100); // stay out of the way of live play while catching up
++                    } catch (Exception e) {
++                        BotLogger.error("engine: rebuild failed for " + mg.getName(), e);
++                    }
++                }
++                BotLogger.info("engine: rebuilt " + opened + " open decisions in " + games + " live games ("
++                        + (System.currentTimeMillis() - t0) + " ms)");
++            } catch (InterruptedException e) {
++                Thread.currentThread().interrupt();
++            } catch (Exception e) {
++                BotLogger.error("engine: startup rebuild failed", e);
++            }
++        });
++    }
++
++    /** Re-captures one game's open prompts; returns how many decisions are open for it afterwards. */
++    public static int rebuild(Game game) throws Exception {
++        String botId = JdaService.getBotId();
++        Set<String> channels = new LinkedHashSet<>();
++        add(channels, game.getMainChannelID());
++        add(channels, game.getTableTalkChannelID());
++        add(channels, game.getBotMapUpdatesThreadID());
++        for (Player p : game.getPlayers().values()) {
++            add(channels, p.getCardsInfoThreadID());
++            add(channels, p.getPrivateChannelID());
++        }
++        // Strategy-card follow threads, combat threads, etc.: "<game>-…" threads JDA knows.
++        String prefix = game.getName() + "-";
++        for (var t : JdaService.jda.getThreadChannels()) {
++            if (t.getName().startsWith(prefix)) add(channels, t.getId());
++        }
++        List<DataObject> messages = new ArrayList<>();
++        for (String ch : channels) {
++            DataArray arr = fetch(ch);
++            if (arr == null) continue;
++            for (int i = 0; i < arr.length(); i++) {
++                DataObject m = arr.getObject(i);
++                if (!m.hasKey("components") || m.isNull("components") || m.getArray("components").isEmpty()) continue;
++                DataObject author = m.optObject("author").orElse(null);
++                if (author == null || !botId.equals(author.getString("id", ""))) continue;
++                if (!m.hasKey("channel_id") || m.isNull("channel_id")) m.put("channel_id", ch);
++                messages.add(m);
++            }
++        }
++        // Oldest first, so a later prompt on the same message wins and seq order follows the game.
++        messages.sort((a, b) -> Long.compareUnsigned(Long.parseUnsignedLong(a.getString("id")),
++                Long.parseUnsignedLong(b.getString("id"))));
++        for (DataObject m : messages) {
++            EngineMetrics.count("rebuild.message");
++            DecisionCapture.onMessage(m, null, game);
++        }
++        return DecisionRegistry.openDecisions(game.getName()).size();
++    }
++
++    private static void add(Set<String> s, String id) {
++        if (id != null && !id.isBlank() && id.chars().allMatch(Character::isDigit)) s.add(id);
++    }
++
++    private static DataArray fetch(String channelId) throws Exception {
++        String base = System.getenv("DISCORD_API_BASE");
++        if (base == null) return null;
++        String token = JdaService.jda.getToken();
++        if (!token.startsWith("Bot ")) token = "Bot " + token;
++        OkHttpClient http = JdaService.jda.getHttpClient().newBuilder().callTimeout(10, TimeUnit.SECONDS).build();
++        Request request = new Request.Builder()
++                .url(base.replaceAll("/+$", "") + "/channels/" + channelId + "/messages?limit=" + PER_CHANNEL)
++                .header("Authorization", token)
++                .get()
++                .build();
++        try (Response res = http.newCall(request).execute()) {
++            if (!res.isSuccessful() || res.body() == null) return null;
++            String text = res.body().string();
++            return text.trim().startsWith("[") ? DataArray.fromJson(text) : null;
++        }
++    }
++}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionRegistry.java b/src/main/java/ti4/selfhost/engine/DecisionRegistry.java
 new file mode 100644
 index 0000000..dcb3e09
@@ -1766,10 +2187,10 @@ index 0000000..dcb3e09
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..8fe4fae
+index 0000000..c754cc0
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,93 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.Objects;
@@ -1803,6 +2224,32 @@ index 0000000..8fe4fae
 +        jda.addEventListener(new InteractionTracker());
 +        ti4.selfhost.engine.interaction.NativeCoverage.warmUp();
 +        BotLogger.info("engine: decision capture on (" + DecisionKinds.all().size() + " typed kinds)");
++        DecisionRebuild.scheduleStartupRebuild();
++    }
++
++    /** A prompt posted up to this long after a save belongs to that save's action (same rule as UndoService). */
++    static final long UNDO_SLACK_MS = 1500;
++
++    /**
++     * UndoJournal.recordUndo (Discord UNDO button, web undo and rewind alike), called after the restored save is
++     * loaded and before the bot re-posts the restored prompt: every decision asked after the restored save belongs to
++     * an undone action and closes ("undone"), including ephemerals and private-channel prompts the undo cannot delete.
++     */
++    public static void onUndo(String gameName, long restoredSavedAt) {
++        if (!ENABLED || gameName == null) return;
++        try {
++            long from = restoredSavedAt + UNDO_SLACK_MS;
++            int n = 0;
++            for (Decision d : DecisionRegistry.openDecisions(gameName)) {
++                if (d.createdAt() >= from) {
++                    DecisionRegistry.close(d.id(), "undone");
++                    n++;
++                }
++            }
++            if (n > 0) EngineMetrics.count("undo.closed");
++        } catch (Exception e) {
++            BotLogger.error("engine: undo hook failed for " + gameName, e);
++        }
 +    }
 +
 +    /** GameWebStatePipeline.queue: every save and every undo. */
@@ -1839,10 +2286,10 @@ index 0000000..8fe4fae
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineController.java b/src/main/java/ti4/selfhost/engine/EngineController.java
 new file mode 100644
-index 0000000..1204366
+index 0000000..e7c765c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineController.java
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,256 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -1916,6 +2363,30 @@ index 0000000..1204366
 +        if (!trusted(auth)) return unauthorized();
 +        if (req.userId() == null) return ResponseEntity.badRequest().body(Map.of("error", "userId required"));
 +        return answerResponse(ActionInvoker.answer(game, id, req.userId(), req));
++    }
++
++    /** Counters since start plus open-decision coverage (typed %, weak targets, top untyped prefixes, latency). */
++    @GetMapping("/api/public/selfhost/engine/metrics")
++    public ResponseEntity<?> metrics(
++            @RequestParam(required = false) String game,
++            @RequestHeader(value = "Authorization", required = false) String auth) {
++        if (!trusted(auth)) return unauthorized();
++        return ok(EngineMetrics.snapshot(game));
++    }
++
++    /** Re-reads the game's recent bot messages and re-captures every prompt still on screen (after a restart). */
++    @PostMapping("/api/public/selfhost/engine/{game}/rebuild")
++    public ResponseEntity<?> rebuild(
++            @PathVariable String game, @RequestHeader(value = "Authorization", required = false) String auth) {
++        if (!trusted(auth)) return unauthorized();
++        Game g = game(game);
++        if (g == null) return notFound();
++        try {
++            int open = DecisionRebuild.rebuild(g);
++            return ok(Map.of("open", open, "seq", DecisionRegistry.currentSeq()));
++        } catch (Exception e) {
++            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", String.valueOf(e)));
++        }
 +    }
 +
 +    /**
@@ -2075,12 +2546,167 @@ index 0000000..1204366
 +        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "bot token required"));
 +    }
 +}
+diff --git a/src/main/java/ti4/selfhost/engine/EngineMetrics.java b/src/main/java/ti4/selfhost/engine/EngineMetrics.java
+new file mode 100644
+index 0000000..853beb8
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/EngineMetrics.java
+@@ -0,0 +1,149 @@
++package ti4.selfhost.engine;
++
++import java.util.ArrayList;
++import java.util.Comparator;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.TreeMap;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.atomic.AtomicLong;
++import java.util.concurrent.atomic.LongAdder;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Option;
++
++/**
++ * Counters since bot start plus a snapshot of the open decisions: how much of what the engine asks is typed, how
++ * well targets resolve, which untyped handler prefixes are most common, and how fast capture and answers are.
++ * Served at GET /api/public/selfhost/engine/metrics (tools/engine-metrics.mjs prints it).
++ */
++public final class EngineMetrics {
++    private EngineMetrics() {}
++
++    private static final long STARTED = System.currentTimeMillis();
++    private static final Map<String, LongAdder> counters = new ConcurrentHashMap<>();
++    private static final Timer capture = new Timer();
++    private static final Map<String, Timer> answers = new ConcurrentHashMap<>();
++
++    public static void count(String name) {
++        counters.computeIfAbsent(name, k -> new LongAdder()).increment();
++    }
++
++    public static void captureNanos(long nanos) {
++        capture.add(nanos);
++    }
++
++    public static void answer(String status, long nanos) {
++        answers.computeIfAbsent(status, k -> new Timer()).add(nanos);
++    }
++
++    /** Snapshot for one game, or all games with open decisions when game is null. */
++    public static Map<String, Object> snapshot(String game) {
++        List<Decision> open = new ArrayList<>();
++        if (game != null) open.addAll(DecisionRegistry.openDecisions(game));
++        else for (String g : DecisionRegistry.games()) open.addAll(DecisionRegistry.openDecisions(g));
++
++        Map<String, Integer> byKind = new TreeMap<>();
++        Map<String, Integer> byTarget = new TreeMap<>();
++        Map<String, Integer> untypedPrefixes = new LinkedHashMap<>();
++        Map<String, Integer> perGame = new TreeMap<>();
++        int typed = 0, weak = 0, answerable = 0;
++        for (Decision d : open) {
++            byKind.merge(d.kind(), 1, Integer::sum);
++            String how = d.target() == null ? "none" : d.target().resolvedBy();
++            byTarget.merge(how, 1, Integer::sum);
++            perGame.merge(d.game(), 1, Integer::sum);
++            if (!DecisionKinds.LEGACY.equals(d.kind())) typed++;
++            if ("none".equals(how) || "mention".equals(how)) weak++;
++            boolean anyAnswerable = false;
++            for (Option o : d.options()) {
++                if (!o.disabled() && !o.needsInput() && !o.id().contains("#")) anyAnswerable = true;
++            }
++            if (anyAnswerable) answerable++;
++            if (DecisionKinds.LEGACY.equals(d.kind())) {
++                java.util.Set<String> seen = new java.util.HashSet<>();
++                for (Option o : d.options()) {
++                    String p = handlerPrefix(o.handler());
++                    if (p != null && seen.add(p)) untypedPrefixes.merge(p, 1, Integer::sum);
++                }
++            }
++        }
++        List<Map<String, Object>> top = untypedPrefixes.entrySet().stream()
++                .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder()))
++                .limit(25)
++                .map(e -> Map.<String, Object>of("prefix", e.getKey(), "decisions", e.getValue()))
++                .toList();
++
++        Map<String, Object> out = new LinkedHashMap<>();
++        out.put("game", game);
++        out.put("uptimeSec", (System.currentTimeMillis() - STARTED) / 1000);
++        out.put("seq", DecisionRegistry.currentSeq());
++        out.put("open", open.size());
++        out.put("typed", typed);
++        out.put("typedPct", pct(typed, open.size()));
++        out.put("weakTarget", weak);
++        out.put("weakTargetPct", pct(weak, open.size()));
++        out.put("answerablePct", pct(answerable, open.size()));
++        out.put("byKind", byKind);
++        out.put("byTarget", byTarget);
++        out.put("perGame", perGame);
++        out.put("topUntypedPrefixes", top);
++        Map<String, Long> c = new TreeMap<>();
++        counters.forEach((k, v) -> c.put(k, v.sum()));
++        out.put("counters", c);
++        out.put("captureMs", capture.summary());
++        Map<String, Object> a = new TreeMap<>();
++        answers.forEach((k, v) -> a.put(k, v.summary()));
++        out.put("answersMs", a);
++        return out;
++    }
++
++    /** Handler id up to and including its first '_' (or the whole id), e.g. "scPick_", "sc_follow_" -> "sc_". */
++    static String handlerPrefix(String handler) {
++        if (handler == null) return null;
++        int us = handler.indexOf('_');
++        return us < 0 ? handler : handler.substring(0, us + 1);
++    }
++
++    private static double pct(int part, int whole) {
++        return whole == 0 ? 0 : Math.round(1000.0 * part / whole) / 10.0;
++    }
++
++    /** Count, mean and max plus a recent-window p50/p95 (last 512 samples), in milliseconds. */
++    static final class Timer {
++        private final AtomicLong n = new AtomicLong();
++        private final AtomicLong total = new AtomicLong();
++        private final AtomicLong max = new AtomicLong();
++        private final long[] ring = new long[512];
++        private int pos;
++
++        void add(long nanos) {
++            n.incrementAndGet();
++            total.addAndGet(nanos);
++            max.accumulateAndGet(nanos, Math::max);
++            synchronized (ring) {
++                ring[pos++ % ring.length] = nanos;
++            }
++        }
++
++        Map<String, Object> summary() {
++            long count = n.get();
++            long[] copy;
++            synchronized (ring) {
++                copy = java.util.Arrays.copyOf(ring, (int) Math.min(count, ring.length));
++            }
++            java.util.Arrays.sort(copy);
++            Map<String, Object> m = new LinkedHashMap<>();
++            m.put("count", count);
++            m.put("mean", count == 0 ? 0 : ms(total.get() / count));
++            m.put("p50", copy.length == 0 ? 0 : ms(copy[copy.length / 2]));
++            m.put("p95", copy.length == 0 ? 0 : ms(copy[Math.min(copy.length - 1, (int) (copy.length * 0.95))]));
++            m.put("max", ms(max.get()));
++            return m;
++        }
++
++        private static double ms(long nanos) {
++            return Math.round(nanos / 10_000.0) / 100.0;
++        }
++    }
++}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineModels.java b/src/main/java/ti4/selfhost/engine/EngineModels.java
 new file mode 100644
-index 0000000..5a3f6c6
+index 0000000..0dc360f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineModels.java
-@@ -0,0 +1,438 @@
+@@ -0,0 +1,443 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -2461,7 +3087,12 @@ index 0000000..5a3f6c6
 +             */
 +            boolean needsInput,
 +            String handler,
-+            Map<String, Object> value) {}
++            Map<String, Object> value,
++            /**
++             * Who may press this option when it differs from the decision's target: set only on menus whose options
++             * carry different owners (target.resolvedBy = mixed_owners). null = the decision's target/scope rules.
++             */
++            Target owner) {}
 +
 +    public record Source(String channelId, String messageId, String customIdPrefix, boolean ephemeral) {}
 +
@@ -3315,10 +3946,10 @@ index 0000000..9031883
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/TacticalController.java b/src/main/java/ti4/selfhost/engine/TacticalController.java
 new file mode 100644
-index 0000000..0489887
+index 0000000..293647a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/TacticalController.java
-@@ -0,0 +1,435 @@
+@@ -0,0 +1,445 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -3445,6 +4076,11 @@ index 0000000..0489887
 +    // ------------------------------------------------------------------ move
 +
 +    static AnswerResult move(String gameName, String decisionId, String userId, MoveRequest req) {
++        return ActionInvoker.asOneUndoStep(
++                gameName, userId, "tactical.move", () -> moveSteps(gameName, decisionId, userId, req));
++    }
++
++    private static AnswerResult moveSteps(String gameName, String decisionId, String userId, MoveRequest req) {
 +        Decision d = DecisionRegistry.get(decisionId);
 +        AnswerResult bad = check(d, gameName, decisionId, userId, "tactical.move", req.expectedSeq());
 +        if (bad != null) return bad;
@@ -3589,6 +4225,11 @@ index 0000000..0489887
 +    // ------------------------------------------------------------------ land
 +
 +    static AnswerResult land(String gameName, String decisionId, String userId, LandRequest req) {
++        return ActionInvoker.asOneUndoStep(
++                gameName, userId, "tactical.land", () -> landSteps(gameName, decisionId, userId, req));
++    }
++
++    private static AnswerResult landSteps(String gameName, String decisionId, String userId, LandRequest req) {
 +        Decision d = DecisionRegistry.get(decisionId);
 +        AnswerResult bad = check(d, gameName, decisionId, userId, "tactical.land", req.expectedSeq());
 +        if (bad != null) return bad;
@@ -4109,6 +4750,81 @@ index 0000000..f9e2a0c
 +        return new ProposeResult(false, status, error, null, null, List.of(), DecisionRegistry.currentSeq(), 0);
 +    }
 +}
+diff --git a/src/main/java/ti4/selfhost/engine/UndoGroup.java b/src/main/java/ti4/selfhost/engine/UndoGroup.java
+new file mode 100644
+index 0000000..89ef450
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/UndoGroup.java
+@@ -0,0 +1,69 @@
++package ti4.selfhost.engine;
++
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardCopyOption;
++import java.util.List;
++import ti4.helpers.Constants;
++import ti4.helpers.Storage;
++import ti4.logging.BotLogger;
++import ti4.service.game.GameUndoNameService;
++
++/**
++ * One undo step per engine answer. A payload answer (payment, production, agenda vote, token split…) makes several
++ * presses, and the bot saves an undo snapshot after each ({@code <game>_N.txt}). Once the answer is done we collapse
++ * them: the last snapshot becomes {@code before + 1} and the intermediate ones go, so the UNDO button, {@code /game
++ * undo} and the web undo / rewind take the whole answer back in one step (the web's flow grouping is not needed for
++ * engine answers). Callers hold the game's WRITE lock, so no other save interleaves.
++ */
++final class UndoGroup {
++    private UndoGroup() {}
++
++    /** The latest undo snapshot number now (-1 when none). */
++    static int latest(String gameName) {
++        try {
++            return GameUndoNameService.getLatestUndoNumber(gameName);
++        } catch (Exception e) {
++            return -1;
++        }
++    }
++
++    /**
++     * Collapses the snapshots made after {@code before} into one, labelled {@code label} as pressed by {@code by}.
++     * No-op when the answer made fewer than two snapshots or the numbering is not contiguous.
++     */
++    static void collapse(String gameName, int before, String by, String label) {
++        if (before < 0) return;
++        try {
++            List<Integer> numbers = GameUndoNameService.getSortedUndoNumbers(gameName);
++            if (numbers.isEmpty()) return;
++            int last = numbers.getLast();
++            if (last - before < 2) return;
++            for (int i = before + 1; i <= last; i++) if (!numbers.contains(i)) return;
++            Path target = file(gameName, before + 1);
++            Files.move(file(gameName, last), target, StandardCopyOption.REPLACE_EXISTING);
++            for (int i = before + 2; i < last; i++) Files.deleteIfExists(file(gameName, i));
++            relabel(target, by + " pressed button: " + label + " (engine answer)");
++            EngineMetrics.count("answer.undo_collapsed");
++        } catch (Exception e) {
++            BotLogger.error("engine: could not group the undo snapshots of an answer in " + gameName, e);
++        }
++    }
++
++    private static Path file(String gameName, int index) {
++        return Storage.getGameUndo(gameName, gameName + "_" + index + Constants.TXT);
++    }
++
++    /** Rewrites the snapshot's {@code latest_command} line (what the undo list shows for it). */
++    private static void relabel(Path snapshot, String command) throws Exception {
++        List<String> lines = Files.readAllLines(snapshot, StandardCharsets.UTF_8);
++        for (int i = 0; i < lines.size(); i++) {
++            if (lines.get(i).startsWith("latest_command ")) {
++                lines.set(i, "latest_command " + command.replace('\n', ' '));
++                Files.write(snapshot, lines, StandardCharsets.UTF_8);
++                return;
++            }
++        }
++    }
++}
 diff --git a/src/main/java/ti4/selfhost/engine/interaction/EngineInteraction.java b/src/main/java/ti4/selfhost/engine/interaction/EngineInteraction.java
 new file mode 100644
 index 0000000..7df605e
@@ -4387,7 +5103,7 @@ index 0000000..7df605e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/interaction/Forms.java b/src/main/java/ti4/selfhost/engine/interaction/Forms.java
 new file mode 100644
-index 0000000..ec3051f
+index 0000000..493f60d
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/interaction/Forms.java
 @@ -0,0 +1,175 @@
@@ -4463,8 +5179,8 @@ index 0000000..ec3051f
 +                "private",
 +                modal.getTitle(),
 +                List.of(
-+                        new Option(SUBMIT, "Submit", "primary", null, false, true, modal.getId(), null),
-+                        new Option(CANCEL, "Cancel", "secondary", null, false, false, null, null)),
++                        new Option(SUBMIT, "Submit", "primary", null, false, true, modal.getId(), null, null),
++                        new Option(CANCEL, "Cancel", "secondary", null, false, false, null, null, null)),
 +                new Source(origin.source().channelId(), pseudoMessage, modal.getId(), true),
 +                System.currentTimeMillis(),
 +                0,
@@ -7983,10 +8699,10 @@ index 0000000..0f7fb2e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java b/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java
 new file mode 100644
-index 0000000..fa7967e
+index 0000000..d796066
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java
-@@ -0,0 +1,189 @@
+@@ -0,0 +1,194 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.HashMap;
@@ -8028,6 +8744,11 @@ index 0000000..fa7967e
 +    private static final long WAIT_MS = 8000;
 +
 +    public static PlanResult execute(String gameName, String decisionId, String userId, PlanRequest req) {
++        return ti4.selfhost.engine.ActionInvoker.asOneUndoStep(
++                gameName, userId, "combat plan", () -> executeSteps(gameName, decisionId, userId, req));
++    }
++
++    private static PlanResult executeSteps(String gameName, String decisionId, String userId, PlanRequest req) {
 +        Decision d = DecisionRegistry.get(decisionId);
 +        if (d == null || !d.game().equals(gameName)) return fail("stale", "That decision is no longer open.");
 +        if (!"combat.hits".equals(d.kind())) return fail("bad_option", "Not a combat.hits decision.");
@@ -10158,7 +10879,7 @@ index 0000000..5bf8988
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
 new file mode 100644
-index 0000000..af24622
+index 0000000..8c755a8
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
 @@ -0,0 +1,100 @@
@@ -10256,7 +10977,7 @@ index 0000000..af24622
 +            MiltyDraftManager m = game.getMiltyDraftManager();
 +            Player p = m == null || m.isFinished() ? null : m.getCurrentDraftPlayer(game);
 +            if (p == null) return new Target(null, null, null, "draft_turn");
-+            return new Target(p.getUserID(), p.getFaction(), p.getColor(), "draft_turn");
++            return ti4.selfhost.engine.DecisionCapture.target(p, "draft_turn");
 +        } catch (Exception e) {
 +            return new Target(null, null, null, "draft_turn");
 +        }
@@ -15152,6 +15873,32 @@ index 0000000..769ca2a
 +        return Objects.requireNonNullElse(s.get(state.ordinal()), 0);
 +    }
 +}
+diff --git a/src/main/java/ti4/service/button/ReactionCheckService.java b/src/main/java/ti4/service/button/ReactionCheckService.java
+index b6fb6af..cb8ac2a 100644
+--- a/src/main/java/ti4/service/button/ReactionCheckService.java
++++ b/src/main/java/ti4/service/button/ReactionCheckService.java
+@@ -21,6 +21,7 @@ import ti4.helpers.Helper;
+ import ti4.logging.BotLogger;
+ import ti4.message.GameMessageManager;
+ import ti4.message.MessageHelper;
++import ti4.selfhost.SelfHosted;
+ import ti4.service.StatusCleanupService;
+ import ti4.service.emoji.CardEmojis;
+ import ti4.service.game.EndGameService;
+@@ -107,6 +108,13 @@ public class ReactionCheckService {
+     }
+ 
+     public static void respondAllHaveScored(Game game) {
++        // A late "No Public/Secret Objective Scored" press (a re-sent click, a second copy of the scoring message)
++        // completes the scoring check again after this round's objective is out: do not offer the reveal again,
++        // its only answer would be "already revealed".
++        if (SelfHosted.isEnabled()
++                && !game.getStoredValue("revealedPOInRound" + game.getRound()).isEmpty()) {
++            return;
++        }
+         String message2 =
+                 "All players have indicated scoring. Flip the relevant public objective using the buttons. This will automatically run status clean-up if it has not been run already.";
+         Button draw2Stage2 = Buttons.green("reveal_stage_2x2", "Reveal 2 Stage 2");
 diff --git a/src/main/java/ti4/service/combat/CombatRollService.java b/src/main/java/ti4/service/combat/CombatRollService.java
 index ade82fc..e6de162 100644
 --- a/src/main/java/ti4/service/combat/CombatRollService.java
@@ -16265,10 +17012,10 @@ index 0000000..8db5384
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/TradeController.java b/src/main/java/ti4/spring/api/selfhost/TradeController.java
 new file mode 100644
-index 0000000..347b803
+index 0000000..62d104f
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/TradeController.java
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,70 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.util.Map;
@@ -16286,6 +17033,7 @@ index 0000000..347b803
 +import org.springframework.web.bind.annotation.RestController;
 +import ti4.game.Game;
 +import ti4.game.Player;
++import ti4.spring.api.selfhost.TradeModels.PendingResponse;
 +import ti4.spring.api.selfhost.TradeModels.ProposeRequest;
 +import ti4.spring.api.selfhost.TradeModels.ProposeResponse;
 +import ti4.spring.api.selfhost.TradeModels.TradeOptions;
@@ -16298,8 +17046,10 @@ index 0000000..347b803
 + * <ul>
 + *   <li>{@code GET  /api/game/{gameName}/trade/options} — what I can offer, who I can trade with, what they have</li>
 + *   <li>{@code POST /api/game/{gameName}/trade/propose} — build the bot transaction and send the offer</li>
++ *   <li>{@code GET  /api/game/{gameName}/trade/pending} — open offers to / from me, with the bot's buttons
++ *       (legacy fallback: scraped from the cards-info threads; the engine path is GameState.trade + trade.offer
++ *       decisions, see TradeEngine. Deleted with the Discord emulation in INFRA-4.)</li>
 + * </ul>
-+ * Open offers are engine decisions ({@code trade.offer}) and {@code GameState.trade}; see TradeEngine.
 + */
 +@RestController
 +@RequiredArgsConstructor
@@ -16323,6 +17073,14 @@ index 0000000..347b803
 +        return tradeService.propose(RequestContext.getGame(), RequestContext.getPlayer(), request);
 +    }
 +
++    @GetMapping("/pending")
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public ResponseEntity<PendingResponse> pending(@PathVariable String gameName) {
++        Game game = RequestContext.getGame();
++        Player me = RequestContext.getPlayer();
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(tradeService.pending(game, me));
++    }
++
 +    @ExceptionHandler(TradeService.TradeException.class)
 +    public ResponseEntity<Map<String, String>> tradeError(TradeService.TradeException e) {
 +        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
@@ -16330,10 +17088,10 @@ index 0000000..347b803
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/TradeModels.java b/src/main/java/ti4/spring/api/selfhost/TradeModels.java
 new file mode 100644
-index 0000000..9ff37d6
+index 0000000..e09cc47
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/TradeModels.java
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,143 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.util.List;
@@ -16449,13 +17207,40 @@ index 0000000..9ff37d6
 +     */
 +    public record TradeItem(String from, String to, String kind, int amount, String id, String label, String raw) {}
 +
++    /**
++     * An open offer. {@code direction} is "incoming" (to me; {@code accept}/{@code reject}/{@code counter} are the
++     * bot's buttons) or "outgoing" (from me; {@code rescind}). Press a button through the shim's /app/ws
++     * {@code click} op with the given channel / message / custom id.
++     *
++     * @param current false when a newer offer replaced it (the bot will refuse to accept it)
++     */
++    public record PendingOffer(
++            String direction,
++            String otherFaction,
++            String otherUserId,
++            String otherUserName,
++            String otherColor,
++            int offerNumber,
++            boolean current,
++            String text,
++            List<TradeItem> items,
++            ButtonRef accept,
++            ButtonRef reject,
++            ButtonRef counter,
++            ButtonRef rescind,
++            String createdAt,
++            String otherIcon) {}
++
++    public record ButtonRef(String channelId, String messageId, String customId, String label) {}
++
++    public record PendingResponse(List<PendingOffer> incoming, List<PendingOffer> outgoing) {}
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/TradeService.java b/src/main/java/ti4/spring/api/selfhost/TradeService.java
 new file mode 100644
-index 0000000..4b5d321
+index 0000000..12dfc41
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/TradeService.java
-@@ -0,0 +1,566 @@
+@@ -0,0 +1,692 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.lang.reflect.Method;
@@ -16464,9 +17249,11 @@ index 0000000..4b5d321
 +import java.util.List;
 +import java.util.Locale;
 +import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.TimeUnit;
 +import net.dv8tion.jda.api.components.buttons.Button;
 +import net.dv8tion.jda.api.entities.Message;
++import net.dv8tion.jda.api.entities.MessageHistory;
 +import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
 +import org.springframework.stereotype.Service;
 +import ti4.discord.JdaService;
@@ -16481,7 +17268,10 @@ index 0000000..4b5d321
 +import ti4.model.PromissoryNoteModel;
 +import ti4.model.RelicModel;
 +import ti4.service.agenda.IsPlayerElectedService;
++import ti4.spring.api.selfhost.TradeModels.ButtonRef;
 +import ti4.spring.api.selfhost.TradeModels.CardRef;
++import ti4.spring.api.selfhost.TradeModels.PendingOffer;
++import ti4.spring.api.selfhost.TradeModels.PendingResponse;
 +import ti4.spring.api.selfhost.TradeModels.ProposeRequest;
 +import ti4.spring.api.selfhost.TradeModels.ProposeResponse;
 +import ti4.spring.api.selfhost.TradeModels.TradeCounterparty;
@@ -16509,6 +17299,11 @@ index 0000000..4b5d321
 +            List.of(Constants.CULTURAL, Constants.INDUSTRIAL, Constants.HAZARDOUS, Constants.FRONTIER);
 +    private static final int MAX_GENERIC = 7;
 +    private static final int MAX_DIGIT = 9;
++    private static final long HISTORY_TTL_MS = 3000;
++
++    private record HistoryEntry(long at, long version, List<Message> messages) {}
++
++    private final Map<String, HistoryEntry> historyCache = new ConcurrentHashMap<>();
 +
 +    // ---------------------------------------------------------------- options
 +
@@ -16812,6 +17607,103 @@ index 0000000..4b5d321
 +        }
 +    }
 +
++    // ---------------------------------------------------------------- pending
++
++    public PendingResponse pending(Game game, Player me) {
++        List<PendingOffer> incoming = new ArrayList<>();
++        List<PendingOffer> outgoing = new ArrayList<>();
++        ThreadChannel myThread = me.getCardsInfoThread();
++        if (myThread == null) return new PendingResponse(incoming, outgoing);
++        List<Message> mine = history(myThread, game);
++
++        Map<String, Boolean> seenRescind = new LinkedHashMap<>();
++        for (Message m : mine) {
++            ButtonRef accept = null, reject = null, counter = null, rescind = null;
++            for (Button b : m.getComponentTree().findAll(Button.class)) {
++                String id = b.getCustomId();
++                if (id == null) continue;
++                ButtonRef ref = new ButtonRef(myThread.getId(), m.getId(), id, b.getLabel());
++                if (id.startsWith("acceptOffer_")) accept = ref;
++                else if (id.startsWith("rejectOffer_")) reject = ref;
++                else if (id.startsWith("resetOffer_")) counter = ref;
++                else if (id.startsWith("rescindOffer_")) rescind = ref;
++            }
++            if (accept != null) {
++                PendingOffer offer = incomingOffer(game, me, m, accept, reject, counter);
++                if (offer != null) incoming.add(offer);
++            }
++            if (rescind != null) {
++                String color = rescind.customId().split("_")[1];
++                if (seenRescind.putIfAbsent(color, true) != null) continue; // newest first
++                PendingOffer offer = outgoingOffer(game, me, m, color, rescind);
++                if (offer != null) outgoing.add(offer);
++            }
++        }
++        return new PendingResponse(incoming, outgoing);
++    }
++
++    private PendingOffer incomingOffer(
++            Game game, Player me, Message m, ButtonRef accept, ButtonRef reject, ButtonRef counter) {
++        String[] parts = accept.customId().split("_");
++        Player from = game.getPlayerFromColorOrFaction(parts[1]);
++        if (from == null) return null;
++        int num = parts.length > 2 ? parseInt(parts[2], -1) : -1;
++        int latest = parseInt(game.getStoredValue("offerFrom" + from.getFaction() + "To" + me.getFaction()), -1);
++        List<String> items = from.getTransactionItemsWithPlayer(me);
++        boolean current = (num == -1 || num == latest) && !items.isEmpty();
++        return new PendingOffer(
++                "incoming",
++                from.getFaction(),
++                from.getUserID(),
++                from.getUserName(),
++                from.getColor(),
++                num,
++                current,
++                m.getContentRaw(),
++                current ? decode(game, items) : List.of(),
++                accept,
++                reject,
++                counter,
++                null,
++                m.getTimeCreated().toString(),
++                emojiUrl(from));
++    }
++
++    private PendingOffer outgoingOffer(Game game, Player me, Message m, String color, ButtonRef rescind) {
++        Player to = game.getPlayerFromColorOrFaction(color);
++        if (to == null) return null;
++        List<String> items = me.getTransactionItemsWithPlayer(to);
++        if (items.isEmpty()) return null;
++        int latest = parseInt(game.getStoredValue("offerFrom" + me.getFaction() + "To" + to.getFaction()), -1);
++        ThreadChannel theirs = to.getCardsInfoThread();
++        if (theirs == null) return null;
++        boolean open = false;
++        for (Message tm : history(theirs, game)) {
++            for (Button b : tm.getComponentTree().findAll(Button.class)) {
++                String id = b.getCustomId();
++                if (id != null && id.startsWith("acceptOffer_" + me.getColor() + "_" + latest)) open = true;
++            }
++            if (open) break;
++        }
++        if (!open) return null;
++        return new PendingOffer(
++                "outgoing",
++                to.getFaction(),
++                to.getUserID(),
++                to.getUserName(),
++                to.getColor(),
++                latest,
++                true,
++                m.getContentRaw(),
++                decode(game, items),
++                null,
++                null,
++                null,
++                rescind,
++                m.getTimeCreated().toString(),
++                emojiUrl(to));
++    }
++
 +    /**
 +     * Strips the Accept / Reject / Counter buttons of {@code sender}'s offers in {@code receiver}'s cards-info thread
 +     * that the bot would refuse anyway: replaced by a newer offer, or rescinded (the bot only deletes the rescinder's
@@ -16844,6 +17736,25 @@ index 0000000..4b5d321
 +                ti4.logging.BotLogger.error("Could not retire stale trade offers in " + game.getName(), e);
 +            }
 +        });
++    }
++
++    private List<Message> history(ThreadChannel channel, Game game) {
++        long now = System.currentTimeMillis();
++        HistoryEntry hit = historyCache.get(channel.getId());
++        if (hit != null && hit.version == game.getLastModifiedDate() && now - hit.at < HISTORY_TTL_MS)
++            return hit.messages;
++        try {
++            MessageHistory mh = channel.getHistory();
++            List<Message> got = mh.retrievePast(100).timeout(5, TimeUnit.SECONDS).complete();
++            String botId = JdaService.getBotId();
++            List<Message> fromBot = got.stream()
++                    .filter(msg -> botId == null || botId.equals(msg.getAuthor().getId()))
++                    .toList();
++            historyCache.put(channel.getId(), new HistoryEntry(now, game.getLastModifiedDate(), fromBot));
++            return fromBot;
++        } catch (Exception e) {
++            return hit != null ? hit.messages : List.of();
++        }
 +    }
 +
 +    // ---------------------------------------------------------------- decoding
@@ -17101,10 +18012,10 @@ index 0000000..145811a
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/UndoJournal.java b/src/main/java/ti4/spring/api/selfhost/UndoJournal.java
 new file mode 100644
-index 0000000..4f512c6
+index 0000000..ababe6a
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/UndoJournal.java
-@@ -0,0 +1,167 @@
+@@ -0,0 +1,168 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.nio.charset.StandardCharsets;
@@ -17160,6 +18071,7 @@ index 0000000..4f512c6
 +
 +    /** Called by {@code GameUndoService} after it restored save {@code toIndex} (replacing {@code fromIndex}). */
 +    public static void recordUndo(String gameName, int fromIndex, int toIndex, long fromSavedAt, long toSavedAt) {
++        ti4.selfhost.engine.Engine.onUndo(gameName, toSavedAt);
 +        try {
 +            Context c = context.get();
 +            String line = String.join(
