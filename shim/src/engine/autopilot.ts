@@ -9,6 +9,7 @@ import { chooseExplore } from "./policy/explore.js";
 import { chooseFaction } from "./policy/faction.js";
 import { chooseFactionGroupC } from "./policy/factionGroupC.js";
 import { chooseFactionB } from "./policy/factionB.js";
+import { choosePokFaction } from "./policy/factionPok.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
@@ -75,6 +76,8 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   if (groupC !== undefined) return groupC;
   const factionB = chooseFactionB(d, state, me);
   if (factionB !== undefined) return factionB;
+  const pok = choosePokFaction(d, state, me, ctx.history);
+  if (pok !== undefined) return pok;
   const faction = chooseFaction(d, state, me);
   if (faction !== undefined) return faction;
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
