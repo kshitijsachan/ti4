@@ -7,6 +7,8 @@ import { parseBoard, type Board } from "./botplay/board.js";
 import { controlsOf, type Control, type Prompt } from "./botplay/prompts.js";
 import type { Seat } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
+import type { EngineClient } from "./engine/client.js";
+import { chooseTyped } from "./engine/autopilot.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -229,6 +231,8 @@ export class Autopilot {
   private chain: Promise<unknown> = Promise.resolve();
   private drafts = new Map<string, { at: number; data: Json | null }>();
   private webFactions = new Map<string, { at: number; map: Map<string, string> }>();
+  /** Typed engine API (docs/ENGINE.md); when it answers, it is authoritative and the heuristics below are skipped. */
+  engine?: EngineClient;
 
   constructor(
     readonly hub: Hub,
@@ -325,6 +329,8 @@ export class Autopilot {
 
   /** Each seat's faction in a game, from the bot's web data (cached; refetched at most every 20s while unknown). */
   async factionOf(game: string, userId: string): Promise<string | undefined> {
+    const authoritative = await this.engine?.factionOf(game, userId);
+    if (authoritative) return authoritative;
     const hit = this.webFactions.get(game);
     if (hit?.map.has(userId)) return hit.map.get(userId);
     if (hit && Date.now() - hit.at < 20000) return undefined;
@@ -505,6 +511,11 @@ class SeatPilot {
           this.schedule();
           return;
         }
+      }
+      if (await this.engineStep()) {
+        this.busy = false;
+        this.schedule();
+        return;
       }
       const choice = await this.decide();
       if (!choice) {
@@ -976,6 +987,11 @@ class SeatPilot {
 
   /** This seat's faction in a game: from the bot's draft state, else learned from buttons addressed to us. */
   private async faction(game: string, m: StoredMessage): Promise<string | undefined> {
+    const authoritative = family((await this.mgr.engine?.factionOf(game, this.userId)) ?? undefined);
+    if (authoritative) {
+      this.factions.set(game, authoritative);
+      return authoritative;
+    }
     const known = this.factions.get(game);
     if (known) return known;
     const fromWeb = await this.mgr.factionOf(game, this.userId);
@@ -1117,6 +1133,38 @@ class SeatPilot {
 
   // ---- the planner's view of this seat ----
 
+  /** Engine answers already sent (decision id | option id): each is tried once; afterwards the heuristics take over. */
+  private engineTried = new Set<string>();
+
+  /**
+   * Typed decisions addressed to this seat (engine API): answered directly, with the target resolved by the engine
+   * (no faction guessing from buttons). Returns false when the engine is unavailable or nothing typed is ours, so
+   * the legacy rule table runs as before.
+   */
+  private async engineStep(): Promise<boolean> {
+    const engine = this.mgr.engine;
+    if (!engine) return false;
+    for (const game of this.liveGames()) {
+      const mine = await engine.decisionsFor(game, this.userId);
+      if (!mine?.length) continue;
+      const state = await engine.state(game, this.userId, 2000);
+      for (const d of mine) {
+        const pick = chooseTyped(d, state, this.userId);
+        if (!pick) continue;
+        const key = `${d.id}|${pick.option.id}`;
+        if (this.engineTried.has(key)) continue;
+        this.engineTried.add(key);
+        if (this.engineTried.size > 5000) this.engineTried.clear();
+        const r = await this.mgr.serial(() => engine.answer(game, d.id, { optionId: pick.option.id, expectedSeq: d.seq, requestId: key, userId: this.userId }));
+        if (!r) return false;
+        log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option.label}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
+        if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
+        if (r.ok) return true;
+      }
+    }
+    return false;
+  }
+
   /** Games this seat sits in with something happening in the last hour (by their actions channel). */
   private liveGames(): string[] {
     const out: string[] = [];
@@ -1154,6 +1202,11 @@ class SeatPilot {
         return self.name;
       },
       faction: async (game) => {
+        const authoritative = family((await self.mgr.engine?.factionOf(game, self.userId)) ?? undefined);
+        if (authoritative) {
+          self.factions.set(game, authoritative);
+          return authoritative;
+        }
         const known = self.factions.get(game);
         if (known) return known;
         const f = family(await self.mgr.factionOf(game, self.userId));

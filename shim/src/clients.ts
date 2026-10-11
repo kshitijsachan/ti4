@@ -301,6 +301,23 @@ export class Clients implements Listener {
     this.hub.gateway.dispatch("INTERACTION_CREATE", payload);
   }
 
+  /**
+   * Engine answers (bot -> POST /api/v10/selfhost/interactions): registers a component interaction for a seat on a
+   * message, exactly like a browser press, but returns the INTERACTION_CREATE payload to the bot (which runs the
+   * handler itself, synchronously) instead of dispatching it through the gateway.
+   */
+  mintComponentInteraction(userId: string, channelId: string, messageId: string, customId: string, componentType = 2, values?: string[]): { payload?: Json; error?: string } {
+    const m = this.store.findMessage(channelId, messageId);
+    if (!m || !this.messageVisible(userId, m)) return { error: "Unknown message" };
+    m._presses = { ...m._presses, [userId]: { at: new Date().toISOString(), controls: controlIds(m.components) } };
+    this.store.scheduleSave();
+    const inter = this.store.newInteraction({ type: 3, user_id: userId, channel_id: channelId, message_id: messageId });
+    const data: Json = { custom_id: customId, component_type: componentType };
+    if (componentType !== 2) data.values = values ?? [];
+    const payload: Json = { ...this.basePayload({ userId } as Client, channelId), id: inter.id, token: inter.token, type: 3, data, message: stripPrivate(m) };
+    return { payload };
+  }
+
   private component(c: Client, msg: Json, componentType: number) {
     const m = this.store.findMessage(msg.channel_id, msg.message_id);
     if (!m || !this.messageVisible(c.userId, m)) {
