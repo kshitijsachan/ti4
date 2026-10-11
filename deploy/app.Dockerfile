@@ -15,6 +15,8 @@ RUN --mount=type=cache,target=/root/.npm --mount=type=secret,id=build_ca,require
     if [ -s /run/secrets/build_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca; fi; \
     npm ci --no-audit --no-fund
 COPY web/ ./
+# The web type-checks against the engine contract in shim/src/engine (type-only imports, nothing bundled).
+COPY shim/src/engine /src/shim/src/engine
 RUN npm run build
 
 # ---- shim (TypeScript -> JS) ----

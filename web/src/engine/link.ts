@@ -26,9 +26,9 @@ export function useEngineLink(gameName: string) {
     if (!enabled) return;
     let timer: number | undefined;
     const subscribe = () => {
-      const { view, follow } = engineStore.getState();
+      const { view } = engineStore.getState();
       const resume = view.game === gameName && view.status === "live" && view.seq > 0;
-      follow(gameName);
+      engineStore.getState().follow(gameName);
       conn.send({ op: "engine_sub", game: gameName, after: resume ? view.seq : undefined });
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
@@ -75,7 +75,7 @@ export function useEngineAnswer() {
       decisionId: decision.id,
       optionId,
       expectedSeq: decision.seq,
-      requestId: `${decision.id}:${decision.seq}:${optionId}`,
+      requestId: `${decision.id}:${decision.revision ?? decision.seq}:${optionId}`,
     });
     if (!nonce) return store.answerFailed(decision.id, "", "Not connected to the game server — reconnecting.");
     store.answerStarted(decision.id, nonce, optionId);

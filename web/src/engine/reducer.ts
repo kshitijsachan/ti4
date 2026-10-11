@@ -41,9 +41,20 @@ function applyEvent(view: EngineView, e: EngineEvent): EngineView {
   if (e.game !== view.game || e.seq <= view.seq) return view;
   if (e.type === "state.changed") return { ...view, seq: e.seq };
   const decisions = { ...view.decisions };
+  const held = decisions[e.decision.id];
   if (e.type === "decision.closed") delete decisions[e.decision.id];
-  else decisions[e.decision.id] = e.decision;
+  else if (!held || (e.decision.revision ?? 0) >= (held.revision ?? 0)) decisions[e.decision.id] = e.decision;
   return { ...view, seq: e.seq, decisions };
+}
+
+/**
+ * Is this decision waiting on `userId`? Same rule as the contract's `awaits` (shim/src/engine/types.ts; the web only
+ * imports the contract's types): a reaction window while I'm eligible and haven't responded, else my own prompt.
+ */
+export function awaits(d: Decision, userId: string): boolean {
+  if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
+  if (d.scope === "player") return d.target?.userId === userId;
+  return true;
 }
 
 /** Drops in-flight / error marks of decisions that are gone. */
@@ -87,7 +98,7 @@ export function startAnswer(view: EngineView, decisionId: string, nonce: string,
   return { ...view, pending: { ...view.pending, [decisionId]: { nonce, optionId, at } }, errors };
 }
 
-/** An answer finished (error = null on success). Ignores replies to an answer that was superseded. */
+/** An answer finished (error = null on success). Ignores replies to an answer that was superseded or already settled. */
 export function settleAnswer(view: EngineView, decisionId: string | undefined, nonce: string | undefined, error: string | null): EngineView {
   const id = decisionId ?? Object.keys(view.pending).find((k) => view.pending[k].nonce === nonce);
   if (!id) return view;
@@ -101,13 +112,13 @@ export function settleAnswer(view: EngineView, decisionId: string | undefined, n
 }
 
 /**
- * Decisions waiting on this user, oldest first: addressed to me, or open to the whole table (each seat answers for
- * itself). Untargeted player-scoped prompts are not "mine": the engine could not tell whose they are.
+ * Decisions waiting on this user, oldest first (`awaits`): my prompts, reaction windows I still have to answer, and
+ * window-less table prompts if I'm seated. Untargeted player-scoped prompts are not "mine": the engine couldn't tell.
  */
 export function myDecisions(view: EngineView, userId: string | null | undefined): Decision[] {
   if (!userId) return [];
   const seated = !!view.state?.players.some((p) => p.userId === userId);
   return Object.values(view.decisions)
-    .filter((d) => d.target?.userId === userId || (d.scope === "table" && seated))
+    .filter((d) => awaits(d, userId) && (d.scope === "player" || !!d.window || seated))
     .sort((a, b) => a.createdAt - b.createdAt || a.seq - b.seq);
 }

@@ -61,10 +61,10 @@ export function PlayerRail({ gameName, myUserId, actionPhase = true, onAllPlayer
     const seat = rail.children[myIndex] as HTMLElement | undefined;
     if (seat) rail.scrollLeft = seat.offsetLeft - rail.offsetLeft - 12;
   }, [myIndex]);
-  useCoversBoard(!!openColor);
+  const opened = seats.find((s) => s.summary.key === openColor)?.legacy;
+  useCoversBoard(!!opened);
 
   if (!seats.length) return null;
-  const opened = seats.find((s) => s.summary.key === openColor)?.legacy;
   const vpsToWin = data?.vpsToWin || 10;
 
   return (
