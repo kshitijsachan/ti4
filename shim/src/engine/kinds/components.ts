@@ -134,7 +134,39 @@ export type LeaderAgent = DecisionBase<
   }
 >;
 
-export type ComponentsDecision = ChooseDecision | ComponentAction | RelicUse | LeaderAgent;
+/**
+ * A generic technology's follow-up step (bot TechStepKind). source = tech alias ("bs", "td", "sr", "sar", "ie", "md",
+ * "dxa", "pa"; "research" for "Get a Technology"; "entropicscar"; "ground_hit" for the unit a Magen / Ruthless hit
+ * targets). step:
+ *  - exhaust: a standalone "exhaust <tech>" offer (source = that tech)
+ *  - ready (Bio-Stims: target "tech" | "planet"), destination (Transit Diodes), system (Sling Relay),
+ *    planet (Self-Assembly Routines), use (Integrated Economy / Magen / Dacxive offers), target (ground hit),
+ *    open / exhaust_planet (Psychoarchaeology), research (Get a Technology), gain (Entropic Scar faction tech)
+ * Declines / Done have value null.
+ */
+export type TechStep = DecisionBase<
+  "tech.step",
+  ChooseBase & {
+    step: "exhaust" | "ready" | "destination" | "system" | "planet" | "use" | "target" | "open" | "exhaust_planet" | "research" | "gain" | string;
+    techName?: string;
+    /** The technology named in the id (exhaust: the source itself; Bio-Stims: the tech to ready; Entropic Scar: the tech gained). */
+    tech?: string;
+    targetTechName?: string;
+    /** Bio-Stims: what gets readied. */
+    target?: "tech" | "planet";
+    planet?: string;
+    planetName?: string;
+    tile?: string | null;
+    tileName?: string | null;
+    /** ground_hit: the opposing unit (async id, "damaged"/"galvanized" suffixes) and its color; choice = the ability. */
+    unit?: string;
+    color?: string;
+    choice?: string;
+    unitUpgradeOnly?: boolean;
+  }
+>;
+
+export type ComponentsDecision = ChooseDecision | ComponentAction | RelicUse | LeaderAgent | TechStep;
 
 export const COMPONENT_KINDS: ReadonlySet<string> = new Set([
   "choose.planet",
@@ -147,4 +179,5 @@ export const COMPONENT_KINDS: ReadonlySet<string> = new Set([
   "component.action",
   "relic.use",
   "leader.agent",
+  "tech.step",
 ]);

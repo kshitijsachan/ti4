@@ -10,7 +10,13 @@
  *  - leader.agent: the "who uses the agent" menu → ourselves, else the first; optional "use agent" offers → decline.
  *  - choose.confirm: yes (Silver Flame: take the point); choose.amount (commodities): convert when we hold enough,
  *    else gain; choose.planet: Stellar Converter on someone else's planet, Nano-Forge on one of ours, else first;
- *    choose.player: someone other than us; choose.card/system/unit: the first offered.
+ *    choose.player: someone other than us; choose.card/system/unit: the first offered; JR-XS455-O: a PDS, else
+ *    the trade good.
+ *  - tech.step: free gains are taken (Graviton / Bio-Stims / Magen / Dacxive offers, Bio-Stims readies a planet
+ *    first, the ground hit kills infantry first, Sling Relay / Self-Assembly take the first place, "Get a
+ *    Technology" is pressed, Entropic Scar takes a faction tech when we hold a strategy token); anything that would
+ *    spend resources or open a plan we do not make (Transit Diodes, Integrated Economy, Predictive Intelligence,
+ *    Psychoarchaeology, other exhaust offers) is declined.
  */
 import type {
   ChooseAmount,
@@ -21,6 +27,7 @@ import type {
   ComponentsDecision,
   LeaderAgent,
   RelicUse,
+  TechStep,
 } from "../kinds/components.js";
 import { COMPONENT_KINDS } from "../kinds/components.js";
 import { optionsFor, type Decision, type GameState, type Option, type PlayerState } from "../types.js";
@@ -53,6 +60,9 @@ export function chooseComponents(d: ComponentsDecision, state: GameState | null,
       return leaderAgent(typed as Live<LeaderAgent["options"][number]["value"]>, untyped.length > 0, self, pick) ?? decline("keep the agent ready");
     case "choose.confirm": {
       const t = typed as Live<ChooseConfirm["options"][number]["value"]>;
+      if (t[0]?.value!.source === "jrxs455o") {
+        return pick(t.find((o) => o.value!.choice === "pds") ?? t.find((o) => o.value!.choice === "tg") ?? t[0], "JR-XS455-O: a PDS, else a trade good") ?? decline("none");
+      }
       return (
         pick(t.find((o) => o.value!.confirm && o.value!.choice === "Point"), "take the point") ??
         pick(t.find((o) => o.value!.confirm), `use ${t[0]?.value?.source ?? ""}`) ??
@@ -95,6 +105,8 @@ export function chooseComponents(d: ComponentsDecision, state: GameState | null,
     case "choose.system":
     case "choose.unit":
       return pick(typed[0], "first offered") ?? decline("none");
+    case "tech.step":
+      return techStep(typed as Live<TechStep["options"][number]["value"]>, self, pick) ?? decline("not worth it now");
     default:
       return null;
   }
@@ -128,4 +140,33 @@ function leaderAgent(
   }
   if (!hasDecline) return pick(t[0], "agent: only choice");
   return null;
+}
+
+/** Exhaust offers worth taking with no planning: free effects. */
+const FREE_EXHAUSTS = new Set(["gls", "bs"]);
+
+function techStep(t: Live<TechStep["options"][number]["value"]>, self: PlayerState | undefined, pick: Pick): ComponentsChoice | null {
+  const v = t[0]?.value;
+  if (!v) return null;
+  switch (v.step) {
+    case "exhaust":
+      return pick(t.find((o) => FREE_EXHAUSTS.has(o.value!.source)), `exhaust ${t.find((o) => FREE_EXHAUSTS.has(o.value!.source))?.value?.techName ?? "tech"}`);
+    case "ready":
+      return pick(t.find((o) => o.value!.target === "planet") ?? t[0], "Bio-Stims: ready a planet (else a technology)");
+    case "target":
+      return pick(t.find((o) => /^infantry$/.test(o.value!.unit ?? "")) ?? t.find((o) => !/damaged/.test(o.value!.unit ?? "")) ?? t[0], "hit: infantry first");
+    case "system":
+    case "planet":
+      return pick(t[0], `${v.techName ?? v.source}: first offered`);
+    case "use":
+      // Magen Defense Grid hit, Dacxive Animators infantry: free. Integrated Economy production: not planned.
+      return v.source === "ie" ? null : pick(t[0], `use ${v.techName ?? v.source}`);
+    case "research":
+      return pick(t[0], "get a technology");
+    case "gain":
+      return (self?.commandTokens?.strategy ?? 0) > 0 ? pick(t[0], "Entropic Scar: gain a faction technology") : null;
+    default:
+      // destination (Transit Diodes), open / exhaust_planet (Psychoarchaeology): decline.
+      return null;
+  }
 }

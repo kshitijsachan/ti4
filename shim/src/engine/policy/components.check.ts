@@ -42,6 +42,19 @@ assert.equal(pick(base("choose.planet", [opt("theirs", { source: "nanoforge", pl
 assert.equal(pick(base("choose.player", [opt("h", { source: "quantum_entangler", faction: "hacan" }), opt("s", { source: "quantum_entangler", faction: "sol" })])), "s");
 assert.equal(pick(base("choose.confirm", [opt("p", { source: "thesilverflame", confirm: true, choice: "Purge" }), opt("q", { source: "thesilverflame", confirm: true, choice: "Point" })])), "q");
 assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card", position: 1 }), opt("x", null)])), "one");
+// tech.step: free offers taken, costly ones declined; always an answer.
+assert.equal(pick(base("tech.step", [opt("g", { source: "gls", step: "exhaust", tech: "gls" }), opt("no", null)])), "g");
+assert.equal(pick(base("tech.step", [opt("t", { source: "td", step: "exhaust", tech: "td" }), opt("no", null)])), "no");
+assert.equal(pick(base("tech.step", [opt("t", { source: "pi", step: "exhaust", tech: "pi" })])), "t");
+assert.equal(pick(base("tech.step", [opt("t", { source: "bs", step: "ready", target: "tech", tech: "aida" }), opt("p", { source: "bs", step: "ready", target: "planet", planet: "arretze" })])), "p");
+assert.equal(pick(base("tech.step", [opt("m", { source: "ground_hit", step: "target", unit: "mech" }), opt("i", { source: "ground_hit", step: "target", unit: "infantry" })])), "i");
+assert.equal(pick(base("tech.step", [opt("ie", { source: "ie", step: "use", planet: "jord" }), opt("no", null)])), "no");
+assert.equal(pick(base("tech.step", [opt("d", { source: "dxa", step: "use", planet: "jord" }), opt("no", null)])), "d");
+assert.equal(pick(base("tech.step", [opt("p", { source: "pa", step: "exhaust_planet", planet: "arretze" }), opt("no", null)])), "no");
+assert.equal(pick(base("tech.step", [opt("r", { source: "research", step: "research", unitUpgradeOnly: false }), opt("no", null)])), "r");
+assert.equal(pick(base("tech.step", [opt("s", { source: "sr", step: "system", tile: "101" }), opt("s2", { source: "sr", step: "system", tile: "102" })])), "s");
+assert.equal(pick(base("tech.step", [opt("e", { source: "entropicscar", step: "gain", tech: "lgf" }), opt("no", null)])), "no");
+assert.equal(pick(base("choose.confirm", [opt("sd", { source: "jrxs455o", confirm: true, choice: "sd" }), opt("pds", { source: "jrxs455o", confirm: true, choice: "pds" }), opt("tg", { source: "jrxs455o", confirm: true, choice: "tg" })])), "pds");
 // Always answers when only untyped options remain; never answers someone else's prompt.
 assert.equal(pick(base("choose.system", [opt("x", null)])), "x");
 assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card" })], { target: { userId: "u2", faction: "sol", color: "red", resolvedBy: "owner_prefix" } })), undefined);

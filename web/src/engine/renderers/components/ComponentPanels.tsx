@@ -6,6 +6,7 @@ import type {
   ComponentAction,
   LeaderAgent,
   RelicUse,
+  TechStep,
 } from "../../../../../shim/src/engine/kinds/components";
 import type { GameState, Option } from "../../../../../shim/src/engine/types";
 import classes from "./components.module.css";
@@ -39,6 +40,12 @@ const SOURCE_NAMES: Record<string, string> = {
   heartofixth: "Heart of Ixth",
   thesilverflame: "The Silver Flame",
   throne_of_the_false_emperor: "Throne of the False Emperor",
+  thesilverflame_bam: "Become a Martyr",
+  jrxs455o: "JR-XS455-O",
+  industrex: "Industrex",
+  research: "Research a technology",
+  entropicscar: "Entropic Scar",
+  ground_hit: "Hit an opposing ground force",
 };
 
 export const sourceName = (s: string | undefined | null) =>
@@ -113,6 +120,8 @@ function cardText(a: Record<string, unknown>): string {
   return str(a.card) || str(a.choice);
 }
 
+const JR_CHOICES: Record<string, string> = { sd: "Place a space dock", pds: "Place a PDS", monument: "Place a monument", tg: "Gain 1 trade good" };
+
 /** One line for a typed choose.* option, from its value only. */
 function chooseText(kind: string, v: ChooseValue, state: GameState | null): string {
   const a = v as unknown as Record<string, unknown>;
@@ -131,7 +140,7 @@ function chooseText(kind: string, v: ChooseValue, state: GameState | null): stri
     case "choose.card":
       return cardText(a);
     case "choose.confirm":
-      return str(a.choice) || (a.confirm ? "Yes" : "No");
+      return (a.source === "jrxs455o" && JR_CHOICES[str(a.choice)]) || str(a.choice) || (a.confirm ? "Yes" : "No");
     default:
       return "";
   }
@@ -265,6 +274,53 @@ export function LeaderAgentPanel({ decision, state, answer, pendingOptionId }: R
         ))}
       </div>
       <Rest options={decision.options as Option<unknown>[]} pendingOptionId={pendingOptionId} answer={answer} />
+    </div>
+  );
+}
+
+type TechStepValue = NonNullable<TechStep["options"][number]["value"]>;
+
+/** One line for a tech.step option, from its value only. */
+function techStepText(v: TechStepValue): string {
+  const where = str(v.planetName) || str(v.planet) || str(v.tileName) || str(v.tile);
+  switch (v.step) {
+    case "exhaust":
+      return `Exhaust ${str(v.techName) || str(v.tech)}`;
+    case "ready":
+      return `Ready ${v.target === "tech" ? str(v.targetTechName) || str(v.tech) : where}`;
+    case "target":
+      return `${cap(str(v.unit).replace(/(damaged|galvanized)/g, " ($1)"))}${v.color ? ` (${str(v.color)})` : ""}`;
+    case "use":
+      return `Use ${str(v.techName) || sourceName(v.source)}${where ? ` on ${where}` : ""}`;
+    case "open":
+      return `Use ${str(v.techName) || sourceName(v.source)}`;
+    case "exhaust_planet":
+      return `Exhaust ${where} for 1 trade good`;
+    case "research":
+      return v.unitUpgradeOnly ? "Research a unit upgrade" : "Research a technology";
+    case "gain":
+      return `Gain ${str(v.targetTechName) || str(v.tech)}`;
+    default:
+      return where || str(v.techName) || str(v.source);
+  }
+}
+
+/** A generic technology's follow-up step: heading from the tech, one button per typed option, then Decline/Done. */
+export function TechStepPanel({ decision, answer, pendingOptionId }: RendererProps<TechStep>) {
+  const opts = decision.options;
+  const typed = opts.filter((o) => o.value);
+  const names = [...new Set(typed.map((o) => (o.value!.step === "exhaust" ? "" : str(o.value!.techName) || sourceName(o.value!.source))))].filter(Boolean);
+  return (
+    <div className={classes.root}>
+      <div className={classes.heading}>{names.length === 1 ? names[0] : "Technology"}</div>
+      <div className={classes.row}>
+        {typed.map((o) => (
+          <Choice key={o.id} option={o} pendingOptionId={pendingOptionId} answer={answer}>
+            {techStepText(o.value!)}
+          </Choice>
+        ))}
+      </div>
+      <Rest options={opts as Option<unknown>[]} pendingOptionId={pendingOptionId} answer={answer} />
     </div>
   );
 }
