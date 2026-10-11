@@ -13,6 +13,7 @@ import type {
   TeVisionaria,
 } from "../../../../../shim/src/engine/kinds/te";
 import classes from "./Te.module.css";
+import { playerLabel } from "../../names";
 
 export type TeRendererProps<D extends Decision = Decision> = {
   decision: D;
@@ -245,7 +246,7 @@ export function Expedition({ decision, state, answer }: TeRendererProps<TeExpedi
 export function PlaceThundersEdge({ decision, state, answer }: TeRendererProps<TePlaceThundersEdge>) {
   const opts = live(decision).filter((o) => o.value);
   const step = opts[0]?.value?.step ?? "start";
-  const factionName = (f: string) => state?.players.find((p) => p.faction === f)?.userName ?? f;
+  const factionName = (f: string) => playerLabel(state, f);
   const title = step === "infantry" ? "Who places infantry on it?" : step === "system" ? "Choose its system" : "Place Thunder's Edge";
   return (
     <div className={classes.stack}>

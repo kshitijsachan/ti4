@@ -1,9 +1,9 @@
-import { useState } from "react";
 import cx from "clsx";
 import { getTechData } from "@/entities/lookup/tech";
 import { Choice, ErrorLine, useAnswer } from "./parts";
 import type { Renderer } from "./types";
 import classes from "./Setup.module.css";
+import { useDecisionState } from "../../draftState";
 
 const TYPE_CLASS: Record<string, string | undefined> = {
   PROPULSION: classes.tech_propulsion,
@@ -23,7 +23,7 @@ function TechDot({ type }: { type: string | undefined }) {
 /** Gain a technology: the cards by id, text on selection. Starting technologies are free. */
 export const TechGainRenderer: Renderer<"tech.gain"> = ({ decision, state, answer }) => {
   const { pending, error, press } = useAnswer(answer);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useDecisionState<string | null>(decision.id, "selected", null);
   const owned = new Set(state?.players.find((p) => p.self)?.techs ?? []);
   const options = decision.options.filter((o) => o.value);
   const extra = decision.options.filter((o) => !o.value);

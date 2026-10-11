@@ -92,7 +92,7 @@ type Props = {
   talkUnread: number;
   incomingTrades: number;
   /** Decisions waiting on me from the engine stream; replaces the legacy prompt detection when given. */
-  waiting?: { count: number; title: string | null };
+  waiting?: { count: number; title: string | null; note?: string | null };
 };
 
 /** The table's header, one quiet line: which game, where we are in it, whose move it is, and a few icons. */
@@ -117,7 +117,7 @@ export function TopBar({
   const legacySetup = useSetupWaiting(gameName);
   const waitingOnMe = waiting ? waiting.count : legacyCount;
   const firstDecision = waiting ? waiting.title : legacyTitle;
-  const setup = waiting ? null : legacySetup;
+  const setup = waiting ? (waiting.note ? { text: waiting.note, me: false } : null) : legacySetup;
   /* A decision of mine is up (setup, agenda, a follow…): the table waits on me even when it is nobody's turn. */
   const myMove = turn.mine || waitingOnMe > 0 || !!setup?.me;
   let turnText = "";
