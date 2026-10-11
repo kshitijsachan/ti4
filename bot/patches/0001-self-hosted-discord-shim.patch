@@ -86,9 +86,18 @@ index d91d9d5..50e3842 100644
  
              generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
 diff --git a/src/main/java/ti4/helpers/ButtonHelper.java b/src/main/java/ti4/helpers/ButtonHelper.java
-index d4c34fb..351bbd1 100644
+index d4c34fb..9f83263 100644
 --- a/src/main/java/ti4/helpers/ButtonHelper.java
 +++ b/src/main/java/ti4/helpers/ButtonHelper.java
+@@ -4817,7 +4817,7 @@ public class ButtonHelper {
+         return buttons;
+     }
+ 
+-    @ButtonHandler("buttonID.startsWith")
++    @ButtonHandler("specialRex_") // was the literal "buttonID.startsWith": unreachable
+     public static void resolveSpecialRex(Player player, Game game, String buttonID, ButtonInteractionEvent event) {
+         String planet = buttonID.split("_")[1];
+         String faction = buttonID.split("_")[2];
 @@ -5052,7 +5052,11 @@ public class ButtonHelper {
          // Expeditions
          String expeditionText = game.getExpeditions().getTopLevelExpeditionButtonText();
@@ -343,10 +352,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..6d0c8d6
+index 0000000..9bc523d
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,145 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.Collections;
@@ -425,6 +434,12 @@ index 0000000..6d0c8d6
 +        if ("player".equals(d.scope()) && d.target() != null && d.target().userId() != null
 +                && !d.target().userId().equals(userId))
 +            return fail("forbidden", "That decision is for someone else.", decisionId);
++        if (d.window() != null) {
++            if (!d.window().eligible().contains(userId))
++                return fail("forbidden", "You are not part of this reaction window.", decisionId);
++            if (d.window().responded().contains(userId))
++                return fail("stale", "You already responded to this window.", decisionId);
++        }
 +        Option opt = null;
 +        for (Option o : d.options()) if (o.id().equals(req.optionId())) opt = o;
 +        if (opt == null) return fail("bad_option", "No such option.", decisionId);
@@ -436,7 +451,8 @@ index 0000000..6d0c8d6
 +            String err = spec.validate(game, player, d, opt.id());
 +            if (err != null) return fail("refused", err, decisionId);
 +        }
-+        if (!inFlight.add(decisionId)) return fail("busy", "An answer to this decision is in progress.", decisionId);
++        String flightKey = "table".equals(d.scope()) ? decisionId + "|" + userId : decisionId;
++        if (!inFlight.add(flightKey)) return fail("busy", "An answer to this decision is in progress.", decisionId);
 +        long before = DecisionRegistry.currentSeq();
 +        try {
 +            DataObject interaction = mint(userId, d.source().channelId(), d.source().messageId(), opt.id());
@@ -449,7 +465,7 @@ index 0000000..6d0c8d6
 +            BotLogger.error("engine: answer " + decisionId + " / " + opt.id() + " by " + userId + " failed", e);
 +            return fail("error", String.valueOf(e.getMessage()), decisionId);
 +        } finally {
-+            inFlight.remove(decisionId);
++            inFlight.remove(flightKey);
 +        }
 +        List<Decision> opened = DecisionRegistry.openedAfter(gameName, before);
 +        return new AnswerResult(
@@ -487,10 +503,10 @@ index 0000000..6d0c8d6
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..2fef392
+index 0000000..5f9439e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,351 @@
+@@ -0,0 +1,383 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -501,7 +517,6 @@ index 0000000..2fef392
 +import java.util.Map;
 +import java.util.Objects;
 +import java.util.Set;
-+import java.util.concurrent.atomic.AtomicLong;
 +import java.util.regex.Matcher;
 +import java.util.regex.Pattern;
 +import net.dv8tion.jda.api.entities.channel.Channel;
@@ -520,6 +535,8 @@ index 0000000..2fef392
 +import ti4.logging.BotLogger;
 +import ti4.selfhost.engine.EngineModels.Decision;
 +import ti4.selfhost.engine.EngineModels.Option;
++import ti4.selfhost.engine.EngineModels.Progress;
++import ti4.selfhost.engine.EngineModels.ReactionWindow;
 +import ti4.selfhost.engine.EngineModels.Source;
 +import ti4.selfhost.engine.EngineModels.Target;
 +import ti4.service.game.GameNameService;
@@ -539,7 +556,6 @@ index 0000000..2fef392
 +    private static final Pattern HOOK_MSG = Pattern.compile(".*/webhooks/(\\d+)/([^/]+)/messages/([^/]+)$");
 +    private static final Pattern CALLBACK = Pattern.compile(".*/interactions/(\\d+)/([^/]+)/callback$");
 +    private static final Pattern MENTION = Pattern.compile("<@!?(\\d+)>");
-+    private static final AtomicLong REV = new AtomicLong();
 +
 +    @Override
 +    public Response intercept(Chain chain) throws IOException {
@@ -619,6 +635,14 @@ index 0000000..2fef392
 +        }
 +        Game game = gameForChannel(channelId);
 +        if (game == null) return;
++        Decision d = build(game, msg, controls, interactionToken);
++        if (d != null) DecisionRegistry.open(d);
++    }
++
++    /** Message → Decision for a known game; null when it equals the open revision. Pure apart from reading Game. */
++    static Decision build(Game game, DataObject msg, List<RawControl> controls, String interactionToken) {
++        String messageId = msg.getString("id");
++        String channelId = msg.getString("channel_id", null);
 +        boolean ephemeral = (msg.getInt("flags", 0) & 64) != 0;
 +        String content = msg.getString("content", "");
 +
@@ -662,17 +686,32 @@ index 0000000..2fef392
 +                    value));
 +        }
 +        String visibility = ephemeral || isPrivateChannel(game, channelId) ? "private" : "public";
-+        String scope = spec != null ? spec.scope(ctx) : (target == null || target.userId() == null ? "table" : "player");
++        ReactionWindow window = null;
++        Progress progress = null;
++        if (spec != null) {
++            try {
++                window = spec.window(ctx);
++                progress = spec.progress(ctx);
++            } catch (Exception e) {
++                BotLogger.error("engine: kind " + spec.kind() + " failed to build window/progress", e);
++            }
++        }
++        String scope = window != null
++                ? "table"
++                : spec != null ? spec.scope(ctx) : (target == null || target.userId() == null ? "table" : "player");
 +        String prefix = commonPrefix(handlerIds);
 +
 +        Decision existing = byIdOrNull(DecisionRegistry.decisionIdForMessage(messageId));
 +        if (existing != null
 +                && Objects.equals(existing.target(), target)
 +                && sameOptions(existing.options(), options)
-+                && Objects.equals(existing.prompt(), content)) return;
++                && Objects.equals(existing.prompt(), content)
++                && Objects.equals(existing.window(), window)
++                && Objects.equals(existing.progress(), progress)) return null;
 +
++        // Stable per message: an edit in place (multi-step prompts) is the same decision, revision+1.
 +        Decision d = new Decision(
-+                "d" + messageId + "-" + REV.incrementAndGet(),
++                "d" + messageId,
 +                game.getName(),
 +                spec == null ? DecisionKinds.LEGACY : spec.kind(),
 +                0,
@@ -683,8 +722,17 @@ index 0000000..2fef392
 +                content,
 +                options,
 +                new Source(channelId, messageId, prefix, ephemeral),
-+                System.currentTimeMillis());
-+        DecisionRegistry.open(d);
++                existing != null ? existing.createdAt() : System.currentTimeMillis(),
++                0,
++                window,
++                progress);
++        return d;
++    }
++
++    static List<RawControl> controls(DataObject msg) {
++        List<RawControl> controls = new ArrayList<>();
++        if (msg.hasKey("components") && !msg.isNull("components")) collect(msg.getArray("components"), controls);
++        return controls;
 +    }
 +
 +    private static Decision byIdOrNull(String id) {
@@ -844,16 +892,18 @@ index 0000000..2fef392
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionKinds.java b/src/main/java/ti4/selfhost/engine/DecisionKinds.java
 new file mode 100644
-index 0000000..9712c94
+index 0000000..f7eedb8
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionKinds.java
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,69 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
 +import java.util.Comparator;
 +import java.util.List;
 +import org.reflections.Reflections;
++import org.reflections.scanners.Scanners;
++import org.reflections.scanners.SubTypesScanner;
 +import org.reflections.util.ClasspathHelper;
 +import org.reflections.util.ConfigurationBuilder;
 +import ti4.logging.BotLogger;
@@ -873,10 +923,14 @@ index 0000000..9712c94
 +            if (specs != null) return specs;
 +            List<KindSpec> found = new ArrayList<>();
 +            try {
++                // Same scan as AnnotationHandler.getAllClasses (known to work for the deployed -jar layout).
 +                Reflections r = new Reflections(new ConfigurationBuilder()
-+                        .setUrls(ClasspathHelper.forPackage("ti4.selfhost.engine.kinds"))
-+                        .forPackages("ti4.selfhost.engine.kinds"));
-+                for (Class<? extends KindSpec> c : r.getSubTypesOf(KindSpec.class)) {
++                        .setUrls(ClasspathHelper.forJavaClassPath())
++                        .setScanners(new SubTypesScanner(false)));
++                for (Class<?> raw : r.get(Scanners.SubTypes.of(Object.class).asClass())) {
++                    if (!KindSpec.class.isAssignableFrom(raw)) continue;
++                    @SuppressWarnings("unchecked")
++                    Class<? extends KindSpec> c = (Class<? extends KindSpec>) raw;
 +                    if (c.isInterface() || java.lang.reflect.Modifier.isAbstract(c.getModifiers())) continue;
 +                    if (!c.getPackageName().startsWith("ti4.selfhost.engine.kinds")) continue;
 +                    try {
@@ -913,10 +967,10 @@ index 0000000..9712c94
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionRegistry.java b/src/main/java/ti4/selfhost/engine/DecisionRegistry.java
 new file mode 100644
-index 0000000..a1cb5ca
+index 0000000..dcb3e09
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionRegistry.java
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,157 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayDeque;
@@ -957,11 +1011,22 @@ index 0000000..a1cb5ca
 +    /** Opens (or replaces the open revision on the same message with) a decision. Returns the stored decision. */
 +    // Listeners are called under the registry lock so they see events in seq order; they must not block
 +    // (the stream endpoint only enqueues).
++
++    /**
++     * Opens a decision, or — when the same message already has an open decision with the same id — replaces it in
++     * place (revision+1, event decision.updated). A different decision on the message closes the old one.
++     */
 +    public static synchronized Decision open(Decision d) {
-+        String prev = byMessage.get(d.source().messageId());
-+        if (prev != null) closeLocked(prev, "replaced");
-+        d = new Decision(d.id(), d.game(), d.kind(), ++seq, d.stateVersion(), d.target(), d.scope(), d.visibility(),
-+                d.prompt(), d.options(), d.source(), d.createdAt());
++        String prevId = byMessage.get(d.source().messageId());
++        Decision prev = prevId == null ? null : get(prevId);
++        if (prev != null && prev.id().equals(d.id()) && prev.game().equals(d.game())) {
++            d = d.withSeq(++seq, prev.revision() + 1);
++            open.get(d.game()).put(d.id(), d);
++            fire(append(new EngineEvent(d.seq(), "decision.updated", d.game(), d.stateVersion(), d, null)));
++            return d;
++        }
++        if (prevId != null) closeLocked(prevId, "replaced");
++        d = d.withSeq(++seq, 1);
 +        open.computeIfAbsent(d.game(), g -> new ConcurrentHashMap<>()).put(d.id(), d);
 +        byMessage.put(d.source().messageId(), d.id());
 +        gameOfDecision.put(d.id(), d.game());
@@ -969,12 +1034,12 @@ index 0000000..a1cb5ca
 +        return d;
 +    }
 +
-+    /** Replaces an open decision in place (same id), e.g. a new target; emits decision.updated. */
++    /** Replaces an open decision in place (same id), e.g. a new target or window; emits decision.updated. */
 +    public static synchronized Decision update(Decision d) {
 +        Map<String, Decision> m = open.get(d.game());
-+        if (m == null || !m.containsKey(d.id())) return null;
-+        d = new Decision(d.id(), d.game(), d.kind(), ++seq, d.stateVersion(), d.target(), d.scope(), d.visibility(),
-+                d.prompt(), d.options(), d.source(), d.createdAt());
++        Decision prev = m == null ? null : m.get(d.id());
++        if (prev == null) return null;
++        d = d.withSeq(++seq, prev.revision() + 1);
 +        m.put(d.id(), d);
 +        fire(append(new EngineEvent(d.seq(), "decision.updated", d.game(), d.stateVersion(), d, null)));
 +        return d;
@@ -1065,10 +1130,10 @@ index 0000000..a1cb5ca
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..9cbf38d
+index 0000000..295ddf5
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,66 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.Objects;
@@ -1076,7 +1141,10 @@ index 0000000..9cbf38d
 +import ti4.game.Game;
 +import ti4.logging.BotLogger;
 +import ti4.selfhost.SelfHosted;
++import ti4.game.Player;
 +import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Progress;
++import ti4.selfhost.engine.EngineModels.ReactionWindow;
 +import ti4.selfhost.engine.EngineModels.Target;
 +
 +/**
@@ -1111,19 +1179,24 @@ index 0000000..9cbf38d
 +        }
 +    }
 +
-+    /** Kinds with a dynamic target (e.g. draft turn) are re-resolved after each state change. */
++    /** Kinds that are dynamic() get target / window / progress recomputed after each state change. */
 +    private static void retarget(Game game) {
 +        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
 +            KindSpec spec = DecisionKinds.byKind(d.kind());
-+            if (spec == null || !spec.dynamicTarget()) continue;
++            if (spec == null || !spec.dynamic()) continue;
++            Player p = d.target() == null || d.target().userId() == null ? null : game.getPlayer(d.target().userId());
 +            KindSpec.CaptureContext ctx = new KindSpec.CaptureContext(
 +                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(),
-+                    d.target(), null);
++                    d.target(), p);
 +            Target t = spec.target(ctx, d.target());
-+            if (Objects.equals(t, d.target())) continue;
-+            DecisionRegistry.update(new Decision(
-+                    d.id(), d.game(), d.kind(), 0, game.getLastModifiedDate(), t, d.scope(), d.visibility(),
-+                    d.prompt(), d.options(), d.source(), d.createdAt()));
++            Player tp = t == null || t.userId() == null ? null : game.getPlayer(t.userId());
++            ctx = new KindSpec.CaptureContext(
++                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(), t, tp);
++            ReactionWindow w = spec.window(ctx);
++            Progress pr = spec.progress(ctx);
++            if (Objects.equals(t, d.target()) && Objects.equals(w, d.window()) && Objects.equals(pr, d.progress()))
++                continue;
++            DecisionRegistry.update(d.withDynamic(game.getLastModifiedDate(), t, w, pr));
 +        }
 +    }
 +}
@@ -1350,10 +1423,10 @@ index 0000000..e424c03
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineModels.java b/src/main/java/ti4/selfhost/engine/EngineModels.java
 new file mode 100644
-index 0000000..d5fe6d2
+index 0000000..a95256d
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineModels.java
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,201 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -1447,6 +1520,7 @@ index 0000000..d5fe6d2
 +     * closed when it is deleted, its components removed, or it is answered.
 +     */
 +    public record Decision(
++            /** Stable for the life of the prompt message (edits in place keep the id; see revision). */
 +            String id,
 +            String game,
 +            /** Discriminant: "legacy" or a typed kind such as "strategy_card.pick". See DecisionKinds. */
@@ -1462,7 +1536,53 @@ index 0000000..d5fe6d2
 +            String prompt,
 +            List<Option> options,
 +            Source source,
-+            long createdAt) {}
++            long createdAt,
++            /** Increments each time the prompt changes (edit in place, new target, window/progress change). */
++            int revision,
++            /** Set for "everyone answers in parallel" prompts (scope table); null otherwise. */
++            ReactionWindow window,
++            /** Set for multi-step prompts that accumulate choices before committing; null otherwise. */
++            Progress progress) {
++
++        public Decision withSeq(long newSeq, int newRevision) {
++            return new Decision(id, game, kind, newSeq, stateVersion, target, scope, visibility, prompt, options,
++                    source, createdAt, newRevision, window, progress);
++        }
++
++        public Decision withDynamic(long newStateVersion, Target newTarget, ReactionWindow newWindow, Progress newProgress) {
++            return new Decision(id, game, kind, seq, newStateVersion, newTarget, scope, visibility, prompt, options,
++                    source, createdAt, revision, newWindow, newProgress);
++        }
++    }
++
++    /**
++     * A reaction window: every eligible player answers (in parallel, any order); it is over when everyone eligible
++     * has responded (the engine then closes the decision). kind: "follow" (strategy card secondary), "when",
++     * "after", "sabotage", "vote", "pre_vote", "trade_follow", ... (area-defined, document new ones in types.ts).
++     * subject: what the window is about, e.g. {"strategyCard": 5} or {"actionCard": "ac_id", "player": uid}.
++     * responses: optional per-player answer summaries, e.g. uid → "followed" / "passed" / "3 votes for Against".
++     */
++    public record ReactionWindow(
++            String kind,
++            Map<String, Object> subject,
++            List<String> eligible,
++            List<String> responded,
++            Map<String, String> responses) {}
++
++    /**
++     * Sub-step state of a multi-step decision (movement, landing, hit assignment, payment, agenda voting, when/after
++     * queues): what has been chosen so far and what is left, derived by the kind from engine state (stored values,
++     * the game), never from message text — so it survives reloads and restarts. step: the current sub-step name
++     * ("select_units", "select_planets", "confirm", ...). accumulated: the typed running selection (e.g.
++     * {"units": [...], "spent": {"planets": [...], "tg": 2}, "votes": 7}). required: what is still needed, e.g.
++     * {"hits": 2} or {"resources": 3}. canCommit: the "Done"/"Confirm" option is meaningful now.
++     */
++    public record Progress(
++            String flow,
++            String step,
++            Map<String, Object> accumulated,
++            Map<String, Object> required,
++            boolean canCommit) {}
 +
 +    /**
 +     * userId null when nobody specific is targeted. resolvedBy says how the engine knows: owner_prefix (FFCC_),
@@ -1593,10 +1713,10 @@ index 0000000..42e2f9a
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/KindSpec.java b/src/main/java/ti4/selfhost/engine/KindSpec.java
 new file mode 100644
-index 0000000..e7d6b20
+index 0000000..7267848
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/KindSpec.java
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,89 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.Map;
@@ -1633,15 +1753,34 @@ index 0000000..e7d6b20
 +
 +    /**
 +     * Override the target the generic resolver found (e.g. the draft's current player). Also called again after
-+     * every state change while the decision is open when {@link #dynamicTarget()} is true.
++     * every state change while the decision is open when {@link #dynamic()} is true.
 +     */
 +    @Nullable
 +    default Target target(CaptureContext ctx, @Nullable Target resolved) {
 +        return resolved;
 +    }
 +
-+    default boolean dynamicTarget() {
++    /**
++     * True when target / window / progress move with game state: they are recomputed after every state change while
++     * the decision is open (emitting decision.updated when they change).
++     */
++    default boolean dynamic() {
 +        return false;
++    }
++
++    /**
++     * Reaction window for "everyone answers" prompts: eligible players and who has responded, from engine state
++     * (stored values etc.). When set, scope is "table" and an answer is accepted from each eligible player once.
++     */
++    @Nullable
++    default EngineModels.ReactionWindow window(CaptureContext ctx) {
++        return null;
++    }
++
++    /** Sub-step state for multi-step prompts edited in place (see EngineModels.Progress). */
++    @Nullable
++    default EngineModels.Progress progress(CaptureContext ctx) {
++        return null;
 +    }
 +
 +    /** "player" (only the target answers) or "table" (any seated player answers for themself). */
@@ -1850,7 +1989,7 @@ index 0000000..d2b118c
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
 new file mode 100644
-index 0000000..0f9f665
+index 0000000..e71d8e9
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
 @@ -0,0 +1,78 @@
@@ -1904,7 +2043,7 @@ index 0000000..0f9f665
 +    }
 +
 +    @Override
-+    public boolean dynamicTarget() {
++    public boolean dynamic() {
 +        return true;
 +    }
 +
