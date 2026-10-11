@@ -102,6 +102,8 @@ export function pressOutcome(m: Message | undefined, customId: string, values?: 
   const choices = choicesOf(m);
   const choice = choices.find((c) => c.customId === customId);
   const id = baseId(customId);
+  /* Utilities (refresh, show map, player settings) change nothing in the game: no note. */
+  if (choice?.rank === "more") return undefined;
 
   const noFollow = id.match(NO_FOLLOW);
   if (noFollow) {
