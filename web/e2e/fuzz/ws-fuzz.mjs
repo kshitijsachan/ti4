@@ -97,7 +97,7 @@ const errTail = new BotErrorTail(game);
 
 // ---- policy ----
 const SKIP =
-  /concede|eliminat|endGame|end_game|gameEnd|deleteGame|resign|leaveGame|kickPlayer|replacePlayer|forceAbort|startTFDraft|frankenDraft|^jmf|showGameAgain|searchMyGames|getStarted|newGame|createGame|offerPlayerPref|playerPref_|notepad|^setupStep|startPlayerSetup|^frankenSetup|^setupBaseGameMode|^chooseExp_|^enableDaneMode|^offerTEOptionButtons|^restartAllMiltyQueue|^miltyFactionInfo|setupHomebrew|getHomebrewButtons|^gameSetup|miltySetup|^draftSetup/i;
+  /concede|eliminat|endGame|end_game|gameEnd|deleteGame|resign|leaveGame|kickPlayer|replacePlayer|forceAbort|startTFDraft|frankenDraft|^jmf|showGameAgain|searchMyGames|getStarted|newGame|createGame|offerPlayerPref|playerPref_|notepad|^setupStep|startPlayerSetup|^frankenSetup|^setupBaseGameMode|^chooseExp_|^enableDaneMode|^offerTEOptionButtons|^restartAllMiltyQueue|^miltyFactionInfo|genericModify|getModifyTiles|^modifyUnits|getDamageButtons_.*_remove|^addUnits|^removeUnits|setupHomebrew|getHomebrewButtons|^gameSetup|miltySetup|^draftSetup/i;
 // "Done" / dismiss buttons on a required prompt throw the prompt away; a human rarely does it, the fuzzer would
 // mostly dead-end the game, so they get a low weight (they are still tried).
 // Read-only info buttons (Cards Info thread, map views, refreshes) are pressed rarely: they don't move the game.
@@ -364,7 +364,7 @@ async function checkAll(after) {
   const undoSince = undoAt > undoChecked;
   undoChecked = Date.now();
   for (const v of invariantViolations(prevSnap, snap, { undoSince }))
-    rec.record({ kind: `invariant:${v.id}`, severity: v.severity, detail: `${v.player ? v.player + ": " : ""}${v.message} [round ${snap.web.gameRound} ${snap.web.gameState?.phase}; after ${after}; save: ${snap.label ?? "?"}]`, step, trace: tr() });
+    rec.record({ kind: `invariant:${v.id}`, severity: v.severity, detail: `${v.player ? v.player + ": " : ""}${v.message}`, context: `round ${snap.web.gameRound} ${snap.web.gameState?.phase}; after ${after}; last save: ${snap.label ?? "?"}`, step, trace: tr() });
   prevSnap = { ...snap, save: snap.save };
   if (snap.web.gameState?.winner || /finished/.test(snap.web.gameState?.phase ?? "")) gameOver = true;
 }

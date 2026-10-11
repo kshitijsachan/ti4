@@ -580,6 +580,7 @@ export function foldViolations() {
     md.push(`## [${v.severity ?? "error"}] ${v.tool} ${v.kind} (x${g.n}, ${g.games.size} game(s))`);
     md.push("");
     md.push(`- detail: ${String(v.detail).replace(/\n/g, " ").slice(0, 600)}`);
+    if (v.context) md.push(`- context: ${String(v.context).slice(0, 300)}`);
     md.push(`- first: ${g.first.at} ${g.first.game} seed ${g.first.seed}; last: ${v.at} ${v.game} seed ${v.seed}${v.step ? ` step ${v.step}` : ""}`);
     md.push(`- replay: \`${replayCommand(v)}\``);
     if (v.screenshot) md.push(`- screenshot: ${v.screenshot}`);
