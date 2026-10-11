@@ -123,13 +123,14 @@ export function PaymentBody(props: RendererProps) {
     return new Set(build?.sarween && sarween && purpose.key === "build" ? [sarween.key] : []);
   });
   const discount = offers.filter((o) => on.has(o.key)).reduce((n, o) => n + o.amount, 0);
-  const auto = () => suggest(planets, kind, (cost ?? 0) - spent - discount, tgMax, commMax, worth);
+  /* Spending commodities exhausts the Keleres agent: only ever by hand, never suggested. */
+  const auto = () => suggest(planets, kind, (cost ?? 0) - spent - discount, tgMax, 0, worth);
   type Picked = { planets: Set<string>; tg: number; comm: number };
   /* Follows the cost and the discounts (Suggest) until I pick something myself. */
   const suggested = useMemo<Picked>(() => {
     const s = auto();
     return { planets: new Set(s.planets), tg: s.tg, comm: s.comm };
-  }, [cost, discount, spent, planets, tgMax, commMax, worth, kind]); // auto reads exactly these
+  }, [cost, discount, spent, planets, tgMax, worth, kind]); // auto reads exactly these
   const [manual, setManual] = useState<Picked | null>(null);
   const pick = manual ?? suggested;
   const setPick = (next: Picked | ((s: Picked) => Picked)) => setManual((prev) => (typeof next === "function" ? next(prev ?? suggested) : next));
@@ -293,11 +294,11 @@ export function PaymentBody(props: RendererProps) {
       )}
       {commMax > 0 && (
         <Quantity
-          label="Commodities"
+          label="Commodities as trade goods"
           value={pick.comm}
           max={Math.min(2, commMax)}
           onChange={(n) => setPick((s) => ({ ...s, comm: n }))}
-          hint={`you have ${commMax}`}
+          hint={`exhausts your agent Xander Alexin Victori III · you have ${commMax}`}
           busy={busy}
         />
       )}
