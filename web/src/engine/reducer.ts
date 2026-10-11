@@ -52,10 +52,17 @@ function applyEvent(view: EngineView, e: EngineEvent): EngineView {
  * imports the contract's types): a reaction window while I'm eligible and haven't responded, else my own prompt.
  */
 export function awaits(d: Decision, userId: string): boolean {
+  if (AFFORDANCES.has(d.kind)) return false;
   if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
   if (d.scope === "player") return d.target?.userId === userId;
   return true;
 }
+
+/**
+ * Undo / optional / info-menu affordances (contract AFFORDANCE_KINDS): nobody is asked anything, so they are never
+ * "waiting on me" (not in myDecisions); their options still work when pressed.
+ */
+const AFFORDANCES = new Set<string>(["ui.undo_affordance", "ui.optional", "ui.info_menu"]);
 
 /** Drops in-flight / error marks of decisions that are gone. */
 function prune(view: EngineView): EngineView {
@@ -144,7 +151,14 @@ function plotPanel(d: Decision): boolean {
 
 /**
  * Optional "decide in advance" prompts that sit in a player's cards thread all round (pre-decline a strategy card,
- * pre-play an action card, queue a draft or strategy-card pick): background, like window-less table prompts (live:
+ * pre-play an action card, queue a draft or strategy-card pick, preferences): background, like window-less table prompts (live:
  * hundreds open per game).
  */
-const IN_ADVANCE = new Set<string>(["strategy_card.pre_decline", "action_card.preassign", "draft.milty.queue", "strategy_card.queue_pick"]);
+const IN_ADVANCE = new Set<string>([
+  "strategy_card.pre_decline",
+  "action_card.preassign",
+  "draft.milty.queue",
+  "strategy_card.queue_pick",
+  // Preferences (auto-pass timers, statistics opt-in…): answer any time; bots answer them at once.
+  "player.preference",
+]);

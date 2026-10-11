@@ -38,7 +38,7 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "setup.keleres_tech": "planner",
   "setup.deal_secrets": "planner",
   "setup.reveal_objectives": "planner",
-  "setup.preference": "optional",
+  "player.preference": "optional",
   "setup.game_settings": "optional",
   "tech.choose_type": "planner",
   "tech.gain": "planner",
@@ -119,6 +119,15 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   // C1-C5 factions: the faction policy answers; abilities / leaders are often optional, so fallback only when forced
   "faction.ability": "planner",
   "leader.use": "planner",
+  // C5 Thunder's Edge faction steps
+  "te.breach": "planner",
+  "te.breakthrough": "planner",
+  "te.plot": "planner",
+  // C12 perpetual prompts: affordances / info menus are never answered; select-only prompts by their policy
+  "ui.undo_affordance": "optional",
+  "ui.optional": "optional",
+  "ui.info_menu": "optional",
+  "choose.select": "planner",
 };
 
 const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);
