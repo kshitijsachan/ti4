@@ -2,7 +2,7 @@
 // Replays a recording in a fork game on the live bot and compares every save with the recorded one.
 //
 //   node tests/engine/replay.mjs tests/engine/recordings/<game>.json [--mode step|chain] [--from N] [--to M]
-//        [--fork pbdN] [--no-resync] [--stop-on-first] [--ignore key,key] [--no-web] [--out report.json] [--quiet]
+//        [--via press|engine] [--answer-legacy] [--fork pbdN] [--no-resync] [--stop-on-first] [--ignore key,key] [--no-web] [--out report.json] [--quiet]
 //
 // Every step compares the full save (all game state; volatile bookkeeping and random card handles dropped); at the
 // recording's web-data checkpoints it also compares the bot's web data (what clients render) unless --no-web.
@@ -14,6 +14,11 @@
 // random draw: Milty slices, seat colours), reordered (same items, other order: deck shuffles, hash-set order), diverged
 // (differs without dice: a determinism or rules bug), skipped (not replayable from the log: selections, modals,
 // web API calls, system saves), resync (chain: state reset to the recording), error.
+// --via engine: instead of pressing, find the engine decision the carrier opened and answer it through the engine
+//       API as the recorded presser's replay seat, then diff exactly like step mode. Extra statuses: not_typed (no typed
+//       decision: pressed like the original, its outcome in engine.legacyStatus), refused (the engine refused an answer
+//       the original code accepted: a BUG). Summary: typed coverage, typed mismatches, refusals, by kind.
+//       --answer-legacy also answers untyped (legacy) decisions through the engine.
 // The report (JSON) goes to $ENGINE_RUN_DIR/reports/<game>-<mode>.json unless --out is given.
 // Exit code 1 if any step diverged without dice.
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
@@ -46,12 +51,15 @@ const results = await replay(rec, fork, {
   stopOnFirst: argv.includes("--stop-on-first"),
   ignore: (opt("--ignore", "") || "").split(",").filter(Boolean),
   web: !argv.includes("--no-web"),
+  via: opt("--via", "press"),
+  answerLegacy: argv.includes("--answer-legacy"),
   log,
   onStep: (r) => {
     if (quiet && r.status === "match") return;
     const extra =
       r.status === "dice" ? ` dice recorded=[${(r.recordedDice ?? []).join(",")}] replay=[${(r.replayDice ?? []).join(",")}]` : r.why ? ` (${r.why})` : "";
-    console.log(`${String(r.index).padStart(4)} ${r.status.padEnd(8)} ${short(r.label)}${extra}`);
+    const e = r.engine ? ` {${r.engine.kind ?? "-"}${r.engine.legacyStatus ? `→${r.engine.legacyStatus}` : ""}${r.engine.path ? ` ${r.engine.path}` : ""}${r.status === "refused" ? `: ${short(String(r.engine.error), 120)}` : ""}}` : "";
+    console.log(`${String(r.index).padStart(4)} ${r.status.padEnd(9)} ${short(r.label.includes("[CLASSIFIED]") && r.customId ? r.label.replace("[CLASSIFIED]", r.customId) : r.label)}${e}${extra}`);
     if (r.diffs && r.status !== "match") for (const d of r.diffs.slice(0, 6)) console.log(`        ${d.key}${d.orderOnly ? " (order)" : ""}: ${short(String(d.expected), 70)}  =>  ${short(String(d.actual), 70)}`);
     if (r.webDiffs && r.status !== "match") for (const d of r.webDiffs.slice(0, 4)) console.log(`        web ${d.path}: ${short(JSON.stringify(d.expected) ?? "-", 60)}  =>  ${short(JSON.stringify(d.actual) ?? "-", 60)}`);
     if (r.status === "diverged" && r.botSaid?.length) console.log(`        bot: ${short(r.botSaid.join(" / ").replace(/\n/g, " "), 200)}`);
@@ -61,12 +69,21 @@ closeFork(fork);
 const sum = summarizeReplay(results);
 const reportDir = join(ensureRunDir(), "reports");
 mkdirSync(reportDir, { recursive: true });
-const out = opt("--out", join(reportDir, `${rec.game}-${mode}.json`));
-writeFileSync(out, JSON.stringify({ game: rec.game, mode, fork: fork.game, at: new Date().toISOString(), summary: sum, results }, null, 1));
+const via = opt("--via", "press");
+const out = opt("--out", join(reportDir, `${rec.game}-${mode}${via === "engine" ? "-engine" : ""}.json`));
+writeFileSync(out, JSON.stringify({ game: rec.game, mode, via, fork: fork.game, at: new Date().toISOString(), summary: sum, results }, null, 1));
 console.log(`\n${rec.game} ${mode}: ${JSON.stringify(sum.counts)} in ${((Date.now() - t0) / 1000).toFixed(0)}s; report ${out}`);
+if (sum.engine) {
+  const e = sum.engine;
+  console.log(`engine: typed ${e.typed}/${e.steps} (${e.typedCoverage}%); typed match ${e.typedMatch}, dice/random ${e.typedDiceOrRandom}, MISMATCH ${e.mismatches.length}, REFUSED ${e.refused.length}; legacy presses ${JSON.stringify(e.legacyOutcomes)}`);
+  console.log(`  by kind: ${JSON.stringify(e.byKind)}`);
+  for (const m of e.mismatches) console.log(`  MISMATCH ${m.index} ${m.kind} ${short(m.label, 80)}: ${m.keys.join(", ")}`);
+  for (const m of e.refused) console.log(`  REFUSED  ${m.index} ${m.kind} ${short(m.label, 80)}: ${short(String(m.error), 140)}`);
+  console.log(`  top untyped: ${e.topUntyped.map(([p, n]) => `${p}×${n}`).join(" ")}`);
+}
 if (sum.firstDivergence) {
   const d = sum.firstDivergence;
   console.log(`first divergence (no dice): save ${d.index} "${d.label}"`);
   for (const x of (d.diffs ?? []).slice(0, 10)) console.log(`   ${x.key}\n      recorded: ${short(String(x.expected), 160)}\n      replay:   ${short(String(x.actual), 160)}`);
 } else console.log("no divergence without dice");
-process.exit(sum.firstDivergence ? 1 : 0);
+process.exit(sum.firstDivergence || sum.engine?.mismatches.length || sum.engine?.refused.length ? 1 : 0);

@@ -23,11 +23,31 @@ import { recordingSaves, type Action, type Recording } from "./recording.ts";
 import { controlsOf, type ShimClient } from "./shim.ts";
 import { forkWebData, newNonce, unfork } from "./materialize.ts";
 import { diffWeb, type WebDiff } from "./webdiff.ts";
+import { answer, findDecision, type AnswerOutcome } from "./engine.ts";
 
-export type StepStatus = "match" | "dice" | "random" | "reordered" | "diverged" | "skipped" | "error" | "resync";
+export type StepStatus = "match" | "dice" | "random" | "reordered" | "diverged" | "skipped" | "error" | "resync" | "not_typed" | "refused";
+
+/** --via engine: what the engine made of the step. */
+export type EngineStep = {
+  /** decision carrying the recorded button (null: none captured) */
+  decision?: string | null;
+  kind?: string | null;
+  option?: string;
+  target?: string | null;
+  resolvedBy?: string | null;
+  /** answered through the engine (else pressed like the original) */
+  answered?: boolean;
+  /** engine answer result */
+  answerStatus?: string;
+  path?: string | null;
+  error?: string | null;
+  /** not_typed steps: the outcome of the legacy press (match / diverged / dice ...) */
+  legacyStatus?: StepStatus;
+};
 export type StepResult = {
   index: number;
   label: string;
+  customId?: string;
   kind: string;
   status: StepStatus;
   why?: string;
@@ -41,6 +61,7 @@ export type StepResult = {
   /** what the bot posted in the fork during the step (non-matching steps) */
   botSaid?: string[];
   ms?: number;
+  engine?: EngineStep;
 };
 
 /**
@@ -66,6 +87,10 @@ export type ReplayOptions = {
   ignore?: string[];
   log?: (s: string) => void;
   onStep?: (r: StepResult) => void;
+  /** "press" (default): press the recorded button. "engine": answer the engine decision carrying it instead. */
+  via?: "press" | "engine";
+  /** via engine: also answer untyped ("legacy") decisions through the engine (status stays not_typed) */
+  answerLegacy?: boolean;
 };
 
 /** Seat-mapped slash-command options (user ids of the original game -> replay seats). */
@@ -152,7 +177,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
     const a = byIndex.get(cur.index)!;
     await waitForStack(undefined, log);
     const t0 = Date.now();
-    const base: StepResult = { index: cur.index, label: a.label, kind: a.kind, status: "skipped", recordedDice: a.dice };
+    const base: StepResult = { index: cur.index, label: a.label, customId: a.customId, kind: a.kind, status: "skipped", recordedDice: a.dice };
     const map = mapFor(prev.text);
     mirrorUserSettings(map, rec.userSettings);
     const forkUser = a.user ? map.users.get(a.user.id) : undefined;
@@ -202,8 +227,27 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
         push({ ...base, status: "error", why: "the bot did not post the carrier for the button", ms: Date.now() - t0 });
         continue;
       }
+      // --via engine: find the decision the engine captured for the carrier and answer it instead of pressing.
+      let eng: EngineStep | undefined;
+      let ans: AnswerOutcome | undefined;
+      if (o.via === "engine") {
+        if (isButton && carrierMsg) {
+          const cid = mapIdsInCustomId(a.customId!, map);
+          const found = await findDecision(fork.game, cid, carrierMsg.id, 8000);
+          eng = { decision: found?.d.id ?? null, kind: found?.d.kind ?? null, option: found?.option.id, target: found?.d.target?.userId ?? null, resolvedBy: found?.d.target?.resolvedBy ?? null, answered: false };
+          if (found && (found.d.kind !== "legacy" || o.answerLegacy)) eng.answered = true;
+        } else eng = { decision: null, kind: null, answered: false, error: a.kind === "command" ? "slash command (no decision)" : "no carrier" };
+      }
       const since = latestUndo(fork.game);
       const { result: err, texts } = await capturing(client, async () => {
+        if (eng?.answered) {
+          ans = await answer(fork.game, eng.decision!, forkUser!, { optionId: eng.option });
+          eng.answerStatus = ans.status ?? String(ans.httpStatus);
+          eng.path = ans.path ?? null;
+          eng.error = ans.error ?? null;
+          const s = ans.ok ? await waitForSaves(fork.game, since) : await waitForSaves(fork.game, since, 2500);
+          return { e: ans.ok ? undefined : `engine refused (${ans.httpStatus} ${ans.status ?? ""}): ${ans.error ?? ""}`, s };
+        }
         const e = await perform(fork, map, a, forkUser!, carrierMsg);
         const s = await waitForSaves(fork.game, since);
         return { e, s };
@@ -227,6 +271,13 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
       if (diffs.length && diffs.every((d) => d.orderOnly)) status = "reordered";
       else if (diffs.length && KNOWN_RANDOM.some((r) => r.test(a.customId ?? ""))) status = "random";
       if ((diffs.length || webDiffs?.length) && (a.dice?.length || replayDice.length)) status = "dice";
+      if (eng) {
+        if (ans && !ans.ok && ans.status !== "needs_input") status = "refused";
+        else if (!eng.kind || eng.kind === "legacy") {
+          eng.legacyStatus = status;
+          status = "not_typed";
+        }
+      }
       const r: StepResult = {
         ...base,
         status,
@@ -238,6 +289,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
         botSaid: status === "match" ? undefined : texts.map((t) => t.replace(/<a?(:\w+:)\d+>/g, "$1").replace(/<@\d+>/g, "@").slice(0, 300)).slice(0, 5),
         why: err.e ? `the shim answered: ${err.e}` : err.s.saves === 0 ? "the bot saved nothing" : undefined,
         ms: Date.now() - t0,
+        engine: eng,
       };
       push(r);
       if (status !== "match" && o.mode === "chain" && o.resync !== false) {
@@ -292,5 +344,36 @@ export function summarizeReplay(results: StepResult[]) {
   for (const r of results) counts[r.status] = (counts[r.status] ?? 0) + 1;
   const firstDivergence = results.find((r) => r.status === "diverged") ?? null;
   const firstNonMatch = results.find((r) => r.status === "diverged" || r.status === "dice" || r.status === "error") ?? null;
-  return { counts, firstDivergence, firstNonMatch };
+  // --via engine: typed coverage of the recording's replayed presses, and the typed answers that disagree.
+  const viaEngine = results.filter((r) => r.engine);
+  let engine: Record<string, unknown> | undefined;
+  if (viaEngine.length) {
+    const typed = viaEngine.filter((r) => r.engine!.kind && r.engine!.kind !== "legacy");
+    const kinds: Record<string, Record<string, number>> = {};
+    for (const r of typed) {
+      const k = (kinds[r.engine!.kind!] ??= {});
+      k[r.status] = (k[r.status] ?? 0) + 1;
+    }
+    const legacy: Record<string, number> = {};
+    const untypedPrefixes: Record<string, number> = {};
+    for (const r of viaEngine.filter((r) => r.status === "not_typed")) {
+      const ls = r.engine!.legacyStatus ?? "?";
+      legacy[ls] = (legacy[ls] ?? 0) + 1;
+      const p = String(r.engine!.option ?? r.kind).replace(/^FFCC_[^_]+_/, "").split(/[_~;]/)[0];
+      untypedPrefixes[p] = (untypedPrefixes[p] ?? 0) + 1;
+    }
+    engine = {
+      steps: viaEngine.length,
+      typed: typed.length,
+      typedCoverage: Math.round((1000 * typed.length) / viaEngine.length) / 10,
+      typedMatch: typed.filter((r) => r.status === "match" || r.status === "reordered").length,
+      typedDiceOrRandom: typed.filter((r) => r.status === "dice" || r.status === "random").length,
+      mismatches: typed.filter((r) => r.status === "diverged").map((r) => ({ index: r.index, kind: r.engine!.kind, label: r.label, keys: (r.diffs ?? []).slice(0, 5).map((d) => d.key) })),
+      refused: typed.filter((r) => r.status === "refused").map((r) => ({ index: r.index, kind: r.engine!.kind, label: r.label, error: r.engine!.error })),
+      byKind: kinds,
+      legacyOutcomes: legacy,
+      topUntyped: Object.entries(untypedPrefixes).sort((x, y) => y[1] - x[1]).slice(0, 15),
+    };
+  }
+  return { counts, firstDivergence, firstNonMatch, engine };
 }
