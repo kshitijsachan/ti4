@@ -48,10 +48,14 @@ export function planUndo(points: readonly UndoPoint[], me: Me): UndoPlan {
   return points[start + 1] ? { kind: "others", point: latest } : { kind: "none" };
 }
 
-/** "Undo Tester pressed “Trade”" → "your pick of Trade" (a strategy card pick) or "you pressed “…”". */
+/** Buttons that pick something (a strategy card, a draft slice, seat or faction): undone as "you picked …". */
+const PICK_ID = /^(scPick_\d+|(?:milty|queueMilyPick|draft\w*)_(?:faction|slice|order|seat|speaker)\w*)/i;
+
+/** "Undo Tester pressed “Trade”" → "you picked Trade" (a strategy card, slice or faction pick) or "you pressed “…”". */
 export function asMine(label: string, point: UndoPoint): string {
-  const picked = /scPick_\d+/.test(point.command) ? /“(.+)”/.exec(label)?.[1] : undefined;
-  if (picked) return `your pick of ${picked}`;
+  const id = /\(([^()]*)\)\s*$/.exec(point.command)?.[1]?.replace(/^FFCC_[^_]+_/, "") ?? "";
+  const picked = PICK_ID.test(id) || /scPick_\d+/.test(point.command) ? /“(.+)”/.exec(label)?.[1] : undefined;
+  if (picked) return `you picked ${picked}`;
   const readable = readableLabel(label, point);
   return point.actor && readable.startsWith(point.actor + " ") ? `you${readable.slice(point.actor.length)}` : readable;
 }
