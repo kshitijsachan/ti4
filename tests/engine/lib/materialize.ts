@@ -4,7 +4,8 @@
  */
 import { BOT_URL, getJson, sleep, type Json } from "./env.ts";
 import { closeFork, createFork, loadSave, openFork, seatMap, type Fork } from "./fork.ts";
-import type { ForkMap } from "./savefile.ts";
+import { parseSave, type ForkMap } from "./savefile.ts";
+import { WEB_PHASES } from "./invariants.ts";
 
 /** Maps fork ids / names / game name in any JSON back to the original game's. */
 export function unfork(json: Json, fork: Fork, map: ForkMap): Json {
@@ -29,25 +30,59 @@ export async function readWebData(game: string): Promise<Json | null> {
   }
 }
 
-const stable = (w: Json | null) => (w ? JSON.stringify({ ...w, gameState: { ...w.gameState, turnStartedAt: 0 }, objectives: null }) : "");
+const sorted = (x: unknown) => JSON.stringify([...((x as unknown[]) ?? [])].map(String).sort());
+const list = (v: string | undefined) => (v ? v.split(",").map((s) => s.trim()).filter(Boolean) : []);
+
+/** Does this web data show the state of `save` (round, phase and every seat's pools, goods, planets, techs, follows)? */
+export function webShowsSave(web: Json, save: string, map: ForkMap): string | null {
+  const p = parseSave(save);
+  if (Number(web.gameRound ?? 0) !== Number(p.game.get("round") ?? 0)) return "round";
+  const ph = WEB_PHASES[String(web.gameState?.phase ?? "")];
+  const raw = p.game.get("phase_of_game") ?? "";
+  if (ph !== undefined && ph !== "finished" && ph !== "" && raw && ph.toLowerCase() !== raw.toLowerCase() && !(raw === "status" && ph === "statusScoring") && !(raw === "voting" && ph === "agendaVoting"))
+    return `phase ${ph} vs ${raw}`;
+  for (const pl of p.players) {
+    const id = map.users.get(pl.userId) ?? pl.userId;
+    const w = (web.playerData ?? []).find((x: Json) => x.discordId === id);
+    if (!w) continue;
+    const checks: [string, unknown, unknown][] = [
+      ["tg", w.tg, Number(pl.kv.get("trade_goods") ?? w.tg)],
+      ["commodities", w.commodities, Number(pl.kv.get("commodities") ?? w.commodities)],
+      ["tacticalCC", w.tacticalCC, Number(pl.kv.get("tactical_cc") ?? w.tacticalCC)],
+      ["fleetCC", w.fleetCC, Number(pl.kv.get("fleet_cc") ?? w.fleetCC)],
+      ["strategicCC", w.strategicCC, Number(pl.kv.get("strategy_cc") ?? w.strategicCC)],
+      ["followedSCs", sorted(w.followedSCs), sorted(list(pl.kv.get("followed_sc")))],
+      ["planets", sorted(w.planets), sorted(list(pl.kv.get("planets")))],
+      ["exhaustedPlanets", sorted(w.exhaustedPlanets), sorted(list(pl.kv.get("planets_exhausted")))],
+      ["techs", sorted(w.techs), sorted(list(pl.kv.get("tech")))],
+      ["passed", w.passed, pl.kv.get("passed") === "true"],
+    ];
+    for (const [k, a, b] of checks) if (JSON.stringify(a) !== JSON.stringify(b)) return `${pl.kv.get("faction")}.${k}`;
+  }
+  return null;
+}
 
 /**
- * The fork's web data once the bot has rebuilt it after a save. The bot refreshes its web-data cache asynchronously
- * after each save (GameWebStatePipeline), so: wait for the payload to differ from `before` (read before the save),
- * or, when the new state renders identically, for `settleMs` with no change.
+ * The fork's web data once the bot has rebuilt it for `save`. The bot refreshes its web-data cache asynchronously
+ * after each save (GameWebStatePipeline), so poll until the payload shows the save (webShowsSave); after `timeoutMs`
+ * the last payload is returned with `_stale` set.
  */
-export async function forkWebData(fork: Fork, before: Json | null, settleMs = 2500, timeoutMs = 10000): Promise<Json | null> {
+export async function forkWebData(fork: Fork, save: string, map: ForkMap, nonce?: string, timeoutMs = 60000): Promise<Json | null> {
   const end = Date.now() + timeoutMs;
-  const start = Date.now();
-  const was = stable(before);
   let last: Json | null = null;
+  let why: string | null = "no web data";
   while (Date.now() < end) {
     last = await readWebData(fork.game);
-    if (last && (stable(last) !== was || Date.now() - start >= settleMs)) return last;
-    await sleep(250);
+    // The bot rebuilds web data on one thread shared by every game: under load it can lag many seconds behind.
+    why = !last ? "no web data" : nonce && last.gameCustomName !== nonce ? "not rebuilt yet" : webShowsSave(last, save, map);
+    if (!why) return last;
+    await sleep(300);
   }
-  return last;
+  return last ? { ...last, _stale: why } : null;
 }
+
+let nonces = 0;
+export const newNonce = () => `replay-${Date.now().toString(36)}-${++nonces}`;
 
 /** Materializes every save (in order) and returns its web data in the original game's terms (null where it failed). */
 export async function materializeAll(
@@ -58,15 +93,23 @@ export async function materializeAll(
   const log = o.log ?? (() => {});
   const fork = o.fork ? await openFork(o.fork) : await createFork(8, log);
   const out: (Json | null)[] = [];
+  const extra = [...(o.extraChannelIds ?? [])];
   try {
     for (let i = 0; i < saves.length; i++) {
       const map = seatMap(fork, saves[i], o.usernames);
-      if (o.extraChannelIds) for (const id of o.extraChannelIds) map.otherChannelIds!.add(id);
+      for (const id of extra) map.otherChannelIds!.add(id);
       try {
-        const before = await readWebData(fork.game);
-        await loadSave(fork, saves[i], map);
-        const web = await forkWebData(fork, before);
-        out.push(web ? unfork(web, fork, map) : null);
+        const nonce = newNonce();
+        await loadSave(fork, saves[i], map, undefined, nonce);
+        const web = await forkWebData(fork, saves[i], map, nonce);
+        if (web?._stale) {
+          log(`${game}: save ${i + 1}/${saves.length}: web data never showed the save (${web._stale}); dropped`);
+          out.push(null);
+          continue;
+        }
+        const w = web ? unfork(web, fork, map) : null;
+        if (w) w.gameCustomName = parseSave(saves[i]).game.get("game_custom_name") ?? w.gameCustomName;
+        out.push(w);
       } catch (e) {
         log(`${game}: save ${i + 1}/${saves.length} could not be materialized: ${(e as Error).message}`);
         out.push(null);

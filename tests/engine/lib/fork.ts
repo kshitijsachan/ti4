@@ -13,9 +13,9 @@
  * pre-rewind file is written with exactly the one button to press as its saved button: the bot itself posts the
  * carrier, in the channel the button was originally pressed in.
  */
-import { readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BOT_URL, SHIM_STATE, SHIM_URL, ensureRunDir, gameFile, getJson, sleep, undoDir, undoFile, type Json } from "./env.ts";
+import { BOT_STORAGE, BOT_URL, SHIM_STATE, SHIM_URL, ensureRunDir, gameFile, getJson, sleep, undoDir, undoFile, type Json } from "./env.ts";
 import { GAME_CHANNEL_KEYS, PLAYER_CHANNEL_KEYS, isRealPlayer, parseSave, rewriteForFork, type ForkMap } from "./savefile.ts";
 import { ShimClient, controlsOf, type Msg } from "./shim.ts";
 
@@ -52,6 +52,30 @@ export async function replaySeats(): Promise<Seat[]> {
   writeFileSync(file, JSON.stringify(seats, null, 1));
   return seats;
 }
+
+/**
+ * The bot reads per-person settings (auto-pass timers, preferred colours, ...) from user_settings/<user id>.json on
+ * every use: give each replay seat the settings of the person it stands in for (or none, if they had none).
+ */
+export function mirrorUserSettings(map: ForkMap) {
+  const dir = join(BOT_STORAGE, "user_settings");
+  for (const [orig, seat] of map.users) {
+    const src = join(dir, `${orig}.json`);
+    const dst = join(dir, `${seat}.json`);
+    try {
+      if (existsSync(src)) {
+        const s = JSON.parse(readFileSync(src, "utf8"));
+        s.userId = seat;
+        writeFileSync(dst, JSON.stringify(s, null, 2));
+      } else if (existsSync(dst)) rmSync(dst);
+    } catch {
+      /* settings are best effort */
+    }
+  }
+}
+
+/** Original user ids embedded in a component id (e.g. setupStep5_<user id>_keleresm_...) -> the replay seats'. */
+export const mapIdsInCustomId = (customId: string, map: ForkMap) => customId.replace(/\d{15,20}/g, (id) => map.users.get(id) ?? id);
 
 export function undoIndexes(game: string): number[] {
   try {
@@ -220,17 +244,17 @@ export function identityMap(fork: Fork): ForkMap {
  * Loads an original save into the fork (see the file comment). With `carrier`, the bot also posts a message with that
  * one button in `carrier.channelId`; resolves with that message (for pressing it).
  */
-export async function loadSave(fork: Fork, origText: string, map: ForkMap, carrier?: Carrier): Promise<Msg | null> {
+export async function loadSave(fork: Fork, origText: string, map: ForkMap, carrier?: Carrier, nonce?: string): Promise<Msg | null> {
   const latest = latestUndo(fork.game);
   if (latest < 2) throw new Error(`fork ${fork.game} has no undo history`);
   refreshThreads(fork, map);
-  const target = rewriteForFork(origText, map, { savedButtons: "", savedMessage: "", savedChannel: fork.actionsId });
+  const target = rewriteForFork(origText, map, { savedButtons: "", savedMessage: "", savedChannel: fork.actionsId, customName: nonce });
   atomicWrite(undoFile(fork.game, latest - 1), target);
   let pre = target;
   if (carrier) {
     const label = (carrier.label || carrier.customId).replace(/[;,\n]/g, " ").trim().slice(0, 78) || "Press";
     const saved = `${carrier.faction ?? "null"};${carrier.customId.replace(/;/g, "fin66")};${label};PRIMARY`;
-    pre = rewriteForFork(origText, map, { savedButtons: saved, savedMessage: carrier.message ?? `[replay] ${label}`, savedChannel: carrier.channelId })
+    pre = rewriteForFork(origText, map, { savedButtons: saved, savedMessage: carrier.message ?? `[replay] ${label}`, savedChannel: carrier.channelId, customName: nonce })
       // generateSavedButtons skips status phases: the pre-rewind file only needs to post the carrier.
       .replace(/^phase_of_game .*status.*$/m, "phase_of_game action")
       // Game.getSavedChannel looks the id up as a thread when the stored value savedChannelType says so.

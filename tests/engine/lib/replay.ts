@@ -17,12 +17,14 @@
  */
 import { readFileSync } from "node:fs";
 import { gameFile, type Json } from "./env.ts";
-import { clientFor, identityMap, latestUndo, loadSave, seatMap, waitForSaves, type Fork } from "./fork.ts";
+import { clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves, type Fork } from "./fork.ts";
 import { diffNormalized, normalizeSave, parseSave, type ForkMap, type SaveDiff } from "./savefile.ts";
 import { recordingSaves, type Action, type Recording } from "./recording.ts";
 import { controlsOf, type ShimClient } from "./shim.ts";
+import { forkWebData, newNonce, unfork } from "./materialize.ts";
+import { diffWeb, type WebDiff } from "./webdiff.ts";
 
-export type StepStatus = "match" | "dice" | "diverged" | "skipped" | "error" | "resync";
+export type StepStatus = "match" | "dice" | "random" | "reordered" | "diverged" | "skipped" | "error" | "resync";
 export type StepResult = {
   index: number;
   label: string;
@@ -33,8 +35,21 @@ export type StepResult = {
   diffs?: SaveDiff[];
   recordedDice?: number[];
   replayDice?: number[];
+  /** a recorded web-data checkpoint was compared too */
+  webChecked?: boolean;
+  webDiffs?: WebDiff[];
+  /** what the bot posted in the fork during the step (non-matching steps) */
+  botSaid?: string[];
   ms?: number;
 };
+
+/**
+ * Actions whose outcome the bot draws at random (unseeded), besides dice. A divergence on them is "random", not a bug.
+ *   jmfA_main_startMilty            Milty slices and faction pool (MiltyRandomSetupService, Collections.shuffle)
+ *   milty_order_* / setupStep5_*    seat colour: PlayerColorService shuffles the faction's preferred colours
+ *   startOfGameObjReveal, reveal_stage_*   only when the deck must be reshuffled (Game.revealStage1Random)
+ */
+export const KNOWN_RANDOM: RegExp[] = [/^jmfA_main_startMilty$/, /^milty_order_\d+$/, /^setupStep5_/, /^milty_faction_/];
 
 const DIE = /<a?:d10(?:red|grey|green|blue|purple|gray)_(\d)\w*:\d+>/g;
 const diceOf = (text: string) => [...text.matchAll(DIE)].map((d) => (d[1] === "0" ? 10 : Number(d[1])));
@@ -45,6 +60,8 @@ export type ReplayOptions = {
   to?: number;
   resync?: boolean;
   stopOnFirst?: boolean;
+  /** compare web data at the recording's checkpoints (default true) */
+  web?: boolean;
   /** extra normalized keys to ignore, e.g. "stored.warFundingRollssol" */
   ignore?: string[];
   log?: (s: string) => void;
@@ -94,7 +111,7 @@ async function perform(fork: Fork, map: ForkMap, a: Action, forkUser: string, ca
   const c = await clientFor(fork, forkUser);
   if (a.kind === "button" || a.kind === "hidden-button") {
     if (!carrierMsg) return "no message carries the button";
-    const r = await c.click(carrierMsg.channel_id, carrierMsg.id, a.customId!);
+    const r = await c.click(carrierMsg.channel_id, carrierMsg.id, mapIdsInCustomId(a.customId!, map));
     return r.error;
   }
   if (a.kind === "command") {
@@ -115,6 +132,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
   const startPos = Math.max(0, pos(from));
   const endPos = pos(to) < 0 ? saves.length - 1 : pos(to);
   const ignore = o.ignore ?? [];
+  const webAt = new Map(rec.checkpoints.filter((c) => c.index !== "live").map((c) => [c.index as number, c.web]));
   const results: StepResult[] = [];
   const mapFor = (text: string) => {
     const m = seatMap(fork, text, usernames);
@@ -134,6 +152,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
     const t0 = Date.now();
     const base: StepResult = { index: cur.index, label: a.label, kind: a.kind, status: "skipped", recordedDice: a.dice };
     const map = mapFor(prev.text);
+    mirrorUserSettings(map);
     const forkUser = a.user ? map.users.get(a.user.id) : undefined;
     const playable = a.replayable && (a.kind === "button" || a.kind === "hidden-button" || a.kind === "command") && !!forkUser;
     if (!playable) {
@@ -157,16 +176,17 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
           fork,
           prev.text,
           map,
-          isButton ? { customId: a.customId!, label: a.buttonLabel ?? a.customId!, faction, channelId: ch.channelId, thread: ch.thread, watcher: forkUser } : undefined,
+          isButton ? { customId: mapIdsInCustomId(a.customId!, map), label: a.buttonLabel ?? a.customId!, faction, channelId: ch.channelId, thread: ch.thread, watcher: forkUser } : undefined,
+          newNonce(),
         );
         chainLoaded = true;
       } else if (isButton) {
         // Chain: press the button the bot itself posted in the fork, else reload the fork's own state with a carrier.
-        carrierMsg = latestCarrying(client, a.customId!);
+        carrierMsg = latestCarrying(client, mapIdsInCustomId(a.customId!, map));
         if (!carrierMsg) {
           const ch = carrierChannel(fork, map, a, forkUser!);
           carrierMsg = await loadSave(fork, readFileSync(gameFile(fork.game), "utf8"), identityMap(fork), {
-            customId: a.customId!,
+            customId: mapIdsInCustomId(a.customId!, map),
             label: a.buttonLabel ?? a.customId!,
             faction,
             channelId: ch.channelId,
@@ -188,20 +208,46 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
       const actual = readFileSync(gameFile(fork.game), "utf8");
       const diffs = compare(cur.text, actual, fork, map, ignore);
       const replayDice = texts.flatMap(diceOf);
-      let status: StepStatus = diffs.length ? "diverged" : "match";
-      if (diffs.length && (a.dice?.length || replayDice.length)) status = "dice";
+      // At a recorded web-data checkpoint, also compare what the web client would render.
+      let webDiffs: WebDiff[] | undefined;
+      const checkpoint = o.web === false ? undefined : webAt.get(cur.index);
+      if (checkpoint) {
+        const nonce = parseSave(actual).game.get("game_custom_name");
+        const fw = await forkWebData(fork, actual, identityMap(fork), nonce, 30000);
+        if (fw && !fw._stale) {
+          const w = unfork(fw, fork, map);
+          w.gameCustomName = checkpoint.gameCustomName;
+          webDiffs = diffWeb(checkpoint, w);
+        }
+      }
+      let status: StepStatus = diffs.length || webDiffs?.length ? "diverged" : "match";
+      if (diffs.length && diffs.every((d) => d.orderOnly)) status = "reordered";
+      else if (diffs.length && KNOWN_RANDOM.some((r) => r.test(a.customId ?? ""))) status = "random";
+      if ((diffs.length || webDiffs?.length) && (a.dice?.length || replayDice.length)) status = "dice";
       const r: StepResult = {
         ...base,
         status,
         saves: err.s.saves,
         diffs: diffs.length ? diffs : undefined,
+        webChecked: !!checkpoint,
+        webDiffs: webDiffs?.length ? webDiffs.slice(0, 30) : undefined,
         replayDice: replayDice.length ? replayDice : undefined,
+        botSaid: status === "match" ? undefined : texts.map((t) => t.replace(/<a?(:\w+:)\d+>/g, "$1").replace(/<@\d+>/g, "@").slice(0, 300)).slice(0, 5),
         why: err.e ? `the shim answered: ${err.e}` : err.s.saves === 0 ? "the bot saved nothing" : undefined,
         ms: Date.now() - t0,
       };
       push(r);
       if (status !== "match" && o.mode === "chain" && o.resync !== false) {
         await loadSave(fork, cur.text, mapFor(cur.text));
+      } else if (status === "match" && o.mode === "chain") {
+        // Same state, but the bot drew new random card handles (dealt cards): later buttons name the recorded
+        // handles (discardSecret_117), so take the recorded save, which differs from the fork's only in handles.
+        const reverse = new Map([...map.users].map(([x, y]) => [y, x]));
+        const withHandles = diffNormalized(
+          normalizeSave(cur.text, { keepHandles: true, extraVolatile: ignore }),
+          normalizeSave(actual, { keepHandles: true, reverseUsers: reverse, forkGame: fork.game, origGame: map.game[0], extraVolatile: ignore }),
+        );
+        if (withHandles.length) await loadSave(fork, cur.text, mapFor(cur.text));
       }
       if (status === "diverged" && o.stopOnFirst) break;
     } catch (e) {

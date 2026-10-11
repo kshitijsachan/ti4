@@ -562,4 +562,7 @@ export const INVARIANTS: { id: string; severity: Severity; what: string }[] = [
   { id: "round.monotone / phase.transition / phase.round-advance", severity: "error", what: "rounds never go back; phases follow setup -> strategy -> action -> status -> [agenda] -> strategy (round + 1)" },
   { id: "vp.monotone", severity: "error", what: "a player's VP never drop, except by losable points (e.g. Shard, Political Censure)" },
   { id: "techs.monotone / secrets.scored-monotone", severity: "warn", what: "technologies and scored secrets are not lost" },
+  { id: "phase.forced-by-command / phase.transition-skipped", severity: "warn", what: "a phase set by /game start_phase, or a step the bot did not save (action -> statusHomework)" },
+  { id: "progress.no-idle-streaks", severity: "warn", what: "no long run (>= 6) of saved actions that change nothing (stale prompts pressed in a loop)" },
+  { id: "progress.no-cycles", severity: "warn", what: "the state does not return to an earlier state through different ones (actions going round in circles)" },
 ];

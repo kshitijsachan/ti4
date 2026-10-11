@@ -2,12 +2,16 @@
 // Replays a recording in a fork game on the live bot and compares every save with the recorded one.
 //
 //   node tests/engine/replay.mjs tests/engine/recordings/<game>.json [--mode step|chain] [--from N] [--to M]
-//        [--fork pbdN] [--no-resync] [--stop-on-first] [--ignore key,key] [--out report.json] [--quiet]
+//        [--fork pbdN] [--no-resync] [--stop-on-first] [--ignore key,key] [--no-web] [--out report.json] [--quiet]
+//
+// Every step compares the full save (all game state; volatile bookkeeping and random card handles dropped); at the
+// recording's web-data checkpoints it also compares the bot's web data (what clients render) unless --no-web.
 //
 // step  (default) each action on top of the recorded save before it ("replay from snapshot N", for every N)
 // chain load save --from once, then press every action on the fork's own state; a divergence is reported and
 //       (unless --no-resync) the fork is reset to the recorded save so dice steps use the recorded outcome.
-// Statuses: match, dice (differs, and dice were rolled: expected, the bot's RNG cannot be seeded), diverged
+// Statuses: match, dice (differs, and dice were rolled: expected, the bot's RNG cannot be seeded), random (a known
+// random draw: Milty slices, seat colours), reordered (same items, other order: deck shuffles, hash-set order), diverged
 // (differs without dice: a determinism or rules bug), skipped (not replayable from the log: selections, modals,
 // web API calls, system saves), resync (chain: state reset to the recording), error.
 // The report (JSON) goes to $ENGINE_RUN_DIR/reports/<game>-<mode>.json unless --out is given.
@@ -41,13 +45,16 @@ const results = await replay(rec, fork, {
   resync: !argv.includes("--no-resync"),
   stopOnFirst: argv.includes("--stop-on-first"),
   ignore: (opt("--ignore", "") || "").split(",").filter(Boolean),
+  web: !argv.includes("--no-web"),
   log,
   onStep: (r) => {
     if (quiet && r.status === "match") return;
     const extra =
       r.status === "dice" ? ` dice recorded=[${(r.recordedDice ?? []).join(",")}] replay=[${(r.replayDice ?? []).join(",")}]` : r.why ? ` (${r.why})` : "";
     console.log(`${String(r.index).padStart(4)} ${r.status.padEnd(8)} ${short(r.label)}${extra}`);
-    if (r.diffs && r.status !== "match") for (const d of r.diffs.slice(0, 6)) console.log(`        ${d.key}: ${short(String(d.expected), 70)}  =>  ${short(String(d.actual), 70)}`);
+    if (r.diffs && r.status !== "match") for (const d of r.diffs.slice(0, 6)) console.log(`        ${d.key}${d.orderOnly ? " (order)" : ""}: ${short(String(d.expected), 70)}  =>  ${short(String(d.actual), 70)}`);
+    if (r.webDiffs && r.status !== "match") for (const d of r.webDiffs.slice(0, 4)) console.log(`        web ${d.path}: ${short(JSON.stringify(d.expected) ?? "-", 60)}  =>  ${short(JSON.stringify(d.actual) ?? "-", 60)}`);
+    if (r.status === "diverged" && r.botSaid?.length) console.log(`        bot: ${short(r.botSaid.join(" / ").replace(/\n/g, " "), 200)}`);
   },
 });
 closeFork(fork);

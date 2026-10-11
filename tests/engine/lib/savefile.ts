@@ -93,7 +93,11 @@ export type ForkMap = {
  * Rewrites an original save so it loads as the fork game: its name, its people (seat for seat) and its channels.
  * Card decks, dice-free state, tiles, stored values are left byte-for-byte as recorded.
  */
-export function rewriteForFork(text: string, m: ForkMap, opts: { savedButtons?: string; savedMessage?: string; savedChannel?: string } = {}): string {
+export function rewriteForFork(
+  text: string,
+  m: ForkMap,
+  opts: { savedButtons?: string; savedMessage?: string; savedChannel?: string; customName?: string } = {},
+): string {
   const [fromGame, toGame] = m.game;
   const lines = splitLines(text);
   const out: string[] = [];
@@ -141,6 +145,11 @@ export function rewriteForFork(text: string, m: ForkMap, opts: { savedButtons?: 
       }
       if (k === "saved_buttons" && opts.savedButtons !== undefined) {
         out.push(`saved_buttons ${opts.savedButtons}`);
+        continue;
+      }
+      if (k === "game_custom_name" && opts.customName) {
+        // A marker the web data shows (gameCustomName): tells a fresh web-data payload from a stale one.
+        out.push(`game_custom_name ${opts.customName}`);
         continue;
       }
       if (k === "saved_channel" && opts.savedChannel) {
@@ -228,7 +237,17 @@ export const VOLATILE_PLAYER_KEYS = new Set([
   "actual_hits",
 ]);
 
+/**
+ * Card lists stored as "card,handle;card,handle;": the handle is a random 0-999 number the bot draws for every card it
+ * deals (Game: ThreadLocalRandom.nextInt(1000)) so buttons can name the card. Not game state: compared without it.
+ */
+export const CARD_HANDLE_KEYS =
+  /^(action_cards|action_cards_discarded|action_cards_purged|secret_objectives|secret_objectives_scored|promissory_notes|discarded_agendas|sent_agenda|law|scored_secrets|events|discarded_events)$/;
+export const stripHandles = (v: string) => v.replace(/([^,;]+),\d{1,4};/g, "$1;");
+
 export type NormalizeOpts = {
+  /** keep the random card handles (see CARD_HANDLE_KEYS) */
+  keepHandles?: boolean;
   /** fork user id -> original user id (applied first) */
   reverseUsers?: Map<string, string>;
   forkGame?: string;
@@ -264,14 +283,14 @@ export function normalizeSave(text: string, o: NormalizeOpts = {}): string[] {
       }
       continue;
     }
-    out.push(`game.${k} ${fix(v)}`);
+    out.push(`game.${k} ${fix(!o.keepHandles && CARD_HANDLE_KEYS.test(k) ? stripHandles(v) : v)}`);
   }
   for (const pl of p.players) {
     const uid = o.reverseUsers?.get(pl.userId) ?? pl.userId;
     const who = pl.kv.get("faction") && pl.kv.get("faction") !== "null" ? pl.kv.get("faction") : uid;
     for (const [k, v] of pl.kv) {
       if (VOLATILE_PLAYER_KEYS.has(k) || extra.has(`player.${k}`) || !/^[a-z0-9_]+$/.test(k)) continue;
-      out.push(`player[${who}].${k} ${fix(v)}`);
+      out.push(`player[${who}].${k} ${fix(!o.keepHandles && CARD_HANDLE_KEYS.test(k) ? stripHandles(v) : v)}`);
     }
   }
   let tile = "";
@@ -287,7 +306,15 @@ export function normalizeSave(text: string, o: NormalizeOpts = {}): string[] {
   return out;
 }
 
-export type SaveDiff = { key: string; expected: string | null; actual: string | null };
+/** `orderOnly`: the same items in another order (a shuffle, or a hash-set iteration order). */
+export type SaveDiff = { key: string; expected: string | null; actual: string | null; orderOnly?: boolean };
+
+const tokens = (s: string | null) =>
+  (s ?? "")
+    .split(/[\s,;|{}\[\]":⏎]+/)
+    .filter(Boolean)
+    .sort()
+    .join(" ");
 
 /** Key-wise difference of two normalized saves (tiles compared as multisets of lines per tile). */
 export function diffNormalized(expected: string[], actual: string[]): SaveDiff[] {
@@ -308,7 +335,11 @@ export function diffNormalized(expected: string[], actual: string[]): SaveDiff[]
   for (const k of new Set([...e.keys(), ...a.keys()])) {
     const ev = (e.get(k) ?? []).slice().sort().join("\n");
     const av = (a.get(k) ?? []).slice().sort().join("\n");
-    if (ev !== av) out.push({ key: k, expected: e.has(k) ? ev : null, actual: a.has(k) ? av : null });
+    if (ev !== av) {
+      const d: SaveDiff = { key: k, expected: e.has(k) ? ev : null, actual: a.has(k) ? av : null };
+      if (d.expected !== null && d.actual !== null && tokens(d.expected) === tokens(d.actual)) d.orderOnly = true;
+      out.push(d);
+    }
   }
   return out;
 }
