@@ -3,6 +3,7 @@
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
 import type { Decision, GameState, Option } from "./types.js";
+import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -10,6 +11,7 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 export type TypedChoice = { option: Option<any>; why: string };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string): TypedChoice | null {
+  if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);
   if (d.target?.userId !== me || d.scope !== "player") return null;
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   if (!live.length) return null;
@@ -27,6 +29,9 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string): T
       return opts[0] ? { option: opts[0], why: "setup: first starting technology not owned" } : null;
     }
     case "secret_objective.discard": {
+      // Mecatol Rex (Thunder's Edge legendary, already exhausted): swap one secret for a fresh draw; the newest goes.
+      const swaps = d.options.filter((o) => !o.disabled && o.value?.redraw);
+      if (swaps.length) return { option: swaps.at(-1)!, why: "Mecatol Rex: swap a secret objective" };
       // Setup (round 1, holding more than one): keep the first, discard the last. Later discards: not ours to guess.
       if ((state?.round ?? 99) > 1 || (self?.secretObjectiveCount ?? 0) < 2) return null;
       const opts = d.options.filter((o) => !o.disabled && o.value && !o.value.redraw);
