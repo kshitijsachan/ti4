@@ -1404,10 +1404,10 @@ index 0000000..1422959
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..6d10f42
+index 0000000..d854c4b
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,620 @@
+@@ -0,0 +1,642 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -1796,29 +1796,51 @@ index 0000000..6d10f42
 +        return new Target(null, null, null, owners.size() > 1 ? "mixed_owners" : "none");
 +    }
 +
-+    /** Saving handlers that are still perpetual menus, not questions (the read-only ones are found by route). */
-+    private static final java.util.Set<String> INFO_EXTRA = java.util.Set.of("getModifyTiles", "purgeOverrule");
++    /** Saving handlers that are perpetual menus on their own (not questions). */
++    private static final java.util.Set<String> INFO_ALONE = java.util.Set.of("getModifyTiles", "purgeOverrule");
 +
 +    /**
-+     * A message whose every option opens a read-only handler (save = false: info, decks, views, preferences) or one
-+     * of {@link #INFO_EXTRA}, plus at most "delete these buttons": an info menu, not a decision.
++     * Saving handlers (prefixes) that ride along on the game's info menus (round summaries, presets, player setup,
++     * dismiss): info only next to at least one read-only option.
++     */
++    private static final List<String> INFO_COMPANIONS = List.of(
++            "deleteButtons", "editRoundSummary_", "editEndOfRoundSummaries", "startPlayerSetup", "removePreset_");
++
++    /**
++     * An info menu, not a decision: every option opens a read-only handler (save = false: info, decks, views,
++     * preferences), one of {@link #INFO_ALONE}, or (with at least one read-only option) an {@link #INFO_COMPANIONS}.
 +     */
 +    static boolean isInfoMenu(List<RawControl> controls, List<String> handlerIds) {
-+        boolean info = false;
++        boolean readOnlySeen = false;
++        boolean aloneSeen = false;
++        boolean companionSeen = false;
 +        for (int i = 0; i < controls.size(); i++) {
 +            String h = handlerIds.get(i);
 +            if (h == null) return false;
-+            if (h.equals("deleteButtons")) continue;
++            if (INFO_ALONE.contains(h)) {
++                aloneSeen = true;
++                continue;
++            }
++            boolean companion = false;
++            for (String c : INFO_COMPANIONS) if (h.startsWith(c)) companion = true;
++            if (companion) {
++                companionSeen = true;
++                continue;
++            }
 +            boolean readOnly;
 +            try {
 +                readOnly = ti4.discord.interactions.buttons.ButtonProcessor.isReadOnly(controls.get(i).customId);
 +            } catch (Throwable t) {
 +                readOnly = false;
 +            }
-+            if (!readOnly && !INFO_EXTRA.contains(h)) return false;
-+            info = true;
++            if (!readOnly) return false;
++            readOnlySeen = true;
 +        }
-+        return info;
++        if (readOnlySeen) return true;
++        // Without a read-only option: only the stand-alone menus (plus a dismiss button) count.
++        if (!aloneSeen) return false;
++        for (String h : handlerIds) if (!INFO_ALONE.contains(h) && !h.startsWith("deleteButtons")) return false;
++        return companionSeen || aloneSeen;
 +    }
 +
 +    static boolean obsolete(KindSpec spec, KindSpec.CaptureContext ctx) {

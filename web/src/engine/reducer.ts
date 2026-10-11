@@ -127,9 +127,17 @@ export function myDecisions(view: EngineView, userId: string | null | undefined)
 }
 
 /**
- * A window-less table prompt (anyone may press it; usually an untyped menu): never "waiting on me" for the header,
- * and listed after the prompts that are really mine.
+ * A background prompt — window-less table prompt (anyone may press it; usually an untyped menu) or an optional
+ * decide-in-advance prompt: never "waiting on me" for the header, never pops up on its own, listed after the prompts
+ * that are really mine.
  */
 export function openToAll(d: Decision): boolean {
-  return d.scope === "table" && !d.window;
+  return (d.scope === "table" && !d.window) || IN_ADVANCE.has(d.kind);
 }
+
+/**
+ * Optional "decide in advance" prompts that sit in a player's cards thread all round (pre-decline a strategy card,
+ * pre-play an action card, queue a draft or strategy-card pick): background, like window-less table prompts (live:
+ * hundreds open per game).
+ */
+const IN_ADVANCE = new Set<string>(["strategy_card.pre_decline", "action_card.preassign", "draft.milty.queue", "strategy_card.queue_pick"]);
