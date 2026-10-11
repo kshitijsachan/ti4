@@ -118,7 +118,9 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
   const summary = buildSummary(rows, total);
   const planetsHere = [...new Set(rows.map((r) => r.where).filter((w) => w !== "space"))];
   const where = planetsHere.length ? `${planetsHere.join(", ")} (${pos})` : pos;
-  const others = d.choices.filter((c) => !/^place_/.test(baseId(c.customId)) && c !== done && c !== reset);
+  const kept = d.choices.filter((c) => !/^place_/.test(baseId(c.customId)) && c !== done && c !== reset);
+  /* Some produce prompts (following Warfare) come without the bot's UNDO: offer the top bar's undo all the same. */
+  const others = kept.some((c) => c.rank === "undo") ? kept : [...kept, { ...actionChoice("ultimateUndo_production", "Undo", 2), rank: "undo" as const }];
 
   const setCount = (r: ProduceRow, n: number) => setCounts((c) => ({ ...c, [r.key]: Math.max(0, n) }));
   const setBgCount = (r: ProduceRow, n: number) => setBg((c) => ({ ...c, [r.key]: Math.max(0, n) }));
