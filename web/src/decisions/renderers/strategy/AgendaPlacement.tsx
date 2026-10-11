@@ -81,7 +81,14 @@ export function AgendaPlacementBody({ d, data }: RendererProps) {
       ...bottoms.flatMap((p) => (p.bottom?.customId ? [{ channelId: p.channelId, messageId: p.id, customId: p.bottom.customId, label: `${p.agenda.name} to the bottom` }] : [])),
       ...topOrder.flatMap((p) => (p.top?.customId ? [{ channelId: p.channelId, messageId: p.id, customId: p.top.customId, label: `${p.agenda.name} to the top` }] : [])),
     ];
-    void run(`agendas:${d.id}`, presses, (dismiss) => peeks.forEach((p) => dismiss(p.id)));
+    const said = [
+      ...[...topOrder].reverse().map((p, i) => `${p.agenda.name} on top${topOrder.length > 1 && i === 0 ? " (revealed first)" : ""}`),
+      ...bottoms.map((p) => `${p.agenda.name} on the bottom`),
+    ];
+    void run(`agendas:${d.id}`, presses, (dismiss) => {
+      peeks.forEach((p) => dismiss(p.id));
+      useRunner.getState().set({ summary: { text: `Put ${said.join(", ")}`, at: Date.now() } });
+    });
   };
 
   if (runner.running?.startsWith("agendas:")) {
