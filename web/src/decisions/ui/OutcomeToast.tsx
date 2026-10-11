@@ -5,11 +5,17 @@ import { useGameEvents } from "@/gamelog";
 import { segText } from "@/gamelog/parse/markup";
 import type { GameEvent } from "@/gamelog";
 import { useReservedArea } from "@/state/reservedArea";
+import { useRunner } from "../renderers/strategy/runner";
+import { pressOutcome } from "./pressOutcome";
 import classes from "./OutcomeToast.module.css";
 
 /** How long after my press the bot's reply still counts as its outcome. */
 const REPLY_WINDOW_MS = 20_000;
 const SHOW_MS = 6_000;
+/** How long the bot gets to report a press in the game log before the button's own wording stands in. */
+const LOCAL_MS = 900;
+
+type Note = { key: string; text: string; fromLog: boolean };
 
 /** "You researched Gravity Drive": the game log's own wording for an event of mine. */
 function outcomeText(events: GameEvent[]) {
@@ -17,35 +23,65 @@ function outcomeText(events: GameEvent[]) {
 }
 
 /**
- * What my last press did, in plain words, for a few seconds: the game-log events the bot posted for my faction right
- * after the press (gained trade goods, readied planets, explored, rolled, scored…). One toast at a time.
+ * What my last press did, in plain words, for a few seconds. Every press gets a note: the game-log events the bot
+ * posted for my faction right after it (gained trade goods, readied planets, explored, scored…) when they arrive
+ * quickly, else the pressed button's own words ("Kept Strengthen Bonds", "Passed", "Not following Technology"),
+ * replaced by the bot's wording if that comes later. A multi-press flow gets one note, for its last press.
  */
 export function OutcomeToast({ gameName, faction, rightInset }: { gameName: string; faction?: string; rightInset: number }) {
-  const pressed = usePlay((s) => s.pressed);
+  const press = usePlay((s) => s.lastPress);
+  const flowRunning = useRunner((s) => !!s.running);
   const { events } = useGameEvents(gameName);
-  const lastPress = useMemo(() => Math.max(0, ...Object.values(pressed)), [pressed]);
-  const outcome = useMemo(() => {
-    if (!faction || !lastPress) return undefined;
+  const reply = useMemo(() => {
+    if (!faction || !press) return undefined;
     const mine = events.filter((e) => {
       const at = Date.parse(e.time);
-      return at >= lastPress - 1000 && at <= lastPress + REPLY_WINDOW_MS && e.actor?.faction === faction && e.importance >= 2;
+      return at >= press.at - 1000 && at <= press.at + REPLY_WINDOW_MS && e.actor?.faction === faction && e.importance >= 2;
     });
-    if (!mine.length) return undefined;
-    return { key: mine[mine.length - 1].id, text: outcomeText(mine) };
-  }, [events, faction, lastPress]);
+    return mine.length ? outcomeText(mine) : undefined;
+  }, [events, faction, press]);
+  const local = useMemo(() => (press?.customId ? pressOutcome(press.message, press.customId, press.values) : undefined), [press]);
 
-  /* The last few outcomes, newest last; each leaves after a few seconds. */
-  const [shown, setShown] = useState<{ key: string; text: string }[]>([]);
-  const [seen, setSeen] = useState<string | null>(null);
-  const timers = useRef<number[]>([]);
-  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
+  /* The press whose wait for the bot's wording is over. */
+  const [due, setDue] = useState<number | null>(null);
   useEffect(() => {
-    if (!outcome || outcome.key === seen) return;
-    setSeen(outcome.key);
-    setShown((list) => [...list.filter((x) => x.key !== outcome.key), outcome].slice(-3));
-    /* Each note leaves on its own clock, whatever arrives after it. */
-    timers.current.push(window.setTimeout(() => setShown((list) => list.filter((x) => x.key !== outcome.key)), SHOW_MS));
-  }, [outcome, seen]);
+    if (!press) return;
+    const t = window.setTimeout(() => setDue(press.at), LOCAL_MS);
+    return () => window.clearTimeout(t);
+  }, [press]);
+
+  const note: Note | undefined = useMemo(() => {
+    if (!press) return undefined;
+    const key = `press-${press.at}`;
+    if (reply) return { key, text: reply, fromLog: true };
+    if (due !== press.at || flowRunning || !local) return undefined;
+    return { key, text: local, fromLog: false };
+  }, [press, reply, due, flowRunning, local]);
+
+  /* The last few notes, newest last; each leaves after a few seconds. */
+  const [shown, setShown] = useState<Note[]>([]);
+  const timers = useRef(new Map<string, number>());
+  useEffect(() => {
+    const live = timers.current;
+    return () => live.forEach((t) => window.clearTimeout(t));
+  }, []);
+  useEffect(() => {
+    if (!note) return;
+    setShown((list) => {
+      const same = list.find((x) => x.key === note.key);
+      if (same && same.text === note.text) return list;
+      return [...list.filter((x) => x.key !== note.key), note].slice(-3);
+    });
+    /* Each note leaves on its own clock, restarted when the bot's wording replaces the button's. */
+    window.clearTimeout(timers.current.get(note.key));
+    timers.current.set(
+      note.key,
+      window.setTimeout(() => {
+        timers.current.delete(note.key);
+        setShown((list) => list.filter((x) => x.key !== note.key));
+      }, SHOW_MS),
+    );
+  }, [note]);
 
   /* Under the decision card when it is up (inside its column), else top-right under the top bar: never over tiles. */
   const card = useReservedArea((s) => s.rects["decision-card"]);
@@ -58,8 +94,14 @@ export function OutcomeToast({ gameName, faction, rightInset }: { gameName: stri
   return createPortal(
     <div className={`ti4play ${classes.stack}`} style={style} role="status" aria-live="polite">
       {shown.map((o) => (
-        <div key={o.key} className={classes.toast}>
-          <span className={classes.you}>You</span> {o.text}
+        <div key={`${o.key}:${o.text}`} className={classes.toast}>
+          {o.fromLog ? (
+            <>
+              <span className={classes.you}>You</span> {o.text}
+            </>
+          ) : (
+            o.text
+          )}
         </div>
       ))}
     </div>,
