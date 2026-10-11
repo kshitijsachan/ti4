@@ -11,7 +11,7 @@ import { HandTray } from "@/hand";
 /** The engine-driven popup when the engine flag is on and its stream is live; the legacy one otherwise. */
 export function DecisionSlot({ gameName, className, rightInset }: { gameName: string; className?: string; rightInset?: number }) {
   const mode = useEngineMode(gameName);
-  if (mode === "engine") return <EngineDecisionHost placement="contained" rightInset={rightInset} />;
+  if (mode === "engine") return <EngineDecisionHost gameName={gameName} placement="contained" rightInset={rightInset} />;
   if (mode === "waiting") return null;
   return <DecisionHost gameName={gameName} placement="contained" className={className} rightInset={rightInset} />;
 }

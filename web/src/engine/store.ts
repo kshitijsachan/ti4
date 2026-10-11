@@ -20,7 +20,12 @@ export type EngineStore = {
   answerStarted(decisionId: string, nonce: string, optionId: string): void;
   answerFailed(decisionId: string, nonce: string, error: string): void;
   dismissError(decisionId: string): void;
+  /** My last answer from this page, for the outcome note and the queue's "next step first". */
+  lastAnswer: LastAnswer | null;
+  noteAnswer(answer: LastAnswer): void;
 };
+
+export type LastAnswer = { at: number; decision: Decision; optionId: string | null; values?: string[] };
 
 /** One engine view per page (the game on screen), fed by the play socket's `t:"engine"` frames (see link.ts). */
 export const engineStore = createStore<EngineStore>((set) => ({
@@ -38,6 +43,8 @@ export const engineStore = createStore<EngineStore>((set) => ({
   answerStarted: (id, nonce, optionId) => set((s) => ({ view: startAnswer(s.view, id, nonce, optionId) })),
   answerFailed: (id, nonce, error) => set((s) => ({ view: settleAnswer(s.view, id, nonce, error) })),
   dismissError: (id) => set((s) => ({ view: settleAnswer(s.view, id, undefined, null) })),
+  lastAnswer: null,
+  noteAnswer: (lastAnswer) => set({ lastAnswer }),
 }));
 
 export function useEngine<T>(selector: (s: EngineStore) => T): T {

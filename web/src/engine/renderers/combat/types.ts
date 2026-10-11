@@ -1,5 +1,6 @@
 import type { GameState, Option } from "../../../../../shim/src/engine/types";
 import type { CombatPlanEntry, HittableUnit } from "../../../../../shim/src/engine/kinds/combat";
+import { playerLabel } from "../../names";
 
 /** A whole hit assignment, answered in one call (engine: POST …/decisions/{id}/combat-plan). */
 export type CombatPlanPayload = { action: "combat-plan"; body: { plan: CombatPlanEntry[] } };
@@ -44,8 +45,7 @@ export const ROLL_NAMES: Record<string, string> = {
 };
 
 export function playerName(state: GameState | null, faction: string | null | undefined) {
-  const p = state?.players.find((x) => x.faction === faction);
-  return p?.userName ?? faction ?? "?";
+  return faction ? playerLabel(state, faction) : "?";
 }
 
 export const me = (state: GameState | null) => state?.players.find((p) => p.self) ?? null;

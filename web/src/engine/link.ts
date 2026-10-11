@@ -86,6 +86,7 @@ export function useEngineAnswer() {
     if (!a.optionId && a.payload === undefined && !a.action) return;
     const plain = option && a.payload === undefined && !a.action && !typedInput;
     const { channelId, messageId } = decision.source;
+    engineStore.getState().noteAnswer({ at: Date.now(), decision, optionId: a.optionId ?? null, values: a.values });
     const hash = option?.id.indexOf("#") ?? -1;
     if (plain && hash > 0) return void conn.select(channelId, messageId, option.id.slice(0, hash), [option.id.slice(hash + 1)], 3);
     if (plain && option.needsInput) return void conn.click(channelId, messageId, option.id);
