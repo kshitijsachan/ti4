@@ -1,0 +1,45 @@
+{
+  "name": "faction-yin",
+  "description": "Yin: Indoctrination (initialIndoctrination_<planet> -> indoctrinate_<planet>_infantry), Devotion (startDevotion_<pos>), agent (yinagent_<pos>), hero (yinHeroStart -> yinHeroTarget_<f> -> yinHeroPlanet_ -> yinHeroInfantry_), commander (yinCommanderStep1_ -> yinCommanderRemoval_), Greyfire PN (greyfire_<planet>)",
+  "base": {
+    "recording": "pbd94",
+    "index": 43,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:yinhero faction_or_color:yin",
+    "/leaders unlock leader:yincommander faction_or_color:yin",
+    "/player stats trade_goods:3 faction_or_color:yin",
+    "/add_units tile_name:310 unit_names:\"infantry jord\" faction_or_color:yin",
+    "/add_units tile_name:307 unit_names:\"2 destroyer\" faction_or_color:yin"
+  ],
+  "trigger": {
+    "press": "FFCC_yin_initialIndoctrination_jord",
+    "as": "yin"
+  },
+  "steps": [
+    {
+      "press": "indoctrinate_jord_infantry",
+      "as": "yin"
+    },
+    {
+      "press": "FFCC_yin_startDevotion_307",
+      "as": "yin"
+    },
+    {
+      "press": "FFCC_yin_yinHeroStart",
+      "as": "yin"
+    },
+    {
+      "press": "yinHeroTarget_sol",
+      "as": "yin"
+    },
+    {
+      "press": "yinCommanderStep1_",
+      "as": "yin"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

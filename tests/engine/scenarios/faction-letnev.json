@@ -1,0 +1,16 @@
+{
+  "name": "faction-letnev",
+  "description": "Letnev: mech DEPLOY (letnevMechRes_<planet>_mech), commander Rear Admiral Farran (gain1tgFromLetnevCommander), War Funding PN (resolveWarfunding), agent (getAgentSelection_letnevagent -> exhaustAgent_letnevagent_<faction>)",
+  "base": { "recording": "pbd104", "index": 44, "repost": false },
+  "setup": [
+    "/player stats trade_goods:4 faction_or_color:letnev",
+    "/leaders unlock leader:letnevcommander faction_or_color:letnev"
+  ],
+  "trigger": { "press": "FFCC_letnev_letnevMechRes_arcprime_mech", "as": "letnev" },
+  "steps": [
+    { "press": "gain1tgFromLetnevCommander", "as": "letnev" },
+    { "press": "getAgentSelection_letnevagent", "as": "letnev" },
+    { "press": "exhaustAgent_letnevagent_letnev", "as": "letnev" }
+  ],
+  "expect": { "invariants": true }
+}

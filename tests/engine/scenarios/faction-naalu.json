@@ -1,0 +1,30 @@
+{
+  "name": "faction-naalu",
+  "description": "Naalu: hero The Oracle (naaluHeroInitiation -> naaluHeroSend_<f>_<pn>), commander M'aban (naaluCommander, naaluCPN)",
+  "base": {
+    "recording": "pbd101",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:naaluhero faction_or_color:naalu",
+    "/leaders unlock leader:naalucommander faction_or_color:naalu"
+  ],
+  "trigger": {
+    "press": "naaluHeroInitiation",
+    "as": "naalu"
+  },
+  "steps": [
+    {
+      "press": "naaluCommander",
+      "as": "naalu"
+    },
+    {
+      "press": "naaluCPN",
+      "as": "naalu"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
