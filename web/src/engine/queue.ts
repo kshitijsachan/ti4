@@ -88,11 +88,11 @@ const TITLES: Record<string, string> = {
 };
 
 /** First line of an untyped prompt's text as a title: no markdown, mentions or emoji; empty when there is none. */
-function promptTitle(prompt: string | null | undefined, state?: GameState | null): string {
+function promptTitle(prompt: string | null | undefined): string {
   if (!prompt) return "";
   const line = prompt
     .replace(/<a?:\w+:\d+>/g, "")
-    .replace(/<@!?(\d+)>/g, (_, id: string) => state?.players.find((p) => p.userId === id)?.userName ?? "")
+    .replace(/<@[!&]?\d+>\s*/g, "")
     .replace(/<#\d+>/g, "")
     .replace(/[*_~`>#|]/g, "")
     .split("\n")
@@ -118,7 +118,7 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
     const words = d.kind.replace(/[._]/g, " ").trim();
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
-  return promptTitle(d.prompt, state) || (d.scope === "table" ? "Open to everyone" : "Your move");
+  return promptTitle(d.prompt) || (d.scope === "table" ? "Open to everyone" : "Your move");
 }
 
 /** The small line above the title: who it is for when it is not just me. */
@@ -142,17 +142,20 @@ const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/
  * My decisions in the order to answer them (head first), and the background ones behind "Available now":
  * 1. the next step of what I just answered (pay after build, gain after pay), 2. combat, 3. trade offers to me,
  * 4. everything else oldest first, 5. table steps that move the phase on (after my homework), 6. my turn menu,
- * which stays up while what it spawned is answered.
+ * which stays up while what it spawned is answered, 7. untyped prompts (often leftovers). Prompts I hid are left out.
  */
-export function orderDecisions(mine: Decision[], answeredAtSeq: number | null): { queue: Decision[]; offers: Decision[] } {
-  const offers = mine.filter(openToAll);
-  const own = mine.filter((d) => !openToAll(d));
+export function orderDecisions(mine: Decision[], answeredAtSeq: number | null, hidden?: ReadonlySet<string>): { queue: Decision[]; offers: Decision[] } {
+  const shown = hidden?.size ? mine.filter((d) => !hidden.has(d.id)) : mine;
+  const offers = shown.filter(openToAll);
+  const own = shown.filter((d) => !openToAll(d));
   const homework = own.some((d) => HOMEWORK.test(d.kind) && !PHASE_STEP.has(d.kind));
   const rank = (d: Decision) => {
-    if (d.kind === "turn.action") return 6;
-    if (PHASE_STEP.has(d.kind)) return homework ? 5 : 4;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
     if (answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2) return 1;
+    /* Untyped prompts come last: the engine can't tell a live one from a leftover the game never closed. */
+    if (d.kind === "legacy") return 7;
+    if (d.kind === "turn.action") return 6;
+    if (PHASE_STEP.has(d.kind)) return homework ? 5 : 4;
     if (COMBAT.test(d.kind)) return 2;
     if (d.kind === "trade.offer") return 3;
     return 4;
@@ -168,5 +171,6 @@ export function orderDecisions(mine: Decision[], answeredAtSeq: number | null): 
 export function useMyQueue(): Decision[] {
   const mine = useMyDecisions();
   const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
-  return useMemo(() => orderDecisions(mine, answeredAtSeq).queue, [mine, answeredAtSeq]);
+  const hidden = useEngine((s) => s.hidden);
+  return useMemo(() => orderDecisions(mine, answeredAtSeq, hidden).queue, [mine, answeredAtSeq, hidden]);
 }

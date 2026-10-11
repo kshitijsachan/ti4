@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
 import { Tooltip, UnstyledButton } from "@mantine/core";
-import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconMap, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEyeOff, IconMap, IconX } from "@tabler/icons-react";
 import cx from "clsx";
 import { useDecisionFocus, useWaitingOnMe } from "@/decisions/model/focus";
 import { useReserveRect } from "@/state/reservedArea";
@@ -48,8 +48,9 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const pending = useEngine((s) => s.view.pending);
   const errors = useEngine((s) => s.view.errors);
   const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
+  const hidden = useEngine((s) => s.hidden);
   const answer = useEngineAnswer();
-  const { queue, offers } = useMemo(() => orderDecisions(decisions, answeredAtSeq), [decisions, answeredAtSeq]);
+  const { queue, offers } = useMemo(() => orderDecisions(decisions, answeredAtSeq, hidden), [decisions, answeredAtSeq, hidden]);
 
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [offerId, setOfferId] = useState<string | null>(null);
@@ -222,6 +223,20 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
                   {collapsed ? <IconChevronDown size={15} /> : <IconChevronUp size={15} />}
                 </UnstyledButton>
               </Tooltip>
+              {shown.kind === "legacy" && (
+                <Tooltip label="Not for me — hide this prompt" position="bottom">
+                  <UnstyledButton
+                    className={classes.iconBtn}
+                    onClick={() => {
+                      engineStore.getState().hide(shown.id);
+                      setOfferId(null);
+                    }}
+                    aria-label="Hide this prompt"
+                  >
+                    <IconEyeOff size={15} />
+                  </UnstyledButton>
+                </Tooltip>
+              )}
               {openOffer && (
                 <Tooltip label="Close — it stays under “Available now”" position="bottom">
                   <UnstyledButton className={classes.iconBtn} onClick={() => setOfferId(null)} aria-label="Close">
