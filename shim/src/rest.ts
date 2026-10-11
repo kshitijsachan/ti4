@@ -295,16 +295,21 @@ export class Rest {
       const ch = this.channelOr404(ctx, ctx.params[0]);
       if (!ch) return;
       const b = ctx.body.json;
+      const before = JSON.stringify(ch);
       for (const k of ["name", "topic", "position", "parent_id", "permission_overwrites", "nsfw", "rate_limit_per_user"]) {
         if (k in b) ch[k] = b[k];
       }
       if (ch.thread_metadata) {
+        const wasArchived = ch.thread_metadata.archived;
         for (const k of ["archived", "locked", "invitable", "auto_archive_duration"]) {
           if (k in b) ch.thread_metadata[k] = b[k];
         }
-        if ("archived" in b) ch.thread_metadata.archive_timestamp = new Date().toISOString();
+        if ("archived" in b && b.archived !== wasArchived) ch.thread_metadata.archive_timestamp = new Date().toISOString();
       }
-      this.hub.channelUpdate(ch);
+      // A no-op edit (the bot reopening a thread that is already open) changes nothing for players: only the bot hears
+      // it back (its cache may be stale), so a bot repeating it cannot flood every open tab.
+      if (JSON.stringify(ch) !== before) this.hub.channelUpdate(ch);
+      else this.hub.channelEcho(ch);
       sendJson(ctx.res, 200, ch);
     });
     this.on("DELETE", "/channels/:c", (ctx) => {

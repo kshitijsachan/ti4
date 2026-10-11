@@ -323,6 +323,12 @@ export class Hub {
     for (const l of this.listeners) l.channelUpsert(ch);
   }
 
+  /** Tells the bot a channel's current state again (no change for players). */
+  channelEcho(ch: Json) {
+    const isThread = [10, 11, 12].includes(ch.type);
+    this.gateway.dispatch(isThread ? "THREAD_UPDATE" : "CHANNEL_UPDATE", ch);
+  }
+
   channelDelete(ch: Json) {
     const isThread = [10, 11, 12].includes(ch.type);
     delete this.store.state.channels[ch.id];

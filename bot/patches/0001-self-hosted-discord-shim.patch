@@ -158,6 +158,39 @@ index 69ff42e..9b14938 100644
          if (logToConsole()) {
              if (severity.isErrorOrHigher()) {
                  System.err.println(severity.name() + ": " + compiledMessage + "\n" + err);
+diff --git a/src/main/java/ti4/message/MessageHelper.java b/src/main/java/ti4/message/MessageHelper.java
+index 72fd3dd..a942335 100755
+--- a/src/main/java/ti4/message/MessageHelper.java
++++ b/src/main/java/ti4/message/MessageHelper.java
+@@ -63,6 +63,7 @@ import ti4.helpers.ButtonHelper;
+ import ti4.helpers.Helper;
+ import ti4.helpers.StringHelper;
+ import ti4.logging.BotLogger;
++import ti4.selfhost.SelfHosted;
+ import ti4.logging.LogOrigin;
+ import ti4.service.actioncard.SabotageService;
+ import ti4.service.agenda.IsPlayerElectedService;
+@@ -704,13 +705,18 @@ public class MessageHelper {
+         }
+ 
+         if (channel instanceof ThreadChannel thread) {
+-            if (thread.isArchived() && !thread.isLocked()) {
++            // Self-hosted: a thread object that is not the cached one keeps reporting "archived" after it was reopened,
++            // and re-checking it after the reopen sent the bot into an endless reopen loop. Trust a reopen for a while.
++            if (thread.isArchived() && !thread.isLocked() && !SelfHosted.reopenedRecently(thread.getIdLong())) {
+                 String txt = messageText;
+                 List<Button> butts = buttons;
+                 thread.getManager()
+                         .setArchived(false)
+                         .queue(
+-                                (v) -> splitAndSentWithAction(txt, channel, restAction, sanitizedEmbeds, butts),
++                                (v) -> {
++                                    SelfHosted.markReopened(thread.getIdLong());
++                                    splitAndSentWithAction(txt, channel, restAction, sanitizedEmbeds, butts);
++                                },
+                                 BotLogger::catchRestError);
+                 return;
+             } else if (thread.isLocked()) {
 diff --git a/src/main/java/ti4/selfhost/ExpeditionGate.java b/src/main/java/ti4/selfhost/ExpeditionGate.java
 new file mode 100644
 index 0000000..a451361
@@ -212,11 +245,14 @@ index 0000000..a451361
 +}
 diff --git a/src/main/java/ti4/selfhost/SelfHosted.java b/src/main/java/ti4/selfhost/SelfHosted.java
 new file mode 100644
-index 0000000..e03efb2
+index 0000000..ebde53c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/SelfHosted.java
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,45 @@
 +package ti4.selfhost;
++
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
 +
 +/** True when the bot runs against the ti4 web shim instead of real Discord. */
 +public final class SelfHosted {
@@ -243,6 +279,19 @@ index 0000000..e03efb2
 +        if (url.startsWith("https://media.discordapp.net/")) return shimBaseUrl() + url.substring("https://media.discordapp.net".length());
 +        if (url.startsWith("/")) return shimBaseUrl() + url;
 +        return url;
++    }
++
++    private static final Map<Long, Long> REOPENED = new ConcurrentHashMap<>();
++
++    /** Records that the bot just reopened (unarchived) a thread. */
++    public static void markReopened(long threadId) {
++        REOPENED.put(threadId, System.currentTimeMillis());
++    }
++
++    /** The bot reopened this thread in the last 10 seconds: do not reopen it again. */
++    public static boolean reopenedRecently(long threadId) {
++        Long at = REOPENED.get(threadId);
++        return at != null && System.currentTimeMillis() - at < 10_000;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/ShimRetryInterceptor.java b/src/main/java/ti4/selfhost/ShimRetryInterceptor.java
