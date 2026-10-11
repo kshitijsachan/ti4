@@ -12,7 +12,10 @@ export type TypedChoice = { option: Option<any>; why: string };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx = { history: [], open: [] }): TypedChoice | null {
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
-  if (STRATEGY_POLICY_KINDS.has(d.kind)) {
+  // (command_tokens.adjust belongs to the status area; only its Leadership panel is answered here.)
+  const kind: string = d.kind;
+  const leadershipPanel = kind === "command_tokens.adjust" && (d.options as Option<any>[]).some((o) => o.handler === "deleteButtons_leadership");
+  if (STRATEGY_POLICY_KINDS.has(kind) && (kind !== "command_tokens.adjust" || leadershipPanel)) {
     if (d.scope === "player" && d.target?.userId !== me) return null;
     return chooseStrategy(d, state, me, ctx);
   }

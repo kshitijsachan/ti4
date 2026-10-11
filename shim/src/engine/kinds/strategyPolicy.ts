@@ -13,7 +13,6 @@
 import { researchable, TECH_PREFERENCE } from "../../botplay/techs.js";
 import type { Decision, GameState, Option, PlayerState } from "../types.js";
 import type {
-  CommandTokenAdjust,
   ConstructionPlace,
   DiplomacySystem,
   PlanetReady,
@@ -56,25 +55,25 @@ const live = <V>(d: { options: Option<V>[] }) => d.options.filter((o) => !o.disa
 export function chooseStrategy(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx): StrategyChoice | null {
   if (EDIT_IN_PLACE.has(d.kind) && ctx.lastRevision !== undefined && ctx.lastRevision === d.revision) return null;
   const self = state?.players.find((p) => p.userId === me) ?? null;
-  switch (d.kind) {
+  switch (d.kind as string) {
     case "strategy_card.resolve":
-      return resolveCard(d, state, self, me, ctx);
+      return resolveCard(d as StrategyCardResolve, state, self, me, ctx);
     case "strategy_card.strategic_action":
-      return strategicAction(d, state, self);
+      return strategicAction(d as StrategicAction, state, self);
     case "strategy_card.diplomacy_system":
-      return diplomacySystem(d);
+      return diplomacySystem(d as DiplomacySystem);
     case "planet.ready":
-      return readyPlanets(d, ctx);
+      return readyPlanets(d as PlanetReady, ctx);
     case "strategy_card.politics_speaker":
-      return speaker(d);
+      return speaker(d as PoliticsSpeaker);
     case "strategy_card.politics_agenda":
-      return agenda(d);
+      return agenda(d as PoliticsAgenda);
     case "strategy_card.construction_place":
-      return constructionPlace(d);
+      return constructionPlace(d as ConstructionPlace);
     case "strategy_card.trade_replenish":
-      return tradeReplenish(d);
+      return tradeReplenish(d as TradeReplenish);
     case "command_tokens.adjust":
-      return commandTokens(d, state, self, me);
+      return commandTokens(d, state, self, me, ctx);
     default:
       return null;
   }
@@ -208,23 +207,33 @@ function tradeReplenish(d: TradeReplenish): StrategyChoice | null {
   return done ? { option: done, why: "Trade: no free replenishes" } : null;
 }
 
-const sum = (p: { tactic: number; fleet: number; strategy: number } | null | undefined) => (p ? p.tactic + p.fleet + p.strategy : 0);
+type Pools = { tactic: number; fleet: number; strategy: number };
+const sum = (p: Pools | null | undefined) => (p ? p.tactic + p.fleet + p.strategy : 0);
+const isPools = (x: unknown): x is Pools => !!x && typeof (x as Pools).tactic === "number" && typeof (x as Pools).fleet === "number";
 
-function commandTokens(d: CommandTokenAdjust, state: GameState | null, self: PlayerState | null, me: string): StrategyChoice | null {
-  const opts = live(d);
+/**
+ * The command-token panel (kind command_tokens.adjust, owned by G7: value {action:"adjust", pool, delta} | {action:
+ * "reset"}, progress.accumulated = current pools). Only the Leadership panel (Done = deleteButtons_leadership) is
+ * answered here: gain up to 3 (holder), by pools — current − original when the engine supplies the original pools
+ * (progress.required.original or value.original), else by our own answers on this panel, one per revision.
+ */
+function commandTokens(d: Decision, state: GameState | null, self: PlayerState | null, me: string, ctx: PolicyCtx): StrategyChoice | null {
+  const opts = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput);
   const done = opts.find((o) => o.handler === "deleteButtons_leadership");
-  // Only the Leadership panel is planned here (status / Warfare redistribute belong to their own flows).
   if (!done || !self) return null;
-  const typed = opts.find((o) => o.value?.original && o.value?.current);
-  if (!typed) return null;
-  const { original, current, reinforcements } = typed.value!;
+  const isGain = (o?: Option<any>) => !!o?.value && (o.value.action === "gain" || (o.value.action === "adjust" && o.value.delta === 1));
+  const acc = d.progress?.accumulated;
+  const current: Pools = isPools(acc) ? acc : isPools(opts.find((o) => isPools(o.value?.current))?.value?.current) ? opts.find((o) => isPools(o.value?.current))!.value.current : self.commandTokens;
+  const origRaw = d.progress?.required?.original ?? opts.find((o) => isPools(o.value?.original))?.value?.original;
+  const original = isPools(origRaw) ? origRaw : null;
+  const gained = original ? sum(current) - sum(original) : ctx.history.filter((id) => isGain(opts.find((o) => o.id === id))).length;
+  const reinforcements = Number(opts.find((o) => typeof o.value?.reinforcements === "number")?.value?.reinforcements ?? Infinity);
   const leadership = state?.strategyCards.find((c) => c.card === "pok1leadership" && c.played && c.holder === me);
   const allowance = leadership ? 3 : 0;
-  const gained = sum(current) - sum(original);
   if (gained < allowance && reinforcements > 0) {
-    const pool: "tactic" | "fleet" | "strategy" = current!.fleet < 3 && gained === 2 ? "fleet" : current!.strategy < 2 && gained === 1 ? "strategy" : "tactic";
-    const o = opts.find((x) => x.value?.action === "gain" && x.value.pool === pool) ?? opts.find((x) => x.value?.action === "gain" && x.value.pool === "tactic");
-    if (o) return { option: o, why: `Leadership: gain a ${o.value!.pool} token (${gained + 1}/${allowance})` };
+    const pool: keyof Pools = current.fleet < 3 && gained === 2 ? "fleet" : current.strategy < 2 && gained === 1 ? "strategy" : "tactic";
+    const o = opts.find((x) => isGain(x) && x.value.pool === pool) ?? opts.find((x) => isGain(x) && x.value.pool === "tactic");
+    if (o) return { option: o, why: `Leadership: gain a ${o.value.pool} token (${gained + 1}/${allowance})` };
   }
   return { option: done, why: `Leadership: done, gained ${gained} command tokens` };
 }

@@ -171,14 +171,14 @@ function walk(d: Decision, st: GameState, me: string, max = 6): string[] {
       visibility: "private",
       prompt: "",
       options: [
-        ...(["tactic", "fleet", "strategy"] as const).map((pool) => opt(`increase_${pool}_cc`, { action: "gain", pool, original: { tactic: 3, fleet: 3, strategy: 2 }, current, reinforcements: 8 })),
+        ...(["tactic", "fleet", "strategy"] as const).map((pool) => opt(`increase_${pool}_cc`, { action: "adjust", pool, delta: 1 })),
         opt("deleteButtons_leadership", null),
       ],
       source: { channelId: "c", messageId: "m2", customIdPrefix: null, ephemeral: false },
       createdAt: 0,
       revision,
       window: null,
-      progress: null,
+      progress: { flow: "command_tokens", step: "adjust", accumulated: current, required: { status: false, original: { tactic: 3, fleet: 3, strategy: 2 } }, canCommit: true },
     }) as unknown as Decision;
   const a = chooseTyped(panel({ tactic: 3, fleet: 3, strategy: 2 }, 1), st, "u1", { history: [], open: [] });
   check("Leadership: first gain", /^increase_/.test(a?.option.id ?? ""), a?.option.id);
@@ -188,6 +188,10 @@ function walk(d: Decision, st: GameState, me: string, max = 6): string[] {
   check("Leadership: 3 gained by pools → Done", full?.option.id === "deleteButtons_leadership", full?.option.id);
   const replay = chooseTyped(panel({ tactic: 5, fleet: 3, strategy: 3 }, 4), st, "u1", { history: [], open: [] });
   check("Leadership: after a restart (no history) still Done, no extra gain", replay?.option.id === "deleteButtons_leadership", replay?.option.id);
+  // Without the original pools (status-area kind omits them): one gain per answered revision, never more than 3.
+  const noOrig = (rev: number) => ({ ...panel({ tactic: 3, fleet: 3, strategy: 2 }, rev), progress: null }) as unknown as Decision;
+  const g = chooseTyped(noOrig(5), st, "u1", { history: ["increase_tactic_cc", "increase_tactic_cc", "increase_tactic_cc"], lastRevision: 4, open: [] });
+  check("Leadership (no original pools): 3 answered gains → Done", g?.option.id === "deleteButtons_leadership", g?.option.id);
 }
 
 process.exit(failed ? 1 : 0);

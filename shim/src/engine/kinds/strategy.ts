@@ -126,22 +126,6 @@ export type TradeReplenish = DecisionBaseOf<
   { faction: string; color: string | null; commodities: number; commoditiesMax: number; reacted: boolean }
 >;
 
-export interface Pools {
-  tactic: number;
-  fleet: number;
-  strategy: number;
-}
-
-/**
- * Command-token panel (Leadership, Warfare redistribute, status, Nekro Technology). Tokens gained so far =
- * sum(current) − sum(original): never count presses. The panel's Done option is untyped (value null); its handler
- * names the source: deleteButtons_leadership / deleteButtons_technology / deleteButtons (redistribute).
- */
-export type CommandTokenAdjust = DecisionBaseOf<
-  "command_tokens.adjust",
-  { action: "gain" | "lose" | "reset"; pool: keyof Pools | null; original: Pools | null; current: Pools | null; reinforcements: number }
->;
-
 export type StrategyDecision =
   | StrategyCardResolve
   | StrategyCardQueuePick
@@ -151,8 +135,7 @@ export type StrategyDecision =
   | PoliticsSpeaker
   | PoliticsAgenda
   | ConstructionPlace
-  | TradeReplenish
-  | CommandTokenAdjust;
+  | TradeReplenish;
 
 export const STRATEGY_KINDS = [
   "strategy_card.resolve",
@@ -164,5 +147,4 @@ export const STRATEGY_KINDS = [
   "strategy_card.politics_agenda",
   "strategy_card.construction_place",
   "strategy_card.trade_replenish",
-  "command_tokens.adjust",
 ] as const;

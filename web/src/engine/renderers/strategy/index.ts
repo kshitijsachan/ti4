@@ -2,7 +2,6 @@ import type { ComponentType } from "react";
 import { PlayedCard } from "./PlayedCard";
 import {
   AgendaView,
-  CommandTokensView,
   ConstructionPlaceView,
   DiplomacySystemView,
   PickCard,
@@ -27,5 +26,4 @@ export const renderers: Record<string, ComponentType<RendererProps<any>>> = {
   "strategy_card.politics_agenda": AgendaView,
   "strategy_card.construction_place": ConstructionPlaceView,
   "strategy_card.trade_replenish": TradeReplenishView,
-  "command_tokens.adjust": CommandTokensView,
 };

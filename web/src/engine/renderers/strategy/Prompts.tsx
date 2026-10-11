@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { StrategyCardPick } from "../../../../../shim/src/engine/types";
 import type {
-  CommandTokenAdjust,
   ConstructionPlace,
   DiplomacySystem,
   PlanetReady,
@@ -11,7 +10,7 @@ import type {
   StrategyCardQueuePick,
   TradeReplenish,
 } from "../../../../../shim/src/engine/kinds/strategy";
-import { Choice, live, Meta, playerName, Title, viewer, type RendererProps } from "./shared";
+import { Choice, live, Meta, playerName, Title, type RendererProps } from "./shared";
 import classes from "./strategy.module.css";
 
 /** Strategy phase: pick a card (trade goods on it shown). */
@@ -214,33 +213,6 @@ export function TradeReplenishView({ decision, state, answer }: RendererProps<Tr
             <Choice key={o.id} option={o} onPick={answer} quiet />
           ),
         )}
-      </div>
-    </div>
-  );
-}
-
-/** Command-token panel: pools now vs when it opened; gained = the difference (never a press count). */
-export function CommandTokensView({ decision, state, answer }: RendererProps<CommandTokenAdjust>) {
-  const opts = live(decision.options);
-  const typed = opts.find((o) => o.value?.current);
-  const me = viewer(state);
-  const cur = typed?.value?.current ?? me?.commandTokens ?? null;
-  const orig = typed?.value?.original ?? null;
-  const gained = cur && orig ? cur.tactic + cur.fleet + cur.strategy - (orig.tactic + orig.fleet + orig.strategy) : null;
-  return (
-    <div className={classes.panel}>
-      <Title sub={gained !== null ? `Net ${gained >= 0 ? "+" : ""}${gained} · ${typed?.value?.reinforcements ?? "?"} in reinforcements` : undefined}>Command tokens</Title>
-      {cur && (
-        <div className={classes.pools}>
-          <span>T {cur.tactic}</span>
-          <span>F {cur.fleet}</span>
-          <span>S {cur.strategy}</span>
-        </div>
-      )}
-      <div className={classes.choices}>
-        {opts.map((o) => (
-          <Choice key={o.id} option={o} onPick={answer} quiet={!o.value || o.value.action !== "gain"} />
-        ))}
       </div>
     </div>
   );
