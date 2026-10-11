@@ -194,7 +194,7 @@ const DRAFT_MAX_DELAY = 450;
 /** A seat counts as drafting for this long after it last saw its game's draft in progress. */
 const DRAFTING_WINDOW_MS = 15000;
 /** Messages per channel an autopilot looks at (newest). */
-const WINDOW = 30;
+const WINDOW = 60;
 /** A message whose presses failed this often is ignored. */
 const MAX_FAILS = 2;
 /** After this many failures in a row the seat rests for a minute. */
@@ -603,7 +603,7 @@ class SeatPilot {
     // Still there, unchanged, well after we pressed it: for prompts the bot removes once it acts, the press was lost.
     const pressedAt = mine?.sig === sig ? mine.at : press && press.controls === sig ? Date.parse(press.at) : undefined;
     const lost = pressedAt !== undefined && Date.now() - pressedAt > RETRY_MS && (this.retries.get(m.id) ?? 0) < MAX_RETRIES;
-    if (answered && press && !mine && Date.parse(press.at) < this.started && !lost && !this.tableStalled(m, game) && !controls.some((c) => /^combatRoll_/.test(c.custom_id))) return null;
+    if (answered && press && !mine && Date.parse(press.at) < this.started && !lost && !this.tableStalled(m, game) && !controls.some((c) => /^combatRoll_|^pass_on_abilities$/.test(c.custom_id))) return null;
     const unpressed = controls;
     // Combat rolls are pressed once per combat round on the same message (mayRoll decides).
     const reusable = (c: Control) => /^combatRoll_/.test(c.custom_id);
@@ -692,7 +692,10 @@ class SeatPilot {
           return { msg: m, control: again[0], score: rule.score, why: `${rule.why}; again, the first press was lost` };
         }
       }
-      if (answered && !rule.again) continue;
+      // The status homework message also carries the planner's "Redistribute, Gain, & Confirm Command Tokens": a press
+      // of that one does not answer "Ready For Agenda Phase".
+      const otherPressOnly = /pass_on_abilities/.test(String(rule.id)) && !this.pressed.has(`${m.id}:pass_on_abilities`) && controls.some((c) => c.custom_id === "pass_on_abilities");
+      if (answered && !rule.again && !otherPressOnly) continue;
       // A table window we answered once stays answered, even if the bot edited it since (e.g. after a restart),
       // unless the whole game has been quiet for a while since: then our answer may have been lost (refused while the
       // bot was busy, or the bot restarted), and answering again is harmless.
@@ -708,7 +711,7 @@ class SeatPilot {
           return { msg: m, control: hits[0], score: rule.score, why: `${rule.why}; again, the game has been waiting a while` };
         }
       }
-      if (rule.table && !rule.again && press) continue;
+      if (rule.table && !rule.again && press && !otherPressOnly) continue;
       if (rule.again && rule.why !== "combat: roll dice" && press && !mine && Date.parse(press.at) < this.started) continue;
       if (rule.why.startsWith("status: reveal") && !this.mayReveal(m, game)) continue;
       if (rule.why === "setup: Keleres technology options" && !(await this.othersHaveStartingTech(game))) continue;

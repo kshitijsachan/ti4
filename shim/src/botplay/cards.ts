@@ -162,7 +162,8 @@ class StatusTokensJob implements Job {
   }
 
   owns(p: Prompt) {
-    return p.controls.some((c) => /^(redistributeCCButtons|increase_(tactic|fleet|strategy)_cc|decrease_(tactic|fleet|strategy)_cc|resetCCs)$/.test(baseId(c.custom_id)));
+    // Not the homework message itself: "Ready For Agenda Phase" on it must stay pressable (the gain prompt works later).
+    return p.controls.some((c) => /^(increase_(tactic|fleet|strategy)_cc|decrease_(tactic|fleet|strategy)_cc|resetCCs)$/.test(baseId(c.custom_id)));
   }
 
   async tick(board: Board | null, me: PlayerView | undefined, faction: string): Promise<JobResult> {
