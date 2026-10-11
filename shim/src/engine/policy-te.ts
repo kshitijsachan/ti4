@@ -8,7 +8,7 @@
  * - Never toggle galvanize: optional galvanize menus are left alone; the Bastion agent's forced prompt gets exactly
  *   one galvanize (progress says how many are done), then "Done". Ungalvanize is never chosen.
  */
-import type { Decision, GameState, Option, PlayerState } from "./types.js";
+import type { Decision, GameState, Option, PlayerState, UnitId } from "./types.js";
 import { awaits } from "./types.js";
 import { INGRESS_TOKEN, type TeGalvanizeValue, type ThundersEdgeDecision } from "./kinds/te.js";
 
@@ -17,7 +17,7 @@ export type TeChoice = { option: Option<any>; why: string };
 const CERTAIN = new Set(["owner_prefix", "spoof_prefix", "cards_thread", "private_channel", "interaction_user"]);
 
 /** Galvanize the biggest ship first. */
-const GALVANIZE_RANK = ["ws", "fs", "dn", "cv", "ca", "dd", "mf", "gf", "ff", "pd", "sd"];
+const GALVANIZE_RANK: UnitId[] = ["ws", "fs", "dn", "cv", "ca", "dd", "mf", "gf", "ff", "pd", "sd"];
 
 const TE_KINDS = new Set<string>([
   "te.fracture.roll",
@@ -118,7 +118,7 @@ function presence(state: GameState | null, self: PlayerState | undefined, positi
   let n = 0;
   for (const h of tile.holders) {
     for (const u of h.units) if (u.owner === self.faction) n += u.count;
-    if (self.planets.includes(h.name)) n += 2;
+    if (h.name !== "space" && self.planets.includes(h.name)) n += 2;
   }
   return n;
 }

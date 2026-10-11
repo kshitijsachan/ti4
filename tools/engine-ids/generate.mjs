@@ -106,6 +106,7 @@ const relics = table("data/relics", "alias");
 const explores = table("data/explores", "id");
 const leaders = table("data/leaders", "id", (r) => (r.title ? `${r.name} (${r.title})` : r.name));
 const unitModels = table("data/units", "id");
+const breakthroughs = table("data/breakthroughs", "alias");
 
 // Strategy cards: model ids plus the automation ids the engine resolves them as.
 const strategyCards = table("data/strategy_cards", "id");
@@ -241,6 +242,7 @@ idSet("RELIC_IDS", "RelicId", "Relic ids (`alias` in data/relics; includes the \
 idSet("EXPLORE_CARD_IDS", "ExploreCardId", "Exploration card ids (`id` in data/explores; relic fragments included)", explores);
 idSet("LEADER_IDS", "LeaderId", "Leader ids (data/leaders `id`: <faction>agent / commander / hero)", leaders);
 idSet("STRATEGY_CARD_IDS", "StrategyCardId", "Strategy card model + automation ids (\"pok4construction\", \"te6warfare\", …)", strategyCards);
+idSet("BREAKTHROUGH_IDS", "BreakthroughId", "Thunder's Edge breakthrough ids (`alias` in data/breakthroughs)", breakthroughs);
 idSet("COLORS", "ColorName", "Player colour names (data/colors `name`; PlayerState.color, UnitStack.color)", colorMap);
 
 counts.RelicFragmentId = fragments.length;
@@ -306,6 +308,7 @@ emit(`  agenda: has(AGENDA_IDS) as (x: unknown) => x is AgendaId,`);
 emit(`  publicObjective: has(PUBLIC_OBJECTIVE_IDS) as (x: unknown) => x is PublicObjectiveId,`);
 emit(`  secretObjective: has(SECRET_OBJECTIVE_IDS) as (x: unknown) => x is SecretObjectiveId,`);
 emit(`  relic: has(RELIC_IDS) as (x: unknown) => x is RelicId,`);
+emit(`  breakthrough: has(BREAKTHROUGH_IDS) as (x: unknown) => x is BreakthroughId,`);
 emit(`  exploreCard: has(EXPLORE_CARD_IDS) as (x: unknown) => x is ExploreCardId,`);
 emit(`  relicFragment: has(RELIC_FRAGMENT_IDS) as (x: unknown) => x is RelicFragmentId,`);
 emit(`  leader: has(LEADER_IDS) as (x: unknown) => x is LeaderId,`);

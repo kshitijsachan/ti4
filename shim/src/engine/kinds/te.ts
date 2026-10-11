@@ -2,10 +2,10 @@
  * Thunder's Edge decision kinds (G10). Mirrors bot ti4.selfhost.engine.kinds.Te*Kind 1:1.
  * Dependency-free (imported by the web too).
  */
-import type { DecisionBase } from "../types.js";
+import type { BreakthroughId, DecisionBase, FactionId, HolderName, TileId, TilePosition, UnitId } from "../types.js";
 
 /** Roll for The Fracture after a breakthrough unlock (rollFracture_<bt>); spawn: Al'Raith / Styx and Stones bring it in without a roll. */
-export type TeFractureRoll = DecisionBase<"te.fracture.roll", { breakthrough: string | null; spawn: boolean; canEnterPlay: boolean }>;
+export type TeFractureRoll = DecisionBase<"te.fracture.roll", { breakthrough: BreakthroughId | null; spawn: boolean; canEnterPlay: boolean }>;
 
 /**
  * Place an ingress token (addIngressToken_<pos>_<perType>), one prompt per technology type; "Done Resolving" has
@@ -13,12 +13,12 @@ export type TeFractureRoll = DecisionBase<"te.fracture.roll", { breakthrough: st
  */
 export type TeFractureIngress = DecisionBase<
   "te.fracture.ingress",
-  { position: string; tileId: string | null; skips: string[]; hasIngress: boolean; perType: number }
+  { position: TilePosition; tileId: TileId | null; skips: string[]; hasIngress: boolean; perType: number }
 >;
 
 export type TeGalvanizeValue =
-  | { action: "galvanize" | "ungalvanize"; position: string; unit: string; holder: string }
-  | { action: "system"; position: string };
+  | { action: "galvanize" | "ungalvanize"; position: TilePosition; unit: UnitId; holder: HolderName }
+  | { action: "system"; position: TilePosition };
 
 /**
  * Galvanize menu (galvanize_ / ungalvanize_ per unit, edited in place; toggleGalvanize_ = pick the system first).
@@ -37,8 +37,8 @@ export type TeExpedition = DecisionBase<
 
 export type TePlaceThundersEdgeValue =
   | { step: "start" }
-  | { step: "system"; position: string; tileId: string | null }
-  | { step: "infantry"; position: string; tileId: string | null; faction: string };
+  | { step: "system"; position: TilePosition; tileId: TileId | null }
+  | { step: "infantry"; position: TilePosition; tileId: TileId | null; faction: FactionId };
 
 /** The last expedition's completer places Thunder's Edge: start → system → whose infantry goes on it. */
 export type TePlaceThundersEdge = DecisionBase<"te.thunders_edge.place", TePlaceThundersEdgeValue>;
@@ -57,7 +57,7 @@ export type ThundersEdgeDecision = TeFractureRoll | TeFractureIngress | TeGalvan
 // ---- state (GameState.thundersEdge)
 
 export interface BreakthroughState {
-  id: string;
+  id: BreakthroughId;
   unlocked: boolean;
   exhausted: boolean;
   active: boolean;
@@ -68,9 +68,9 @@ export interface ThundersEdgeState {
   fractureInPlay: boolean;
   thundersEdgeInPlay: boolean;
   /** Expedition key → faction that completed it, null while open. */
-  expeditions: Record<ExpeditionKey | string, string | null>;
+  expeditions: Partial<Record<ExpeditionKey, FactionId | null>>;
   /** Faction → its breakthroughs. */
-  breakthroughs: Record<string, BreakthroughState[]>;
+  breakthroughs: Partial<Record<FactionId, BreakthroughState[]>>;
 }
 
 /** Ingress token id on a system's space area (TileState holder "space" tokens). */

@@ -27,13 +27,42 @@ export type * from "./kinds/status.js";
 export type * from "./kinds/tactical.js";
 export type * from "./kinds/te.js";
 export type * from "./kinds/trade.js";
+export type * from "./ids.js";
+import type {
+  ActionCardId,
+  AgendaId,
+  ColorName,
+  FactionId,
+  LeaderStatus,
+  Phase,
+  PlanetId,
+  PromissoryNoteId,
+  PublicObjectiveId,
+  RelicFragmentId,
+  RelicId,
+  SecretObjectiveId,
+  StrategyCardId,
+  StrategyCardNumber,
+  TechId,
+  TechType,
+  TileId,
+  UnitId,
+} from "./ids.js";
 
 export const CONTRACT_VERSION = 1;
 
 // ---------------------------------------------------------------- state
 
 export type UserId = string;
-export type FactionId = string;
+/** Board position ("000", "101", "tl", …): depends on the map template, so not a closed set. */
+export type TilePosition = string;
+/** A unit holder on a tile: the space area or a planet. */
+export type HolderName = "space" | PlanetId;
+/**
+ * Key of GameState.publicObjectives: a public objective id, or the display name of a custom one the engine adds
+ * itself ("Custodian/Imperial", "Imperial Rider", "Shard of the Throne", a secret made public, …): an open set.
+ */
+export type RevealedObjectiveKey = PublicObjectiveId | (string & {});
 
 export interface GameState {
   contract: number;
@@ -42,16 +71,17 @@ export interface GameState {
   stateVersion: number;
   /** Engine event seq at snapshot time; resume the stream with after=seq. */
   seq: number;
-  phase: string;
+  phase: Phase;
   round: number;
   activePlayer: UserId | null;
   speaker: UserId | null;
   players: PlayerState[];
   strategyCards: StrategyCardState[];
   tiles: TileState[];
-  /** Revealed public objective id → user ids... (today: factions/user ids as the engine stores them) that scored it. */
-  publicObjectives: Record<string, string[]>;
-  laws: string[];
+  /** Revealed public objective (RevealedObjectiveKey: an id, or a custom objective's name) → user ids that scored it. */
+  publicObjectives: Record<string, UserId[]>;
+  /** Laws in play (agenda ids). */
+  laws: AgendaId[];
   draft: DraftState | null;
   /** Exploration decks, relic deck, recent explore results / relic draws (G9). Older engines: absent. */
   exploration?: ExplorationState | null;
@@ -74,7 +104,7 @@ export interface PlayerState {
   userName: string;
   /** Authoritative. null until drafted. */
   faction: FactionId | null;
-  color: string | null;
+  color: ColorName | null;
   /** This is the viewer (only then is `hand` filled). */
   self: boolean;
   real: boolean;
@@ -87,17 +117,18 @@ export interface PlayerState {
   commodities: number;
   commoditiesMax: number;
   commandTokens: { tactic: number; fleet: number; strategy: number };
-  strategyCards: number[];
-  techs: string[];
-  exhaustedTechs: string[];
-  planets: string[];
-  exhaustedPlanets: string[];
-  relics: string[];
-  fragments: string[];
+  strategyCards: StrategyCardNumber[];
+  techs: TechId[];
+  exhaustedTechs: TechId[];
+  planets: PlanetId[];
+  exhaustedPlanets: PlanetId[];
+  relics: RelicId[];
+  fragments: RelicFragmentId[];
   /** "<leaderId>" or "<leaderId>:locked" / ":exhausted". */
-  leaders: string[];
-  promissoryNotesInPlayArea: string[];
-  secretsScored: Record<string, number>;
+  leaders: LeaderStatus[];
+  promissoryNotesInPlayArea: PromissoryNoteId[];
+  /** Scored secret objective id → engine handle. */
+  secretsScored: Partial<Record<SecretObjectiveId, number>>;
   actionCardCount: number;
   secretObjectiveCount: number;
   promissoryNoteCount: number;
@@ -106,19 +137,19 @@ export interface PlayerState {
 
 /** Card id → the per-player numeric handle the engine uses in its option ids. */
 export interface Hand {
-  actionCards: Record<string, number>;
-  secretObjectives: Record<string, number>;
-  promissoryNotes: Record<string, number>;
+  actionCards: Partial<Record<ActionCardId, number>>;
+  secretObjectives: Partial<Record<SecretObjectiveId, number>>;
+  promissoryNotes: Partial<Record<PromissoryNoteId, number>>;
 }
 
 export interface StrategyCardState {
-  number: number;
+  number: StrategyCardNumber;
   holder: UserId | null;
   tradeGoods: number;
   played: boolean;
   name: string;
   /** Automation id the engine resolves the card as ("pok4construction", …). */
-  card: string | null;
+  card: StrategyCardId | null;
   holderFaction: FactionId | null;
   /** Once played: every seated player's answer to it. */
   reactions: ScReaction[];
@@ -135,14 +166,14 @@ export interface ScReaction {
 }
 
 export interface TileState {
-  position: string;
-  tileId: string;
+  position: TilePosition;
+  tileId: TileId;
   holders: HolderState[];
 }
 
 /** name: "space" or a planet id. */
 export interface HolderState {
-  name: string;
+  name: HolderName;
   units: UnitStack[];
   tokens: string[];
   control: string[];
@@ -150,9 +181,9 @@ export interface HolderState {
 
 export interface UnitStack {
   owner: FactionId | null;
-  color: string;
-  /** async unit id: inf, ff, mf, pd, sd, dd, ca, cv, dn, fs, ws, ... */
-  unit: string;
+  color: ColorName;
+  /** async unit id: gf, ff, mf, pd, sd, dd, ca, cv, dn, fs, ws, ... */
+  unit: UnitId;
   count: number;
   damaged: number;
   galvanized: number;
@@ -225,7 +256,7 @@ export type ResolvedBy =
 export interface Target {
   userId: UserId | null;
   faction: FactionId | null;
-  color: string | null;
+  color: ColorName | null;
   resolvedBy: ResolvedBy;
 }
 
@@ -353,17 +384,17 @@ export type DecisionBaseOf<K extends string, V> = DecisionBase<K, V>;
 
 export type StrategyCardPick = DecisionBase<
   "strategy_card.pick",
-  { strategyCard: number; tradeGoods: number; name?: string; card?: string | null }
+  { strategyCard: StrategyCardNumber; tradeGoods: number; name?: string; card?: StrategyCardId | null }
 >;
 export type TechGain = DecisionBase<
   "tech.gain",
   {
-    tech: string;
+    tech: TechId;
     free: boolean;
     starting: boolean;
     flags: string[];
     /** PROPULSION | BIOTIC | CYBERNETIC | WARFARE | UNITUPGRADE | … */
-    type?: string | null;
+    type?: TechType | null;
     /** Prerequisite letters, e.g. "GG". */
     requirements?: string | null;
     factionTech?: boolean;
@@ -371,7 +402,7 @@ export type TechGain = DecisionBase<
 >;
 export type SecretObjectiveDiscard = DecisionBase<
   "secret_objective.discard",
-  { handle: number; secretObjective?: string; redraw: boolean }
+  { handle: number; secretObjective?: SecretObjectiveId; redraw: boolean }
 >;
 
 /** Everything not yet typed: options carry label/style/handler only. */

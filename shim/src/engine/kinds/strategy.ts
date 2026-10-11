@@ -4,10 +4,19 @@
  * PoliticsAgendaKind, ConstructionPlaceKind). Values carry ids
  * (card numbers, faction ids, planet ids, tile positions, amounts), never labels.
  */
-import type { DecisionBaseOf } from "../types.js";
+import type {
+  AgendaId,
+  ColorName,
+  DecisionBaseOf,
+  FactionId,
+  PlanetId,
+  StrategyCardId,
+  StrategyCardNumber,
+  TilePosition,
+} from "../types.js";
 
 /** Card automation id as the engine resolves it: "pok1leadership" … "pok8imperial", "te4construction", … */
-export type CardId = string;
+export type CardId = StrategyCardId;
 
 /** Who may press an option of a played card's message. */
 export type ScWho = "holder" | "others" | "anyone";
@@ -55,11 +64,11 @@ export type ScAction =
 export type StrategyCardResolve = DecisionBaseOf<
   "strategy_card.resolve",
   {
-    strategyCard: number;
+    strategyCard: StrategyCardNumber;
     name: string;
     card: CardId | null;
     /** Holder's faction. */
-    holder: string | null;
+    holder: FactionId | null;
     action: ScAction;
     who: ScWho;
     /** A non-holder pays a strategy token for it (the first such press follows the card). */
@@ -78,40 +87,40 @@ export type StrategyCardResolve = DecisionBaseOf<
 
 export type StrategyCardQueuePick = DecisionBaseOf<
   "strategy_card.queue_pick",
-  | { strategyCard: number; name: string; card: CardId | null; tradeGoods: number; queued: number[]; restart?: undefined }
-  | { restart: true; queued: number[]; strategyCard?: undefined }
+  | { strategyCard: StrategyCardNumber; name: string; card: CardId | null; tradeGoods: number; queued: StrategyCardNumber[]; restart?: undefined }
+  | { restart: true; queued: StrategyCardNumber[]; strategyCard?: undefined }
 >;
 
 export type StrategicAction = DecisionBaseOf<
   "strategy_card.strategic_action",
-  { action: "strategic"; strategyCard: number; name: string; card: CardId | null }
+  { action: "strategic"; strategyCard: StrategyCardNumber; name: string; card: CardId | null }
 >;
 
 export type DiplomacySystem = DecisionBaseOf<
   "strategy_card.diplomacy_system",
-  { tile: string | null; planet: string | null; mahact: boolean; planets: string[]; resources: number; influence: number; home: boolean }
+  { tile: TilePosition | null; planet: PlanetId | null; mahact: boolean; planets: PlanetId[]; resources: number; influence: number; home: boolean }
 >;
 
 export type PlanetReady = DecisionBaseOf<
   "planet.ready",
-  | { planet: string; resources: number; influence: number; done?: undefined }
+  | { planet: PlanetId; resources: number; influence: number; done?: undefined }
   | { done: true; source: "diplomacy" | string; limit: number; planet?: undefined }
 >;
 
-export type PoliticsSpeaker = DecisionBaseOf<"strategy_card.politics_speaker", { faction: string; color: string | null; self: boolean }>;
+export type PoliticsSpeaker = DecisionBaseOf<"strategy_card.politics_speaker", { faction: FactionId; color: ColorName | null; self: boolean }>;
 
 export type PoliticsAgenda = DecisionBaseOf<
   "strategy_card.politics_agenda",
   | { action: "draw"; count: number }
-  | { action: "top" | "bottom" | "discard"; handle: number; agenda: string | null; placedThisRound: number }
+  | { action: "top" | "bottom" | "discard"; handle: number; agenda: AgendaId | null; placedThisRound: number }
 >;
 
 export type ConstructionPlace = DecisionBaseOf<
   "strategy_card.construction_place",
   {
     unit: "pds" | "spacedock";
-    planet: string;
-    tile: string | null;
+    planet: PlanetId;
+    tile: TilePosition | null;
     home: boolean;
     resources: number;
     influence: number;
@@ -135,7 +144,7 @@ export type StrategyDecision =
 /** Decide in advance not to follow a strategy card (preDeclineSC_ / getPreDeclineSCButtons_), in the cards thread. */
 export type StrategyCardPreDecline = DecisionBaseOf<
   "strategy_card.pre_decline",
-  { strategyCard: number; action: "pre_decline" | "decide_later" | "undo" }
+  { strategyCard: StrategyCardNumber; action: "pre_decline" | "decide_later" | "undo" }
 >;
 
 export const STRATEGY_KINDS = [

@@ -1407,6 +1407,48 @@ export const STRATEGY_CARD_NAMES: Readonly<Record<StrategyCardId, string>> = {
   "te6warfare": "Warfare",
 };
 
+/** Thunder's Edge breakthrough ids (`alias` in data/breakthroughs) (31). */
+export const BREAKTHROUGH_IDS = [
+  "arborecbt", "argentbt", "bastionbt", "cabalbt", "crimsonbt", "deepwroughtbt", "empyreanbt", "firmamentbt",
+  "ghostbt", "hacanbt", "jolnarbt", "keleresbt", "l1z1xbt", "letnevbt", "mahactbt", "mentakbt", "muaatbt", "naalubt",
+  "naazbt", "nekrobt", "nomadbt", "obsidianbt", "ralnelbt", "saarbt", "sardakkbt", "solbt", "titansbt", "winnubt",
+  "xxchabt", "yinbt", "yssarilbt",
+] as const;
+export type BreakthroughId = (typeof BREAKTHROUGH_IDS)[number];
+export const BREAKTHROUGH_NAMES: Readonly<Record<BreakthroughId, string>> = {
+  "arborecbt": "Psychospore",
+  "argentbt": "Wing Transfer",
+  "bastionbt": "The Icon",
+  "cabalbt": "Al'Raith Ix Ianovar",
+  "crimsonbt": "Resonance Generator",
+  "deepwroughtbt": "Visionaria Select",
+  "empyreanbt": "Void Tether",
+  "firmamentbt": "The Sowing",
+  "ghostbt": "Particle Synthesis",
+  "hacanbt": "Auto-Factories",
+  "jolnarbt": "Specialist Compounds",
+  "keleresbt": "I.I.H.Q. Modernization",
+  "l1z1xbt": "Fealty Uplink",
+  "letnevbt": "Gravleash Maneuvers",
+  "mahactbt": "Vaults of the Heir",
+  "mentakbt": "The Table's Grace",
+  "muaatbt": "Stellar Genesis",
+  "naalubt": "Mindsieve",
+  "naazbt": "Absolute Synergy",
+  "nekrobt": "Valefar Assimilator Z",
+  "nomadbt": "Thunder's Paradox",
+  "obsidianbt": "The Reaping",
+  "ralnelbt": "Data Skimmer",
+  "saarbt": "Deorbit Barrage",
+  "sardakkbt": "N'orr Supremacy",
+  "solbt": "Bellum Gloriosum",
+  "titansbt": "Slumberstate Computing",
+  "winnubt": "Imperator",
+  "xxchabt": "Archon's Gift",
+  "yinbt": "Yin Ascendant",
+  "yssarilbt": "Deepgloom Executable",
+};
+
 /** Player colour names (data/colors `name`; PlayerState.color, UnitStack.color) (80). */
 export const COLORS = [
   "aberration", "azure", "beige", "black", "blight", "bloodred", "blue", "brown", "camouflage", "checker",
@@ -1615,6 +1657,7 @@ export const is = {
   publicObjective: has(PUBLIC_OBJECTIVE_IDS) as (x: unknown) => x is PublicObjectiveId,
   secretObjective: has(SECRET_OBJECTIVE_IDS) as (x: unknown) => x is SecretObjectiveId,
   relic: has(RELIC_IDS) as (x: unknown) => x is RelicId,
+  breakthrough: has(BREAKTHROUGH_IDS) as (x: unknown) => x is BreakthroughId,
   exploreCard: has(EXPLORE_CARD_IDS) as (x: unknown) => x is ExploreCardId,
   relicFragment: has(RELIC_FRAGMENT_IDS) as (x: unknown) => x is RelicFragmentId,
   leader: has(LEADER_IDS) as (x: unknown) => x is LeaderId,

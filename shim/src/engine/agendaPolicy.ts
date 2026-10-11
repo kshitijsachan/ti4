@@ -4,11 +4,11 @@
  * them anyway); abstain when unsure (For/Against, laws, harmful or unknown elections). Pass on whens/afters and
  * shenanigans; the speaker breaks ties, resolves and moves on.
  */
-import type { Decision, GameState, Option } from "./types.js";
-import type { AgendaOutcomeChoice } from "./kinds/agenda.js";
+import type { AgendaId, Decision, GameState, Option } from "./types.js";
+import type { AgendaOutcomeChoice, AgendaOutcomeId } from "./kinds/agenda.js";
 
 /** Elections that are good for whoever (or whose planet) is elected (base + PoK agenda ids). */
-const GOOD_TO_WIN = new Set([
+const GOOD_TO_WIN = new Set<AgendaId>([
   "secret",
   "committee",
   "arbiter",
@@ -54,7 +54,7 @@ export function preferredOutcome(state: GameState | null, me: string, outcomes: 
     return outcomes.find((o) => o.userId === me || o.id === self.faction || o.id === self.color)?.id ?? null;
   }
   if (agenda.outcomeType === "planet") {
-    const ours = new Set(self.planets);
+    const ours = new Set<string>(self.planets);
     return outcomes.find((o) => ours.has(o.id))?.id ?? null;
   }
   return null;
@@ -87,12 +87,12 @@ export function chooseAgenda(d: Decision, state: GameState | null, me: string, o
       return abstain ? { option: abstain, why: "agenda: abstain (nothing in it for us)" } : null;
     }
     case "agenda.tiebreak": {
-      const outcomes = opts.filter((o) => "outcome" in o.value).map((o) => ({ id: o.value.outcome as string, name: o.value.name as string }));
+      const outcomes = opts.filter((o) => "outcome" in o.value).map((o) => ({ id: o.value.outcome as AgendaOutcomeId, name: o.value.name as string }));
       const want = preferredOutcome(state, me, outcomes);
       const self = state?.players.find((p) => p.userId === me);
       const o =
         (want && pick((v) => v.outcome === want)) ||
-        (state?.agenda && GOOD_TO_WIN.has(state.agenda.agendaId ?? "") && pick((v) => v.planetOwner === self?.faction)) ||
+        (state?.agenda?.agendaId && GOOD_TO_WIN.has(state.agenda.agendaId) && pick((v) => v.planetOwner === self?.faction)) ||
         opts[0];
       return o ? { option: o, why: "agenda: speaker breaks the tie" } : null;
     }
