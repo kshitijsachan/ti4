@@ -28,7 +28,7 @@ import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ENGINE_DIR, RECORDINGS_DIR, ensureRunDir, gameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
 import { createFork, openFork, closeFork, clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
-import { loadRecording, recordingSaves } from "./lib/recording.ts";
+import { gameChannels, loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
 import { controlsOf } from "./lib/shim.ts";
 import { checkSnapshot } from "./lib/invariants.ts";
@@ -272,8 +272,14 @@ class Runner {
 
   carrying(customId, user) {
     const c = this.fork.clients.get(user);
+    // Only this fork's channels: with --diff both forks seat the same users, so a client also sees the other
+    // fork's messages (a legacy press must never click the engine fork's copy of a button, or vice versa).
+    const mine = gameChannels({ channels: Object.fromEntries(c?.channels ?? []) }, this.fork.game);
     let best = null;
-    for (const msgs of c?.messages.values() ?? []) for (const m of msgs.values()) if (controlsOf(m.components).some((x) => x.id === customId) && (!best || BigInt(m.id) > BigInt(best.id))) best = m;
+    for (const [chId, msgs] of c?.messages.entries() ?? []) {
+      if (mine.size && !mine.has(chId)) continue;
+      for (const m of msgs.values()) if (controlsOf(m.components).some((x) => x.id === customId) && (!best || BigInt(m.id) > BigInt(best.id))) best = m;
+    }
     return best;
   }
 
