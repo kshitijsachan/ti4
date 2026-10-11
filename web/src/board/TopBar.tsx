@@ -91,6 +91,8 @@ type Props = {
   onPlayers?: () => void;
   talkUnread: number;
   incomingTrades: number;
+  /** Decisions waiting on me from the engine stream; replaces the legacy prompt detection when given. */
+  waiting?: { count: number; title: string | null };
 };
 
 /** The table's header, one quiet line: which game, where we are in it, whose move it is, and a few icons. */
@@ -107,11 +109,15 @@ export function TopBar({
   onPlayers,
   talkUnread,
   incomingTrades,
+  waiting,
 }: Props) {
   const toggle = (name: DrawerName) => onDrawer(drawer === name ? null : name);
-  const waitingOnMe = useWaitingOnMe((s) => s.count);
-  const firstDecision = useWaitingOnMe((s) => s.title);
-  const setup = useSetupWaiting(gameName);
+  const legacyCount = useWaitingOnMe((s) => s.count);
+  const legacyTitle = useWaitingOnMe((s) => s.title);
+  const legacySetup = useSetupWaiting(gameName);
+  const waitingOnMe = waiting ? waiting.count : legacyCount;
+  const firstDecision = waiting ? waiting.title : legacyTitle;
+  const setup = waiting ? null : legacySetup;
   /* A decision of mine is up (setup, agenda, a follow…): the table waits on me even when it is nobody's turn. */
   const myMove = turn.mine || waitingOnMe > 0 || !!setup?.me;
   let turnText = "";

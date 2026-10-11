@@ -13,6 +13,8 @@ import { BoardTable } from "./BoardTable";
 import { GameDrawers } from "./GameDrawers";
 import { DecisionSlot, HandSlot, LogSlot } from "./Mounts";
 import { OPEN_TRADE_EVENT } from "@/decisions";
+import { decisionTitle, useEngineLink, useEngineState, useMyDecisions } from "@/engine";
+import { activePlayerColor, engineTurn } from "@/engine/board";
 import { ObjectivesModal } from "./ObjectivesModal";
 import { PlayerRail } from "./PlayerRail";
 import { PlayersView } from "./PlayersView";
@@ -64,9 +66,14 @@ type Props = {
 };
 
 /** The game, laid out like a table: header, seats, the map, your hand, and drawers for the rest. */
-export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
+export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing }: Props) {
   const data = useGameData();
   const me = usePlay((s) => s.me);
+  useEngineLink(gameName);
+  /* Engine flag on and its stream live: the header and seats read the engine's state, not the web-data document. */
+  const engineState = useEngineState(gameName);
+  const myDecisions = useMyDecisions();
+  const turn = engineState ? engineTurn(engineState, me?.id) : legacyTurn;
   const channels = usePlay((s) => s.channels);
   const game = findGame(channels, gameName);
   const [drawer, setDrawer] = useState<DrawerName | null>(null);
@@ -112,7 +119,8 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
   let myNote: string | undefined;
   /* The bot keeps "passed" set through the status and agenda phases; it only means something in the action phase. */
   const actionPhase = !turn.phase || turn.phase.startsWith("Action");
-  if (mine?.passed && actionPhase) myNote = "You passed";
+  const passed = engineState ? engineState.players.find((p) => p.userId === me?.id)?.passed : mine?.passed;
+  if (passed && actionPhase) myNote = "You passed";
   const revealed = [...(data?.objectives?.stage1Objectives ?? []), ...(data?.objectives?.stage2Objectives ?? [])].filter((o) => o.revealed).length;
 
   let stage: ReactNode = takeover;
@@ -124,9 +132,10 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
     <div className={classes.screen}>
       <TopBar
         gameName={gameName}
-        round={data?.gameRound}
+        round={engineState ? engineState.round : data?.gameRound}
         turn={turn}
-        activeColor={active ? getPrimaryColorCSS(active.color) : undefined}
+        activeColor={engineState ? activePlayerColor(engineState) : active ? getPrimaryColorCSS(active.color) : undefined}
+        waiting={engineState ? { count: myDecisions.length, title: myDecisions[0] ? decisionTitle(myDecisions[0]) : null } : undefined}
         myNote={myNote}
         objectives={revealed}
         drawer={drawer}
@@ -136,7 +145,7 @@ export function GameScreen({ gameName, turn, takeover, boardMissing }: Props) {
         talkUnread={talkUnread}
         incomingTrades={incomingTrades}
       />
-      {!takeover && <PlayerRail myUserId={me?.id} actionPhase={actionPhase} onAllPlayers={() => setPlayersOpen(true)} />}
+      {!takeover && <PlayerRail gameName={gameName} myUserId={me?.id} actionPhase={actionPhase} onAllPlayers={() => setPlayersOpen(true)} />}
       <main ref={stageRef} className={classes.stage} style={stageStyle}>
         {stage}
         {!takeover && (

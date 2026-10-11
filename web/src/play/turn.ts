@@ -19,7 +19,7 @@ const PHASES: Record<string, string> = {
 };
 
 /** "status.scoring" → "Status phase · scoring". */
-function phaseLabel(phase?: string) {
+export function phaseLabel(phase?: string) {
   if (!phase) return undefined;
   const [main, step] = phase.split(".");
   if (main === "setup") return "Setup";
