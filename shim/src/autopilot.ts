@@ -221,6 +221,10 @@ const INVERSE_PREFIXES: [string, string][] = [
 /** How long to wait for our own draft pick to register before picking again. */
 const MILTY_WAIT_MS = 15000;
 const MAX_RETRIES = 3;
+/** A prompt clearly waiting on us this long, with no press of ours in its game meanwhile, is looked at afresh. */
+const STALL_MS = 60000;
+/** Our action-phase turn buttons. */
+const TURN_ID = /^FFCC_[^_]+_(tacticalAction|componentAction|turnEnd|endOfTurnAbilities|passForRound|strategicAction_\d+)$/;
 const BUSY_TEXT = /hasn't finished processing the last task/i;
 
 export class Autopilot {
@@ -323,11 +327,14 @@ export class Autopilot {
     return (await this.stateOf(game))?.phase ?? null;
   }
 
-  /** Each seat's faction in a game, from the bot's web data (cached; refetched at most every 20s while unknown). */
+  /**
+   * Each seat's faction in a game, from the bot's web data: the only authority on who plays what. Cached, but read
+   * again every 20s (a faction is never taken from a cache forever: a stale one makes a seat press another faction's
+   * buttons and ignore its own).
+   */
   async factionOf(game: string, userId: string): Promise<string | undefined> {
     const hit = this.webFactions.get(game);
-    if (hit?.map.has(userId)) return hit.map.get(userId);
-    if (hit && Date.now() - hit.at < 20000) return undefined;
+    if (hit && Date.now() - hit.at < 20000) return hit.map.get(userId);
     const map = new Map<string, string>();
     try {
       const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(8000) });
@@ -336,10 +343,20 @@ export class Autopilot {
         for (const p of data.playerData ?? []) if (p.discordId && p.faction && p.faction !== "null") map.set(String(p.discordId), String(p.faction));
       }
     } catch {
-      /* bot API down: fall back to the draft state */
+      /* bot API down: keep what we knew (below), else fall back to the draft state */
+    }
+    // A failed read keeps the last good one (it is still the bot's word), but tries again soon.
+    if (!map.size && hit?.map.size) {
+      this.webFactions.set(game, { at: Date.now() - 15000, map: hit.map });
+      return hit.map.get(userId);
     }
     this.webFactions.set(game, { at: Date.now(), map });
     return map.get(userId);
+  }
+
+  forgetFaction(game: string) {
+    this.webFactions.delete(game);
+    this.drafts.delete(game);
   }
 
   /** The bot's draft state for a game (cached briefly): whose pick it is, and each player's faction. */
@@ -376,6 +393,7 @@ class SeatPilot {
   /** Per game: how many draft picks we had when we last pressed a draft button, and when. */
   private miltyPress = new Map<string, { picks: number; at: number }>();
   private startingTechChecked = new Map<string, { ok: boolean; at: number }>();
+  /** Our faction per game as last read from the bot (only to log changes; faction() always asks the bot's records). */
   private factions = new Map<string, string>();
   /** When we last pressed a control by `${channel}:${custom id}:${content}`: the bot often re-posts a prompt. */
   private recent = new Map<string, number>();
@@ -385,6 +403,8 @@ class SeatPilot {
   private answered = new Map<string, { sig: string; at: number }>();
   /** Per channel, when the bot last nudged us there ("the queue is currently waiting on you"). */
   private nudges = new Map<string, number>();
+  /** Prompts pinging us but locked to another faction, for which we already re-read our faction. */
+  private lockChecked = new Set<string>();
   /** Prompts we reported as having nothing safe to press. */
   private skipped = new Set<string>();
   /**
@@ -432,8 +452,16 @@ class SeatPilot {
   private onFrame(f: Json) {
     switch (f.t) {
       case "message_create":
-        if (f.message?.ephemeral && BUSY_WRONG.test(f.message.content ?? "") && this.lastPressed) {
-          this.fails.set(this.lastPressed, MAX_FAILS);
+        if (f.message?.ephemeral && BUSY_WRONG.test(f.message.content ?? "")) {
+          // The bot says we pressed another player's buttons: never that prompt again, and our idea of our own
+          // faction in this game was wrong (it decides which locked buttons are ours): read it again from the bot.
+          if (this.lastPressed) this.fails.set(this.lastPressed, MAX_FAILS);
+          const ch = this.store.channel(String(f.message.channel_id ?? ""));
+          const game = ch ? gameOf(ch, this.store.state.channels) : null;
+          if (game) {
+            log.warn(`autopilot ${this.name}: the bot says we pressed someone else's buttons in ${game}; re-reading our faction`);
+            this.forgetFaction(game);
+          }
         }
         // The bot refused our press because it was busy (the shim re-sends a few times first): let `retry`
         // prompts be pressed again soon rather than after RETRY_MS.
@@ -506,7 +534,7 @@ class SeatPilot {
           return;
         }
       }
-      const choice = await this.decide();
+      const choice = (await this.stalledPrompt()) ?? (await this.decide());
       if (!choice) {
         await this.recoverTurns();
         return;
@@ -547,7 +575,7 @@ class SeatPilot {
         this.orphanSince.delete(game);
         continue;
       }
-      const faction = this.factions.get(game) ?? family(await this.mgr.factionOf(game, this.userId));
+      const faction = await this.faction(game);
       if (!faction) continue;
       const hasPrompt = this.store
         .messages(ch.id)
@@ -563,6 +591,72 @@ class SeatPilot {
       this.turnStartAt.set(game, Date.now());
       log.info(`autopilot ${this.name}: our turn in ${game} has no turn buttons; asking the bot to start it again`);
       this.conn.send({ op: "command", nonce: `autopilot-turn-${++this.nonce}`, channel_id: ch.id, name: "player", options: [{ type: 1, name: "turn_start", options: [] }] });
+    }
+  }
+
+  /** Per game, when we last pressed anything in it. */
+  private lastPressIn = new Map<string, number>();
+  /** Per stalled prompt (message id): how often we re-checked it, and when last. */
+  private stallChecks = new Map<string, { n: number; at: number }>();
+  private lastStallScan = 0;
+
+  /**
+   * Safety net: a prompt clearly waiting on us (the strategy card pick while we are the active picker, our turn
+   * buttons while it is our action-phase turn) that has sat unanswered for over a minute. Whatever made us pass it
+   * over (a stale faction, a dedupe that took it for answered, a lost press), look at it afresh: forget what we
+   * remembered about it and our faction in that game, and answer it.
+   */
+  private async stalledPrompt(): Promise<Choice | null> {
+    if (Date.now() - this.lastStallScan < 10000) return null;
+    this.lastStallScan = Date.now();
+    const s = this.store.state;
+    const me = this.userId;
+    for (const game of this.liveGames()) {
+      if (Date.now() - (this.lastPressIn.get(game) ?? 0) < STALL_MS) continue;
+      const st = await this.mgr.stateOf(game);
+      if (!st?.active || st.active !== st.colors.get(me)) continue;
+      const turn = st.phase === "action" ? TURN_ID : st.phase === "strategy" ? /_scPick_\d+$/ : null;
+      if (!turn) continue;
+      let found: { m: StoredMessage; ch: Json } | null = null;
+      for (const ch of Object.values(s.channels)) {
+        if (![0, 11, 12].includes(ch.type) || !this.store.canView(me, ch.id) || gameOf(ch, s.channels) !== game) continue;
+        for (const m of this.store.messages(ch.id).slice(-WINDOW)) {
+          if ((m._ephemeral_for && m._ephemeral_for !== me) || !s.users[m.author?.id]?.bot) continue;
+          const content = String(m.content ?? "");
+          if (!content.includes(`<@${me}>`) || [...content.matchAll(/<@!?(\d+)>/g)].some(([, id]) => id !== me && s.users[id] && !s.users[id].bot)) continue;
+          if (!controlsOf(m.components).some((c) => turn.test(c.custom_id))) continue;
+          if (!found || BigInt(m.id) > BigInt(found.m.id)) found = { m, ch };
+        }
+      }
+      if (!found) continue;
+      const { m, ch } = found;
+      if (Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp) < STALL_MS) continue;
+      const seen = this.stallChecks.get(m.id);
+      if (seen && (Date.now() - seen.at < STALL_MS || seen.n >= 3)) continue;
+      this.stallChecks.set(m.id, { n: (seen?.n ?? 0) + 1, at: Date.now() });
+      log.info(`autopilot ${this.name}: re-checking stalled prompt "${String(m.content ?? "").slice(0, 80).replace(/\s+/g, " ")}" in #${ch.name} (waiting on us for ${Math.round((Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp)) / 1000)}s)`);
+      this.forgetFaction(game);
+      this.forgetPrompt(m);
+      const choice = await this.consider(m, ch, game);
+      if (choice) return { ...choice, why: `${choice.why}; re-checking stalled prompt` };
+      log.info(`autopilot ${this.name}: the stalled prompt in #${ch.name} still has nothing for us to press (faction ${(await this.faction(game)) ?? "unknown"}; controls ${controlsOf(m.components).map((c) => c.custom_id).slice(0, 6).join(", ")})`);
+    }
+    return null;
+  }
+
+  /** Forgets that we answered (or gave up on) a prompt, so the next look at it starts afresh. */
+  private forgetPrompt(m: StoredMessage) {
+    this.answered.delete(m.id);
+    this.fails.delete(m.id);
+    this.skipped.delete(m.id);
+    this.retries.delete(m.id);
+    this.lockChecked.delete(m.id);
+    for (const k of [...this.pressed]) if (k.startsWith(`${m.id}:`)) this.pressed.delete(k);
+    const controls = controlsOf(m.components);
+    this.recent.delete(this.promptKey(m, controls));
+    for (const c of controls) {
+      this.recent.delete(this.repostKey(m, c));
+      this.recent.delete(`${m.channel_id}:label:${c.label}`);
     }
   }
 
@@ -640,7 +734,7 @@ class SeatPilot {
       controls = controls.filter((c) => !/(^|_)(un)?galvanize_/i.test(c.custom_id));
     }
 
-    const faction = await this.faction(game, m);
+    const faction = await this.faction(game);
     const content = String(m.content ?? "");
     const mentionsMe = content.includes(`<@${me}>`) || (m.mentions ?? []).some((u: Json) => u.id === me);
     // The bot names players as "<faction emoji>Name <color emoji>**Color**", often without a mention.
@@ -653,7 +747,29 @@ class SeatPilot {
     const pingsOther = [...content.matchAll(/<@!?(\d+)>/g)].some(([, id]) => id !== me && s.users[id] && !s.users[id].bot);
     const mentionsOther = namesOther || (!mentionsMe && (pingsOther || (m.mentions ?? []).some((u: Json) => u.id !== me && !s.users[u.id]?.bot)));
     const ffcc = (c: Control) => family(/^FFCC_([^_]+)_/.exec(c.custom_id)?.[1]);
-    const ffccMine = !!faction && controls.some((c) => ffcc(c) === faction);
+    // Our faction's lock on the prompt makes it ours, unless the text is for another player (it names or pings only
+    // them): then the lock and the text disagree, and we take neither as a reason to answer.
+    const ffccMine = !!faction && controls.some((c) => ffcc(c) === faction) && !mentionsOther;
+    // The prompt carries a lock that is not ours (or any lock while we do not know our faction): its buttons are for
+    // that player, so a mention or our thread alone does not make it a question for us (no setup rule, no "only /
+    // first option" fallback). Rules for unlocked controls anyone may press (combat rolls on a combat thread's
+    // "Buttons for combat.", which also carries a fighter's own ability buttons) still apply.
+    const lockedOther = unpressed.some((c) => !!ffcc(c) && ffcc(c) !== faction) && !ffccMine;
+    // A prompt that pings only us but is locked to another faction: either it is a "played by @us" post with the
+    // followers' buttons, or our faction is not what we think. Re-read it from the bot (once per prompt) before we
+    // leave the prompt alone.
+    if (lockedOther && mentionsMe && !mentionsOther && !this.lockChecked.has(m.id) && Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp) < 600000) {
+      this.lockChecked.add(m.id);
+      const locks = [...new Set(unpressed.map(ffcc).filter(Boolean))];
+      if (locks.length === 1) {
+        this.forgetFaction(game);
+        const fresh = await this.faction(game);
+        if (fresh !== faction) {
+          log.info(`autopilot ${this.name}: a prompt for us in #${ch.name} is locked to ${locks[0]}; our faction is ${fresh ?? "unknown"}, not ${faction ?? "unknown"}`);
+          return this.consider(m, ch, game);
+        }
+      }
+    }
     // Only we are named in an actions-channel post ("@Bot Beta, as Speaker, please decide a winner").
     const calledOut = mentionsMe && ch.type === 0 && !(m.mention_roles ?? []).length && !/is up to draft/.test(content);
     // Other factions' buttons, and the controls we never press.
@@ -661,7 +777,7 @@ class SeatPilot {
     controls = ours.filter((c) => !BLOCKED_ID.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && !BLOCKED_LABEL.test(c.label.trim()));
     if (!controls.length) {
       // Say so (once) when a prompt that is certainly ours offers nothing we may press: a likely stall.
-      if ((ffccMine || m._ephemeral_for === me || calledOut) && !this.answered.has(m.id) && !this.skipped.has(m.id) && Date.now() - Date.parse(m.timestamp) < 600000) {
+      if ((ffccMine || (m._ephemeral_for === me && !BUSY_WRONG.test(content)) || calledOut) && !this.answered.has(m.id) && !this.skipped.has(m.id) && Date.now() - Date.parse(m.timestamp) < 600000) {
         this.skipped.add(m.id);
         const labels = ours.map((c) => c.label || c.custom_id).filter((l) => !/^undo$/i.test(l));
         if (labels.length) log.info(`autopilot ${this.name}: leaving "${content.slice(0, 80).replace(/\s+/g, " ")}" in #${ch.name} to a person (only ${labels.slice(0, 6).join(" / ")})`);
@@ -677,9 +793,11 @@ class SeatPilot {
     // Our own private thread (cards info) naming only us: e.g. Keleres' "choose a flavor of keleres", prompted by
     // whoever's press finished the draft.
     const ownThread = ch.type === 12 && myThreadOwner(ch, s, me);
-    const strong = m._ephemeral_for === me || ffccMine || (m._prompted_for === me && !mentionsOther) || (ownThread && mentionsMe && !mentionsOther);
+    // Only we may see it (and it is not the bot telling us a press was someone else's).
+    const ephemeralMine = m._ephemeral_for === me && !BUSY_WRONG.test(content);
+    const strong = ephemeralMine || ffccMine || (!lockedOther && !mentionsOther && ((m._prompted_for === me) || (ownThread && mentionsMe)));
     const ctx: Ctx = {
-      addressed: m._ephemeral_for === me || ffccMine || ((mentionsMe || ownThread) && !mentionsOther),
+      addressed: ephemeralMine || ffccMine || ((mentionsMe || ownThread) && !mentionsOther && !lockedOther),
       strong,
       direct: strong || calledOut || (mentionsMe && !/is up to draft/.test(content)) || ((myThread || factionThread) && !mentionsOther),
       faction,
@@ -761,7 +879,8 @@ class SeatPilot {
       const control = rule.last ? hits[hits.length - 1] : hits[0];
       return { msg: m, control, score: rule.score, why: rule.why };
     }
-    if (!ctx.strong || answered || TAKE_BACK_TEXT.test(content)) return null;
+    // Only for prompts clearly addressed to us: never one for another player, or locked to another faction.
+    if (!ctx.strong || mentionsOther || lockedOther || answered || TAKE_BACK_TEXT.test(content)) return null;
     // A prompt certainly waiting on us that no rule covers: its first control (not one we just chose in a
     // similar prompt here, e.g. a second "choose a technology").
     // Optional abilities offered "just in case" (agents, commanders, promissory notes, "use X?") are not questions
@@ -974,32 +1093,36 @@ class SeatPilot {
     return { msg: m, control: open[0], score: rule.score, why: `draft: first ${kind}` };
   }
 
-  /** This seat's faction in a game: from the bot's draft state, else learned from buttons addressed to us. */
-  private async faction(game: string, m: StoredMessage): Promise<string | undefined> {
-    const known = this.factions.get(game);
-    if (known) return known;
-    const fromWeb = await this.mgr.factionOf(game, this.userId);
-    if (fromWeb) {
-      this.factions.set(game, family(fromWeb)!);
-      return family(fromWeb);
-    }
+  /**
+   * This seat's faction in a game, only ever from the bot's own records: its web data (read again every 20s), else the
+   * faction the draft recorded for us. Never guessed from the buttons of a message that pings us: a strategy card's
+   * "played by @us" post carries other factions' follow buttons, and a guess cached for the game made a seat press
+   * another faction's setup buttons and ignore its own strategy card pick (pbd10). Unknown means: no faction-locked
+   * button is ours.
+   */
+  private async faction(game: string): Promise<string | undefined> {
+    const fromWeb = family(await this.mgr.factionOf(game, this.userId));
+    if (fromWeb) return this.noteFaction(game, fromWeb, "the bot's game data");
     const draft = await this.mgr.draft(game, 10000);
     const mine = (draft?.players ?? []).find((p: Json) => String(p.userId) === this.userId);
-    if (mine?.faction) {
-      this.factions.set(game, family(String(mine.faction))!);
-      return family(String(mine.faction));
-    }
-    const content = String(m.content ?? "");
-    if (content.includes(`<@${this.userId}>`) && !(m.mentions ?? []).some((u: Json) => u.id !== this.userId)) {
-      const ids = controlsOf(m.components)
-        .map((c) => /^FFCC_([^_]+)_/.exec(c.custom_id)?.[1])
-        .filter(Boolean);
-      if (ids.length && ids.every((f) => f === ids[0])) {
-        this.factions.set(game, family(ids[0])!);
-        return family(ids[0]);
-      }
-    }
+    if (mine?.faction) return this.noteFaction(game, family(String(mine.faction))!, "the draft");
     return undefined;
+  }
+
+  /** Logs when our faction in a game changes (first learned, or corrected). */
+  private noteFaction(game: string, faction: string, source: string) {
+    const was = this.factions.get(game);
+    if (was !== faction) {
+      this.factions.set(game, faction);
+      log.info(`autopilot ${this.name}: ${was ? `faction in ${game} is ${faction}, not ${was}` : `plays ${faction} in ${game}`} (from ${source})`);
+    }
+    return faction;
+  }
+
+  /** Our faction in this game may be wrong: read it again from the bot before the next decision. */
+  private forgetFaction(game: string) {
+    this.mgr.forgetFaction(game);
+    this.mgr.forgetState(game);
   }
 
   // ---- Claude (optional) ----
@@ -1081,6 +1204,8 @@ class SeatPilot {
     this.recent.set(key0, Date.now());
     this.recent.set(this.repostKey(msg, control), Date.now());
     this.lastPressed = msg.id;
+    const pressGame = gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels);
+    if (pressGame) this.lastPressIn.set(pressGame, Date.now());
     const nonce = `autopilot-${++this.nonce}`;
     const done = new Promise<string | undefined>((resolve) => {
       const timer = setTimeout(() => resolve("no answer from the bot"), 20000);
@@ -1153,13 +1278,7 @@ class SeatPilot {
       get name() {
         return self.name;
       },
-      faction: async (game) => {
-        const known = self.factions.get(game);
-        if (known) return known;
-        const f = family(await self.mgr.factionOf(game, self.userId));
-        if (f) self.factions.set(game, f);
-        return f;
-      },
+      faction: (game) => self.faction(game),
       prompts: (game) => collect(game, true),
       messages: (game) => collect(game, false),
       press: (p, c, why) => self.mgr.serial(() => self.press({ msg: p.m, control: c, score: 100, why })),
