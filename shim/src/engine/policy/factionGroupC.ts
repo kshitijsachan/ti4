@@ -55,6 +55,15 @@ export function chooseFactionGroupC(d: Decision, state: GameState | null, me: st
     return undefined; // decline (generic)
   }
 
+  // Devotion / Impulse Core hit: the biggest opposing ship, an already-damaged one first (no sustain).
+  const hits = of("hit_opponent");
+  if (hits.length) {
+    const rank = ["ws", "fs", "dn", "cv", "ca", "dd", "mf", "gf", "ff"];
+    const score = (o: Option<V>) => (rank.indexOf(o.value!.unit ?? "") + 1 || 99) - (o.value!.damaged ? 0.5 : 0);
+    const pick = [...hits].sort((a, b) => score(a) - score(b))[0];
+    return { option: pick, why: "assign the ability's hit to the biggest opposing ship" };
+  }
+
   // Yssaril hero: we must offer one action card; give the least useful one.
   const offer = of("yssarilhero", "yssarilHeroInitialOffering");
   if (offer.length) {
