@@ -214,6 +214,8 @@ export type ResolvedBy =
   | "speaker" // the speaker acts: agenda tie-break / resolution, reveal the next public objective
   | "agenda_voter" // a vote step: the current voter
   | "sc_holder" // the player holding the strategy card the prompt is about
+  | "prompt_text" // tech.gain: the one player the prompt text names (faction emoji / colour)
+  | "setup_state" // tech.gain during setup: the one player still owing starting technologies
   | "mention" // weak: exactly one seated player mentioned
   | "mixed_owners"
   | "recent_press" // weak: whoever pressed a button in that channel just before (kind fallback)
@@ -472,6 +474,17 @@ export function awaits(d: Decision, userId: UserId): boolean {
   if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
   if (d.scope === "player") return d.target?.userId === userId;
   return true;
+}
+
+/**
+ * The player may answer although the window does not await them (KindSpec.answersOutsideWindow): the holder of a
+ * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only).
+ */
+export function answersOutsideWindow(d: Decision, userId: UserId, state: GameState | null): boolean {
+  if (d.kind !== "strategy_card.resolve" || !d.window) return false;
+  const holder = d.window.subject?.holder;
+  const me = state?.players.find((p) => p.userId === userId);
+  return !!holder && !!me?.faction && me.faction === holder;
 }
 
 /** Narrow helpers. */

@@ -118,7 +118,10 @@ export function settleAnswer(view: EngineView, decisionId: string | undefined, n
 export function myDecisions(view: EngineView, userId: string | null | undefined): Decision[] {
   if (!userId) return [];
   const seated = !!view.state?.players.some((p) => p.userId === userId);
+  const myFaction = view.state?.players.find((p) => p.userId === userId)?.faction;
+  // The strategy card I played: its window lists followers only; I resolve the primary on it (answersOutsideWindow).
+  const holding = (d: Decision) => d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction;
   return Object.values(view.decisions)
-    .filter((d) => awaits(d, userId) && (d.scope === "player" || !!d.window || seated))
+    .filter((d) => (awaits(d, userId) || holding(d)) && (d.scope === "player" || !!d.window || seated || holding(d)))
     .sort((a, b) => a.createdAt - b.createdAt || a.seq - b.seq);
 }

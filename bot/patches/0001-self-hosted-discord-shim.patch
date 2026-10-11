@@ -834,10 +834,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..919d04f
+index 0000000..0c05283
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,511 @@
+@@ -0,0 +1,516 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -950,9 +950,11 @@ index 0000000..919d04f
 +                && !d.target().userId().equals(userId))
 +            return fail("forbidden", "That decision is for someone else.", decisionId);
 +        if (d.window() != null) {
-+            if (!d.window().eligible().contains(userId))
++            KindSpec ws = DecisionKinds.byKind(d.kind());
++            boolean outside = ws != null && ws.answersOutsideWindow(game, player, d);
++            if (!outside && !d.window().eligible().contains(userId))
 +                return fail("forbidden", "You are not part of this reaction window.", decisionId);
-+            if (d.window().responded().contains(userId))
++            if (!outside && d.window().responded().contains(userId))
 +                return fail("stale", "You already responded to this window.", decisionId);
 +        }
 +
@@ -1022,7 +1024,7 @@ index 0000000..919d04f
 +        } finally {
 +            inFlight.remove(flightKey);
 +        }
-+        recordWindowResponse(d, userId);
++        recordWindowResponse(d, userId, plan.componentId());
 +        List<Decision> opened = DecisionRegistry.openedAfter(gameName, before);
 +        return new AnswerResult(
 +                true,
@@ -1203,10 +1205,13 @@ index 0000000..919d04f
 +    }
 +
 +    /** Kinds with recordsResponses(): mark this player responded on the window now (see WindowResponses). */
-+    private static void recordWindowResponse(Decision d, String userId) {
++    private static void recordWindowResponse(Decision d, String userId, String componentId) {
 +        if (d.window() == null || !d.window().eligible().contains(userId)) return;
 +        KindSpec spec = DecisionKinds.byKind(d.kind());
 +        if (spec == null || !spec.recordsResponses()) return;
++        String handler = null;
++        for (Option o : d.options()) if (o.id().equals(componentId)) handler = o.handler();
++        if (handler == null || !spec.countsAsResponse(handler)) return;
 +        WindowResponses.record(d.source().messageId(), userId);
 +        String id = DecisionRegistry.decisionIdForMessage(d.source().messageId());
 +        Decision cur = id == null ? null : DecisionRegistry.get(id);
@@ -1351,10 +1356,10 @@ index 0000000..919d04f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..7e36785
+index 0000000..8d8bf25
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,578 @@
+@@ -0,0 +1,588 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -1548,6 +1553,8 @@ index 0000000..7e36785
 +        KindSpec spec = DecisionKinds.classify(handlerIds);
 +        KindSpec.CaptureContext ctx =
 +                new KindSpec.CaptureContext(game, channelId, messageId, content, ephemeral, resolved, player, handlerIds);
++        // A typed decision that can never be answered must not exist: an obsolete prompt stays legacy.
++        if (spec != null && obsolete(spec, ctx)) spec = null;
 +        Target target = resolved;
 +        if (spec != null) {
 +            target = spec.target(ctx, resolved);
@@ -1732,6 +1739,14 @@ index 0000000..7e36785
 +            if (mentioned.size() == 1) return target(game.getPlayer(mentioned.iterator().next()), "mention");
 +        }
 +        return new Target(null, null, null, owners.size() > 1 ? "mixed_owners" : "none");
++    }
++
++    static boolean obsolete(KindSpec spec, KindSpec.CaptureContext ctx) {
++        try {
++            return spec.obsolete(ctx);
++        } catch (Exception e) {
++            return false;
++        }
 +    }
 +
 +    public static Target target(Player p, String how) {
@@ -2304,10 +2319,10 @@ index 0000000..dcb3e09
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..081e3e6
+index 0000000..1cf8a7e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,99 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.Objects;
@@ -2389,6 +2404,11 @@ index 0000000..081e3e6
 +            KindSpec.CaptureContext ctx = new KindSpec.CaptureContext(
 +                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(),
 +                    d.target(), p);
++            if (DecisionCapture.obsolete(spec, ctx)) {
++                // Every answer would be refused now (e.g. the round's objective is already revealed): close it.
++                DecisionRegistry.close(d.id(), "obsolete");
++                continue;
++            }
 +            Target t = spec.target(ctx, d.target());
 +            Player tp = t == null || t.userId() == null ? null : game.getPlayer(t.userId());
 +            ctx = new KindSpec.CaptureContext(
@@ -3480,10 +3500,10 @@ index 0000000..149af12
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/KindSpec.java b/src/main/java/ti4/selfhost/engine/KindSpec.java
 new file mode 100644
-index 0000000..590ab6f
+index 0000000..4be88f0
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/KindSpec.java
-@@ -0,0 +1,193 @@
+@@ -0,0 +1,217 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -3562,6 +3582,30 @@ index 0000000..590ab6f
 +     * table decisions take several presses from one player).
 +     */
 +    default boolean recordsResponses() {
++        return false;
++    }
++
++    /**
++     * Whether this player may answer the decision although they are not (or no longer) awaited by its window — e.g.
++     * the holder of a played strategy card resolving its primary on the card's message (the window lists only the
++     * players who may follow). The kind's validate() still applies.
++     */
++    default boolean answersOutsideWindow(Game game, Player answering, Decision decision) {
++        return false;
++    }
++
++    /** With {@link #recordsResponses()}: whether pressing this option (handler id) is the player's response. */
++    default boolean countsAsResponse(String handlerId) {
++        return true;
++    }
++
++    /**
++     * True when this prompt can no longer be answered (validate would refuse every option), e.g. a stale "reveal the
++     * next objective" after it was revealed. Checked at capture (the message then stays legacy) and, for dynamic()
++     * kinds, after every state change (the open decision is closed). A typed decision that can never be answered
++     * must not exist.
++     */
++    default boolean obsolete(CaptureContext ctx) {
 +        return false;
 +    }
 +
@@ -3679,10 +3723,10 @@ index 0000000..590ab6f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/SetupStateBuilder.java b/src/main/java/ti4/selfhost/engine/SetupStateBuilder.java
 new file mode 100644
-index 0000000..36e5baa
+index 0000000..6216ba1
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/SetupStateBuilder.java
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,201 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -3785,7 +3829,8 @@ index 0000000..36e5baa
 +        }
 +    }
 +
-+    private static boolean pastSetup(Game game) {
++    /** The game is past setup (round 2+, or a strategy / action / status / agenda phase, or objectives revealed). */
++    public static boolean pastSetup(Game game) {
 +        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame();
 +        return game.getRound() > 1
 +                || phase.startsWith("strategy")
@@ -9966,10 +10011,10 @@ index 0000000..9ac32c4
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/DealSecretsKind.java b/src/main/java/ti4/selfhost/engine/kinds/DealSecretsKind.java
 new file mode 100644
-index 0000000..efec590
+index 0000000..fc104fc
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/DealSecretsKind.java
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,72 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -10029,6 +10074,17 @@ index 0000000..efec590
 +        if (!"deal_secrets".equals(s.stage()) && !s.waitingOn().isEmpty())
 +            return "Not every player is set up yet (" + s.waitingOn().size() + " still choosing).";
 +        return null;
++    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/DiplomacySystemKind.java b/src/main/java/ti4/selfhost/engine/kinds/DiplomacySystemKind.java
@@ -10736,10 +10792,10 @@ index 0000000..941d0a5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/GameSettingsKind.java b/src/main/java/ti4/selfhost/engine/kinds/GameSettingsKind.java
 new file mode 100644
-index 0000000..0f16630
+index 0000000..b2bac82
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/GameSettingsKind.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,75 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -10799,7 +10855,20 @@ index 0000000..0f16630
 +
 +    @Override
 +    public Target target(CaptureContext ctx, Target resolved) {
-+        return "cards_thread".equals(resolved == null ? null : resolved.resolvedBy()) ? resolved : null;
++        return "cards_thread".equals(resolved == null ? null : resolved.resolvedBy())
++                ? SetupKindSupport.refresh(ctx, resolved)
++                : null;
++    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ImperialScoreKind.java b/src/main/java/ti4/selfhost/engine/kinds/ImperialScoreKind.java
@@ -10877,10 +10946,10 @@ index 0000000..e2835f7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java b/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java
 new file mode 100644
-index 0000000..13d0a6f
+index 0000000..f840b33
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,116 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -10978,13 +11047,31 @@ index 0000000..13d0a6f
 +        if (m == null) return false;
 +        return m.isFactionTaken(flavor) || (!m.isFinished() && m.getFactionDraft().contains(flavor));
 +    }
++
++    /** Setup: faction / colour are picked after capture; re-resolve the target on every state change. */
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    @Override
++    public ti4.selfhost.engine.EngineModels.Target target(
++            CaptureContext ctx, ti4.selfhost.engine.EngineModels.Target resolved) {
++        return SetupKindSupport.refresh(ctx, resolved);
++    }
++
++    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
++    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java b/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java
 new file mode 100644
-index 0000000..a43e15f
+index 0000000..9a130f4
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,69 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -11035,13 +11122,31 @@ index 0000000..a43e15f
 +        return "Wait until every other player has chosen their starting technologies (" + waiting.size()
 +                + " still choosing): Keleres chooses from theirs.";
 +    }
++
++    /** Setup: faction / colour are picked after capture; re-resolve the target on every state change. */
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    @Override
++    public ti4.selfhost.engine.EngineModels.Target target(
++            CaptureContext ctx, ti4.selfhost.engine.EngineModels.Target resolved) {
++        return SetupKindSupport.refresh(ctx, resolved);
++    }
++
++    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
++    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftInfoKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftInfoKind.java
 new file mode 100644
-index 0000000..5bf8988
+index 0000000..4a31cfa
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftInfoKind.java
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,58 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -11090,6 +11195,14 @@ index 0000000..5bf8988
 +    @Override
 +    public String scope(CaptureContext ctx) {
 +        return "table";
++    }
++
++    /** Once the draft is over this prompt is a leftover (live: hundreds open across games). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game())
++                || ti4.selfhost.engine.SetupStateBuilder.draftFinished(
++                        ctx.game(), ctx.game().getMiltyDraftManager());
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
@@ -11200,10 +11313,10 @@ index 0000000..8c755a8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftQueueKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftQueueKind.java
 new file mode 100644
-index 0000000..029dc4d
+index 0000000..a3866b8
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftQueueKind.java
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,62 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -11244,6 +11357,26 @@ index 0000000..029dc4d
 +        int us = rest.indexOf('_');
 +        return SetupKindSupport.map(
 +                "action", "queue", "category", rest.substring(0, us), "pick", rest.substring(us + 1));
++    }
++
++    /** Setup: faction / colour are picked after capture; re-resolve the target on every state change. */
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    @Override
++    public ti4.selfhost.engine.EngineModels.Target target(
++            CaptureContext ctx, ti4.selfhost.engine.EngineModels.Target resolved) {
++        return SetupKindSupport.refresh(ctx, resolved);
++    }
++
++    /** Once the draft is over this prompt is a leftover (live: hundreds open across games). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game())
++                || ti4.selfhost.engine.SetupStateBuilder.draftFinished(
++                        ctx.game(), ctx.game().getMiltyDraftManager());
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PaymentSpendKind.java b/src/main/java/ti4/selfhost/engine/kinds/PaymentSpendKind.java
@@ -11748,10 +11881,10 @@ index 0000000..1afc874
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java b/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java
 new file mode 100644
-index 0000000..a7cf107
+index 0000000..0cebb2a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,98 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -11830,6 +11963,24 @@ index 0000000..a7cf107
 +
 +    private static String part(String[] t, int i) {
 +        return t.length > i ? t[i] : null;
++    }
++
++    /** Setup: faction / colour are picked after capture; re-resolve the target on every state change. */
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    @Override
++    public ti4.selfhost.engine.EngineModels.Target target(
++            CaptureContext ctx, ti4.selfhost.engine.EngineModels.Target resolved) {
++        return SetupKindSupport.refresh(ctx, resolved);
++    }
++
++    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PoliticsAgendaKind.java b/src/main/java/ti4/selfhost/engine/kinds/PoliticsAgendaKind.java
@@ -12486,10 +12637,10 @@ index 0000000..05cde67
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/RevealObjectivesKind.java b/src/main/java/ti4/selfhost/engine/kinds/RevealObjectivesKind.java
 new file mode 100644
-index 0000000..e046ad1
+index 0000000..a11aff7
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/RevealObjectivesKind.java
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,71 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -12549,6 +12700,17 @@ index 0000000..e046ad1
 +        if (game.getPlayer(game.getSpeakerUserID()) == null) return "No speaker is assigned yet.";
 +        return null;
 +    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
++    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java b/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java
 new file mode 100644
@@ -12607,10 +12769,10 @@ index 0000000..c3bd902
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/SetupKindSupport.java b/src/main/java/ti4/selfhost/engine/kinds/SetupKindSupport.java
 new file mode 100644
-index 0000000..e9bac2e
+index 0000000..f89d2c3
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/SetupKindSupport.java
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,47 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -12639,6 +12801,17 @@ index 0000000..e9bac2e
 +        return m;
 +    }
 +
++    /**
++     * The resolved target with faction / colour re-read from the game: they are picked during setup, so a target
++     * captured earlier has faction null (setup kinds are dynamic() and call this on every state change).
++     */
++    @Nullable
++    static Target refresh(ti4.selfhost.engine.KindSpec.CaptureContext ctx, @Nullable Target resolved) {
++        if (resolved == null || resolved.userId() == null) return resolved;
++        Player p = ctx.game().getPlayer(resolved.userId());
++        return p == null ? resolved : ti4.selfhost.engine.DecisionCapture.target(p, resolved.resolvedBy());
++    }
++
 +    @Nullable
 +    static Target targetOf(Game game, @Nullable String userId, String how) {
 +        Player p = userId == null ? null : game.getPlayer(userId);
@@ -12649,10 +12822,10 @@ index 0000000..e9bac2e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/SetupPreferenceKind.java b/src/main/java/ti4/selfhost/engine/kinds/SetupPreferenceKind.java
 new file mode 100644
-index 0000000..0403a83
+index 0000000..30bb3be
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/SetupPreferenceKind.java
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,72 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -12705,6 +12878,24 @@ index 0000000..0403a83
 +
 +    private static Map<String, Object> v(String pref, String question, String choice) {
 +        return SetupKindSupport.map("preference", pref, "question", question, "choice", choice);
++    }
++
++    /** Setup: faction / colour are picked after capture; re-resolve the target on every state change. */
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    @Override
++    public ti4.selfhost.engine.EngineModels.Target target(
++            CaptureContext ctx, ti4.selfhost.engine.EngineModels.Target resolved) {
++        return SetupKindSupport.refresh(ctx, resolved);
++    }
++
++    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusAdvanceKind.java b/src/main/java/ti4/selfhost/engine/kinds/StatusAdvanceKind.java
@@ -12850,10 +13041,10 @@ index 0000000..bb13661
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusHomeworkKind.java b/src/main/java/ti4/selfhost/engine/kinds/StatusHomeworkKind.java
 new file mode 100644
-index 0000000..36439c5
+index 0000000..ba01b83
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StatusHomeworkKind.java
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,170 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -13011,6 +13202,17 @@ index 0000000..36439c5
 +        if (o instanceof Number n && n.doubleValue() == Math.floor(n.doubleValue())) return n.intValue();
 +        if (o instanceof String s && s.matches("-?\\d+")) return Integer.parseInt(s);
 +        throw new IllegalArgumentException("Give whole numbers for tactic, fleet and strategy.");
++    }
++
++    /** Ready is recorded engine-side too: the react record behind PlayerStatus.ready is not always kept (live pbd97). */
++    @Override
++    public boolean recordsResponses() {
++        return true;
++    }
++
++    @Override
++    public boolean countsAsResponse(String handlerId) {
++        return "pass_on_abilities".equals(handlerId);
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusPhase.java b/src/main/java/ti4/selfhost/engine/kinds/StatusPhase.java
@@ -13235,10 +13437,10 @@ index 0000000..4a6fee8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusRevealObjectiveKind.java b/src/main/java/ti4/selfhost/engine/kinds/StatusRevealObjectiveKind.java
 new file mode 100644
-index 0000000..f2e92c8
+index 0000000..f6488ce
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StatusRevealObjectiveKind.java
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,84 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -13301,6 +13503,12 @@ index 0000000..f2e92c8
 +    @Override
 +    public boolean dynamic() {
 +        return true;
++    }
++
++    /** The round's objective is already revealed (stale prompts in old games, live pbd26/27): never answerable. */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return !ctx.game().getStoredValue("revealedPOInRound" + ctx.game().getRound()).isEmpty();
 +    }
 +
 +    @Override
@@ -13898,10 +14106,10 @@ index 0000000..0f0d0a4
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
 new file mode 100644
-index 0000000..3cb8e7f
+index 0000000..d27a5f6
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,235 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -14079,12 +14287,29 @@ index 0000000..3cb8e7f
 +        List<String> responded = new ArrayList<>();
 +        Map<String, String> responses = new LinkedHashMap<>();
 +        for (Player p : game.getRealPlayers()) {
-+            eligible.add(p.getUserID());
 +            String status = StrategyCards.status(game, p, sc);
 +            responses.put(p.getUserID(), status);
-+            if ("declined".equals(status)) responded.add(p.getUserID());
++            // The holder resolves the primary (answersOutsideWindow); the window is about who follows.
++            if ("holder".equals(status) || p == holder) continue;
++            eligible.add(p.getUserID());
++            if ("declined".equals(status) || "followed".equals(status)) responded.add(p.getUserID());
 +        }
 +        return new ReactionWindow("strategy_card", subject, eligible, responded, responses);
++    }
++
++    /** Nobody holds the card any more (a previous round's prompt, live pbd97): never answerable, close it. */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        Integer sc = cardOfMessage.get(ctx.messageId());
++        return sc != null && StrategyCards.holder(ctx.game(), sc) == null;
++    }
++
++    /** The card's holder answers its primary on this message without being in the follow window. */
++    @Override
++    public boolean answersOutsideWindow(Game game, Player answering, Decision decision) {
++        Object sc = decision.window() == null ? null : decision.window().subject().get("strategyCard");
++        int n = StrategyCards.intOf(sc, -1);
++        return n >= 0 && answering.getSCs() != null && answering.getSCs().contains(n);
 +    }
 +
 +    @Override
@@ -15422,10 +15647,10 @@ index 0000000..51c7727
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TechGainKind.java b/src/main/java/ti4/selfhost/engine/kinds/TechGainKind.java
 new file mode 100644
-index 0000000..626d127
+index 0000000..b780c32
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TechGainKind.java
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,100 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -15433,6 +15658,11 @@ index 0000000..626d127
 +import java.util.LinkedHashMap;
 +import java.util.List;
 +import java.util.Map;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.selfhost.engine.EngineModels.SetupPlayer;
++import ti4.selfhost.engine.EngineModels.SetupState;
++import ti4.selfhost.engine.EngineModels.Target;
 +import ti4.selfhost.engine.KindSpec;
 +
 +/**
@@ -15478,13 +15708,55 @@ index 0000000..626d127
 +        }
 +        return v;
 +    }
++
++    /** Faction / colour are picked during setup, and a prompt without owner prefix may name its player only in text. */
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    /**
++     * The generic target (refreshed: faction / colour may have been picked since capture). Without one (live: setup
++     * starting-tech prompts in the actions channel resolved "none"): the one player the prompt text names by faction
++     * emoji / colour, else, during setup, the one player still owing starting technologies.
++     */
++    @Override
++    public Target target(CaptureContext ctx, Target resolved) {
++        if (resolved != null && resolved.userId() != null) return SetupKindSupport.refresh(ctx, resolved);
++        Game game = ctx.game();
++        String text = ctx.content() == null ? "" : ctx.content().toLowerCase(java.util.Locale.ROOT);
++        Player named = null;
++        int hits = 0;
++        for (Player p : game.getPlayers().values()) {
++            if (p == null || p.isDummy()) continue;
++            String f = p.getFaction() == null ? "" : p.getFaction().toLowerCase(java.util.Locale.ROOT);
++            String c = p.getColor() == null ? "" : p.getColor().toLowerCase(java.util.Locale.ROOT);
++            boolean byFaction = !f.isBlank() && !"null".equals(f) && text.contains("<:" + f + ":");
++            boolean byColor = !c.isBlank() && !"null".equals(c) && text.contains("**" + c + "**");
++            if (byFaction || byColor) {
++                named = p;
++                hits++;
++            }
++        }
++        if (hits == 1) return ti4.selfhost.engine.DecisionCapture.target(named, "prompt_text");
++        SetupState setup = ti4.selfhost.engine.SetupStateBuilder.build(game);
++        if (setup != null) {
++            List<String> owing = new ArrayList<>();
++            for (SetupPlayer sp : setup.players()) if (sp.startingTechsNeeded() > 0) owing.add(sp.userId());
++            if (owing.size() == 1) {
++                Player p = game.getPlayer(owing.getFirst());
++                if (p != null) return ti4.selfhost.engine.DecisionCapture.target(p, "setup_state");
++            }
++        }
++        return resolved;
++    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TechTypeChoiceKind.java b/src/main/java/ti4/selfhost/engine/kinds/TechTypeChoiceKind.java
 new file mode 100644
-index 0000000..1fd4f0e
+index 0000000..10b1653
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TechTypeChoiceKind.java
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,52 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -15523,6 +15795,18 @@ index 0000000..1fd4f0e
 +        int us = type.indexOf('_');
 +        if (us >= 0) type = type.substring(0, us);
 +        return SetupKindSupport.map("techType", type, "free", free);
++    }
++
++    /** Setup: faction / colour are picked after capture; re-resolve the target on every state change. */
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    @Override
++    public ti4.selfhost.engine.EngineModels.Target target(
++            CaptureContext ctx, ti4.selfhost.engine.EngineModels.Target resolved) {
++        return SetupKindSupport.refresh(ctx, resolved);
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TradeForceReplenishKind.java b/src/main/java/ti4/selfhost/engine/kinds/TradeForceReplenishKind.java

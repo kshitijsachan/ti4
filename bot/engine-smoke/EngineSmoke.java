@@ -87,6 +87,18 @@ public class EngineSmoke {
         EngineModels.GameState st = StateSnapshotBuilder.build(g, "111");
         check(st.players().size() == 2 && "hacan".equals(st.players().get(0).faction()) && st.players().get(0).hand() != null && st.players().get(1).hand() == null, "state players/hand");
 
+        // 6b. Obsolete prompts stay legacy: the round's objective is already revealed
+        g.setStoredValue("revealedPOInRound" + g.getRound(), "x");
+        DataObject m6 = msg("5006", "800", 0, "reveal", "reveal_stage_1", "reveal_stage_2");
+        Decision d6 = DecisionCapture.build(g, m6, DecisionCapture.controls(m6), null);
+        check(d6.kind().equals("legacy"), "stale reveal prompt stays legacy: " + d6.kind());
+        g.setStoredValue("revealedPOInRound" + g.getRound(), "");
+
+        // 6c. tech.gain without owner prefix or mention: the player the prompt text names
+        DataObject m7 = msg("5007", "800", 0, "<:hacan:1> **red** use the buttons to choose your starting technology:", "getTech_amd__noPay__comp", "getTech_det__noPay__comp");
+        Decision d7 = DecisionCapture.build(g, m7, DecisionCapture.controls(m7), null);
+        check(d7.kind().equals("tech.gain") && d7.target() != null && "111".equals(d7.target().userId()), "tech.gain target from prompt text " + d7.target());
+
         // 7. Answer bodies deserialize through the records' canonical constructors (Jackson 3, as Spring Boot 4 does)
         var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
         var r1 = mapper.readValue("{\"optionId\":\"x\",\"expectedSeq\":3}", EngineModels.AnswerRequest.class);

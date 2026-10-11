@@ -10,7 +10,7 @@ import { TradeDesk } from "./botplay/trade.js";
 import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
 import { chooseTyped } from "./engine/autopilot.js";
-import { awaits, type AnswerResult } from "./engine/types.js";
+import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
 
@@ -356,7 +356,10 @@ export class Autopilot {
     if (!engine?.isLive) return false;
     const d = (await engine.openDecisions(game))?.find((x) => x.source.messageId === messageId);
     if (!d || d.kind === "legacy") return false;
-    if (d.scope === "player" ? d.target?.userId !== userId : !!d.window && !awaits(d, userId)) return false;
+    if (d.scope === "player" ? d.target?.userId !== userId : !!d.window && !awaits(d, userId)) {
+      // Not awaited by the window, but ours to answer (the strategy card we played): still the engine's.
+      if (!answersOutsideWindow(d, userId, await engine.state(game, userId, 2000))) return false;
+    }
     return Date.now() - d.createdAt < ENGINE_GRACE_MS;
   }
 
@@ -1335,11 +1338,13 @@ class SeatPilot {
       const own = await engine.decisionsFor(game, this.userId);
       // Plus the table-wide setup steps (deal secrets, reveal objectives): no target and no window, any seat may
       // take them; the policy answers only when GameState.setup says the table is ready, the engine refuses otherwise.
-      const table = (await engine.openDecisions(game))?.filter(isTableSetupStep) ?? [];
-      const mine = [...(own ?? []), ...table];
-      if (!mine.length) continue;
-      const state = await engine.state(game, this.userId, 2000);
       const open = (await engine.openDecisions(game)) ?? [];
+      const table = open.filter(isTableSetupStep);
+      const state = await engine.state(game, this.userId, 2000);
+      // And the strategy cards we played: their windows list only followers; we resolve the primary on them.
+      const holding = open.filter((d) => answersOutsideWindow(d, this.userId, state) && !own?.some((x) => x.id === d.id));
+      const mine = [...(own ?? []), ...table, ...holding];
+      if (!mine.length) continue;
       for (const d of mine) {
         const done = this.engineDone.get(d.id);
         const pick = chooseTyped(d, state, this.userId, {
