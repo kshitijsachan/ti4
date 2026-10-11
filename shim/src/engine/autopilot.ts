@@ -3,6 +3,7 @@
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
 import type { Decision, GameState, Option } from "./types.js";
+import { chooseSetup } from "./policy/setup.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -10,6 +11,8 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 export type TypedChoice = { option: Option<any>; why: string };
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string): TypedChoice | null {
+  const setup = chooseSetup(d, state, me);
+  if (setup !== undefined) return setup;
   if (d.target?.userId !== me || d.scope !== "player") return null;
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   if (!live.length) return null;
@@ -32,13 +35,6 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string): T
       const opts = d.options.filter((o) => !o.disabled && o.value && !o.value.redraw);
       const last = opts.at(-1);
       return last ? { option: last, why: "setup: keep the first secret objective" } : null;
-    }
-    case "draft.milty.pick": {
-      if (state?.draft?.currentPlayer && state.draft.currentPlayer !== me) return null;
-      // Categories already drafted are no longer offered to us by the board? Not guaranteed: legacy milty() reads
-      // the draft API for our picks, so leave drafting to it unless every live option is the same category.
-      const cats = new Set(d.options.filter((o) => !o.disabled && o.value).map((o) => o.value!.category));
-      return cats.size === 1 ? { option: d.options.find((o) => !o.disabled && o.value)!, why: "draft: only category left" } : null;
     }
     default:
       return null;

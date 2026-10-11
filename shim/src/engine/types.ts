@@ -4,6 +4,9 @@
  * "../../../shim/src/engine/types"` or a path alias).
  */
 
+import type { SetupDecision } from "./kinds/setup.js";
+export type * from "./kinds/setup.js";
+
 export const CONTRACT_VERSION = 1;
 
 // ---------------------------------------------------------------- state
@@ -29,6 +32,8 @@ export interface GameState {
   publicObjectives: Record<string, string[]>;
   laws: string[];
   draft: DraftState | null;
+  /** Setup progress (game creation → first strategy phase); null once the game is under way. */
+  setup: SetupState | null;
 }
 
 export interface PlayerState {
@@ -106,8 +111,46 @@ export interface UnitStack {
 
 export interface DraftState {
   type: "milty";
+  status: "drafting" | "finished";
+  /** null once the draft is finished. */
   currentPlayer: UserId | null;
+  /** The snake: one entry per pick. */
   order: UserId[];
+  /** Each drafter's picks so far (null = not picked yet). */
+  players: DraftPlayer[];
+  /** Still on the board. */
+  available: { slices: string[]; factions: FactionId[]; speakerOrders: number[] };
+}
+
+export interface DraftPlayer {
+  userId: UserId;
+  /** Draft id: Keleres is drafted as "keleresm" whatever flavour it plays. */
+  faction: FactionId | null;
+  slice: string | null;
+  speakerOrder: number | null;
+}
+
+/**
+ * settings: game created, no draft yet · draft · player_setup: factions, Keleres flavour, starting technologies ·
+ * deal_secrets: everyone set up, secret objectives not dealt · keep_secrets · reveal_objectives: reveal and start the
+ * strategy phase.
+ */
+export type SetupStage = "settings" | "draft" | "player_setup" | "deal_secrets" | "keep_secrets" | "reveal_objectives";
+
+export interface SetupState {
+  stage: SetupStage;
+  /** Who the stage waits on (empty for the table-wide steps). */
+  waitingOn: UserId[];
+  players: SetupPlayer[];
+}
+
+export interface SetupPlayer {
+  userId: UserId;
+  faction: FactionId | null;
+  startingTechsNeeded: number;
+  secretObjectivesToDiscard: number;
+  /** Drafted Keleres and has not chosen a flavour yet (faction is null until then). */
+  keleresFlavorPending: boolean;
 }
 
 // ---------------------------------------------------------------- decisions
@@ -178,7 +221,7 @@ export interface Progress<A = Record<string, unknown>> {
   canCommit: boolean;
 }
 
-interface DecisionBase<K extends string, V> {
+export interface DecisionBase<K extends string, V> {
   /** Stable for the life of the prompt message; edits in place keep it and bump `revision`. */
   id: string;
   game: string;
@@ -203,20 +246,17 @@ interface DecisionBase<K extends string, V> {
 
 // ---- typed kinds (add one member per KindSpec; keep alphabetical within an area) ----
 
+
 export type StrategyCardPick = DecisionBase<"strategy_card.pick", { strategyCard: number; tradeGoods: number }>;
 export type TechGain = DecisionBase<"tech.gain", { tech: string; free: boolean; starting: boolean; flags: string[] }>;
 export type SecretObjectiveDiscard = DecisionBase<
   "secret_objective.discard",
   { handle: number; secretObjective?: string; redraw: boolean }
 >;
-export type MiltyDraftPick = DecisionBase<
-  "draft.milty.pick",
-  { category: "slice" | "faction" | "order" | string; pick: string }
->;
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
 
-export type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraftPick | LegacyDecision;
+export type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | SetupDecision | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
 
