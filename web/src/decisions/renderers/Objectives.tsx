@@ -16,7 +16,7 @@ const SO_SCORE = /^so_score_hand_(\d+)/;
 function stateText(s: ScoreState | undefined, what: "public" | "secret") {
   if (!s) return undefined;
   if (s.kind === "scored") return `Scored ${s.name}`;
-  if (s.kind === "none") return `No ${what} objective this round`;
+  if (s.kind === "none") return `Not scoring a ${what} objective this round`;
   if (s.kind === "queued") return "Queued — scores once earlier players answer";
   return undefined;
 }
@@ -29,7 +29,7 @@ function StateChip({ s }: { s?: ScoreState }) {
       : s.kind === "queued"
         ? "Queued"
         : s.kind === "none"
-          ? "Passed"
+          ? "Not scoring"
           : "Scored";
   return (
     <span className={cx(classes.chip, classes[`chip_${s.kind}`])}>{label}</span>
@@ -161,6 +161,16 @@ export function ScoringBody({
   );
   const others = (info?.lines ?? []).filter((l) => l !== mine);
   const pick = d.steps?.find((s) => s.scoring?.secretPick);
+  /* A public I already have, or one whose progress shows I fall short, cannot be scored now. */
+  const scorable = publics.filter((o) => {
+    if (faction && o.scoredFactions.includes(faction)) return false;
+    const progress = faction ? o.factionProgress?.[faction] : undefined;
+    return !(o.progressThreshold > 0 && progress !== undefined && progress < o.progressThreshold);
+  });
+  const cannotScore = publics.length > 0 && scorable.length === 0 && unmatched.length === 0;
+  const poHint = cannotScore
+    ? "You can't score a public objective this round — you don't meet any of the revealed ones."
+    : "Score at most one public objective you meet right now.";
   const waitingOn = others.filter(
     (l) => l.po.kind === "open" || l.so.kind === "open",
   );
@@ -169,14 +179,12 @@ export function ScoringBody({
     <div className={classes.stack}>
       <Section label="Public objective" aside={<StateChip s={mine?.po} />}>
         {poOpen ? (
-          <p className={classes.hint}>
-            Score at most one public objective you meet right now.
-          </p>
+          <p className={classes.hint}>{poHint}</p>
         ) : (
           <p className={classes.done}>{stateText(mine?.po, "public")}</p>
         )}
         <div className={classes.list}>
-          {publics.map((o) => (
+          {(poOpen ? publics : []).map((o) => (
             <PublicRow
               key={o.key}
               o={o}
@@ -200,7 +208,7 @@ export function ScoringBody({
             onPress={onPress}
             pendingKey={pendingKey}
             channelId={d.prompt.channelId}
-            rankOf={() => "secondary"}
+            rankOf={() => (cannotScore ? "primary" : "secondary")}
           />
         )}
       </Section>

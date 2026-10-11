@@ -12,6 +12,8 @@ import classes from "./PlayerRail.module.css";
 
 type Props = {
   myUserId?: string;
+  /** "Passed" only means something in the action phase (the bot keeps it set until the next strategy phase). */
+  actionPhase?: boolean;
   /** Opens every player's board side by side. */
   onAllPlayers?: () => void;
 };
@@ -20,7 +22,7 @@ type Props = {
  * Every seat at the table in one slim, non-scrolling row: faction, score, strategy cards and whose turn it is.
  * Hovering a seat (tapping, on touch screens) shows its full readout; clicking opens the player's whole area.
  */
-export function PlayerRail({ myUserId, onAllPlayers }: Props) {
+export function PlayerRail({ myUserId, actionPhase = true, onAllPlayers }: Props) {
   const data = useGameData();
   const [openColor, setOpenColor] = useState<string | null>(null);
   const [peekColor, setPeekColor] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function PlayerRail({ myUserId, onAllPlayers }: Props) {
         aria-label="Players"
       >
         {players.map((player) => {
-          const summary = summarizePlayer(player, data.strategyCardIdMap);
+          const summary = { ...summarizePlayer(player, data.strategyCardIdMap), passed: player.passed && actionPhase };
           const isMe = !!myUserId && player.discordId === myUserId;
           const open = (which: "board" | "faction" = "board") => {
             setPeekColor(null);
