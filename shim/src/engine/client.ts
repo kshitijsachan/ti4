@@ -237,8 +237,13 @@ export class EngineClient {
         // a stuck emitter) — abort and resume from our seq (live fuzz: 85 s without events while the registry moved).
         const ctl = new AbortController();
         let lastData = Date.now();
+        let lastTick = Date.now();
         watchdog = setInterval(() => {
-          if (Date.now() - lastData > STREAM_SILENT_MS) {
+          const now = Date.now();
+          // Our own event loop was blocked (a late tick): the bytes may be waiting unread; don't call that silence.
+          if (now - lastTick > 7000) lastData = now;
+          lastTick = now;
+          if (now - lastData > STREAM_SILENT_MS) {
             log.warn(`engine stream silent for ${Math.round((Date.now() - lastData) / 1000)} s: reconnecting`);
             ctl.abort();
           }
