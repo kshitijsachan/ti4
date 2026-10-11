@@ -4,6 +4,10 @@
  * "../../../shim/src/engine/types"` or a path alias).
  */
 
+import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
+
+export type * from "./kinds/explore.js";
+
 export const CONTRACT_VERSION = 1;
 
 // ---------------------------------------------------------------- state
@@ -29,6 +33,8 @@ export interface GameState {
   publicObjectives: Record<string, string[]>;
   laws: string[];
   draft: DraftState | null;
+  /** Exploration decks, relic deck, recent explore results / relic draws (G9). Older engines: absent. */
+  exploration?: ExplorationState | null;
 }
 
 export interface PlayerState {
@@ -121,6 +127,8 @@ export type ResolvedBy =
   | "draft_turn"
   | "mention" // weak: exactly one seated player mentioned
   | "mixed_owners"
+  | "recent_press" // weak: whoever pressed a button in that channel just before (kind fallback)
+  | "active_player" // weak: the active player (kind fallback)
   | "none";
 
 export interface Target {
@@ -178,7 +186,7 @@ export interface Progress<A = Record<string, unknown>> {
   canCommit: boolean;
 }
 
-interface DecisionBase<K extends string, V> {
+export interface DecisionBase<K extends string, V> {
   /** Stable for the life of the prompt message; edits in place keep it and bump `revision`. */
   id: string;
   game: string;
@@ -216,7 +224,13 @@ export type MiltyDraftPick = DecisionBase<
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
 
-export type Decision = StrategyCardPick | TechGain | SecretObjectiveDiscard | MiltyDraftPick | LegacyDecision;
+export type Decision =
+  | StrategyCardPick
+  | TechGain
+  | SecretObjectiveDiscard
+  | MiltyDraftPick
+  | ExploreDecision
+  | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
 
