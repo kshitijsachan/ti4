@@ -223,7 +223,9 @@ export function addOriginalChannels(m: ForkMap, ids: Iterable<string>) {
 }
 
 /** `watcher`: the seat whose client waits for the carrier (it must see the carrier's channel). */
-export type Carrier = { customId: string; label: string; faction?: string; channelId: string; thread?: boolean; message?: string; watcher?: string };
+export type Carrier = { customId: string; label: string; faction?: string; channelId: string; thread?: boolean; message?: string; watcher?: string;
+  /** a whole saved_buttons value (already in the fork's ids) to re-post instead of the one button; customId = one of its ids */
+  raw?: string };
 
 /** The fork's current thread ids, so a loaded save keeps using them (the bot may have created threads meanwhile). */
 export function refreshThreads(fork: Fork, map: ForkMap) {
@@ -256,7 +258,7 @@ export async function loadSave(fork: Fork, origText: string, map: ForkMap, carri
   let pre = target;
   if (carrier) {
     const label = (carrier.label || carrier.customId).replace(/[;,\n]/g, " ").trim().slice(0, 78) || "Press";
-    const saved = `${carrier.faction ?? "null"};${carrier.customId.replace(/;/g, "fin66")};${label};PRIMARY`;
+    const saved = carrier.raw ?? `${carrier.faction ?? "null"};${carrier.customId.replace(/;/g, "fin66")};${label};PRIMARY`;
     pre = rewriteForFork(origText, map, { savedButtons: saved, savedMessage: carrier.message ?? `[replay] ${label}`, savedChannel: carrier.channelId, customName: nonce })
       // generateSavedButtons skips status phases: the pre-rewind file only needs to post the carrier.
       .replace(/^phase_of_game .*status.*$/m, "phase_of_game action")
