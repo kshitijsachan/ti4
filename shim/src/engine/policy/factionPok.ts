@@ -81,7 +81,7 @@ export const POK_STEPS: Record<string, StepPolicy> = {
 };
 
 /** Leaders worth exhausting whenever they are offered alone (free value for a bot). */
-const USE_AGENTS = new Set(["cabalagent", "nomadagentartuno"]);
+const USE_AGENTS = new Set(["cabalagent", "nomadagentartuno", "empyreanagent"]);
 
 export function choosePokFaction(
   d: Decision,
