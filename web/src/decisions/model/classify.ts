@@ -580,7 +580,7 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
     };
   }
   if (has(choices, /^getTech_/)) {
-    const freeAtStart = has(choices, /__noPay__comp$/) && !ctx.web?.strategyCards?.some((sc) => sc.played) && (ctx.web?.gameRound ?? 1) <= 1;
+    const freeAtStart = has(choices, /__noPay(__comp)?$/) && !ctx.web?.strategyCards?.some((sc) => sc.played) && (ctx.web?.gameRound ?? 1) <= 1;
     if (/starting tech/i.test(m.content) || freeAtStart) {
       /* Factions that choose two (Argent Flight, …) get one prompt per pick: never offer one already taken. */
       const owned = new Set(ctx.me?.techs ?? []);
@@ -592,9 +592,11 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
         kind: "tech",
         eyebrow: "Game setup",
         title: already ? "Choose another starting technology" : "Choose your starting technology",
-        text: already
-          ? "Your faction starts with more than one of these. Pick the next one, for free."
-          : "Your faction starts the game with one of these technologies, for free.",
+        text: /other players have/i.test(m.content)
+          ? "Keleres starts with technologies another player has. Pick one, for free."
+          : already
+            ? "Your faction starts with more than one of these. Pick the next one, for free."
+            : "Your faction starts the game with one of these technologies, for free.",
         setup: true,
         /* Every offered technology is already mine: this prompt is spent. */
         optional: !offered.some((c) => /^getTech_/.test(baseId(c.customId))),

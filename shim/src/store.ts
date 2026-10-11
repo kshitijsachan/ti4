@@ -93,6 +93,7 @@ export class Store {
   state: State;
   private dir: string;
   private saveTimer: NodeJS.Timeout | null = null;
+  private lastSaveMs = 0;
   interactions = new Map<string, Interaction>();
   interactionsByToken = new Map<string, Interaction>();
 
@@ -187,16 +188,23 @@ export class Store {
 
   scheduleSave() {
     if (this.saveTimer) return;
-    this.saveTimer = setTimeout(() => {
-      this.saveTimer = null;
-      this.saveNow();
-    }, 1000);
+    // A save serializes the whole state: with many long games that takes hundreds of milliseconds, so space saves out
+    // to keep them under ~20% of the event loop.
+    this.saveTimer = setTimeout(
+      () => {
+        this.saveTimer = null;
+        this.saveNow();
+      },
+      Math.min(15000, Math.max(1000, 4 * this.lastSaveMs)),
+    );
   }
 
   saveNow() {
+    const started = Date.now();
     const file = join(this.dir, "state.json");
     writeFileSync(file + ".tmp", JSON.stringify(this.state));
     renameSync(file + ".tmp", file);
+    this.lastSaveMs = Date.now() - started;
   }
 
   // ---- users / members ----

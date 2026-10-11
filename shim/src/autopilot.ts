@@ -358,6 +358,7 @@ class SeatPilot {
   private lastPressed: string | null = null;
   /** Per game: how many draft picks we had when we last pressed a draft button, and when. */
   private miltyPress = new Map<string, { picks: number; at: number }>();
+  private startingTechChecked = new Map<string, { ok: boolean; at: number }>();
   private factions = new Map<string, string>();
   /** When we last pressed a control by `${channel}:${custom id}:${content}`: the bot often re-posts a prompt. */
   private recent = new Map<string, number>();
@@ -766,6 +767,15 @@ class SeatPilot {
    * Sardakk (no starting technology) owns one and no starting-technology prompt is left anywhere in the game.
    */
   private async othersHaveStartingTech(game: string) {
+    // Checked on every pass over the prompt: re-reading the game each time costs more than a few seconds' delay.
+    const cached = this.startingTechChecked.get(game);
+    if (cached && Date.now() - cached.at < 20000) return cached.ok;
+    const ok = await this.readOthersHaveStartingTech(game);
+    this.startingTechChecked.set(game, { ok, at: Date.now() });
+    return ok;
+  }
+
+  private async readOthersHaveStartingTech(game: string) {
     this.mgr.forgetState(game);
     const st = await this.mgr.stateOf(game);
     if (!st) return false;
