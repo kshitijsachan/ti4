@@ -269,7 +269,7 @@ export function DecisionHost({ gameName, placement = "fixed", className, rightIn
   return (
     <>
       <DecisionPopup decisions={decisions} offers={offers} data={data} placement={placement} className={className} rightInset={rightInset} />
-      <OutcomeToast gameName={gameName} faction={mePlayer?.faction} rightInset={rightInset} />
+      <OutcomeToast gameName={gameName} faction={mePlayer?.faction} rightInset={rightInset} web={web} />
       <CombatOutcome gameName={gameName} rightInset={rightInset} />
     </>
   );

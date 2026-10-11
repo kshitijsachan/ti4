@@ -4,7 +4,9 @@ import { usePlay } from "@/discord";
 import { useGameEvents } from "@/gamelog";
 import { segText } from "@/gamelog/parse/markup";
 import type { GameEvent } from "@/gamelog";
+import type { PlayerDataResponse } from "@/entities/data/types";
 import { useReservedArea } from "@/state/reservedArea";
+import { FollowNoticeNote, useFollowNotices } from "./FollowNotices";
 import classes from "./OutcomeToast.module.css";
 
 /** How long after my press the bot's reply still counts as its outcome. */
@@ -18,9 +20,11 @@ function outcomeText(events: GameEvent[]) {
 
 /**
  * What my last press did, in plain words, for a few seconds: the game-log events the bot posted for my faction right
- * after the press (gained trade goods, readied planets, explored, rolled, scored…). One toast at a time.
+ * after the press (gained trade goods, readied planets, explored, rolled, scored…). One toast at a time. Above them,
+ * strategy cards the bot declined for me without asking (no strategy tokens), until dismissed.
  */
-export function OutcomeToast({ gameName, faction, rightInset }: { gameName: string; faction?: string; rightInset: number }) {
+export function OutcomeToast({ gameName, faction, rightInset, web }: { gameName: string; faction?: string; rightInset: number; web?: PlayerDataResponse }) {
+  const follow = useFollowNotices(gameName, web);
   const pressed = usePlay((s) => s.pressed);
   const { events } = useGameEvents(gameName);
   const lastPress = useMemo(() => Math.max(0, ...Object.values(pressed)), [pressed]);
@@ -49,7 +53,7 @@ export function OutcomeToast({ gameName, faction, rightInset }: { gameName: stri
 
   /* Under the decision card when it is up (inside its column), else top-right under the top bar: never over tiles. */
   const card = useReservedArea((s) => s.rects["decision-card"]);
-  if (!shown.length || typeof document === "undefined") return null;
+  if ((!shown.length && !follow.notices.length) || typeof document === "undefined") return null;
   const style = (
     card
       ? { top: `${card.bottom + 8}px`, right: `${window.innerWidth - card.right}px`, width: `${card.right - card.left}px` }
@@ -57,6 +61,9 @@ export function OutcomeToast({ gameName, faction, rightInset }: { gameName: stri
   ) as CSSProperties;
   return createPortal(
     <div className={`ti4play ${classes.stack}`} style={style} role="status" aria-live="polite">
+      {follow.notices.map((n) => (
+        <FollowNoticeNote key={n.id} notice={n} onDismiss={() => follow.dismiss(n.id)} />
+      ))}
       {shown.map((o) => (
         <div key={o.key} className={classes.toast}>
           <span className={classes.you}>You</span> {o.text}
