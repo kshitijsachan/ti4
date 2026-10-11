@@ -116,6 +116,9 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "trade.offer": "blocking",
   "trade.offer_sent": "optional",
   "trade.force_replenish": "blocking",
+  // C1-C5 factions: the faction policy answers; abilities / leaders are often optional, so fallback only when forced
+  "faction.ability": "planner",
+  "leader.use": "planner",
 };
 
 const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);
