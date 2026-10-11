@@ -84,6 +84,9 @@ export function expansionOptions(board: Board, me: PlayerView): ExpandGoal[] {
     if (hasMyCC(target, me) || enemyShipsIn(target, me.faction)) continue;
     const free = target.planets.filter((p) => freePlanet(p, me));
     if (!free.length) continue;
+    // Fleet pool: non-fighter ships of ours in the target after the move may not exceed our fleet tokens.
+    const fleetRoom = me.fleetCC - (target.space.get(me.faction) ?? []).filter((u) => isShip(u.unit) && u.unit !== "ff").reduce((n, u) => n + u.count, 0);
+    if (fleetRoom < 1) continue;
     const dist = distancesTo(board, target.position, me.faction, 3);
     // The best transport that reaches it: a carrier (or another ship with capacity) in an unlocked system.
     let best: { score: number; goal: ExpandGoal } | null = null;
@@ -131,7 +134,7 @@ export function expansionOptions(board: Board, me: PlayerView): ExpandGoal[] {
       const escort = ships
         .filter((u) => (u.unit === "dd" || u.unit === "ca") && (sys.anomaly ? 1 : statsOf(u.unit, me).move) >= d)
         .sort((a, b) => statsOf(a.unit, me).combat - statsOf(b.unit, me).combat)[0];
-      if (escort) moves.push({ origin, holder: "space", unit: escort.unit, count: 1 });
+      if (escort && fleetRoom >= 2) moves.push({ origin, holder: "space", unit: escort.unit, count: 1 });
       // Land one per planet, best planets first; extras on the best one.
       const ranked = [...free].sort((a, b) => planetValue(b) - planetValue(a));
       const land: Record<string, number> = {};
