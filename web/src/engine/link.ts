@@ -60,7 +60,16 @@ export function useEngineLink(gameName: string) {
  * A renderer's structured answer: `{optionId}`; `{optionId?, payload}` (agenda ballot, token pools); or
  * `{action, body}` for any kind's direct action route (`move`, `land`, `combat-plan`, …).
  */
-export type AnswerPayload = { optionId?: string; payload?: unknown; action?: string; body?: Record<string, unknown> };
+export type AnswerPayload = {
+  optionId?: string;
+  payload?: unknown;
+  action?: string;
+  body?: Record<string, unknown>;
+  /** Select menu values (optionId = the menu's InputSchema id). */
+  values?: string[];
+  /** Form field values (input.form decisions, optionId "submit"). */
+  inputs?: Record<string, string>;
+};
 
 /**
  * Answers a decision as me. Plain options go to the engine (`op:"answer"`, checked against the decision's seq so a
@@ -72,9 +81,10 @@ export function useEngineAnswer() {
   return (decision: Decision, choice: string | AnswerPayload) => {
     const a: AnswerPayload = typeof choice === "string" ? { optionId: choice } : choice;
     const option = a.optionId ? decision.options.find((o) => o.id === a.optionId) : undefined;
-    if (a.optionId && (!option || option.disabled)) return;
+    const typedInput = !!a.optionId && (a.values !== undefined || a.inputs !== undefined || decision.kind === "input.form");
+    if (a.optionId && !typedInput && (!option || option.disabled)) return;
     if (!a.optionId && a.payload === undefined && !a.action) return;
-    const plain = option && a.payload === undefined && !a.action;
+    const plain = option && a.payload === undefined && !a.action && !typedInput;
     const { channelId, messageId } = decision.source;
     const hash = option?.id.indexOf("#") ?? -1;
     if (plain && hash > 0) return void conn.select(channelId, messageId, option.id.slice(0, hash), [option.id.slice(hash + 1)], 3);
@@ -88,7 +98,7 @@ export function useEngineAnswer() {
       decisionId: decision.id,
       ...a,
       expectedSeq: decision.seq,
-      requestId: `${decision.id}:${decision.revision ?? decision.seq}:${key}:${a.payload === undefined && !a.body ? "" : hashOf(a)}`,
+      requestId: `${decision.id}:${decision.revision ?? decision.seq}:${key}:${a.payload === undefined && !a.body && !a.values && !a.inputs ? "" : hashOf(a)}`,
     });
     if (!nonce) return store.answerFailed(decision.id, "", "Not connected to the game server — reconnecting.");
     store.answerStarted(decision.id, nonce, key);

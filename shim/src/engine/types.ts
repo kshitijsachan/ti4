@@ -8,6 +8,7 @@ import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
 import type { CombatDecision, CombatState } from "./kinds/combat.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
+import type { InputFormDecision } from "./kinds/input.js";
 import type { ProductionDecision } from "./kinds/production.js";
 import type { SetupDecision } from "./kinds/setup.js";
 import type { StatusDecision, StatusState } from "./kinds/status.js";
@@ -19,6 +20,7 @@ import type { TradeForceReplenish, TradeOffer, TradeOfferSent, TradeState } from
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
 export type * from "./kinds/explore.js";
+export type * from "./kinds/input.js";
 export type * from "./kinds/production.js";
 export type * from "./kinds/setup.js";
 export type * from "./kinds/status.js";
@@ -233,7 +235,10 @@ export interface Option<V = Record<string, unknown> | null> {
   /** Emoji name or custom emoji id. */
   emoji: string | null;
   disabled: boolean;
-  /** Needs free text (a modal): not answerable through the engine yet; fall back to legacy press. */
+  /**
+   * Answering asks for input: a button that opens a form (the answer returns status "needs_input" and opens an
+   * "input.form" decision for you), or a form's "submit" (send `inputs`).
+   */
   needsInput: boolean;
   /** Engine handler id (custom id without owner prefix): debugging aid, do not parse in new code. */
   handler: string;
@@ -273,6 +278,42 @@ export interface Progress<A = Record<string, unknown>> {
   canCommit: boolean;
 }
 
+/**
+ * A typed input: a select menu on the prompt (kind "select", id = menu id, one "choice" field "values") or a form a
+ * button opened (kind "form", "input.form" decisions). Answer a select with `{ optionId: id, values }` (or a single
+ * option `"<id>#<value>"`); a form with `{ optionId: "submit", inputs: { fieldId: value } }` (multi-values "\n"-joined).
+ */
+export interface InputSchema {
+  id: string;
+  kind: "select" | "form";
+  title: string | null;
+  fields: InputField[];
+}
+
+export interface InputField {
+  id: string;
+  label: string | null;
+  /** choice: pick minValues..maxValues of choices; text: minLength..maxLength chars; number: integer text. */
+  type: "choice" | "text" | "number";
+  required: boolean;
+  minLength: number | null;
+  maxLength: number | null;
+  minValues: number | null;
+  maxValues: number | null;
+  multiline: boolean;
+  placeholder: string | null;
+  /** Prefilled value. */
+  value: string | null;
+  choices: InputChoice[] | null;
+}
+
+export interface InputChoice {
+  value: string;
+  label: string;
+  description: string | null;
+  selected: boolean;
+}
+
 export interface DecisionBase<K extends string, V> {
   /** Stable for the life of the prompt message; edits in place keep it and bump `revision`. */
   id: string;
@@ -294,6 +335,8 @@ export interface DecisionBase<K extends string, V> {
   revision: number;
   window: ReactionWindow | null;
   progress: Progress | null;
+  /** Select menus / form fields this decision accepts (see InputSchema); null when none. */
+  inputs: InputSchema[] | null;
 }
 
 /** For area kind files (shim/src/engine/kinds/*.ts). */
@@ -344,6 +387,7 @@ export type Decision =
   | TradeForceReplenish
   | CombatDecision
   | ProductionDecision
+  | InputFormDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -366,6 +410,10 @@ export interface AnswerRequest {
   requestId?: string;
   /** Trusted (bot-token) route only: the seat answering. */
   userId?: UserId;
+  /** Select menu values (optionId = the select's InputSchema id). */
+  values?: string[];
+  /** Form field values (input.form decisions, optionId "submit"). */
+  inputs?: Record<string, string>;
 }
 
 export type AnswerStatus =
@@ -376,6 +424,7 @@ export type AnswerStatus =
   | "not_found"
   | "bad_option"
   | "needs_input"
+  | "bad_input"
   | "unsupported"
   | "refused"
   | "error";
@@ -387,8 +436,13 @@ export interface AnswerResult {
   decisionId: string;
   seq: number;
   stateVersion: number;
-  /** Decisions the answer opened (any player), in seq order. */
+  /** Decisions the answer opened (any player), in seq order. With status "needs_input": includes the form. */
   opened: Decision[];
+  /**
+   * How the engine ran it: "engine" (direct Interaction), "synthetic" (simulated click) or "payload" (a structured
+   * answer, whose presses each took one of the two); null on failure.
+   */
+  path: "engine" | "synthetic" | "payload" | null;
 }
 
 // ---------------------------------------------------------------- events (SSE: event name = type, id = seq)

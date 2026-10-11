@@ -30,6 +30,9 @@ export type EngineOp =
       /** A kind's direct action route ("move", "land", "combat-plan", …) with its body. */
       action?: string;
       body?: Record<string, unknown>;
+      /** Select menu values / form field values (W-INFRA-3 typed input). */
+      values?: string[];
+      inputs?: Record<string, string>;
       expectedSeq?: number;
       requestId?: string;
     };

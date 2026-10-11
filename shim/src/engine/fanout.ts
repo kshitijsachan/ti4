@@ -33,6 +33,8 @@ export type AnswerOp = {
   payload?: unknown;
   action?: string;
   body?: Record<string, unknown>;
+  values?: unknown;
+  inputs?: unknown;
   expectedSeq?: number;
   requestId?: string;
 };
@@ -115,6 +117,8 @@ export class EngineFanout {
     if (!engine) return reply({ ok: false, status: "unsupported", error: "The engine is off on this server." });
     const game = String(op.game ?? this.subs.get(seat)?.game ?? "");
     const what = op.action ? `${op.action}` : (op.optionId ?? (op.payload !== undefined ? "payload" : ""));
+    const values = Array.isArray(op.values) ? op.values.map(String) : undefined;
+    const inputs = isObject(op.inputs) ? Object.fromEntries(Object.entries(op.inputs).map(([k, v]) => [k, String(v)])) : undefined;
     if (!game || !op.decisionId || !what) return reply({ ok: false, status: "bad_option", error: "game, decisionId and an option, payload or action are required" });
     const snap = await engine.decisionsSnapshot(game);
     const d = snap?.decisions.find((x) => x.id === op.decisionId);
@@ -126,7 +130,7 @@ export class EngineFanout {
     const common = { expectedSeq: op.expectedSeq, requestId: op.requestId, userId: seat.userId };
     const result = op.action
       ? await engine.act(game, d.id, op.action, { ...(op.body ?? {}), ...common })
-      : await engine.answer(game, d.id, { optionId: op.optionId, payload: isObject(op.payload) ? op.payload : undefined, ...common });
+      : await engine.answer(game, d.id, { optionId: op.optionId, payload: isObject(op.payload) ? op.payload : undefined, values, inputs, ...common });
     if (!result) return reply({ ok: false, status: "error", error: "The game server did not answer." });
     log.info(`engine answer ${seat.userId} ${game} ${d.kind} ${what} -> ${result.status}${result.error ? `: ${result.error}` : ""}`);
     reply(result);

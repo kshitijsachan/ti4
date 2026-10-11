@@ -177,8 +177,32 @@ requestId?}`) or `POST /api/game/{game}/engine/decisions/{id}/answer` (seat Bear
 7. returns `{ok, status, seq, stateVersion, opened: Decision[]}` — the decisions the answer opened, so a bot can
    chain without polling.
 
-No gateway hop, no browser, no "which message is mine" inference. Not answerable yet: selects (`#value` options)
-and modal buttons (`~MDL`, `needsInput`) → keep the legacy press path for those until W-INFRA-3.
+No gateway hop, no browser, no "which message is mine" inference.
+
+**Engine-native answers (W-INFRA-3, `result.path`).** Step 6 has two paths. `engine`: the handler runs with an
+`ti4.selfhost.engine.Interaction` — `EngineInteraction` (game, player, prompt channel/message; ops reply,
+replyEphemeral, deferEdit, editComponents, editMessage, deleteMessage) — instead of a Discord click: no shim mint,
+no JDA internals. Unmodified handlers still take `ButtonInteractionEvent`; for an engine answer that event is a
+JDA-public-API view (`NativeEvents`: a `java.lang.reflect.Proxy` of `ButtonInteraction` / `StringSelectInteraction` /
+`ModalInteraction`) whose token operations (reply, deferEdit, getHook().sendMessage/editOriginal/deleteOriginal,
+replyModal) map onto `EngineInteraction` ops. Messages go through a `MessageSink` (today JDA channel REST, so the
+Discord mirror + capture keep working; ephemeral replies are channel posts with nonce `eph:<uid>`, which the shim
+stores as ephemeral for that user and capture attributes to them); deleting the prompt closes its decision in the
+registry immediately ("answered"). The helper layer (`ButtonHelper.deleteMessage`/`deleteButtonAndDeleteMessageIfEmpty`/
+…, `MessageHelper.send*/reply*/ephemeral/edit*`) calls `Interaction.of(event)`, whose JDA adapter
+(`JdaInteraction`) performs exactly the calls the helpers made before (Discord path unchanged).
+A button answer takes the engine path when `NativeCoverage` (bytecode analysis of every `@ButtonHandler`, following
+calls that carry the event, incl. lambdas) proves the handler only uses operations the view implements, the prompt
+is not ephemeral and its channel is known; otherwise `synthetic` (the phase-1 minted click). `TI4_ENGINE_NATIVE=off`
+forces synthetic. `GET /api/public/selfhost/engine/coverage[?handlers=true]` (Bot) reports coverage.
+
+**Typed input.** `Decision.inputs: InputSchema[]` — select menus on the prompt (`kind:"select"`, one `choice`
+field with `minValues/maxValues/choices`) and forms (`kind:"form"`, fields `text` / `number` / `choice`). A select is
+answered `{optionId: <menu id>, values: [...]}` (or one flat option `"<menu>#<value>"`). A button whose handler opens a
+Discord modal is `needsInput`; answering it runs the handler as an engine answer and returns `status:"needs_input"`
+with a new private `input.form` decision for that player (its schema in `inputs[0]`), answered
+`{optionId:"submit", inputs:{field: value}}` (validated against the schema → `bad_input`) or `"cancel"`; submit runs
+the modal's handler (`ModalListener.processNow`) as an engine answer. Selects and forms have no synthetic fallback.
 
 **Structured (payload) answers.** Instead of `optionId` an answer may carry `payload` (a JSON object): body
 `{payload, optionId?, expectedSeq?, requestId?}`. Kinds opt in with `KindSpec.acceptsPayload()`; `ActionInvoker`
@@ -338,7 +362,10 @@ answer path, SSE, shim client, autopilot uses engine for faction + SC pick / sta
   unavailable. Renderers: `web/src/engine/renderers/<area>/index.ts` exporting `renderers` (picked up by
   `import.meta.glob`, props `EngineRendererProps`); `answer(optionId)` sends `op:"answer"` (select `#value` and
   `needsInput` options take the legacy press so modals still open).
-* **W-INFRA-3 Interaction abstraction** (enables true direct invocation and deletes JDA from the action path):
+* **W-INFRA-3 Interaction abstraction** — *landed (bot `infra3-interaction`)*: see §3.4 "Engine-native answers";
+  static coverage 2,720 / 2,724 handler routes (99.9 %) runnable natively (4 modal handlers need resolved mentions),
+  of which 86.8 % use no interaction-token operation at all after the helper migration (17.3 % before). Remaining
+  phase-1 dependency: ephemeral prompts and unproven handlers still use the synthetic click. Original plan:
   introduce `ti4.selfhost.engine.Interaction` (game, player, channel/"reply to", message-buttons ops) and a
   `ButtonInteractionEvent` adapter; migrate the helper layer (`ButtonHelper.deleteMessage`, `MessageHelper.send…`)
   first — that covers most of the 2,931 channel / 2,519 delete uses without touching handlers; then make
@@ -359,6 +386,10 @@ most of `rest.ts` and `store.ts` message storage, bot `DraftButtonLocator`, `Dra
 
 ## 8. Risks
 
+* **Engine-native answers**: the JDA view is a proxy of public JDA interfaces; an operation it does not implement
+  throws `UnsupportedOperationException` mid-handler. NativeCoverage gates handlers statically, but it cannot see
+  events stashed in fields or virtual dispatch into subclasses; if one slips through, the answer fails with
+  status `error` (logged) after partial effects — set `TI4_ENGINE_NATIVE=off` to fall back wholesale.
 * **Synthesised events (phase 1)**: relies on JDA internals (`JDAImpl`, `ButtonInteractionImpl`) and the shim
   minting a valid payload. Pinned JDA 6.7.0; covered by one smoke test per deploy. W-INFRA-3 removes it.
 * **Capture completeness**: a decision missed by capture just stays legacy-only (the old click path still works);
