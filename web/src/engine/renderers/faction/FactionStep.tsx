@@ -36,6 +36,8 @@ function componentName(v: Value): string {
 function optionLabel(state: GameState | null, v: Value): string {
   const parts: string[] = [];
   if (v.action === "skip") parts.push("Finish");
+  if (v.reset) return "Start over";
+  if (v.hits) parts.push(`${v.hits} hit${v.hits > 1 ? "s" : ""}`);
   if (v.unit) parts.push(`${v.count && v.count > 1 ? `${v.count} ` : ""}${v.damaged ? "damaged " : ""}${UNIT[v.unit] ?? v.unit}`);
   if (v.target) parts.push(playerLabel(state, v.target));
   if (v.planet) parts.push(planetName(v.planet));

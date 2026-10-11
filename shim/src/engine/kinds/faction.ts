@@ -36,6 +36,10 @@ export type FactionStepFields = {
   free?: boolean;
   from?: string;
   hits?: number;
+  /** Dice still eligible (Hacan flagship). */
+  remaining?: number;
+  /** "Start over" (Hacan flagship). */
+  reset?: boolean;
   strategyCard?: number;
   ownStrategyCard?: number;
   /** Raw id segments the kind does not type further. */
