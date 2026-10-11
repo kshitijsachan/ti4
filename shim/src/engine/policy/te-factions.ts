@@ -18,7 +18,7 @@ export type TeTableChoice = { option: Option<any>; why: string };
 type Ctx = { state: GameState | null; self: PlayerState | undefined; live: Option<any>[] };
 
 function done(live: Option<any>[]): Option<any> | undefined {
-  return live.find((o) => o.value === null && /^deleteButtons(_|$)/.test(o.handler));
+  return live.find((o) => o.value === null && /^deleteButtons(_|~|$)/.test(o.handler));
 }
 
 function pick(o: Option<any> | undefined, why: string): TeTableChoice | null {
