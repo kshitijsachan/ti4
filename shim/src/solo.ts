@@ -488,8 +488,8 @@ export class SoloGames {
 
   /**
    * Presses a button as the job's human: through the engine when it has the prompt open as a typed decision (the
-   * engine validates it, e.g. refuses to deal secrets while a seat is still setting up), else through a short-lived
-   * virtual client of their seat.
+   * engine validates it, e.g. refuses to deal secrets while a seat is still setting up), else — or when the engine
+   * refuses / cannot run it — through a short-lived virtual client of their seat.
    */
   private async pressAs(job: SoloJob, msg: StoredMessage, customId: string) {
     const engine = this.lobby.autopilot?.engine;
@@ -499,10 +499,13 @@ export class SoloGames {
       const opt = d?.options.find((o) => o.handler === customId || o.id === customId);
       if (d && opt) {
         const r = await engine.answer(game, d.id, { optionId: opt.id, expectedSeq: d.seq, userId: job.user_id });
-        if (r) {
+        // Done, or final (stale prompt / not this seat): stop here. Refused / unsupported / needs input / error: the
+        // engine's pre-check is not the last word (the handler validates again), so press the button as before.
+        if (r && (r.ok || r.status === "stale" || r.status === "forbidden" || r.status === "not_found")) {
           if (!r.ok) this.note(job, `${customId}: ${r.error ?? r.status}`);
           return;
         }
+        if (r) log.info(`solo ${game}: engine ${r.status} for ${customId} (${r.error ?? ""}); pressing it directly`);
       }
     }
     const p = new Player(this.clients, job.user_id);
