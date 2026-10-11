@@ -1372,13 +1372,22 @@ class SeatPilot {
         if (this.engineAttempts.size > 2000) this.engineAttempts.delete(this.engineAttempts.keys().next().value!);
         this.engineTried.add(key);
         if (this.engineTried.size > 5000) this.engineTried.clear();
+        // The seq in the request id: a retry after "stale" (a window re-revised meanwhile) is a new request.
+        const requestId = `${key}@${d.seq}`;
         const req = pick.payload
-          ? { payload: pick.payload, expectedSeq: d.seq, requestId: key, userId: this.userId }
-          : { optionId: pick.option?.id, expectedSeq: d.seq, requestId: key, userId: this.userId };
+          ? { payload: pick.payload, expectedSeq: d.seq, requestId, userId: this.userId }
+          : { optionId: pick.option?.id, expectedSeq: d.seq, requestId, userId: this.userId };
         const r = await this.mgr.serial(() => engine.answer(game, d.id, req));
         if (!r) return false;
         log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option?.label ?? "payload"}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
+        // The decision changed under us (windows are re-revised by every save at the table): not an answer; try again
+        // on the next look with the fresh revision (live: bots' "Not Following" went stale and was never re-sent).
+        if (r.status === "stale" && /changed/i.test(r.error ?? "")) {
+          this.engineTried.delete(key);
+          this.engineAttempts.set(d.id, attempts - 1);
+          continue;
+        }
         // Tell the legacy roll guard (mayRoll) about rolls made here, so it never rolls the same dice again.
         const rolled = pick.option?.value?.action === "roll" ? String(pick.option.value.rollType ?? "") : "";
         if (r.ok && rolled) this.recent.set(`${d.source.channelId}:roll:${rolled}`, Date.now());
