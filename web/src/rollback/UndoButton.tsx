@@ -3,7 +3,7 @@ import { Popover, Tooltip } from "@mantine/core";
 import { IconArrowBackUp, IconHistory } from "@tabler/icons-react";
 import { usePlay } from "@/discord";
 import { UndoApiError } from "./api";
-import { asMine, planUndo, whoActed, type UndoPlan } from "./plan";
+import { asMine, planUndo, readableLabel, whoActed, type UndoPlan } from "./plan";
 import { useUndoPoints, useUndoStore } from "./useUndoPoints";
 import classes from "./Rollback.module.css";
 
@@ -44,10 +44,10 @@ function describe(plan: UndoPlan): { title: string; note?: string; action?: stri
     }
     case "others":
       return {
-        title: `The last action was ${plan.point.actor || "another player"}'s: ${plan.point.label}.`,
+        title: `The last action was ${plan.point.actor || "another player"}'s: ${readableLabel(plan.point.label, plan.point)}.`,
         note: "You have nothing of your own to undo since. Undo theirs anyway? Use History… to rewind further back.",
         action: "Undo theirs",
-        tip: `Undo: ${plan.point.label}`,
+        tip: `Undo: ${readableLabel(plan.point.label, plan.point)}`,
       };
   }
 }
