@@ -55,8 +55,11 @@
   --z-site-header: 2400;
   --z-play-sidebar-overlay: 2450;
 
-  /* The decision popup: what the game waits on, above drawers and the players view, under app modals. */
+  /* The decision popup: what the game waits on, above drawers, under app modals. */
   --z-decision-popup: 3450;
+  /* The decision popup while a full-screen overlay (players view, a player's sheet, an image) is open: under the
+     overlay's backdrop (Mantine modals stack at 200), so the overlay's header and boards are never hidden. */
+  --z-decision-popup-covered: 190;
 
   /* MODALS - Settings, shortcuts and popovers (3000-3999) */
   --z-settings-modal: 3000;

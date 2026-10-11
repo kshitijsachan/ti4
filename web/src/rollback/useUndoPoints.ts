@@ -58,19 +58,26 @@ export const useUndoStore = create<UndoStore>((set, get) => ({
 }));
 
 const POLL_MS = 30_000;
-const SETTLE_MS = 700;
+/** Re-fetch this long after activity (the bot saves right after it posts), and once more for a slow save. */
+const SETTLE_MS = [700, 2500];
+
+/** A channel of this game: its actions channel, undo log, card threads ("pbd90-round-1-Trade") or a "Cards Info-pbd90-…" thread. */
+function isGameChannel(name: string | undefined, gameName: string) {
+  return !!name && name.split("-").includes(gameName);
+}
 
 /**
- * The game's undo saves, kept fresh: re-fetched shortly after any new message in the game's actions channel or
- * undo-log thread (a save lands right after the bot posts), and every 30 s. Must sit inside `<PlayProvider>`.
+ * The game's undo saves, kept fresh: re-fetched shortly after any new message in any of the game's channels and
+ * threads (a strategy card follow answers only in the card's thread or my Cards Info thread) and after each of my
+ * presses (some only edit a message), and every 30 s. Must sit inside `<PlayProvider>`.
  */
 export function useUndoPoints(gameName: string) {
   const entry = useUndoStore((s) => s.games[gameName]);
   const refresh = useUndoStore((s) => s.refresh);
   const activity = usePlay((s) => {
-    let key = "";
+    let key = `${s.lastPress?.at ?? ""}|`;
     for (const c of Object.values(s.channels)) {
-      if (c.name !== `${gameName}-actions` && c.name !== `${gameName}-undo-log`) continue;
+      if (!isGameChannel(c.name, gameName)) continue;
       const ids = s.messages[c.id]?.ids;
       key += `${c.id}:${ids?.[ids.length - 1] ?? ""}|`;
     }
@@ -78,8 +85,8 @@ export function useUndoPoints(gameName: string) {
   });
 
   useEffect(() => {
-    const t = window.setTimeout(() => void refresh(gameName), SETTLE_MS);
-    return () => window.clearTimeout(t);
+    const timers = SETTLE_MS.map((ms) => window.setTimeout(() => void refresh(gameName), ms));
+    return () => timers.forEach((t) => window.clearTimeout(t));
   }, [gameName, activity, refresh]);
 
   useEffect(() => {

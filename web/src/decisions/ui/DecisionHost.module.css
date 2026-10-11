@@ -16,6 +16,11 @@
   padding: 72px 16px 120px;
 }
 
+/* A full-screen overlay is open (players view, a player's sheet): the popup waits beneath it. */
+.layer.covered {
+  z-index: var(--z-decision-popup-covered, 190);
+}
+
 /* Over the board area: under the top bar and player rail, above the hand bar, left of an open side drawer. */
 .fixed.board {
   padding: 100px calc(12px + var(--decision-right-inset, 0px)) 52px 12px;

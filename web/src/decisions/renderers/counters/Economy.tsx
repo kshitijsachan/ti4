@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useStoredState } from "../../model/stored";
 import { cdnImage } from "@/entities/data/cdnImage";
 import { baseId, type Choice } from "../../model/controls";
 import { ChoiceButtons } from "../../ui/ChoiceButtons";
@@ -48,8 +48,8 @@ export function CommodityBody({ d, data }: RendererProps) {
   const comms = data.me?.commodities ?? 0;
   const limit = data.me?.commoditiesTotal ?? comms;
   const tg = data.me?.tg ?? 0;
-  const [gain, setGain] = useState(0);
-  const [convert, setConvert] = useState(0);
+  const [gain, setGain] = useStoredState("comm-gain", d.id, 0);
+  const [convert, setConvert] = useStoredState("comm-convert", d.id, 0);
   const roomFor = Math.max(0, limit - comms);
   const gainMax = gainEach ? roomFor : 0;
   const after = Math.min(limit, comms + gain);
@@ -162,7 +162,7 @@ export function FragmentBody({ d, data, onPress, pendingKey, onHoverChoice }: Re
     const m = baseId(c.customId).match(FRAG);
     if (m) offered[m[1] as Trait].push(Number(m[2]));
   }
-  const [counts, setCounts] = useState<Record<Trait, number>>({ CRF: 0, IRF: 0, HRF: 0, URF: 0 });
+  const [counts, setCounts] = useStoredState<Record<Trait, number>>("fragments", d.id, { CRF: 0, IRF: 0, HRF: 0, URF: 0 });
   const draw = d.choices.find((c) => DRAW.test(baseId(c.customId)));
   const others = d.choices.filter((c) => !FRAG.test(baseId(c.customId)) && c !== draw);
   const need = data.me?.abilities?.includes("fabrication") ? 2 : 3;
@@ -244,7 +244,7 @@ export function ScTradeGoodBody({ d }: RendererProps) {
   const running = useRunning(`counter:sctg:${d.id}`);
   const cards = d.choices.filter((c) => SC_TG.test(baseId(c.customId)));
   const done = d.choices.find((c) => DONE.test(baseId(c.customId)));
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [counts, setCounts] = useStoredState<Record<string, number>>("sc-tg", d.id, {});
   /* Manipulate Investments (the only source of this prompt) places 5 in total; a stated "total of N" wins. */
   const limit = Number(d.text.match(/total of (\d+)/i)?.[1] ?? 5);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);

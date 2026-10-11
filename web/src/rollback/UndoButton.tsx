@@ -3,7 +3,8 @@ import { Popover, Tooltip } from "@mantine/core";
 import { IconArrowBackUp, IconHistory } from "@tabler/icons-react";
 import { usePlay } from "@/discord";
 import { UndoApiError } from "./api";
-import { asMine, planUndo, readableLabel, whoActed, type UndoPlan } from "./plan";
+import { readFlows } from "./flows";
+import { asMine, asTheirs, planUndo, whoActed, type UndoPlan } from "./plan";
 import { useUndoPoints, useUndoStore } from "./useUndoPoints";
 import classes from "./Rollback.module.css";
 
@@ -32,8 +33,12 @@ function describe(plan: UndoPlan): { title: string; note?: string; action?: stri
       const what = asMine(plan.point.label, plan.point);
       return { title: `Undo: ${what}?`, action: "Undo", tip: `Undo: ${what}` };
     }
+    case "flow": {
+      const what = asMine(plan.first.label, plan.first, plan.summary);
+      return { title: `Undo: ${what}?`, action: "Undo", tip: `Undo: ${what}` };
+    }
     case "mine": {
-      const what = asMine(plan.point.label, plan.point);
+      const what = asMine(plan.point.label, plan.point, plan.summary);
       const n = plan.after.length;
       return {
         title: `Undo: ${what}?`,
@@ -44,10 +49,10 @@ function describe(plan: UndoPlan): { title: string; note?: string; action?: stri
     }
     case "others":
       return {
-        title: `The last action was ${plan.point.actor || "another player"}'s: ${readableLabel(plan.point.label, plan.point)}.`,
+        title: `The last action was ${plan.point.actor || "another player"}'s: ${asTheirs(plan.point.label, plan.point)}.`,
         note: "You have nothing of your own to undo since. Undo theirs anyway? Use History… to rewind further back.",
         action: "Undo theirs",
-        tip: `Undo: ${readableLabel(plan.point.label, plan.point)}`,
+        tip: `Undo: ${asTheirs(plan.point.label, plan.point)}`,
       };
   }
 }
@@ -66,7 +71,7 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
   const plan = useMemo<UndoPlan>(
-    () => (data ? planUndo(data.points, { id: me?.id, names: [me?.global_name ?? "", me?.username ?? ""] }) : { kind: "none" }),
+    () => (data ? planUndo(data.points, { id: me?.id, names: [me?.global_name ?? "", me?.username ?? ""] }, readFlows()) : { kind: "none" }),
     [data, me],
   );
   const text = describe(plan);
@@ -86,7 +91,11 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
     try {
       if (plan.kind === "mine") {
         await rewind(gameName, plan.target.index);
-        setStatus({ kind: "done", message: `Undid ${asMine(plan.point.label, plan.point)} and ${plural(plan.after.length, "action")} after it.` });
+        setStatus({ kind: "done", message: `Undid ${asMine(plan.point.label, plan.point, plan.summary)} and ${plural(plan.after.length, "action")} after it.` });
+      } else if (plan.kind === "flow") {
+        /* One action of several presses: back to the save before its first (undoing only the last Done changes nothing). */
+        await rewind(gameName, plan.target.index);
+        setStatus({ kind: "done", message: `Undid: ${asMine(plan.first.label, plan.first, plan.summary)}.` });
       } else {
         const res = await undo(gameName, force || plan.kind === "others");
         setStatus({ kind: "done", message: `Undid: ${res.undoneLabel}` });

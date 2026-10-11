@@ -5,6 +5,7 @@ import { useGameEvents } from "@/gamelog";
 import { segText } from "@/gamelog/parse/markup";
 import type { GameEvent } from "@/gamelog";
 import type { PlayerDataResponse } from "@/entities/data/types";
+import { useBoardCover } from "@/state/boardCover";
 import { useReservedArea } from "@/state/reservedArea";
 import { useRunner } from "../renderers/strategy/runner";
 import { FollowNoticeNote, useFollowNotices } from "./FollowNotices";
@@ -100,6 +101,7 @@ export function OutcomeToast({ gameName, faction, rightInset, web }: { gameName:
 
   /* Under the decision card when it is up (inside its column), else top-right under the top bar: never over tiles. */
   const card = useReservedArea((s) => s.rects["decision-card"]);
+  const covered = useBoardCover((s) => s.open > 0);
   if ((!shown.length && !follow.notices.length) || typeof document === "undefined") return null;
   const style = (
     card
@@ -107,7 +109,7 @@ export function OutcomeToast({ gameName, faction, rightInset, web }: { gameName:
       : { top: "100px", right: `${12 + rightInset}px` }
   ) as CSSProperties;
   return createPortal(
-    <div className={`ti4play ${classes.stack}`} style={style} role="status" aria-live="polite">
+    <div className={`ti4play ${classes.stack} ${covered ? classes.covered : ""}`} style={style} role="status" aria-live="polite">
       {follow.notices.map((n) => (
         <FollowNoticeNote key={n.id} notice={n} onDismiss={() => follow.dismiss(n.id)} />
       ))}

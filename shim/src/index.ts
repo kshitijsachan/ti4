@@ -68,11 +68,28 @@ const MIME: Record<string, string> = {
   ".md": "text/plain; charset=utf-8",
 };
 
-function serveFile(res: import("node:http").ServerResponse, file: string, cache = "public, max-age=31536000, immutable") {
+function serveFile(
+  res: import("node:http").ServerResponse,
+  file: string,
+  cache = "public, max-age=31536000, immutable",
+  extra: Record<string, string> = {},
+) {
   if (!existsSync(file) || !statSync(file).isFile()) return false;
-  res.writeHead(200, { "content-type": MIME[extname(file).toLowerCase()] ?? "application/octet-stream", "cache-control": cache });
+  res.writeHead(200, { "content-type": MIME[extname(file).toLowerCase()] ?? "application/octet-stream", "cache-control": cache, ...extra });
   createReadStream(file).pipe(res);
   return true;
+}
+
+/**
+ * A player link's page (/play?t=<seat token>, /game/<g>?t=…) carries the token in a short-lived cookie too. The web
+ * moves the token into storage once its code runs; if the page is left or replaced before that (a slow load, a second
+ * click), the next page still finds the seat in this cookie instead of landing signed out. The web clears it.
+ */
+function linkCookie(path: string, query: URLSearchParams): Record<string, string> {
+  const token = query.get("t");
+  if (!token || !/^\/(play|game\/)/.test(path) || !/^[\w-]{8,64}$/.test(token)) return {};
+  const value = encodeURIComponent(query.get("tab") === "1" ? `${token}|tab` : token);
+  return { "set-cookie": `ti4seat=${value}; Path=/; Max-Age=900; SameSite=Lax` };
 }
 
 // Bot REST traffic, so a shutdown can wait until the bot's writes for the last interaction have landed.
@@ -130,7 +147,7 @@ const server = createServer({ shouldUpgradeCallback: (req: import("node:http").I
     // Static web client with SPA fallback.
     const rel = normalize(decodeURIComponent(path)).replace(/^(\.\.[\/\\])+/, "");
     if (rel !== "/" && serveFile(res, join(WEB_DIST, rel), rel.startsWith("/assets/") ? undefined : "no-cache")) return;
-    if (serveFile(res, join(WEB_DIST, "index.html"), "no-cache")) return;
+    if (serveFile(res, join(WEB_DIST, "index.html"), "no-cache", linkCookie(path, url.searchParams))) return;
     res.writeHead(404).end("web client not built");
   } catch (e) {
     log.error(`${req.method} ${path}: ${(e as Error).stack}`);

@@ -1,6 +1,7 @@
 import { usePlayConnection, type Message } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { usePressButton } from "@/play/usePressButton";
+import { recordFlow } from "@/rollback/flows";
 import { baseId, choicesOf, type Choice } from "../model/controls";
 import { useRunner } from "../renderers/strategy/runner";
 
@@ -106,7 +107,10 @@ export function usePressPlan() {
     }
     runner.set({ running: key, step: 0, total: steps.length, label: "", error: null, startedAt: Date.now() });
     const ctx: PlanContext = { lastMessageId: "0", presses: 0 };
+    /* Every press of the run is one action for the Undo button, even when the run stops part way. */
+    const pressed: string[] = [];
     const fail = (error: string) => {
+      recordFlow(pressed);
       useRunner.getState().set({ running: null, error });
       return false;
     };
@@ -125,11 +129,13 @@ export function usePressPlan() {
         console.info("[quantity] press", target.customId, "on", target.messageId);
         const result = await press(target.channelId, target.messageId, target.customId);
         if (result.error) return fail(result.error);
+        pressed.push(target.customId);
         ctx.lastMessageId = target.messageId;
         ctx.presses++;
         await settled(conn, target, before, newestBefore);
       }
     }
+    recordFlow(pressed);
     after?.();
     useRunner.getState().set({ running: null, step: 0, total: 0, label: "" });
     return true;

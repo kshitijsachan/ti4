@@ -25,6 +25,7 @@ import type { DecisionData } from "../renderers/types";
 import { OutcomeToast } from "./OutcomeToast";
 import { FooterSlot } from "./Footer";
 import { CombatOutcome } from "../renderers/combat/Outcome";
+import { useBoardCover } from "@/state/boardCover";
 import classes from "./DecisionHost.module.css";
 
 export type DecisionHostProps = {
@@ -303,7 +304,8 @@ function canHide(d: Decision) {
 }
 
 /**
- * The popup floats above the board, its drawers and the players view, so it renders into the page body. It sits
+ * The popup floats above the board and its drawers, so it renders into the page body; a full-screen overlay (the
+ * players view, a player's sheet) puts it underneath until it closes (`useCoversBoard`). It sits
  * in the board's area (under the top bar, over the hand bar) and left of an open side drawer.
  */
 function PopupLayer({ children, placement, rightInset, peeking }: {
@@ -313,8 +315,12 @@ function PopupLayer({ children, placement, rightInset, peeking }: {
   peeking?: boolean;
 }) {
   const style = { "--decision-right-inset": `${rightInset}px` } as CSSProperties;
+  const covered = useBoardCover((s) => s.open > 0);
   const layer = (
-    <div className={cx("ti4play", classes.layer, classes.fixed, placement === "contained" && classes.board, peeking && classes.peeking)} style={style}>
+    <div
+      className={cx("ti4play", classes.layer, classes.fixed, placement === "contained" && classes.board, peeking && classes.peeking, covered && classes.covered)}
+      style={style}
+    >
       {children}
     </div>
   );

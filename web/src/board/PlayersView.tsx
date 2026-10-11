@@ -3,6 +3,7 @@ import { Menu, Modal, UnstyledButton } from "@mantine/core";
 import { IconAdjustmentsHorizontal, IconCheck } from "@tabler/icons-react";
 import cx from "clsx";
 import { useGameData } from "@/state/useGameContext";
+import { useCoversBoard } from "@/state/boardCover";
 import { useSettingsStore, type Settings } from "@/state/appStore";
 import { filterPlayersWithAssignedFaction } from "@/entities/game/playerUtils";
 import { getPrimaryColorCSS } from "@/entities/lookup/colors";
@@ -125,6 +126,7 @@ export function PlayersView({ opened, onClose }: Props) {
   const settings = useSettingsStore((s) => s.settings);
   const updateSettings = useSettingsStore((s) => s.handlers.updateSettings);
   const { sections, hidden, update } = useFilters();
+  useCoversBoard(opened);
   const players = filterPlayersWithAssignedFaction(data?.playerData ?? []);
   const shown = players.filter((p) => !hidden.includes(p.faction));
   const sectionSet = sections ? new Set(sections) : undefined;

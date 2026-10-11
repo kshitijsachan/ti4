@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useStoredSet, useStoredState } from "../../model/stored";
 import { UnstyledButton } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 import { getPlanetData } from "@/entities/lookup/planets";
@@ -130,10 +131,10 @@ export function VoteExhaustBody({ d, data, onPress, pendingKey }: RendererProps)
   const plan = usePressPlan();
   const busy = useAnyRunning();
   const running = useRunning("counter:vote:");
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [tg, setTg] = useState(0);
-  const [inf, setInf] = useState(0);
-  const [adjust, setAdjust] = useState(0);
+  const [picked, setPicked] = useStoredSet("vote-planets", d.id);
+  const [tg, setTg] = useStoredState("vote-tg", d.id, 0);
+  const [inf, setInf] = useStoredState("vote-inf", d.id, 0);
+  const [adjust, setAdjust] = useStoredState("vote-adjust", d.id, 0);
   const [adjusting, setAdjusting] = useState(false);
   const channelId = d.prompt.channelId;
   const content = d.prompt.message.content;

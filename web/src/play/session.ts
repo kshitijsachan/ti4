@@ -26,9 +26,40 @@ function write(storage: () => Storage, key: string, value: string | null) {
 const tab = () => window.sessionStorage;
 const device = () => window.localStorage;
 
-/** The seat token this tab plays as: the tab's own, else the device default. */
+/**
+ * The server sends a player link's page with a short-lived `ti4seat` cookie
+ * ("<token>" or "<token>|tab"), and index.html stores the token before the
+ * app loads. Either way a page left (or replaced by another navigation) before
+ * the app ran still knows the seat: the link always signs in.
+ */
+const LINK_COOKIE = "ti4seat";
+
+function linkCookie(): { token: string; tabOnly: boolean } | null {
+  try {
+    const raw = document.cookie
+      .split(";")
+      .map((c) => c.trim())
+      .find((c) => c.startsWith(`${LINK_COOKIE}=`))
+      ?.slice(LINK_COOKIE.length + 1);
+    if (!raw) return null;
+    const [token, flag] = decodeURIComponent(raw).split("|");
+    return token ? { token, tabOnly: flag === "tab" } : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearLinkCookie() {
+  try {
+    if (linkCookie()) document.cookie = `${LINK_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+  } catch {
+    /* no cookies: nothing to clear */
+  }
+}
+
+/** The seat token this tab plays as: the tab's own, else the device default, else a link not yet adopted. */
 export function getToken(): string | null {
-  return read(tab, TOKEN_KEY) ?? read(device, TOKEN_KEY);
+  return read(tab, TOKEN_KEY) ?? read(device, TOKEN_KEY) ?? linkCookie()?.token ?? null;
 }
 
 /**
@@ -43,6 +74,7 @@ export function setToken(token: string, tabOnly = false) {
 /** Forgets this tab's seat (and the device default when it is the same seat). */
 export function clearToken() {
   const current = getToken();
+  clearLinkCookie();
   write(tab, TOKEN_KEY, null);
   if (read(device, TOKEN_KEY) === current) write(device, TOKEN_KEY, null);
 }
@@ -57,12 +89,20 @@ export function adoptTokenFromUrl(): string | null {
   const url = new URL(window.location.href);
   const fromUrl = url.searchParams.get("t");
   if (!fromUrl) {
+    /* A link opened on this device whose page never got to store it: the newest seat asked for. */
+    const link = linkCookie();
+    if (link) {
+      setToken(link.token, link.tabOnly);
+      clearLinkCookie();
+      return link.token;
+    }
     const current = getToken();
     // Pin the inherited default to this tab so a later link elsewhere does not swap seats here.
     if (current && !read(tab, TOKEN_KEY)) write(tab, TOKEN_KEY, current);
     return current;
   }
   setToken(fromUrl, url.searchParams.get("tab") === "1");
+  clearLinkCookie();
   url.searchParams.delete("t");
   url.searchParams.delete("tab");
   window.history.replaceState(

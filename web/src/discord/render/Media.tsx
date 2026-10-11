@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@mantine/core";
 import { IconDownload, IconFile, IconPhotoOff } from "@tabler/icons-react";
+import { useCoversBoard } from "@/state/boardCover";
 import type { Attachment } from "../types";
 import classes from "./Media.module.css";
 
@@ -73,6 +74,7 @@ export function ZoomImage({ src, alt, width, height, maxWidth = 520, maxHeight =
 }
 
 export function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  useCoversBoard(true);
   return (
     <Modal
       opened
