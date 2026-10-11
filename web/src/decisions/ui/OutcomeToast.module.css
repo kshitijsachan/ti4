@@ -9,6 +9,11 @@
   pointer-events: none;
 }
 
+/* Under a full-screen overlay, with the decision card. */
+.stack.covered {
+  z-index: var(--z-decision-popup-covered, 190);
+}
+
 .toast {
   max-width: 380px;
   padding: 8px 12px;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { HoverCard, Modal, Tabs, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useGameData } from "@/state/useGameContext";
+import { useCoversBoard } from "@/state/boardCover";
 import { filterPlayersWithAssignedFaction } from "@/entities/game/playerUtils";
 import PlayerCard from "@/domains/player/components/composition/PlayerCard";
 import { FactionSheet } from "@/faction";
@@ -39,6 +40,7 @@ export function PlayerRail({ myUserId, actionPhase = true, onAllPlayers }: Props
     const seat = rail.children[myIndex] as HTMLElement | undefined;
     if (seat) rail.scrollLeft = seat.offsetLeft - rail.offsetLeft - 12;
   }, [myIndex]);
+  useCoversBoard(!!openColor);
 
   if (!data || !players.length) return null;
   const opened = players.find((p) => p.color === openColor);
