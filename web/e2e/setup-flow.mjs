@@ -20,6 +20,21 @@ const browser = await chromium
   .launch({ executablePath: "/opt/pw-browsers/chromium" })
   .catch(() => chromium.launch());
 const page = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+// Prompt lifecycle as the tab sees it (create / update / delete of messages with setup buttons, socket closes): a
+// prompt that lingers after the game moved on can then be traced to a missed frame or to the client.
+const PROMPT_ID = /getTech_|discardSecret_|SODISCARD_|setupStep5_|getKeleresTechOptions/;
+page.on("websocket", (ws) => {
+  console.log(`[ws] open ${ws.url().replace(/token=[^&]+/, "token=…")}`);
+  ws.on("close", () => console.log("[ws] closed"));
+  ws.on("framereceived", ({ payload }) => {
+    if (typeof payload !== "string" || payload.length > 200000) return;
+    let f;
+    try { f = JSON.parse(payload); } catch { return; }
+    if (f.t === "message_delete") console.log(`[ws] delete ${f.id}`);
+    else if ((f.t === "message_create" || f.t === "message_update") && PROMPT_ID.test(JSON.stringify(f.message?.components ?? []))) console.log(`[ws] ${f.t.slice(8)} prompt ${f.message.id}`);
+    else if (f.t === "history" && f.messages?.some((m) => PROMPT_ID.test(JSON.stringify(m.components ?? [])))) console.log(`[ws] history ${f.channel_id} has prompts ${f.messages.filter((m) => PROMPT_ID.test(JSON.stringify(m.components ?? []))).map((m) => m.id).join(",")}`);
+  });
+});
 const problems = [];
 page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
 const shot = (name) =>
@@ -156,7 +171,9 @@ while (Date.now() < end2 && !done) {
   if (await options.count()) {
     // A repeated prompt (e.g. Argent picks two starting techs) needs a different option than last time.
     const repeats = seen.filter((t) => t === title).length - 1;
-    await options.nth(repeats % (await options.count())).click();
+    // The panel can re-render under the click (a new prompt arrived): look again rather than fail the run.
+    const picked = await options.nth(repeats % (await options.count())).click({ timeout: 10000 }).then(() => true, () => false);
+    if (!picked) { seen.pop(); await page.waitForTimeout(1500); continue; }
     await page.waitForTimeout(500);
     await shot(`7-decision-${seen.length}-selected`);
     const confirm = dialog.getByRole("button", { name: /^(Take|Keep|Start with|Research|Discard|Pick)\b/ }).first();
