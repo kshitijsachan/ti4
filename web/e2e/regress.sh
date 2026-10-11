@@ -12,8 +12,9 @@ here=$(cd "$(dirname "$0")" && pwd)
 maxload=$(( $(nproc) * 2 ))
 for i in $(seq 1 60); do
   load=$(cut -d' ' -f1 /proc/loadavg)
-  since=$(date -d '-30 sec' +%H:%M:%S)
-  busy=$(tail -2000 "$log" | awk -v s="$since" '$1 >= s && /bot busy/' | wc -l)
+  since=$(date -d '-30 sec' +%H:%M:%S); now=$(date +%H:%M:%S)
+  # Times only (the log spans days): count lines in [since, now] so yesterday's afternoon is not "recent".
+  busy=$(tail -2000 "$log" | awk -v s="$since" -v n="$now" '$1 >= s && $1 <= n && /bot busy/' | wc -l)
   healthy=$(curl -s -m 5 "$base/healthz" | grep -c '"bot":true')
   mem=$(free -g | awk '/Mem:/{print $7}')
   if [ "$healthy" = 1 ] && [ "$busy" = 0 ] && [ "$mem" -ge 3 ] && awk -v l="$load" -v m="$maxload" 'BEGIN{exit !(l < m)}'; then break; fi
