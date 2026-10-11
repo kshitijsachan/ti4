@@ -62,7 +62,7 @@ export type TeStepFields = {
   /** Engine step (handler prefix without the trailing "_"), e.g. "placeVoidTether", "deorbitBarrageTarget". */
   step: string;
   /** use = start / accept an optional effect; target = a choice inside an effect under way; skip = back out / finish. */
-  action: "use" | "target" | "skip";
+  action: "use" | "target" | "skip" | "undo";
   /** The effect may be declined (a Decline/Done option is offered, or this is an offer). */
   optional: boolean;
   /** Tile positions. */
