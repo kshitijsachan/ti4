@@ -47,9 +47,9 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const openIds = useEngine((s) => s.view.decisions);
   const pending = useEngine((s) => s.view.pending);
   const errors = useEngine((s) => s.view.errors);
-  const lastAnswerAt = useEngine((s) => s.lastAnswer?.at ?? null);
+  const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
   const answer = useEngineAnswer();
-  const { queue, offers } = useMemo(() => orderDecisions(decisions, lastAnswerAt), [decisions, lastAnswerAt]);
+  const { queue, offers } = useMemo(() => orderDecisions(decisions, answeredAtSeq), [decisions, answeredAtSeq]);
 
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [offerId, setOfferId] = useState<string | null>(null);

@@ -25,7 +25,8 @@ export type EngineStore = {
   noteAnswer(answer: LastAnswer): void;
 };
 
-export type LastAnswer = { at: number; decision: Decision; optionId: string | null; values?: string[] };
+/** `seq`: the stream position when I answered (decisions opened after it are the answer's next steps). */
+export type LastAnswer = { at: number; seq: number; decision: Decision; optionId: string | null; values?: string[] };
 
 /** One engine view per page (the game on screen), fed by the play socket's `t:"engine"` frames (see link.ts). */
 export const engineStore = createStore<EngineStore>((set) => ({
@@ -46,6 +47,8 @@ export const engineStore = createStore<EngineStore>((set) => ({
   lastAnswer: null,
   noteAnswer: (lastAnswer) => set({ lastAnswer }),
 }));
+
+if (import.meta.env.DEV && typeof window !== "undefined") (window as unknown as { __engine?: unknown }).__engine = engineStore;
 
 export function useEngine<T>(selector: (s: EngineStore) => T): T {
   return useStore(engineStore, selector);

@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import type { Decision, GameState } from "./contract";
 import { openToAll } from "./reducer";
 import { factionName } from "./names";
+import { useEngine, useMyDecisions } from "./store";
 
 /** Plain-words titles per kind; `legacy` (untyped) prompts take a title from their own text. */
 const TITLES: Record<string, string> = {
@@ -135,8 +137,6 @@ const COMBAT = /^combat\./;
 const PHASE_STEP = new Set(["status.advance", "setup.deal_secrets", "setup.reveal_objectives", "status.reveal_objective", "agenda.next"]);
 const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/;
 
-/** How long after my answer a new prompt of mine counts as its next step (comes first). */
-const FOLLOW_UP_MS = 15_000;
 
 /**
  * My decisions in the order to answer them (head first), and the background ones behind "Available now":
@@ -144,14 +144,15 @@ const FOLLOW_UP_MS = 15_000;
  * 4. everything else oldest first, 5. table steps that move the phase on (after my homework), 6. my turn menu,
  * which stays up while what it spawned is answered.
  */
-export function orderDecisions(mine: Decision[], lastAnswerAt: number | null): { queue: Decision[]; offers: Decision[] } {
+export function orderDecisions(mine: Decision[], answeredAtSeq: number | null): { queue: Decision[]; offers: Decision[] } {
   const offers = mine.filter(openToAll);
   const own = mine.filter((d) => !openToAll(d));
   const homework = own.some((d) => HOMEWORK.test(d.kind) && !PHASE_STEP.has(d.kind));
   const rank = (d: Decision) => {
     if (d.kind === "turn.action") return 6;
     if (PHASE_STEP.has(d.kind)) return homework ? 5 : 4;
-    if (lastAnswerAt && d.scope === "player" && d.createdAt >= lastAnswerAt - 1000 && d.createdAt <= lastAnswerAt + FOLLOW_UP_MS) return 1;
+    /* Opened since my last answer (stream positions, not clocks): its next step. */
+    if (answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2) return 1;
     if (COMBAT.test(d.kind)) return 2;
     if (d.kind === "trade.offer") return 3;
     return 4;
@@ -161,4 +162,11 @@ export function orderDecisions(mine: Decision[], lastAnswerAt: number | null): {
     .sort((a, b) => a.r - b.r || a.d.createdAt - b.d.createdAt || a.d.seq - b.d.seq)
     .map((x) => x.d);
   return { queue, offers };
+}
+
+/** My decisions in answering order, live (the popup's queue; background prompts excluded). */
+export function useMyQueue(): Decision[] {
+  const mine = useMyDecisions();
+  const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
+  return useMemo(() => orderDecisions(mine, answeredAtSeq).queue, [mine, answeredAtSeq]);
 }

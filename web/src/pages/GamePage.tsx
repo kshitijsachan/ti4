@@ -10,6 +10,7 @@ import { findGame } from "@/play/games";
 import { useAttention } from "@/play/attention";
 import { useTurn, useTurnAlerts } from "@/play/turn";
 import { GameScreen } from "@/board/GameScreen";
+import { engineTurn, useEngineState, useMyQueue } from "@/engine";
 import { SetupScreen } from "@/board/SetupScreen";
 import classes from "./GamePage.module.css";
 
@@ -117,14 +118,19 @@ export default function GamePage() {
     },
   );
   const attention = useAttention(mapid, turn.mine);
+  /* Engine on and live: the tab title / notifications follow the engine's turn and decision queue. */
+  const engineState = useEngineState(mapid);
+  const engineQueue = useMyQueue();
+  const alertTurn = engineState ? engineTurn(engineState, me?.id) : turn;
+  const alertIds = engineState ? engineQueue.map((d) => d.id) : attention.map((a) => a.message.id);
   useTurnAlerts(
     mapid,
-    turn,
-    attention.map((a) => a.message.id),
+    alertTurn,
+    alertIds,
     () =>
-      turn.mine
-        ? `${turn.phase ?? "Your move"}: the table is waiting on you.`
-        : `${attention.length} prompt(s) waiting for your answer.`,
+      alertTurn.mine
+        ? `${alertTurn.phase ?? "Your move"}: the table is waiting on you.`
+        : `${alertIds.length} prompt(s) waiting for your answer.`,
   );
 
   // Cards on /play prefetch this document; show it at once, refresh behind it.

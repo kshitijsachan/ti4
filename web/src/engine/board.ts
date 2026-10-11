@@ -7,7 +7,7 @@ import { SC_COLORS, SC_NAMES } from "@/entities/data/strategyCardColors";
 import { countTechs, type LeaderState, type PlayerSummary } from "@/board/playerSummary";
 import { phaseLabel, type TurnState } from "@/play/turn";
 import type { Decision, GameState, PlayerState } from "./contract";
-import { decisionTitle, orderDecisions } from "./queue";
+import { decisionTitle } from "./queue";
 import { factionName } from "./names";
 
 /** The engine's raw phase ("statusScoring", "agendaVoting", "miltydraft") as the board labels it. */
@@ -134,11 +134,21 @@ export function engineWaitingNote(state: GameState, myId: string | undefined): s
   }
   const voter = state.agenda?.currentVoter;
   if (voter && voter !== myId) return `Waiting for ${name(voter)} to vote…`;
+  const status = state.status;
+  if (status) {
+    const seated = state.players.filter((p) => p.real && !p.eliminated).map((p) => p.userId);
+    const scoring = status.step === "scoring";
+    const owing = seated.filter((id) => {
+      const st = status.players[id];
+      if (!st || id === myId) return false;
+      return scoring ? st.publicScored === null || st.secretScored === null : !st.ready;
+    });
+    if (owing.length) return `Waiting for ${listed(owing.map(name))} to ${scoring ? "score" : "finish the status phase"}…`;
+  }
   return null;
 }
 
 /** The header's "Your move" count and tooltip (the popup's queue), else what the table waits on. */
-export function engineWaiting(state: GameState, mine: Decision[], lastAnswerAt: number | null, myId: string | undefined) {
-  const { queue } = orderDecisions(mine, lastAnswerAt);
+export function engineWaiting(state: GameState, queue: Decision[], myId: string | undefined) {
   return { count: queue.length, title: queue[0] ? decisionTitle(queue[0], state) : null, note: queue.length ? null : engineWaitingNote(state, myId) };
 }

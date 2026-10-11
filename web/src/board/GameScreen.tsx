@@ -13,7 +13,7 @@ import { BoardTable } from "./BoardTable";
 import { GameDrawers } from "./GameDrawers";
 import { DecisionSlot, HandSlot, LogSlot } from "./Mounts";
 import { OPEN_TRADE_EVENT } from "@/decisions";
-import { useEngine, useEngineLink, useEngineState, useMyDecisions } from "@/engine";
+import { useEngineLink, useEngineState, useMyQueue } from "@/engine";
 import { activePlayerColor, engineTurn, engineWaiting } from "@/engine/board";
 import { ObjectivesModal } from "./ObjectivesModal";
 import { PlayerRail } from "./PlayerRail";
@@ -72,8 +72,7 @@ export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing 
   useEngineLink(gameName);
   /* Engine flag on and its stream live: the header and seats read the engine's state, not the web-data document. */
   const engineState = useEngineState(gameName);
-  const myDecisions = useMyDecisions();
-  const lastAnswerAt = useEngine((s) => s.lastAnswer?.at ?? null);
+  const myQueue = useMyQueue();
   const turn = engineState ? engineTurn(engineState, me?.id) : legacyTurn;
   const channels = usePlay((s) => s.channels);
   const game = findGame(channels, gameName);
@@ -136,7 +135,7 @@ export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing 
         round={engineState ? engineState.round : data?.gameRound}
         turn={turn}
         activeColor={engineState ? activePlayerColor(engineState) : active ? getPrimaryColorCSS(active.color) : undefined}
-        waiting={engineState ? engineWaiting(engineState, myDecisions, lastAnswerAt, me?.id) : undefined}
+        waiting={engineState ? engineWaiting(engineState, myQueue, me?.id) : undefined}
         myNote={myNote}
         objectives={revealed}
         drawer={drawer}
