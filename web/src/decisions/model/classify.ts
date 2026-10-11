@@ -1057,6 +1057,43 @@ function riftStep(base: Decision, choices: Choice[], ctx: ClassifyContext): Deci
   };
 }
 
+/** Bot unit ids in "placeOneNDone_skipbuild_<unit>_<planet>" → words ("gf" is infantry; "2destroyer" two of them). */
+const PLACED_UNIT: Record<string, [string, string]> = {
+  gf: ["infantry", "infantry"],
+  infantry: ["infantry", "infantry"],
+  mf: ["mech", "mechs"],
+  mech: ["mech", "mechs"],
+  ff: ["fighter", "fighters"],
+  fighter: ["fighter", "fighters"],
+  dd: ["destroyer", "destroyers"],
+  destroyer: ["destroyer", "destroyers"],
+  ca: ["cruiser", "cruisers"],
+  cruiser: ["cruiser", "cruisers"],
+  cv: ["carrier", "carriers"],
+  carrier: ["carrier", "carriers"],
+  dn: ["dreadnought", "dreadnoughts"],
+  dreadnought: ["dreadnought", "dreadnoughts"],
+  pds: ["PDS", "PDS"],
+  sd: ["space dock", "space docks"],
+  spacedock: ["space dock", "space docks"],
+};
+
+/**
+ * What a "place one and done" prompt places, from its buttons' unit ("1 infantry" for Mitosis, "1 mech" for Hope's
+ * End), else from the bot's text ("…place an infantry on"); "1 mech" when neither says.
+ */
+function placedUnit(choices: Choice[], text: string) {
+  for (const c of choices) {
+    const m = baseId(c.customId).match(/^placeOneNDone_skipbuild_(\d*)([a-z]+?)_/i);
+    const unit = m && PLACED_UNIT[m[2].toLowerCase()];
+    if (!unit) continue;
+    const n = Number(m[1] || 1);
+    return `${n} ${n === 1 ? unit[0] : unit[1]}`;
+  }
+  const said = text.match(/\bplace an? (infantry|mech|fighter|destroyer|cruiser|carrier|dreadnought|PDS|space dock)\b/i)?.[1];
+  return said ? `1 ${said}` : "1 mech";
+}
+
 function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean) {
   if (choosingSystem || has(choices, /^(getTilesThisFarAway_|ring_)/)) return "Tactical action — choose a system";
   const placing = choices.map((c) => baseId(c.customId).match(/^place_(\w+?)_/)?.[1]).filter(Boolean);
@@ -1067,7 +1104,8 @@ function tacticalTitle(choices: Choice[], text: string, choosingSystem: boolean)
   if (has(choices, /^placeOneNDone_skipbuild/)) {
     const where = /hope'?s end/i.test(text) ? "Hope's End: " : "";
     const ac = choices.some((c) => /action card/i.test(c.label));
-    return `${where}place 1 mech${ac ? " or draw 1 action card" : ""}`.replace(/^p/, (x) => (where ? x : x.toUpperCase()));
+    const what = placedUnit(choices, text);
+    return `${where}place ${what}${ac ? " or draw 1 action card" : ""}`.replace(/^p/, (x) => (where ? x : x.toUpperCase()));
   }
   if (has(choices, /^(tacticalActionBuild|place_|placeOneNDone)/) || /produce/i.test(text)) return "Produce units";
   if (has(choices, /^(landUnits|doneLanding|planetsTake)/) || (/land/i.test(text) && !has(choices, /^doneWithTacticalAction/))) return "Land ground forces";
