@@ -1149,7 +1149,7 @@ class SeatPilot {
       if (!mine?.length) continue;
       const state = await engine.state(game, this.userId, 2000);
       for (const d of mine) {
-        const pick = chooseTyped(d, state, this.userId);
+        const pick = chooseTyped(d, state, this.userId, mine);
         if (!pick) continue;
         const key = `${d.id}@${d.revision}|${pick.option.id}`;
         if (this.engineTried.has(key)) continue;
