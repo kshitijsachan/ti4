@@ -2,6 +2,7 @@
  * Autopilot policy over typed decisions. Pure: (decision, state) → option. Add a case per kind as kinds are typed;
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
+import { chooseExplore } from "./policy/explore.js";
 import type { Decision, GameState, Option } from "./types.js";
 import { chooseCards } from "./policy/cards.js";
 
@@ -43,6 +44,13 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, op
       const cats = new Set(d.options.filter((o) => !o.disabled && o.value).map((o) => o.value!.category));
       return cats.size === 1 ? { option: d.options.find((o) => !o.disabled && o.value)!, why: "draft: only category left" } : null;
     }
+    case "explore.planet":
+    case "explore.card_pick":
+    case "explore.frontier":
+    case "explore.outcome":
+    case "relic.fragments":
+    case "relic.draw":
+      return chooseExplore(d, state, me);
     default:
       return null;
   }
