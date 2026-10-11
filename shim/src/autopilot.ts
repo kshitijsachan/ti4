@@ -99,6 +99,8 @@ type Rule = {
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 /** How long a typed decision belongs to the engine path before the legacy rules may answer it (see engineOwns). */
 const ENGINE_GRACE_MS = 90_000;
+/** At most this many engine answers from one seat to one decision (multi-part answers walk a few options). */
+const ENGINE_MAX_ANSWERS = 8;
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan.
  * The strategy-card pick queue too: the planner picks when it is up, and the fallback filled the queue, pressed its
@@ -1316,6 +1318,8 @@ class SeatPilot {
 
   /** Engine answers already sent (decision id | option id): each is tried once; afterwards the heuristics take over. */
   private engineTried = new Set<string>();
+  /** Answers this seat sent per decision id (capped at ENGINE_MAX_ANSWERS). */
+  private engineAttempts = new Map<string, number>();
   /** Per decision id: the options this seat answered successfully (in order) and the revision of the last one. */
   private engineDone = new Map<string, { options: string[]; revision: number }>();
 
@@ -1345,8 +1349,17 @@ class SeatPilot {
           all: open,
         });
         if (!pick) continue;
-        const key = `${d.id}@${d.revision}#${done?.options.length ?? 0}|${pick.option ? pick.option.id : JSON.stringify(pick.payload)}`;
+        // Reaction windows (table decisions) are re-revised by every save at the table, so their key leaves the revision
+        // out: one answer per option per seat. Every decision gets at most ENGINE_MAX_ANSWERS answers from this seat
+        // (live pbd36: a press that never registered in the window was re-sent 142 times).
+        const windowed = d.scope === "table" || !!d.window;
+        const what = pick.option ? pick.option.id : JSON.stringify(pick.payload);
+        const key = windowed ? `${d.id}#${done?.options.length ?? 0}|${what}` : `${d.id}@${d.revision}#${done?.options.length ?? 0}|${what}`;
         if (this.engineTried.has(key)) continue;
+        const attempts = (this.engineAttempts.get(d.id) ?? 0) + 1;
+        if (attempts > ENGINE_MAX_ANSWERS) continue;
+        this.engineAttempts.set(d.id, attempts);
+        if (this.engineAttempts.size > 2000) this.engineAttempts.delete(this.engineAttempts.keys().next().value!);
         this.engineTried.add(key);
         if (this.engineTried.size > 5000) this.engineTried.clear();
         const req = pick.payload

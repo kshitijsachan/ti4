@@ -834,10 +834,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..07435b8
+index 0000000..919d04f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,511 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -1022,6 +1022,7 @@ index 0000000..07435b8
 +        } finally {
 +            inFlight.remove(flightKey);
 +        }
++        recordWindowResponse(d, userId);
 +        List<Decision> opened = DecisionRegistry.openedAfter(gameName, before);
 +        return new AnswerResult(
 +                true,
@@ -1201,6 +1202,19 @@ index 0000000..07435b8
 +        }
 +    }
 +
++    /** Kinds with recordsResponses(): mark this player responded on the window now (see WindowResponses). */
++    private static void recordWindowResponse(Decision d, String userId) {
++        if (d.window() == null || !d.window().eligible().contains(userId)) return;
++        KindSpec spec = DecisionKinds.byKind(d.kind());
++        if (spec == null || !spec.recordsResponses()) return;
++        WindowResponses.record(d.source().messageId(), userId);
++        String id = DecisionRegistry.decisionIdForMessage(d.source().messageId());
++        Decision cur = id == null ? null : DecisionRegistry.get(id);
++        if (cur == null || cur.window() == null) return;
++        EngineModels.ReactionWindow merged = WindowResponses.merge(cur.source().messageId(), cur.window());
++        if (merged != cur.window()) DecisionRegistry.update(cur.withDynamic(cur.stateVersion(), cur.target(), merged, cur.progress()));
++    }
++
 +    @Nullable
 +    private static InputSchema selectSchema(Decision d, String id) {
 +        if (d.inputs() == null || id == null) return null;
@@ -1337,10 +1351,10 @@ index 0000000..07435b8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..87c8365
+index 0000000..7e36785
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,577 @@
+@@ -0,0 +1,578 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -1574,6 +1588,7 @@ index 0000000..87c8365
 +        if (spec != null) {
 +            try {
 +                window = spec.window(ctx);
++                if (spec.recordsResponses()) window = WindowResponses.merge(messageId, window);
 +                progress = spec.progress(ctx);
 +            } catch (Exception e) {
 +                BotLogger.error("engine: kind " + spec.kind() + " failed to build window/progress", e);
@@ -2289,10 +2304,10 @@ index 0000000..dcb3e09
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..c754cc0
+index 0000000..081e3e6
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,94 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.Objects;
@@ -2379,6 +2394,7 @@ index 0000000..c754cc0
 +            ctx = new KindSpec.CaptureContext(
 +                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(), t, tp);
 +            ReactionWindow w = spec.window(ctx);
++            if (spec.recordsResponses()) w = WindowResponses.merge(d.source().messageId(), w);
 +            Progress pr = spec.progress(ctx);
 +            if (Objects.equals(t, d.target()) && Objects.equals(w, d.window()) && Objects.equals(pr, d.progress()))
 +                continue;
@@ -3464,10 +3480,10 @@ index 0000000..149af12
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/KindSpec.java b/src/main/java/ti4/selfhost/engine/KindSpec.java
 new file mode 100644
-index 0000000..ea2ce68
+index 0000000..590ab6f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/KindSpec.java
-@@ -0,0 +1,184 @@
+@@ -0,0 +1,193 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -3537,6 +3553,15 @@ index 0000000..ea2ce68
 +     * the decision is open (emitting decision.updated when they change).
 +     */
 +    default boolean dynamic() {
++        return false;
++    }
++
++    /**
++     * The engine records who answered this kind's reaction window (one answer per eligible player) and merges that
++     * into {@link #window}: for windows whose engine-side record of reactions is unreliable. Off by default (some
++     * table decisions take several presses from one player).
++     */
++    default boolean recordsResponses() {
 +        return false;
 +    }
 +
@@ -4947,6 +4972,65 @@ index 0000000..89ef450
 +                return;
 +            }
 +        }
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/WindowResponses.java b/src/main/java/ti4/selfhost/engine/WindowResponses.java
+new file mode 100644
+index 0000000..778c13d
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/WindowResponses.java
+@@ -0,0 +1,53 @@
++package ti4.selfhost.engine;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.LinkedHashMap;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import javax.annotation.Nullable;
++import ti4.selfhost.engine.EngineModels.ReactionWindow;
++
++/**
++ * Engine-side record of who answered a reaction window, for kinds whose own record is unreliable
++ * ({@link KindSpec#recordsResponses()}: e.g. agenda shenanigans, whose persistent-react entry is not always kept). A
++ * successful engine answer by an eligible player marks them responded on that message, so the window closes over for
++ * them (ActionInvoker then answers 409 "already responded" instead of pressing again).
++ */
++final class WindowResponses {
++    private static final int MAX_MESSAGES = 2000;
++    private static final Map<String, Set<String>> byMessage = Collections.synchronizedMap(
++            new LinkedHashMap<>(256, 0.75f, true) {
++                @Override
++                protected boolean removeEldestEntry(Map.Entry<String, Set<String>> e) {
++                    return size() > MAX_MESSAGES;
++                }
++            });
++
++    private WindowResponses() {}
++
++    static void record(String messageId, String userId) {
++        byMessage.computeIfAbsent(messageId, k -> Collections.synchronizedSet(new LinkedHashSet<>())).add(userId);
++    }
++
++    /** The kind's window plus the responses the engine recorded for this message. */
++    @Nullable
++    static ReactionWindow merge(String messageId, @Nullable ReactionWindow w) {
++        if (w == null) return null;
++        Set<String> recorded = byMessage.get(messageId);
++        if (recorded == null || recorded.isEmpty()) return w;
++        List<String> responded = new ArrayList<>(w.responded());
++        Map<String, String> responses = new LinkedHashMap<>(w.responses());
++        synchronized (recorded) {
++            for (String uid : recorded) {
++                if (!w.eligible().contains(uid) || responded.contains(uid)) continue;
++                responded.add(uid);
++                responses.putIfAbsent(uid, "answered");
++            }
++        }
++        if (responded.size() == w.responded().size()) return w;
++        return new ReactionWindow(w.kind(), w.subject(), w.eligible(), responded, responses);
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/interaction/EngineInteraction.java b/src/main/java/ti4/selfhost/engine/interaction/EngineInteraction.java
@@ -7646,10 +7730,10 @@ index 0000000..1d91827
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/AgendaShenanigansKind.java b/src/main/java/ti4/selfhost/engine/kinds/AgendaShenanigansKind.java
 new file mode 100644
-index 0000000..bd81b26
+index 0000000..7964164
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/AgendaShenanigansKind.java
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,97 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -7709,6 +7793,12 @@ index 0000000..bd81b26
 +
 +    @Override
 +    public boolean dynamic() {
++        return true;
++    }
++
++    /** One decline per player; the persistent-react record is not always kept (live: pbd36 answer loop). */
++    @Override
++    public boolean recordsResponses() {
 +        return true;
 +    }
 +
