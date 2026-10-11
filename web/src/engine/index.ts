@@ -12,6 +12,7 @@ export { useEngineLink, useEngineAnswer } from "./link";
 export type { AnswerPayload } from "./link";
 export { engineStore, useEngine, useEngineEnabled, useEngineMode, useEngineState, useMyDecisions } from "./store";
 export { EngineDecisionHost, decisionTitle } from "./EngineDecisionHost";
+export { openToAll } from "./reducer";
 export { GenericDecision } from "./GenericDecision";
 export { RENDERERS, rendererFor } from "./registry";
 export type { EngineRenderer, EngineRendererProps } from "./registry";

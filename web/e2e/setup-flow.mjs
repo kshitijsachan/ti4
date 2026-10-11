@@ -90,6 +90,25 @@ await shot("3-draft");
 const draft = async () =>
   getJson(`${base}/bot/api/public/game/${game}/draft`);
 
+/**
+ * Moves the decision popup to my next waiting decision: open the "N more after this / waiting" list and pick the
+ * first entry that is not the one shown (e.g. the strategy-card queue prompt shown before the actual pick).
+ */
+async function nextDecision(dialog, title) {
+  const more = dialog.getByRole("button", { name: /more (after this|waiting)/ });
+  if (!(await more.count())) return false;
+  await more.first().click().catch(() => {});
+  const items = dialog.getByRole("menuitem");
+  for (let i = 0; i < (await items.count()); i++) {
+    const text = ((await items.nth(i).textContent()) ?? "").trim();
+    if (text && text !== title.trim()) {
+      say(`next decision: ${text}`);
+      return items.nth(i).click().then(() => true, () => false);
+    }
+  }
+  return false;
+}
+
 let picks = 0;
 const deadline = Date.now() + 15 * 60000;
 let stuckSince;
@@ -169,8 +188,7 @@ while (Date.now() < end2 && !done) {
   if (/deal secret|start the game|strategy phase$/i.test(title)) {
     if (!seen.includes(title)) { seen.push(title); await shot(`6-table-${seen.length}`); say(`table-wide step shown: ${title} (left to the orchestrator)`); }
     // look at my other decisions, if any
-    const next = dialog.getByLabel("Next decision");
-    if (await next.count()) await next.click();
+    await nextDecision(dialog, title);
     await page.waitForTimeout(2000);
     continue;
   }
@@ -197,8 +215,7 @@ while (Date.now() < end2 && !done) {
     await dialog.getByRole("button", { name: "Get a Technology" }).click();
   } else {
     say(`not mine to script (left alone): ${title}`);
-    const next = dialog.getByLabel("Next decision");
-    if (await next.count()) await next.click();
+    await nextDecision(dialog, title);
     await page.waitForTimeout(3000);
   }
   await page.waitForTimeout(4000);

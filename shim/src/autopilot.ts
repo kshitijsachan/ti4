@@ -354,12 +354,17 @@ export class Autopilot {
   async engineOwns(game: string, messageId: string, userId: string): Promise<boolean> {
     const engine = this.engine;
     if (!engine?.isLive) return false;
-    const d = (await engine.openDecisions(game))?.find((x) => x.source.messageId === messageId);
+    const open = (await engine.openDecisions(game)) ?? [];
+    const d = open.find((x) => x.source.messageId === messageId);
     if (!d || d.kind === "legacy") return false;
+    const state = await engine.state(game, userId, 2000);
     if (d.scope === "player" ? d.target?.userId !== userId : !!d.window && !awaits(d, userId)) {
       // Not awaited by the window, but ours to answer (the strategy card we played): still the engine's.
-      if (!answersOutsideWindow(d, userId, await engine.state(game, userId, 2000))) return false;
+      if (!answersOutsideWindow(d, userId, state)) return false;
     }
+    // Typed, but no bot policy answers it (now): the legacy rules may, without waiting out the grace period.
+    const mine = open.filter((x) => x.id !== d.id && x.target?.userId === userId);
+    if (!chooseTyped(d, state, userId, { history: [], open: mine, all: open })) return false;
     return Date.now() - d.createdAt < ENGINE_GRACE_MS;
   }
 

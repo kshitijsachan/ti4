@@ -129,7 +129,14 @@ export type StrategyDecision =
   | PlanetReady
   | PoliticsSpeaker
   | PoliticsAgenda
-  | ConstructionPlace;
+  | ConstructionPlace
+  | StrategyCardPreDecline;
+
+/** Decide in advance not to follow a strategy card (preDeclineSC_ / getPreDeclineSCButtons_), in the cards thread. */
+export type StrategyCardPreDecline = DecisionBaseOf<
+  "strategy_card.pre_decline",
+  { strategyCard: number; action: "pre_decline" | "decide_later" | "undo" }
+>;
 
 export const STRATEGY_KINDS = [
   "strategy_card.resolve",

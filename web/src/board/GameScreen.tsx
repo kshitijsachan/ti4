@@ -13,7 +13,7 @@ import { BoardTable } from "./BoardTable";
 import { GameDrawers } from "./GameDrawers";
 import { DecisionSlot, HandSlot, LogSlot } from "./Mounts";
 import { OPEN_TRADE_EVENT } from "@/decisions";
-import { decisionTitle, useEngineLink, useEngineState, useMyDecisions } from "@/engine";
+import { decisionTitle, openToAll, useEngineLink, useEngineState, useMyDecisions } from "@/engine";
 import { activePlayerColor, engineTurn } from "@/engine/board";
 import { ObjectivesModal } from "./ObjectivesModal";
 import { PlayerRail } from "./PlayerRail";
@@ -135,7 +135,7 @@ export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing 
         round={engineState ? engineState.round : data?.gameRound}
         turn={turn}
         activeColor={engineState ? activePlayerColor(engineState) : active ? getPrimaryColorCSS(active.color) : undefined}
-        waiting={engineState ? { count: myDecisions.length, title: myDecisions[0] ? decisionTitle(myDecisions[0]) : null } : undefined}
+        waiting={engineState ? { count: myDecisions.filter((d) => !openToAll(d)).length, title: myDecisions[0] && !openToAll(myDecisions[0]) ? decisionTitle(myDecisions[0]) : null } : undefined}
         myNote={myNote}
         objectives={revealed}
         drawer={drawer}

@@ -20,7 +20,15 @@ public class KindOverlap {
             if (line.isBlank()) continue;
             msgs++;
             List<String> hs = new ArrayList<>();
-            for (String c : line.split("\t")) hs.add(ComponentIdEnvelope.decode(c).handlerId());
+            List<DecisionCapture.RawControl> raw = new ArrayList<>();
+            for (String c : line.split("\t")) {
+                hs.add(ComponentIdEnvelope.decode(c).handlerId());
+                raw.add(new DecisionCapture.RawControl(c, "", "secondary", null, false, null));
+            }
+            if (DecisionCapture.isInfoMenu(raw, hs)) {
+                byKind.merge("(info menu: not a decision)", 1, Integer::sum);
+                continue;
+            }
             KindSpec k = DecisionKinds.classify(hs);
             String kn = k == null ? "legacy" : k.kind();
             byKind.merge(kn, 1, Integer::sum);
@@ -35,7 +43,11 @@ public class KindOverlap {
                 }
             }
         }
-        System.out.println("messages: " + msgs);
+        int info = byKind.getOrDefault("(info menu: not a decision)", 0);
+        int legacy = byKind.getOrDefault("legacy", 0);
+        int decisions = msgs - info;
+        System.out.printf("messages: %d, info menus: %d, decisions: %d, typed: %d (%.1f%% of decisions)%n",
+                msgs, info, decisions, decisions - legacy, 100.0 * (decisions - legacy) / Math.max(1, decisions));
         byKind.forEach((k, n) -> System.out.println("  " + n + "\t" + k));
         System.out.println("handler ids matched by 2+ kinds (pattern -> kinds; message classified as):");
         overlaps.forEach((h, ks) -> System.out.println("  " + h + " -> " + ks + "; msg=" + wonBy.get(h)));

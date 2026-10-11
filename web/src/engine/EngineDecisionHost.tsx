@@ -7,6 +7,7 @@ import hostClasses from "@/decisions/ui/DecisionHost.module.css";
 import type { Decision } from "./contract";
 import { useEngineAnswer } from "./link";
 import { rendererFor } from "./registry";
+import { openToAll } from "./reducer";
 import { engineStore, useEngine, useMyDecisions } from "./store";
 import classes from "./EngineDecisionHost.module.css";
 
@@ -35,10 +36,13 @@ export function EngineDecisionHost({ placement = "contained", rightInset = 0 }: 
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
 
-  const shown = decisions.find((d) => d.id === jumpId) ?? decisions[0];
+  // Window-less table prompts (anyone may press; mostly untyped menus) never pop up on their own: they are listed
+  // under "more" and open when picked (live: they headed the queue, "27 more waiting").
+  const own = decisions.filter((d) => !openToAll(d));
+  const shown = decisions.find((d) => d.id === jumpId) ?? own[0];
   if (!shown) return null;
   const Renderer = rendererFor(shown.kind);
-  const more = decisions.length - 1;
+  const more = own.length - (openToAll(shown) ? 0 : 1);
   const error = errors[shown.id];
 
   return (

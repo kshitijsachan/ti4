@@ -28,6 +28,9 @@ export function plannedTokens(base: CommandTokenPools, maxTotal: number): Comman
 
 export function chooseStatus(d: Decision, state: GameState | null, me: string, mine: Decision[] = []): StatusChoice | null | undefined {
   if (!KINDS.has(d.kind)) return undefined;
+  // The command-token panel outside the status homework (Leadership, Technology, other gains) is not ours: the
+  // strategy policy answers Leadership; a payload there is refused ("only in the status phase").
+  if (d.kind === "command_tokens.adjust" && state?.status?.step !== "homework") return undefined;
   const sd = d as StatusDecision;
   const live = (sd.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   const find = (pred: (v: any) => boolean) => live.find((o) => pred(o.value));

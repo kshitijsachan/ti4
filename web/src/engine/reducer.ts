@@ -123,5 +123,13 @@ export function myDecisions(view: EngineView, userId: string | null | undefined)
   const holding = (d: Decision) => d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction;
   return Object.values(view.decisions)
     .filter((d) => (awaits(d, userId) || holding(d)) && (d.scope === "player" || !!d.window || seated || holding(d)))
-    .sort((a, b) => a.createdAt - b.createdAt || a.seq - b.seq);
+    .sort((a, b) => Number(openToAll(a)) - Number(openToAll(b)) || a.createdAt - b.createdAt || a.seq - b.seq);
+}
+
+/**
+ * A window-less table prompt (anyone may press it; usually an untyped menu): never "waiting on me" for the header,
+ * and listed after the prompts that are really mine.
+ */
+export function openToAll(d: Decision): boolean {
+  return d.scope === "table" && !d.window;
 }

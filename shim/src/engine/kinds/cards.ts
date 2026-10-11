@@ -90,4 +90,8 @@ export type CardsDecision =
   | ActionCardDraw
   | ActionCardResolve
   | ActionCardTarget
+  | ActionCardPreassign
   | PromissoryNotePlay;
+
+/** Pre-play an action card for a later window (resolvePreassignment_<what>[_<target>]); agenda ones are agenda.preassign. */
+export type ActionCardPreassign = DecisionBase<"action_card.preassign", { preassignment: string; target: string | null }>;

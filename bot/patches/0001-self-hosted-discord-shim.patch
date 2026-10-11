@@ -42,6 +42,23 @@ index b3bb870..fca05dd 100644
  
          BotLogger.info("INITIALIZING LISTENERS");
          ListenerManager.registerListeners(jda);
+diff --git a/src/main/java/ti4/discord/interactions/buttons/ButtonProcessor.java b/src/main/java/ti4/discord/interactions/buttons/ButtonProcessor.java
+index d2782c8..1ae8729 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/ButtonProcessor.java
++++ b/src/main/java/ti4/discord/interactions/buttons/ButtonProcessor.java
+@@ -33,6 +33,12 @@ public class ButtonProcessor {
+     private static final String DISABLED_HANDLER_ID = "(combat replay disabled)";
+     private static final String UNROUTED_HANDLER_ID = "(unrouted)";
+ 
++    /** Self-host engine: whether this button routes to a read-only handler (save = false: info menus, views). */
++    public static boolean isReadOnly(String customId) {
++        HandlerRegistry.Route<ButtonContext> route = registry.resolve(customId);
++        return route.isMatched() && !route.shouldSave();
++    }
++
+     public static void checkButtonHandlersSetup() {
+         if (registry.getSize() == 0) {
+             throw new IllegalStateException("No button handlers were registered");
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java
 index a54a239..1731da8 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/game/CreateGameButtonHandler.java
@@ -1387,10 +1404,10 @@ index 0000000..1422959
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..8d8bf25
+index 0000000..6d10f42
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,588 @@
+@@ -0,0 +1,620 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -1577,6 +1594,13 @@ index 0000000..8d8bf25
 +
 +        List<String> handlerIds = new ArrayList<>();
 +        for (RawControl c : controls) handlerIds.add(ComponentIdEnvelope.decode(c.customId).handlerId());
++        if (isInfoMenu(controls, handlerIds)) {
++            // Perpetual info / view menus (cards info, game info, decks, preferences…) are not decisions: nobody is
++            // asked anything (live: they headed the engine UI queue, "27 more waiting").
++            DecisionRegistry.closeByMessage(messageId, "info");
++            EngineMetrics.count("capture.info_menu");
++            return null;
++        }
 +
 +        Target resolved =
 +                resolveTarget(game, controls, channelId, ephemeral, interactionToken, interactionUser(msg), content);
@@ -1770,6 +1794,31 @@ index 0000000..8d8bf25
 +            if (mentioned.size() == 1) return target(game.getPlayer(mentioned.iterator().next()), "mention");
 +        }
 +        return new Target(null, null, null, owners.size() > 1 ? "mixed_owners" : "none");
++    }
++
++    /** Saving handlers that are still perpetual menus, not questions (the read-only ones are found by route). */
++    private static final java.util.Set<String> INFO_EXTRA = java.util.Set.of("getModifyTiles", "purgeOverrule");
++
++    /**
++     * A message whose every option opens a read-only handler (save = false: info, decks, views, preferences) or one
++     * of {@link #INFO_EXTRA}, plus at most "delete these buttons": an info menu, not a decision.
++     */
++    static boolean isInfoMenu(List<RawControl> controls, List<String> handlerIds) {
++        boolean info = false;
++        for (int i = 0; i < controls.size(); i++) {
++            String h = handlerIds.get(i);
++            if (h == null) return false;
++            if (h.equals("deleteButtons")) continue;
++            boolean readOnly;
++            try {
++                readOnly = ti4.discord.interactions.buttons.ButtonProcessor.isReadOnly(controls.get(i).customId);
++            } catch (Throwable t) {
++                readOnly = false;
++            }
++            if (!readOnly && !INFO_EXTRA.contains(h)) return false;
++            info = true;
++        }
++        return info;
 +    }
 +
 +    static boolean obsolete(KindSpec spec, KindSpec.CaptureContext ctx) {
@@ -7104,6 +7153,56 @@ index 0000000..a6147a3
 +        return null;
 +    }
 +}
+diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardPreassignKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardPreassignKind.java
+new file mode 100644
+index 0000000..e7aeffe
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardPreassignKind.java
+@@ -0,0 +1,44 @@
++package ti4.selfhost.engine.kinds;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++import ti4.selfhost.engine.KindSpec;
++
++/**
++ * Pre-play an action card for a later window (ButtonHelperActionCards / CryypterHelper): resolvePreassignment_&lt;what&gt;
++ * with &lt;what&gt; e.g. "Puppets On A String", "Relitigate", "Coup_&lt;sc&gt;", "ExtremeDuress_&lt;color&gt;",
++ * "Mentak Envoy &lt;f&gt;_&lt;f2&gt;". The agenda pre-assignments ("Pass On Shenanigans", "Abstain On Agenda") are
++ * agenda.preassign (higher priority).
++ *
++ * <p>value: {preassignment: the card / effect name, target: the part after the first "_" or null}.
++ */
++public class ActionCardPreassignKind implements KindSpec {
++
++    @Override
++    public String kind() {
++        return "action_card.preassign";
++    }
++
++    @Override
++    public int priority() {
++        return 60;
++    }
++
++    @Override
++    public boolean matches(String h) {
++        return h.startsWith("resolvePreassignment_")
++                && !h.equals("resolvePreassignment_Pass On Shenanigans")
++                && !h.equals("resolvePreassignment_Abstain On Agenda");
++    }
++
++    @Override
++    public Map<String, Object> value(String h, CaptureContext ctx) {
++        if (!matches(h)) return null;
++        String rest = h.substring("resolvePreassignment_".length());
++        int us = rest.indexOf('_');
++        Map<String, Object> v = new LinkedHashMap<>();
++        v.put("preassignment", us < 0 ? rest : rest.substring(0, us));
++        v.put("target", us < 0 ? null : rest.substring(us + 1));
++        return v;
++    }
++}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardResolveKind.java
 new file mode 100644
 index 0000000..966a9dc
@@ -9873,10 +9972,10 @@ index 0000000..ec17819
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java b/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java
 new file mode 100644
-index 0000000..53b5ede
+index 0000000..0f4521c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,102 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -9948,6 +10047,14 @@ index 0000000..53b5ede
 +        Map<String, Object> req = new LinkedHashMap<>();
 +        boolean status = StatusPhase.inHomework(game);
 +        req.put("status", status);
++        // The pools when this panel opened (Leadership / Technology / other gains store them): lets a client count
++        // what this panel already gained, across restarts (current - original).
++        String orig = game.getStoredValue("originalCCsFor" + p.getFaction());
++        if (orig != null && orig.matches("\\d+/\\d+/\\d+")) {
++            String[] o = orig.split("/");
++            req.put("original", Map.of(
++                    "tactic", Integer.parseInt(o[0]), "fleet", Integer.parseInt(o[1]), "strategy", Integer.parseInt(o[2])));
++        }
 +        if (status) {
 +            CommandTokens base = StatusPhase.tokensBase(game, p);
 +            req.put("base", Map.of("tactic", base.tactic(), "fleet", base.fleet(), "strategy", base.strategy()));
@@ -14096,12 +14203,58 @@ index 0000000..ebd58f0
 +        return null;
 +    }
 +}
+diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPreDeclineKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPreDeclineKind.java
+new file mode 100644
+index 0000000..836bc73
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPreDeclineKind.java
+@@ -0,0 +1,40 @@
++package ti4.selfhost.engine.kinds;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++import ti4.selfhost.engine.KindSpec;
++
++/**
++ * Pre-decide following a strategy card before it is played (ButtonHelperSCs.preDeclineSC /
++ * getPreDeclineSCButtons): preDeclineSC_&lt;sc&gt;_yes (don't follow it when it is played), preDeclineSC_&lt;sc&gt;_no
++ * (decide later), getPreDeclineSCButtons_&lt;sc&gt; (undo the decision). Posted to the player (cards-info thread).
++ *
++ * <p>value: {strategyCard, action: "pre_decline" | "decide_later" | "undo"}.
++ */
++public class StrategyCardPreDeclineKind implements KindSpec {
++
++    @Override
++    public String kind() {
++        return "strategy_card.pre_decline";
++    }
++
++    @Override
++    public int priority() {
++        return 80;
++    }
++
++    @Override
++    public boolean matches(String h) {
++        return h.matches("preDeclineSC_\\d+_(yes|no)") || h.matches("getPreDeclineSCButtons_\\d+");
++    }
++
++    @Override
++    public Map<String, Object> value(String h, CaptureContext ctx) {
++        if (!matches(h)) return null;
++        String[] p = h.split("_");
++        Map<String, Object> v = new LinkedHashMap<>();
++        v.put("strategyCard", Integer.parseInt(p[1]));
++        v.put("action", h.startsWith("get") ? "undo" : "yes".equals(p[2]) ? "pre_decline" : "decide_later");
++        return v;
++    }
++}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardQueuePickKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardQueuePickKind.java
 new file mode 100644
-index 0000000..0f0d0a4
+index 0000000..c2054a1
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardQueuePickKind.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,80 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -14153,6 +14306,24 @@ index 0000000..0f0d0a4
 +    @Override
 +    public String scope(CaptureContext ctx) {
 +        return "player";
++    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    /**
++     * Queueing is for before your turn: once it is this player's pick (or the strategy phase is over) the prompt is a
++     * leftover, and it hid the real pick (live regress, human picking 6th).
++     */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        Game game = ctx.game();
++        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame();
++        if (!phase.startsWith("strategy")) return true;
++        Player p = ctx.player();
++        return p != null && p == game.getActivePlayer();
 +    }
 +
 +    @Override
@@ -16496,6 +16667,19 @@ index 5b8e62a..91f9ae3 100644
          if (CommandHelper.hasRole(event, JdaService.bothelperRoles)) {
              return false;
          }
+diff --git a/src/main/java/ti4/service/turn/StartTurnService.java b/src/main/java/ti4/service/turn/StartTurnService.java
+index e89c241..d891e17 100644
+--- a/src/main/java/ti4/service/turn/StartTurnService.java
++++ b/src/main/java/ti4/service/turn/StartTurnService.java
+@@ -99,6 +99,8 @@ public class StartTurnService {
+     private static final String FOW_FOLLOW_REMINDERS = "fowFollowReminders";
+ 
+     public static void turnStart(GenericInteractionCreateEvent event, Game game, Player player) {
++        // Self-hosted: after the last player passes there is no next player (live pbd103 NPE); nothing to start.
++        if (player == null) return;
+         player.setInRoundTurnCount(player.getInRoundTurnCount() + 1);
+         VanguardPromissoryHandler.returnGuildCallAtOwnerTurnStart(event, game, player);
+         PoliticalMarriageLLButtonHandler.clearExpiredRestriction(game, player);
 diff --git a/src/main/java/ti4/spring/api/auth/RestDiscordClient.java b/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
 index 8501858..8990781 100644
 --- a/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
