@@ -43,7 +43,7 @@ const seatName = args.seat ?? "Fuzz 1";
 const minutes = Number(args.minutes ?? 20);
 const maxSteps = Number(args.steps ?? Infinity);
 const STALL_S = Number(args.stall ?? 60);
-const deadline = Date.now() + minutes * 60000;
+let deadline = Date.now() + minutes * 60000;
 const runDir = `${FUZZ_DIR}/runs/ws-${seed}`;
 mkdirSync(runDir, { recursive: true });
 const say = makeLogger(`${runDir}/run.log`);
@@ -58,6 +58,7 @@ if (!game) {
   created = true;
 }
 writeFileSync(`${runDir}/game`, `${game}\n${created ? "created" : "attached"}\n`);
+if (created) deadline = Date.now() + minutes * 60000;
 say(`game ${game} (${created ? "created" : "attached"})`);
 const rec = makeRecorder("ws-fuzz", seed, () => game, { seat: seatName });
 const trace = [];
@@ -86,7 +87,7 @@ const errTail = new BotErrorTail(game);
 
 // ---- policy ----
 const SKIP =
-  /concede|eliminat|endGame|end_game|gameEnd|deleteGame|resign|leaveGame|kickPlayer|replacePlayer|forceAbort|startTFDraft|frankenDraft|^jmf|showGameAgain|searchMyGames|getStarted|newGame|createGame|offerPlayerPref|playerPref_|notepad|^setupStep|startPlayerSetup|setupHomebrew|getHomebrewButtons|^gameSetup|miltySetup|^draftSetup/i;
+  /concede|eliminat|endGame|end_game|gameEnd|deleteGame|resign|leaveGame|kickPlayer|replacePlayer|forceAbort|startTFDraft|frankenDraft|^jmf|showGameAgain|searchMyGames|getStarted|newGame|createGame|offerPlayerPref|playerPref_|notepad|^setupStep|startPlayerSetup|^frankenSetup|^setupBaseGameMode|^chooseExp_|^enableDaneMode|^offerTEOptionButtons|^restartAllMiltyQueue|^miltyFactionInfo|setupHomebrew|getHomebrewButtons|^gameSetup|miltySetup|^draftSetup/i;
 // "Done" / dismiss buttons on a required prompt throw the prompt away; a human rarely does it, the fuzzer would
 // mostly dead-end the game, so they get a low weight (they are still tried).
 const DISMISS = /^deleteButtons|^dismiss|^deleteMessage|^ignore|^done/i;
@@ -316,10 +317,31 @@ let waitedSince = null;
 let lastSeq = 0;
 let lastSeqAt = Date.now();
 let gameOver = false;
+let behindSince = null;
+let lastSave = null;
+let lastSaveAt = Date.now();
+/** The bot's registry moved on but no engine event reached me: the live stream is silent (resubscribe to keep going). */
+async function checkStreamLive() {
+  const bot = await botDecisions(game);
+  if (!bot || client.view.status !== "live") return;
+  const mine = new Map(Object.values(client.view.decisions).map((d) => [d.id, d.revision]));
+  const differs = bot.decisions.filter((d) => d.visibility === "public" && mine.get(d.id) !== d.revision).length;
+  if (bot.seq > client.view.seq && differs && Date.now() - client.lastEngineAt > 20000) {
+    behindSince ??= Date.now();
+    if (Date.now() - behindSince > 60000) {
+      rec.record({ kind: "engine:stream-silent", detail: `no engine event over ws for ${Math.round((Date.now() - client.lastEngineAt) / 1000)} s while the bot's registry moved from seq ${client.view.seq} to ${bot.seq} (${differs} public decisions differ); resubscribing`, step, trace: tr() });
+      behindSince = null;
+      client.subscribeEngine(true);
+    }
+  } else behindSince = null;
+}
+
 async function checkAll(after) {
+  await checkStreamLive();
   for (const e of errTail.poll())
     rec.record({ kind: "bot:handler-error", detail: `${e.handler}: ${e.exc}${e.who ? ` (pressed by ${e.who}${e.button ? ` [${e.button}]` : ""})` : ""}`, step, trace: tr(), botlog: e.text });
   const snap = await snapshotOf(game, `step${step}`);
+  if (snap.save && snap.save !== lastSave) (lastSave = snap.save), (lastSaveAt = Date.now());
   if (!snap.web) return;
   const undoSince = undoAt > undoChecked;
   undoChecked = Date.now();
@@ -350,10 +372,10 @@ function checkStall() {
       waitingSince = Date.now();
     }
   } else waitingSince = null;
-  if (Date.now() - lastSeqAt > 5 * 60000) {
+  if (Date.now() - lastSaveAt > 5 * 60000) {
     const active = st.players?.find((p) => p.userId === st.activePlayer);
-    rec.record({ kind: "stall:game-idle", severity: "warn", detail: `nothing happened for ${Math.round((Date.now() - lastSeqAt) / 60000)} min in round ${st.round} ${st.phase}; active ${active?.faction ?? st.activePlayer}${active?.userId === ME ? " (me)" : ""}`, step, trace: tr() });
-    lastSeqAt = Date.now();
+    rec.record({ kind: "stall:game-idle", severity: "warn", detail: `the game was not saved for ${Math.round((Date.now() - lastSaveAt) / 60000)} min in round ${st.round} ${st.phase}; active ${active?.faction ?? st.activePlayer}${active?.userId === ME ? " (me)" : ""}`, step, trace: tr() });
+    lastSaveAt = Date.now();
   }
 }
 
@@ -365,12 +387,13 @@ while (Date.now() < deadline && step < maxSteps && !gameOver) {
   checkStall();
   const mine = myDecisions(client.view, ME);
   const legacy = legacyCandidates();
-  const undoBtns = client.gameMessages().slice(-40).flatMap((m) => controlsOf(m.components).filter((c) => /^ultimateUndo_/.test(c.id)).map((c) => ({ m, c, own: true, w: 1 })));
+  // Only the newest UNDO (one step back); older ones rewind further than a player usually would.
+  const undoBtns = client.gameMessages().slice(-40).flatMap((m) => controlsOf(m.components).filter((c) => /^ultimateUndo_/.test(c.id)).map((c) => ({ m, c, own: true, w: 1 }))).slice(-1);
   const action = rng.weighted([
     [mine.length ? 55 : 0, "mine"],
     [mine.length ? 15 : 0, "mine-legacy"],
     [legacy.length ? (mine.length ? 8 : 25) : 0, "legacy"],
-    [undoBtns.length ? 2.5 : 0, "undo"],
+    [undoBtns.length ? 1.2 : 0, "undo"],
     [3, "foreign"],
     [answered.size ? 3 : 0, "stale"],
     [2, "garbage"],

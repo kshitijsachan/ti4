@@ -135,6 +135,7 @@ export async function createSoloGame(token, bots = 3, log = console.log) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token, bots, expansion: "te" }),
+      signal: AbortSignal.timeout(120000),
     }).catch((e) => ({ ok: false, json: async () => ({ message: String(e) }) }));
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -197,11 +198,12 @@ export function awaits(d, uid) {
 export const optionsFor = (d, uid) => d.options.filter((o) => !o.owner?.userId || o.owner.userId === uid);
 export const openToAll = (d) => d.scope === "table" && !d.window;
 /** Decisions really waiting on me (the popup's list without window-less table prompts). */
-export function myDecisions(view, uid) {
+export function myDecisions(view, uid, { includeOpen = false } = {}) {
+  const seated = !!view.state?.players?.some((p) => p.userId === uid);
   const myFaction = view.state?.players?.find((p) => p.userId === uid)?.faction;
   const holding = (d) => d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction;
   return Object.values(view.decisions)
-    .filter((d) => (awaits(d, uid) || holding(d)) && !openToAll(d))
+    .filter((d) => (awaits(d, uid) || holding(d)) && (includeOpen ? d.scope === "player" || !!d.window || seated || holding(d) : !openToAll(d)))
     .sort((a, b) => a.createdAt - b.createdAt || a.seq - b.seq);
 }
 
@@ -300,7 +302,7 @@ export class ShimClient {
     this.onFrame?.(f);
   }
   applyEngine(f) {
-    this.lastEngineAt = Date.now();
+    if (f.type !== "answer") this.lastEngineAt = Date.now();
     const v = this.view;
     const ev = (e) => {
       if (e.game !== this.game || e.seq <= v.seq) return;

@@ -18,6 +18,7 @@ import {
   SHIM,
   ShimClient,
   createSoloGame,
+  draftData,
   endGame,
   engineState,
   freshSeed,
@@ -41,7 +42,7 @@ const seed = Number(args.seed ?? freshSeed()) >>> 0;
 const rng = makeRng(seed);
 const ENGINE = String(args.engine ?? "1") === "1";
 const seatName = args.seat ?? "Fuzz 2";
-const deadline = Date.now() + Number(args.minutes ?? 4.5) * 60000;
+let deadline = Date.now() + Number(args.minutes ?? 4.5) * 60000;
 const runDir = `${FUZZ_DIR}/runs/ui-${seed}`;
 mkdirSync(runDir, { recursive: true });
 const say = makeLogger(`${runDir}/run.log`);
@@ -57,6 +58,7 @@ if (!game) {
 }
 console.log(`GAME=${game}`);
 writeFileSync(`${runDir}/game`, `${game}\n${created ? "created" : "attached"}\n`);
+if (created) deadline = Date.now() + Number(args.minutes ?? 4.5) * 60000;
 const rec = makeRecorder("ui-fuzz", seed, () => game, { seat: seatName, engine: ENGINE });
 const trace = [];
 const note = (what) => {
@@ -68,6 +70,8 @@ const note = (what) => {
 const oracle = new ShimClient(seat.token, { game, label: "oracle", engine: true });
 await oracle.connect();
 for (let i = 0; i < 30 && oracle.view.status !== "live"; i++) await sleep(300);
+// The oracle must be right even when the live stream is not (see engine:stream-silent): re-snapshot every 20 s.
+setInterval(() => oracle.subscribeEngine(true), 20000).unref();
 let undoAt = 0;
 const answered = new Map(); // decision id -> at
 oracle.onReopen = (e) => {
@@ -155,6 +159,60 @@ async function mySeat() {
 }
 
 // ---- actions ----
+/** My Milty draft pick on the draft board (no popup there): a ready pick button, a speaker-order token, or focus a card. */
+async function doDraft() {
+  const d = await draftData(game);
+  if (d?.status !== "drafting" || String(d.currentPlayer) !== ME) return false;
+  const ready = page.locator('button[class*="pickReady"]:enabled');
+  const order = page.locator('button[class*="orderReady"]:enabled');
+  if (!(await ready.count()) && !(await order.count())) {
+    const cards = page.locator('[class*="sliceCard"], [class*="factionCard"]');
+    const n = await cards.count();
+    if (!n) {
+      draftBlind = (draftBlind ?? 0) + 1;
+      if (draftBlind > 6) {
+        await violation("draft-turn-no-board", "it is my draft pick but the page shows no slice / faction cards and no order token");
+        draftBlind = -20;
+      }
+      return false;
+    }
+    draftBlind = 0;
+    for (const i of rng.shuffle([...Array(n).keys()])) {
+      await cards.nth(i).click({ timeout: 3000 }).catch(() => {});
+      await page.waitForTimeout(400);
+      if (await ready.count()) break;
+    }
+  }
+  const pool = [...(await ready.count() ? [ready] : []), ...(await order.count() ? [order] : [])];
+  const loc = rng.pick(pool);
+  if (!loc) return false;
+  const k = rng.int(await loc.count());
+  const t = ((await loc.nth(k).textContent()) ?? (await loc.nth(k).getAttribute("title")) ?? "").trim();
+  note(`draft pick "${t.slice(0, 50)}"`);
+  await loc.nth(k).click({ timeout: 5000 }).catch((e) => note(`  draft click failed: ${e.message.split("\n")[0]}`));
+  await page.waitForTimeout(3000);
+  return true;
+}
+let draftBlind = 0;
+const clicked = new Map(); // control label -> times clicked (novelty: repeated choices get rarer)
+const oracleKinds = () => myDecisions(oracle.view, ME).map((d) => d.kind).sort();
+
+/** Opens the "N more waiting" list and jumps to a random entry. */
+async function doJump() {
+  const d = dialogOf(page);
+  const more = d.locator("header button", { hasText: /more (after this|waiting)/ });
+  if (!(await more.count())) return false;
+  await more.first().click({ timeout: 3000 }).catch(() => {});
+  const items = d.locator("[role=menuitem]");
+  const n = await items.count();
+  if (!n) return false;
+  const i = rng.int(n);
+  const t = ((await items.nth(i).textContent()) ?? "").trim();
+  note(`jump to "${t}" (${i + 1}/${n})`);
+  await items.nth(i).click({ timeout: 3000 }).catch(() => {});
+  await page.waitForTimeout(800);
+  return true;
+}
 async function act(p = page, label = "tab1") {
   const d = dialogOf(p);
   if (!(await d.count())) return false;
@@ -165,11 +223,13 @@ async function act(p = page, label = "tab1") {
   for (let i = 0; i < n; i++) {
     const t = ((await controls.nth(i).textContent().catch(() => "")) ?? "").trim().replace(/\s+/g, " ");
     if (AVOID.test(t)) continue;
-    choices.push({ i, t, w: /undo/i.test(t) ? 0.15 : /^(Done|No thanks|Decline|Skip)/i.test(t) ? 0.3 : 1 });
+    const seen = clicked.get(`${t}`) ?? 0;
+    choices.push({ i, t, w: (/undo/i.test(t) ? 0.15 : /^(Done|No thanks|Decline|Skip)/i.test(t) ? 0.3 : 1) / (1 + 2 * seen) });
   }
   const c = rng.weighted(choices.map((x) => [x.w, x]));
   if (!c) return false;
   if (/undo/i.test(c.t)) undoAt = Date.now();
+  clicked.set(c.t, (clicked.get(c.t) ?? 0) + 1);
   const before = new Set(myDecisions(oracle.view, ME).map((x) => x.id));
   const title = ((await d.locator("h2").first().textContent().catch(() => "")) ?? "").trim();
   note(`${label} click "${c.t.slice(0, 60)}" in "${title}"`);
@@ -204,11 +264,12 @@ async function doReload() {
   const seat1 = await mySeat();
   const quiet = s0 && s1 && s0.stateVersion === s1.stateVersion && mine0 === mine1;
   if (!quiet) return note(`  (state moved during the reload: not compared)`);
+  const oracleNow = oracleKinds();
   if (!!before !== !!after) return violation("reload-popup-changed", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after (engine state unchanged)`);
   if (before && after) {
     const a = JSON.stringify({ q: before.queue, t: before.queue.length ? undefined : before.title });
     const b = JSON.stringify({ q: after.queue, t: after.queue.length ? undefined : after.title });
-    if (a !== b) await violation("reload-pending-changed", `pending decisions before ${a} after ${b}`);
+    if (a !== b) await violation("reload-pending-changed", `pending decisions before ${a} after ${b}; the engine (oracle) says ${oracleNow.length} wait on me: ${oracleNow.join(",")}`);
     if (before.title === after.title && (JSON.stringify(before.selected) !== JSON.stringify(after.selected) || JSON.stringify(before.inputs) !== JSON.stringify(after.inputs)))
       await violation("reload-selection-lost", `"${before.title}": selections ${JSON.stringify(before.selected)} inputs ${JSON.stringify(before.inputs)} before, ${JSON.stringify(after.selected)} / ${JSON.stringify(after.inputs)} after`);
   }
@@ -254,7 +315,22 @@ async function doSecondTab() {
 
 // ---- checks every loop ----
 let waitingSince = null;
+let checkN = 0;
+let countMismatch = 0;
 async function checks() {
+  // Engine popup = my decisions (oracle), one shown + "N more": compare the counts when nothing moved for a while.
+  if (ENGINE && ++checkN % 3 === 0 && Date.now() - oracle.lastEngineAt > 8000) {
+    const p = await popupState(page);
+    // With a "more" list the list shows every decision of mine (window-less table prompts too), else exactly one.
+    const want = p?.queue?.length ? myDecisions(oracle.view, ME, { includeOpen: true }).map((d) => d.kind).sort() : oracleKinds();
+    const queueKinds = p ? (p.queue.length ? p.queue.length : 1) : 0;
+    if (p && !p.unstable && queueKinds !== want.length && Date.now() - oracle.lastEngineAt > 8000) {
+      if (++countMismatch >= 2) {
+        await violation("popup-count-differs", `popup lists ${queueKinds} decision(s) ("${p.title}"; list ${JSON.stringify(p.queue)}), the engine stream (fresh ws client) has ${want.length} waiting on me: ${want.join(",")}`);
+        countMismatch = -3;
+      }
+    } else if (countMismatch > 0) countMismatch = 0;
+  }
   const mine = myDecisions(oracle.view, ME);
   const pop = await popupState(page);
   if (mine.length && !pop) {
@@ -278,16 +354,22 @@ try {
   while (Date.now() < deadline) {
     steps++;
     await checks();
+    const dd = await draftData(game);
+    const myDraftTurn = dd?.status === "drafting" && String(dd.currentPlayer) === ME;
     const action = rng.weighted([
-      [60, "act"],
+      [50, "act"],
+      [10, "jump"],
+      [myDraftTurn ? 40 : 0, "draft"],
       [20, "reload"],
       [7, "reopen"],
       [7, "offline"],
       [6, "tab2"],
     ]);
     if (action === "act") {
-      if (!(await act())) await page.waitForTimeout(2500);
-    } else if (action === "reload") await doReload();
+      if (!(await act()) && !(await doDraft())) await page.waitForTimeout(2500);
+    } else if (action === "jump") await doJump();
+    else if (action === "draft") await doDraft();
+    else if (action === "reload") await doReload();
     else if (action === "reopen") await doReopen();
     else if (action === "offline") await doOffline();
     else if (action === "tab2") await doSecondTab();
