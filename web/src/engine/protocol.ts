@@ -27,7 +27,7 @@ export type EngineOp =
       optionId?: string;
       /** Structured answer (agenda ballot, token pools) → AnswerRequest.payload. */
       payload?: unknown;
-      /** A kind's direct action route (tactical "move" / "land") with its body. */
+      /** A kind's direct action route ("move", "land", "combat-plan", …) with its body. */
       action?: string;
       body?: Record<string, unknown>;
       expectedSeq?: number;

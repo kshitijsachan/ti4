@@ -51,7 +51,7 @@ export function useEngineLink(gameName: string) {
 
 /**
  * A renderer's structured answer: `{optionId}`; `{optionId?, payload}` (agenda ballot, token pools); or
- * `{action, body}` for a kind's direct action route (tactical `move` / `land`).
+ * `{action, body}` for any kind's direct action route (`move`, `land`, `combat-plan`, …).
  */
 export type AnswerPayload = { optionId?: string; payload?: unknown; action?: string; body?: Record<string, unknown> };
 

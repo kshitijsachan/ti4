@@ -135,7 +135,7 @@ export class EngineClient {
    * userId / expectedSeq / requestId, answered with the same AnswerResult shape.
    */
   async act(game: string, decisionId: string, action: string, body: Record<string, unknown>): Promise<AnswerResult | null> {
-    if (!/^[a-z][a-z_]*$/.test(action) || action === "answer") return null;
+    if (!/^[a-z][a-z_-]*$/.test(action) || action === "answer") return null;
     try {
       const res = await fetch(this.url(`/${encodeURIComponent(game)}/decisions/${encodeURIComponent(decisionId)}/${action}`), {
         method: "POST",
