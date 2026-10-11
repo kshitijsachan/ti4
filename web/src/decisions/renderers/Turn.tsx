@@ -9,6 +9,7 @@ import type { DecisionData, RendererProps } from "./types";
 import classes from "./renderers.module.css";
 import turnClasses from "./Turn.module.css";
 import { isExpeditionChoice } from "../model/expedition";
+import { useExploreResults } from "./exploreResults";
 
 type Action = { choice: Choice; title: string; sub: string; icon: ReactNode; tone: "go" | "card" | "stop" };
 
@@ -96,12 +97,25 @@ export function TurnBody({ d, data, onPress, pendingKey }: RendererProps) {
   const me = data.me;
   /* The end-of-turn abilities prompt (End Turn / Do an Expedition / …): its abilities are the point, keep them in view. */
   const endOfTurn = /^(End of turn|Pass —)/.test(d.title);
+  /* After the action: what its explores found (Dark Energy Tap explores a frontier token on Conclude, with no prompt). */
+  const afterAction = d.choices.some((c) => /^(turnEnd|endOfTurnAbilities)/.test(baseId(c.customId)));
+  const explored = useExploreResults(d.prompt.channelId);
   return (
     <div className={classes.stack}>
       {me && (
         <p className={classes.hint}>
           Command tokens: {me.tacticalCC} tactic · {me.fleetCC} fleet · {me.strategicCC} strategy
         </p>
+      )}
+      {afterAction && explored.length > 0 && (
+        <div className={classes.step}>
+          <span className={classes.stepLabel}>Explored this action</span>
+          {explored.map((r) => (
+            <p key={r} className={classes.cardText}>
+              {r}
+            </p>
+          ))}
+        </div>
       )}
       <div className={classes.actionGrid}>
         {actions.map((a) => (

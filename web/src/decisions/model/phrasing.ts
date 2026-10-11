@@ -157,6 +157,7 @@ function doneOutcome(id: string, label: string, content: string | undefined): st
     if (!names) return "Finished readying planets";
     return names.length ? `Readied ${listed(names)}` : "Skipped readying planets";
   }
+  if (/^doneWithTacticalAction$/.test(id) && /frontier/i.test(label)) return "Explored the frontier token and concluded the action";
   if (/^refresh_\w+$/.test(id)) return `Readied ${cleanButtonLabel(label)}`;
   if (/^scPick_\d+$/.test(id)) return `Picked ${cleanButtonLabel(label)}`;
   if (/^po_scoring_\d+$/.test(id)) return `Scored ${cleanButtonLabel(label)}`;
