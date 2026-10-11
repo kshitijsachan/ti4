@@ -179,6 +179,10 @@ while (Date.now() < end2 && !done) {
     const confirm = dialog.getByRole("button", { name: /^(Take|Keep|Start with|Research|Discard|Pick)\b/ }).first();
     say(`my decision: ${title} -> ${(await confirm.textContent())?.trim()}`);
     await confirm.click();
+  } else if (await dialog.getByRole("button", { name: "Roll For The Fracture" }).count()) {
+    // Crimson Rebellion starts with its breakthrough, which asks for a Fracture roll during setup.
+    say(`my decision: ${title} -> Roll For The Fracture`);
+    await dialog.getByRole("button", { name: "Roll For The Fracture" }).click();
   } else if (await dialog.getByRole("button", { name: "Get a Technology" }).count()) {
     say(`my decision: ${title} -> Get a Technology`);
     await dialog.getByRole("button", { name: "Get a Technology" }).click();
