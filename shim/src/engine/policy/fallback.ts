@@ -38,7 +38,6 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "setup.keleres_tech": "planner",
   "setup.deal_secrets": "planner",
   "setup.reveal_objectives": "planner",
-  "setup.preference": "optional",
   "setup.game_settings": "optional",
   "tech.choose_type": "planner",
   "tech.gain": "planner",
@@ -97,7 +96,10 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "action_card.resolve": "blocking",
   "action_card.target": "blocking",
   "action_card.preassign": "optional",
+  "action_card.step": "blocking", // C7: follow-up steps of a card already played (like action_card.target)
+  "action_card.when_after": "optional", // C7: non-queued agenda whens / afters (offers, like agenda.when / after)
   "promissory_note.play": "optional",
+  "promissory_note.resolve": "blocking", // C7: a played note's follow-up step (Acquiescence offer is declined)
   // G9 exploration
   "explore.planet": "blocking",
   "explore.card_pick": "blocking",
@@ -112,6 +114,10 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "te.expedition": "blocking",
   "te.thunders_edge.place": "blocking",
   "te.visionaria.respond": "blocking",
+  // C5 Thunder's Edge faction steps: like faction.ability, often optional; fallback only when forced
+  "te.breakthrough": "planner",
+  "te.breach": "planner",
+  "te.plot": "planner",
   // G11 trade
   "trade.offer": "blocking",
   "trade.offer_sent": "optional",
@@ -119,6 +125,12 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   // C1-C5 factions: the faction policy answers; abilities / leaders are often optional, so fallback only when forced
   "faction.ability": "planner",
   "leader.use": "planner",
+  // C12 perpetual prompts: ui.* are affordances (never awaited); preferences / select-only menus are background asks
+  "ui.undo_affordance": "optional",
+  "ui.optional": "optional",
+  "ui.info_menu": "optional",
+  "player.preference": "optional",
+  "choose.select": "optional",
 };
 
 const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);
