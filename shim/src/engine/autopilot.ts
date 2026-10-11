@@ -58,6 +58,20 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, op
     case "relic.fragments":
     case "relic.draw":
       return chooseExplore(d, state, me);
+    case "turn.action": {
+      // After an action: end the turn (an unplayed strategy card first: the strategy policy plays it). The start of
+      // a turn (no end_turn option) belongs to the planner (brain.ts) and, for passing, the rule table.
+      const opts = d.options.filter((o) => !o.disabled && o.value);
+      if (opts.some((o) => o.value!.action === "strategic")) return null;
+      const end = opts.filter((o) => o.value!.action === "end_turn");
+      const pick = end.find((o) => o.value!.action === "end_turn" && !o.value!.abilities) ?? end[0];
+      return pick ? { option: pick, why: "action done: end turn" } : null;
+    }
+    case "tactical.rift": {
+      // The planner never paths through gravity rifts; a rift prompt outside its plan has nothing to roll.
+      const done = d.options.find((o) => !o.disabled && o.value?.op === "done");
+      return done ? { option: done, why: "no units moved through a rift" } : null;
+    }
     default:
       return null;
   }

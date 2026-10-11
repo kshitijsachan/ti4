@@ -8,11 +8,13 @@ import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { StatusDecision, StatusState } from "./kinds/status.js";
+import type { TacticalDecision } from "./kinds/tactical.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
 export type * from "./kinds/explore.js";
 export type * from "./kinds/status.js";
+export type * from "./kinds/tactical.js";
 
 export const CONTRACT_VERSION = 1;
 
@@ -223,7 +225,6 @@ export interface DecisionBase<K extends string, V> {
 
 // ---- typed kinds (add one member per KindSpec; keep alphabetical within an area) ----
 
-
 export type StrategyCardPick = DecisionBase<"strategy_card.pick", { strategyCard: number; tradeGoods: number }>;
 export type TechGain = DecisionBase<"tech.gain", { tech: string; free: boolean; starting: boolean; flags: string[] }>;
 export type SecretObjectiveDiscard = DecisionBase<
@@ -248,6 +249,7 @@ export type Decision =
   | ExploreDecision
   | AgendaDecision
   | StatusDecision
+  | TacticalDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;

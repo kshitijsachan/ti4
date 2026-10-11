@@ -8,6 +8,7 @@ import {
   waitFor,
   type Scope,
 } from "./driver";
+import { landViaEngine } from "./engine";
 
 /** What the bot's landing prompt offers: per planet, which of my ground units can land (and how many at most). */
 export type LandingOffer = {
@@ -50,6 +51,8 @@ export type LandingPlan = Record<string, Record<string, number>>;
 
 export type LandDeps = {
   conn: PlayConnection;
+  /** With the game name the engine's land action is used first (buttons are the fallback). */
+  gameName?: string;
   scope: Scope;
   prompt: { channelId: string; messageId: string };
   onProgress?: (text: string) => void;
@@ -61,8 +64,20 @@ export type LandDeps = {
  */
 export async function commitLanding(
   plan: LandingPlan,
-  { conn, scope, prompt, onProgress }: LandDeps,
+  { conn, scope, prompt, onProgress, gameName }: LandDeps,
 ) {
+  if (gameName) {
+    onProgress?.("Landing…");
+    const landings = Object.entries(plan).flatMap(([planet, units]) =>
+      Object.entries(units)
+        .filter(([, n]) => n > 0)
+        .map(([unit, count]) => ({ planet, unit, count })),
+    );
+    if (await landViaEngine(landings, { conn, gameName })) {
+      conn.actions.noteInteraction(prompt.channelId, prompt.messageId);
+      return;
+    }
+  }
   const current = () =>
     messageOf(conn.store.getState(), prompt.channelId, prompt.messageId);
   for (const [planet, units] of Object.entries(plan)) {
