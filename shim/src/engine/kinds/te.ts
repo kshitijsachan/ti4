@@ -52,7 +52,69 @@ export type TeVisionaria = DecisionBase<
   { choice: "research" | "give_promissory" | "decline" | "wait_for_all" | "end_turn_after_all"; respondent: boolean }
 >;
 
-export type ThundersEdgeDecision = TeFractureRoll | TeFractureIngress | TeGalvanize | TeExpedition | TePlaceThundersEdge | TeVisionaria;
+/**
+ * Fields of the table-driven TE kinds (c5: te.breakthrough / te.breach / te.plot; bot TeStepTable). Only fields present
+ * in the option id are set; ids only, never labels.
+ */
+export type TeStepFields = {
+  /** Faction the component belongs to (null for breakthroughs without one, e.g. Stone Embrace). */
+  faction: string | null;
+  /** Engine step (handler prefix without the trailing "_"), e.g. "placeVoidTether", "deorbitBarrageTarget". */
+  step: string;
+  /** use = start / accept an optional effect; target = a choice inside an effect under way; skip = back out / finish. */
+  action: "use" | "target" | "skip";
+  /** The effect may be declined (a Decline/Done option is offered, or this is an offer). */
+  optional: boolean;
+  /** Tile positions. */
+  tile?: string;
+  to?: string;
+  from?: string;
+  planet?: string;
+  /** "space" or a planet id. */
+  holder?: string;
+  unit?: string;
+  /** Another player (faction id). */
+  target?: string;
+  amount?: number;
+  /** Void Tether: adjacency direction index. */
+  dir?: string;
+  tech?: string;
+  card?: string;
+  /** Step-specific raw choice (e.g. "top"/"bottom", a leader id, an SC number). */
+  choice?: string;
+  /** Raw id segments the kind does not type further. */
+  args?: string[];
+};
+
+/**
+ * Using a Thunder's Edge breakthrough through its prompts: Void Tether, Deorbit Barrage, Thunder's Paradox, The Sowing /
+ * The Reaping, The Icon, Data Skimmer, Mindsieve, Stone Embrace, Al'Raith, Vaults of the Heir, Fealty Uplink,
+ * Psychospore, Stellar Genesis, Valefar Assimilator Z, Deepgloom Executable, Eidolon Maximum, Executive Order.
+ */
+export type TeBreakthrough = DecisionBase<"te.breakthrough", TeStepFields & { breakthrough: string }>;
+
+/** Breaches: flip on activation (Incursion), remove (Incursion / status phase), place (Resonance Generator, Exile). */
+export type TeBreach = DecisionBase<"te.breach", TeStepFields & { source: "incursion" | "crimsonbt" | string }>;
+
+/**
+ * Plot cards (Firmament / Obsidian). panel = the cards-info bookkeeping panel (background: nobody waits on it); the
+ * faction picker after a press, and the Obsidian reveals (Seethe → planet, Extract) are real steps.
+ */
+export type TePlot = DecisionBase<
+  "te.plot",
+  TeStepFields & { ability: "plotsplots" | "marionettes" | string; plot?: string; panel: boolean; puppets?: string[]; page?: string }
+>;
+
+export type ThundersEdgeDecision =
+  | TeFractureRoll
+  | TeFractureIngress
+  | TeGalvanize
+  | TeExpedition
+  | TePlaceThundersEdge
+  | TeVisionaria
+  | TeBreakthrough
+  | TeBreach
+  | TePlot;
 
 // ---- state (GameState.thundersEdge)
 

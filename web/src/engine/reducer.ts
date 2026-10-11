@@ -132,7 +132,14 @@ export function myDecisions(view: EngineView, userId: string | null | undefined)
  * that are really mine.
  */
 export function openToAll(d: Decision): boolean {
-  return (d.scope === "table" && !d.window) || IN_ADVANCE.has(d.kind);
+  return (d.scope === "table" && !d.window) || IN_ADVANCE.has(d.kind) || plotPanel(d);
+}
+
+/** The Firmament's plot panel in its cards thread (te.plot, every option panel=true): bookkeeping, not a question. */
+function plotPanel(d: Decision): boolean {
+  if (d.kind !== "te.plot") return false;
+  const typed = d.options.filter((o) => o.value);
+  return typed.length > 0 && typed.every((o) => o.value?.panel);
 }
 
 /**

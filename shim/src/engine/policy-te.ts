@@ -11,10 +11,11 @@
 import type { Decision, GameState, Option, PlayerState } from "./types.js";
 import { awaits } from "./types.js";
 import { INGRESS_TOKEN, type TeGalvanizeValue, type ThundersEdgeDecision } from "./kinds/te.js";
+import { chooseTeBreach, chooseTeBreakthrough, chooseTePlot } from "./policy/te-factions.js";
 
 export type TeChoice = { option: Option<any>; why: string };
 
-const CERTAIN = new Set(["owner_prefix", "spoof_prefix", "cards_thread", "private_channel", "interaction_user"]);
+const CERTAIN = new Set(["owner_prefix", "spoof_prefix", "cards_thread", "private_channel", "interaction_user", "faction_component"]);
 
 /** Galvanize the biggest ship first. */
 const GALVANIZE_RANK = ["ws", "fs", "dn", "cv", "ca", "dd", "mf", "gf", "ff", "pd", "sd"];
@@ -26,6 +27,9 @@ const TE_KINDS = new Set<string>([
   "te.expedition",
   "te.thunders_edge.place",
   "te.visionaria.respond",
+  "te.breakthrough",
+  "te.breach",
+  "te.plot",
 ]);
 
 export function isThundersEdgeKind(d: Decision): d is ThundersEdgeDecision {
@@ -93,6 +97,13 @@ export function chooseThundersEdge(d: ThundersEdgeDecision, state: GameState | n
       systems.sort((a, b) => presence(state, self, b.value.position) - presence(state, self, a.value.position));
       return pick(systems[0] ?? typed[0], "Thunder's Edge: system near my forces");
     }
+
+    case "te.breakthrough":
+      return chooseTeBreakthrough(d, { state, self, live });
+    case "te.breach":
+      return chooseTeBreach(d, { state, self, live });
+    case "te.plot":
+      return chooseTePlot(d, { state, self, live });
 
     case "te.visionaria.respond": {
       const owner = d.window?.subject?.owner === me;
