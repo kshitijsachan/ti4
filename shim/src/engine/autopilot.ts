@@ -2,6 +2,7 @@
  * Autopilot policy over typed decisions. Pure: (decision, state) → option. Add a case per kind as kinds are typed;
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
+import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
 import type { Decision, GameState, Option } from "./types.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
@@ -9,7 +10,12 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 
 export type TypedChoice = { option: Option<any>; why: string };
 
-export function chooseTyped(d: Decision, state: GameState | null, me: string): TypedChoice | null {
+export function chooseTyped(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx = { history: [], open: [] }): TypedChoice | null {
+  // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
+  if (STRATEGY_POLICY_KINDS.has(d.kind)) {
+    if (d.scope === "player" && d.target?.userId !== me) return null;
+    return chooseStrategy(d, state, me, ctx);
+  }
   if (d.target?.userId !== me || d.scope !== "player") return null;
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   if (!live.length) return null;
@@ -24,7 +30,14 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string): T
     case "tech.gain": {
       // Only the free starting technology; paid research stays with the planner / rule table for now.
       const opts = d.options.filter((o) => !o.disabled && o.value?.starting && !self?.techs.includes(o.value.tech));
-      return opts[0] ? { option: opts[0], why: "setup: first starting technology not owned" } : null;
+      if (opts[0]) return { option: opts[0], why: "setup: first starting technology not owned" };
+      // Technology primary (our card, played): the free first technology. Paid research is not planned.
+      const tech = state?.strategyCards.find((c) => c.card === "pok7technology" && c.played && c.holder === me);
+      if (tech && self && ctx.history.length === 0) {
+        const pick = chooseResearch(d.options, self.techs);
+        if (pick) return { option: pick, why: `Technology primary: research ${pick.value.tech}` };
+      }
+      return null;
     }
     case "secret_objective.discard": {
       // Setup (round 1, holding more than one): keep the first, discard the last. Later discards: not ours to guess.
