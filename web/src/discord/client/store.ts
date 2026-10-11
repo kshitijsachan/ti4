@@ -386,6 +386,14 @@ function mergeHistory(c: ChannelMessages, page: Message[], hasMore: boolean): Ch
     return { ...base, ids: page.map((m) => m.id), byId: byId(page), hasMore };
   }
   let next = base;
+  /* A refresh (after a reconnect) is the server's truth for its id range: what it no longer has was deleted meanwhile. */
+  if (!isOlderPage) next = dropMissing(next, page, oldestNew, newestNew);
   for (const m of page) next = insertMessage(next, m);
   return { ...next, hasMore: isOlderPage ? hasMore : c.hasMore };
+}
+
+function dropMissing(c: ChannelMessages, page: Message[], from: Snowflake, to: Snowflake): ChannelMessages {
+  const kept = new Set(page.map((m) => m.id));
+  const gone = c.ids.filter((id) => !kept.has(id) && compareSnowflakes(id, from) >= 0 && compareSnowflakes(id, to) <= 0);
+  return gone.reduce(removeMessage, c);
 }

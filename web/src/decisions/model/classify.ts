@@ -342,11 +342,14 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
   }
   if (prompt.reason === "setup" || has(choices, /^(discardSecret_|SODISCARD_)\d+/)) {
     const round1 = !ctx.web?.gameRound || ctx.web.gameRound <= 1;
+    const keepOne = choices.filter((c) => /^(discardSecret_|SODISCARD_)/.test(baseId(c.customId))).length === 2;
     return {
       ...base,
       kind: "secretDiscard",
       eyebrow: round1 ? "Game setup" : "",
-      title: choices.filter((c) => /^(discardSecret_|SODISCARD_)/.test(baseId(c.customId))).length === 2 ? "Keep one secret objective" : "Discard a secret objective",
+      title: keepOne ? "Keep one secret objective" : "Discard a secret objective",
+      /* Already down to one secret: a leftover copy of the prompt (its delete was missed), not a question. */
+      optional: keepOne && round1 && ctx.me?.soCount !== undefined && ctx.me.soCount <= 1,
       text: round1
         ? "You were dealt two secret objectives. Keep one — it stays hidden in your hand until you score it — and discard the other."
         : "You hold more secret objectives than you may keep. Choose one to discard.",
