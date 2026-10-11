@@ -257,10 +257,18 @@ for (const sig of ["SIGINT", "SIGTERM"]) {
     }
     stopping = true;
     gateway.draining = true;
+    // Save first and keep saving while draining: saves are spaced out in normal running, and a slow drain must not
+    // let a hard kill lose the last seconds of messages.
+    store.saveNow();
     log.info(`${sig}: draining bot REST traffic before exit`);
     const t0 = Date.now();
+    let lastSave = Date.now();
     while (Date.now() - t0 < 10_000 && (restInFlight > 0 || Date.now() - lastRest < 2_000)) {
       await new Promise((r) => setTimeout(r, 200));
+      if (Date.now() - lastSave >= 2_000) {
+        store.saveNow();
+        lastSave = Date.now();
+      }
     }
     log.info(`exiting after ${Date.now() - t0}ms (${restInFlight} REST calls still in flight)`);
     store.saveNow();

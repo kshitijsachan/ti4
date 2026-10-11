@@ -43,6 +43,8 @@ services:
       dockerfile: deploy/app.Dockerfile
     image: ${APP_IMAGE:-ti4-online/app:local}
     restart: unless-stopped
+    # The shim saves its message store on SIGTERM after draining the bot's writes; give it time (default is 10 s).
+    stop_grace_period: 40s
     environment:
       PORT: "8090"
       SHIM_DATA: /data
