@@ -26,7 +26,7 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ENGINE_DIR, RECORDINGS_DIR, ensureRunDir, gameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
+import { ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
 import { createFork, openFork, closeFork, clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
 import { loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
@@ -241,6 +241,13 @@ class Runner {
     }
     if (st.press) return this.press(interp(st.press, this.ctx), user, st);
     if (st.answer) return this.answerStep(st.answer, user);
+    if (st.gameAction) {
+      // Game-level engine action (e.g. trade.propose): engine side only; the legacy fork runs the step's "legacy" presses.
+      if (this.via === "press") return { ok: false, error: `${st.gameAction}: game actions have no button equivalent; give the step a "legacy": [presses] list` };
+      const r = await engineApi(`/${encodeURIComponent(this.fork.game)}/actions/${st.gameAction}`, { userId: user, ...JSON.parse(interp(JSON.stringify(st.body ?? {}), this.ctx)) });
+      const ok = r.status === 200 && r.body?.ok !== false;
+      return ok ? { ok: true, detail: `${st.gameAction} ${r.body?.status ?? ""}` } : { ok: false, refused: true, error: `engine refused ${st.gameAction}: ${r.status} ${r.body?.status ?? ""} ${r.body?.error ?? JSON.stringify(r.body).slice(0, 200)}` };
+    }
     return { ok: false, error: `unknown step ${JSON.stringify(st)}` };
   }
 

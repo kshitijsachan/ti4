@@ -1,0 +1,89 @@
+{
+  "name": "trade-propose-accept",
+  "description": "pbd23 r5 agenda phase: Nomad offers Muaat 3 TG + Nomad's Trade Agreement + 1 debt token for Muaat's Ceasefire (engine: trade.propose; legacy: the Discord deal builder offerToTransact_/sendOffer_), Muaat accepts through trade.offer.",
+  "base": {
+    "recording": "pbd23",
+    "index": 583,
+    "repost": false
+  },
+  "steps": [
+    {
+      "gameAction": "trade.propose",
+      "as": "nomad",
+      "body": {
+        "to": "muaat",
+        "give": {
+          "tg": 3,
+          "promissoryNotes": [
+            "vapourwave_ta"
+          ],
+          "sendDebt": 1
+        },
+        "receive": {
+          "promissoryNotes": [
+            "copper_cf"
+          ]
+        }
+      },
+      "legacy": [
+        {
+          "press": "offerToTransact_TGs_vapourwave_copper_3",
+          "as": "nomad"
+        },
+        {
+          "press": "offerToTransact_PNs_vapourwave_copper_36",
+          "as": "nomad"
+        },
+        {
+          "press": "offerToTransact_SendDebt_vapourwave_copper_1",
+          "as": "nomad"
+        },
+        {
+          "press": "offerToTransact_PNs_copper_vapourwave_88",
+          "as": "nomad"
+        },
+        {
+          "press": "sendOffer_copper",
+          "as": "nomad"
+        }
+      ]
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "trade.offer",
+        "value": {
+          "action": "accept",
+          "from": "nomad"
+        }
+      },
+      "as": "muaat"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[nomad].trade_goods",
+        "eq": "5"
+      },
+      {
+        "key": "player[muaat].trade_goods",
+        "eq": "4"
+      },
+      {
+        "key": "player[muaat].promissory_notes",
+        "includes": "vapourwave_ta"
+      },
+      {
+        "key": "player[nomad].promissory_notes",
+        "includes": "copper_cf"
+      }
+    ]
+  }
+}

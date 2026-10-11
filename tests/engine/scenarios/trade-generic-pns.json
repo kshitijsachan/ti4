@@ -1,0 +1,62 @@
+{
+  "name": "trade-generic-pns",
+  "description": "pbd23 r5 agenda phase: generic promissory notes played from hand through promissory_note.play \u2014 Jol-Nar plays Muaat's Political Secret and Ceasefire, Muaat uses Jol-Nar's Trade Agreement via useTA_ (takes 4 commodities), Mentak plays Nomad's Alliance (play area) and receives Nomad's Support for the Throne.",
+  "base": {
+    "recording": "pbd23",
+    "index": 583,
+    "repost": false
+  },
+  "setup": [
+    "/pn send promissory_note_id:copper_ps target_faction_or_color:jolnar faction_or_color:muaat",
+    "/pn send promissory_note_id:copper_cf target_faction_or_color:jolnar faction_or_color:muaat",
+    "/pn send promissory_note_id:blue_ta target_faction_or_color:muaat faction_or_color:jolnar",
+    "/pn send promissory_note_id:vapourwave_an target_faction_or_color:mentak faction_or_color:nomad",
+    "/pn send promissory_note_id:vapourwave_sftt target_faction_or_color:mentak faction_or_color:nomad"
+  ],
+  "steps": [
+    {
+      "press": "resolvePNPlay_copper_ps",
+      "as": "jolnar"
+    },
+    {
+      "press": "resolvePNPlay_copper_cf",
+      "as": "jolnar"
+    },
+    {
+      "press": "useTA_blue",
+      "as": "muaat"
+    },
+    {
+      "press": "resolvePNPlay_vapourwave_an",
+      "as": "mentak"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[muaat].trade_goods",
+        "eq": "5"
+      },
+      {
+        "key": "player[jolnar].commodities",
+        "eq": "0"
+      },
+      {
+        "key": "player[muaat].promissory_notes",
+        "includes": "copper_ps"
+      },
+      {
+        "key": "player[mentak].promissory_notes_play_area",
+        "includes": "vapourwave_an"
+      },
+      {
+        "key": "player[mentak].promissory_notes_play_area",
+        "includes": "vapourwave_sftt"
+      }
+    ]
+  }
+}
