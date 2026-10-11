@@ -54,8 +54,9 @@ export function chooseTeBreakthrough(d: TeBreakthrough, c: Ctx): TeTableChoice |
       return pick(opts[0], "Deorbit Barrage: hit the points leader");
     }
     case "deorbitBarrageResource": {
-      const opts = [...typed].sort((a, b) => (b.value.amount ?? 0) - (a.value.amount ?? 0));
-      return pick(opts[0], "Deorbit Barrage: the most dice");
+      // Resources spent (planets / trade goods): up to 3, never the whole treasury.
+      const opts = typed.filter((o) => (o.value.amount ?? 0) <= 3).sort((a, b) => (b.value.amount ?? 0) - (a.value.amount ?? 0));
+      return pick(opts[0] ?? typed[0], "Deorbit Barrage: spend up to 3 resources");
     }
     case "useThundersParadox_step3":
     case "useThundersParadox_step4":
