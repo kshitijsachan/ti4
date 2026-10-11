@@ -156,9 +156,22 @@ message: collect buttons/select options → find the game from the channel (`Gam
 Message deleted or components removed → `decision.closed`. `InteractionTracker` (JDA listener) records
 interaction token → user so replies are attributed to the presser, not guessed.
 
-Known capture gaps (documented, small): an interaction reply sent without `with_response` (JDA's default is
-fine against the shim? verify per kind) has no message id → not captured; messages in channels not in JDA's cache;
-lobby (pre-game) messages are ignored (no game).
+Capture details (W-INFRA-1, verified against JDA 6.7.0 + the live shim):
+* JDA sends **every** interaction callback with `?with_response=true`, so replies (type 4/5) and component updates
+  (type 7) arrive with their message. A **deferEdit** (type 6, what `ButtonListener` and every engine answer do) has
+  no message: `@original` then means the component's own message, so the interceptor maps it from the
+  `InteractionTracker`. This matters: `ButtonHelper.deleteMessage(event)` = `hook.deleteOriginal()` is the most
+  common way a prompt goes away, and before this mapping those decisions were never closed (found live: 65 stale
+  decisions in one replayed game).
+* Target fallback: `interaction_metadata.user` on the message itself (`resolvedBy: interaction_user`) when the
+  token is unknown (after a restart, rebuilt messages). `faction`/`color` are `null` (never the string "null")
+  before a player picked them.
+* Channels JDA has not cached (threads after a restart, private channels) are mapped to their game through the
+  live games' players' cards-info thread / private channel ids.
+* Mixed-owner menus (`resolvedBy: mixed_owners`): each option carries `owner` (Target); the answer endpoint
+  refuses another user's option (403). TS helper `optionsFor(d, uid)` / `awaits()` honour it.
+* Still not captured: lobby (pre-game) messages (no game); ephemeral replies are captured live but are not
+  readable back after a restart.
 
 ### 3.4 Actions
 
@@ -193,13 +206,19 @@ and modal buttons (`~MDL`, `needsInput`) → keep the legacy press path for thos
   "Table" decisions accept one answer per player (the handler records each).
 * **Reconnect / reload**: the server is the source of truth. A client (browser or bot) on reconnect fetches
   `/state` + `/decisions` (or resumes the stream with `after`) and renders. Nothing in the client needs to be
-  remembered — reload-resilience falls out. Registry is in memory: after a **bot restart** it is empty until the
-  engine re-asks. Mitigation (W-INFRA-1): on startup, rebuild open decisions by reading each live game's recent
-  messages through JDA once (the shim still stores them), or have the bot re-post pending prompts.
+  remembered — reload-resilience falls out. Registry is in memory; after a **bot restart** `DecisionRebuild`
+  (once the bot is ready) re-reads the last 100 bot messages of every live game's channels (actions, table talk,
+  bot-map thread, `<game>-…` threads, cards-info threads, private channels; games not ended and saved in the last
+  7 days) and re-captures those that still carry components, oldest first, through the normal capture path. Log
+  line `engine: rebuilt N open decisions in M live games`. On demand: `POST …/engine/{g}/rebuild` (Bot).
+  Ephemerals cannot be rebuilt (not readable through the channel).
 * **Undo**: `GameUndoService` restores a snapshot and calls `GameWebStatePipeline.queue` → `state.changed` (new
-  `stateVersion`); the re-posted saved buttons open new decisions; messages the undo deletes close theirs. Gap:
-  prompts posted after the undone point that the undo does *not* delete stay open → W-INFRA-1 closes every decision
-  with `createdAt` after the restored snapshot's time on undo (`UndoJournal` already knows the times).
+  `stateVersion`); the re-posted saved buttons open new decisions; messages the undo deletes close theirs. Prompts
+  posted after the restored save that the undo does *not* delete (Discord UNDO button, ephemerals, private
+  channels) are closed with reason `undone` by `Engine.onUndo` (called from `UndoJournal.recordUndo`, i.e. every
+  undo and rewind, before the restored prompt is re-posted): every open decision whose message was **posted**
+  (`createdAt` = message snowflake time, kept across edits) ≥ restored save + 1.5 s — the same rule as
+  `UndoService.retirePrompts`.
 
 ### 3.6 Flags
 
@@ -228,6 +247,8 @@ Endpoints:
 | `GET /api/public/selfhost/engine/{g}/decisions` | Bot | all open decisions `{seq, decisions}` |
 | `POST /api/public/selfhost/engine/{g}/decisions/{id}/answer` | Bot (`userId` in body) | answer as a seat |
 | `GET /api/public/selfhost/engine/stream?after=&game=` | Bot | SSE event stream |
+| `GET /api/public/selfhost/engine/metrics[?game=]` | Bot | open-decision coverage (typed %, targets, top untyped prefixes) + counters + capture/answer latency |
+| `POST /api/public/selfhost/engine/{g}/rebuild` | Bot | re-capture the game's prompts still on screen |
 | `GET /api/game/{g}/engine/state`, `/decisions`; `POST …/decisions/{id}/answer` | seat Bearer | own view only (private decisions of others hidden) |
 | `POST /api/v10/selfhost/interactions` (shim) | Bot | mint interaction for an engine answer |
 
