@@ -537,6 +537,14 @@ export function answersOutsideWindow(d: Decision, userId: UserId, state: GameSta
   return !!holder && !!me?.faction && me.faction === holder;
 }
 
+/**
+ * A player-scoped decision another seat may still answer (KindSpec.othersMayAnswer): agenda.resolve / agenda.next
+ * wait on the speaker, but the original button is pressable by anyone at the table.
+ */
+export function othersMayAnswer(d: Decision): boolean {
+  return (d.kind === "agenda.resolve" || d.kind === "agenda.next") && d.target?.resolvedBy !== "owner_prefix";
+}
+
 /** The options of `d` this user may press (per-option owner on mixed-owner menus; all options otherwise). */
 export function optionsFor<D extends Decision>(d: D, userId: UserId): D["options"] {
   return d.options.filter((o) => !o.owner?.userId || o.owner.userId === userId) as D["options"];
