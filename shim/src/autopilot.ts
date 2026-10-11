@@ -10,6 +10,7 @@ import { TradeDesk } from "./botplay/trade.js";
 import type { EngineClient } from "./engine/client.js";
 import { chooseTyped } from "./engine/autopilot.js";
 import { awaits, type AnswerResult } from "./engine/types.js";
+import { isTableSetupStep } from "./engine/policy/setup.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -968,6 +969,12 @@ class SeatPilot {
 
   /** Milty draft: when it is our pick, the first option of a category we have not drafted yet. */
   private async milty(m: StoredMessage, controls: Control[], game: string): Promise<Choice | null> {
+    // With the engine up, drafting is typed (draft.milty.pick in engineStep): the engine validates turn, category and
+    // availability, so a pick cannot be doubled. Pressing board buttons here as well would race it.
+    if (this.mgr.engine && (await this.mgr.engine.state(game, this.userId, 1000))?.draft) {
+      this.draftingSeenAt = Date.now();
+      return null;
+    }
     // Always read the draft fresh: a stale copy makes us miss our turn until the next poll.
     const draft = await this.mgr.draft(game, 0);
     if (draft?.status === "drafting") this.draftingSeenAt = Date.now();
@@ -995,6 +1002,12 @@ class SeatPilot {
     if (authoritative) {
       this.factions.set(game, authoritative);
       return authoritative;
+    }
+    // The engine is up and says we have no faction yet (drafting, or Keleres choosing a flavour): believe it. Guessing
+    // from buttons or a draft press here once cached a faction from a pick the bot had rejected.
+    if (this.mgr.engine && (await this.mgr.engine.state(game, undefined, 5000))) {
+      this.factions.delete(game);
+      return undefined;
     }
     const known = this.factions.get(game);
     if (known) return known;
@@ -1151,8 +1164,12 @@ class SeatPilot {
     const engine = this.mgr.engine;
     if (!engine) return false;
     for (const game of this.liveGames()) {
-      const mine = await engine.decisionsFor(game, this.userId);
-      if (!mine?.length) continue;
+      const own = await engine.decisionsFor(game, this.userId);
+      // Plus the table-wide setup steps (deal secrets, reveal objectives): no target and no window, any seat may
+      // take them; the policy answers only when GameState.setup says the table is ready, the engine refuses otherwise.
+      const table = (await engine.openDecisions(game))?.filter(isTableSetupStep) ?? [];
+      const mine = [...(own ?? []), ...table];
+      if (!mine.length) continue;
       const state = await engine.state(game, this.userId, 2000);
       const open = (await engine.openDecisions(game)) ?? [];
       for (const d of mine) {
@@ -1227,6 +1244,10 @@ class SeatPilot {
         if (authoritative) {
           self.factions.set(game, authoritative);
           return authoritative;
+        }
+        if (self.mgr.engine && (await self.mgr.engine.state(game, undefined, 5000))) {
+          self.factions.delete(game);
+          return undefined;
         }
         const known = self.factions.get(game);
         if (known) return known;

@@ -9,6 +9,7 @@ import { chooseExplore } from "./policy/explore.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
+import { chooseSetup } from "./policy/setup.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -18,6 +19,8 @@ export type TypedChoice = { option: Option<any>; why: string; payload?: Record<s
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx = { history: [], open: [], all: [] }): TypedChoice | null {
   const all = ctx.all;
+  const setup = chooseSetup(d, state, me);
+  if (setup !== undefined) return setup;
   if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);
   const status = chooseStatus(d, state, me, all.filter((x) => x.target?.userId === me));
   if (status !== undefined) return status;
@@ -64,13 +67,6 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
       const opts = d.options.filter((o) => !o.disabled && o.value && !o.value.redraw);
       const last = opts.at(-1);
       return last ? { option: last, why: "setup: keep the first secret objective" } : null;
-    }
-    case "draft.milty.pick": {
-      if (state?.draft?.currentPlayer && state.draft.currentPlayer !== me) return null;
-      // Categories already drafted are no longer offered to us by the board? Not guaranteed: legacy milty() reads
-      // the draft API for our picks, so leave drafting to it unless every live option is the same category.
-      const cats = new Set(d.options.filter((o) => !o.disabled && o.value).map((o) => o.value!.category));
-      return cats.size === 1 ? { option: d.options.find((o) => !o.disabled && o.value)!, why: "draft: only category left" } : null;
     }
     case "explore.planet":
     case "explore.card_pick":

@@ -7,6 +7,7 @@
 import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
+import type { SetupDecision } from "./kinds/setup.js";
 import type { StatusDecision, StatusState } from "./kinds/status.js";
 import type { StrategyDecision } from "./kinds/strategy.js";
 import type { TacticalDecision } from "./kinds/tactical.js";
@@ -15,6 +16,7 @@ import type { ThundersEdgeDecision, ThundersEdgeState } from "./kinds/te.js";
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
 export type * from "./kinds/explore.js";
+export type * from "./kinds/setup.js";
 export type * from "./kinds/status.js";
 export type * from "./kinds/tactical.js";
 export type * from "./kinds/te.js";
@@ -52,6 +54,8 @@ export interface GameState {
   status?: StatusState | null;
   /** Thunder's Edge state; null for games without it (G10, kinds/te.ts). */
   thundersEdge?: ThundersEdgeState | null;
+  /** Setup progress (game creation → first strategy phase); null once the game is under way. */
+  setup?: SetupState | null;
 }
 
 export interface PlayerState {
@@ -145,8 +149,46 @@ export interface UnitStack {
 
 export interface DraftState {
   type: "milty";
+  status: "drafting" | "finished";
+  /** null once the draft is finished. */
   currentPlayer: UserId | null;
+  /** The snake: one entry per pick. */
   order: UserId[];
+  /** Each drafter's picks so far (null = not picked yet). */
+  players: DraftPlayer[];
+  /** Still on the board. */
+  available: { slices: string[]; factions: FactionId[]; speakerOrders: number[] };
+}
+
+export interface DraftPlayer {
+  userId: UserId;
+  /** Draft id: Keleres is drafted as "keleresm" whatever flavour it plays. */
+  faction: FactionId | null;
+  slice: string | null;
+  speakerOrder: number | null;
+}
+
+/**
+ * settings: game created, no draft yet · draft · player_setup: factions, Keleres flavour, starting technologies ·
+ * deal_secrets: everyone set up, secret objectives not dealt · keep_secrets · reveal_objectives: reveal and start the
+ * strategy phase.
+ */
+export type SetupStage = "settings" | "draft" | "player_setup" | "deal_secrets" | "keep_secrets" | "reveal_objectives";
+
+export interface SetupState {
+  stage: SetupStage;
+  /** Who the stage waits on (empty for the table-wide steps). */
+  waitingOn: UserId[];
+  players: SetupPlayer[];
+}
+
+export interface SetupPlayer {
+  userId: UserId;
+  faction: FactionId | null;
+  startingTechsNeeded: number;
+  secretObjectivesToDiscard: number;
+  /** Drafted Keleres and has not chosen a flavour yet (faction is null until then). */
+  keleresFlavorPending: boolean;
 }
 
 // ---------------------------------------------------------------- decisions
@@ -271,10 +313,6 @@ export type SecretObjectiveDiscard = DecisionBase<
   "secret_objective.discard",
   { handle: number; secretObjective?: string; redraw: boolean }
 >;
-export type MiltyDraftPick = DecisionBase<
-  "draft.milty.pick",
-  { category: "slice" | "faction" | "order" | string; pick: string }
->;
 
 /** Everything not yet typed: options carry label/style/handler only. */
 export type LegacyDecision = DecisionBase<"legacy", null>;
@@ -283,7 +321,7 @@ export type Decision =
   | StrategyCardPick
   | TechGain
   | SecretObjectiveDiscard
-  | MiltyDraftPick
+  | SetupDecision
   | CardsDecision
   | ExploreDecision
   | AgendaDecision
