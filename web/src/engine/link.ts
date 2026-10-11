@@ -5,6 +5,8 @@ import { engineStore, useEngineEnabled } from "./store";
 
 /** No snapshot after this long: treat the engine as unavailable for now and let the legacy UI run. */
 const SUBSCRIBE_TIMEOUT_MS = 15000;
+/** While the engine is unavailable (bot restarting, or without the engine), ask again this often. */
+const RETRY_MS = 30000;
 const ANSWER_TIMEOUT_MS = 60000;
 
 /**
@@ -38,11 +40,16 @@ export function useEngineLink(gameName: string) {
     };
     const offFrames = conn.onEngineFrame((frame) => engineStore.getState().apply(frame));
     const offHello = conn.onHelloFrame(subscribe);
+    const retry = window.setInterval(() => {
+      const v = engineStore.getState().view;
+      if (v.game === gameName && v.status === "unavailable") subscribe();
+    }, RETRY_MS);
     subscribe();
     return () => {
       window.clearTimeout(timer);
       offFrames();
       offHello();
+      window.clearInterval(retry);
       conn.send({ op: "engine_unsub" });
       engineStore.getState().unfollow();
     };
