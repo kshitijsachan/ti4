@@ -65,7 +65,7 @@ const TOKEN_RULES: Record<
 > = {
   frontier: {
     name: "Frontier Token",
-    rule: "An unexplored reach of space. A player with Dark Energy Tap (or the Empyrean) explores this token when they activate the system with one or more of their ships in it.",
+    rule: "An unexplored reach of space. Only Dark Energy Tap (an Empyrean starting technology) explores it during a normal turn: after your tactical action in this system, if you still have ships here, the token is explored when you conclude the action. A few cards (Exploration Probe, Circlet of the Void, the Empyrean hero) explore it too.",
     imagePath: "token_frontier.png",
   },
   ingress: {

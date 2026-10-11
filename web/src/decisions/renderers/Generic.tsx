@@ -6,12 +6,12 @@ import { baseId, type Choice } from "../model/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
 import { Prose } from "../ui/parts";
 import { riftNote } from "../model/classify";
-import { usePlay } from "@/discord";
-import { cleanLabel } from "../model/controls";
+import { FRONTIER_CONCLUDE_LABEL, FRONTIER_NOTE, frontierOutcome } from "../model/frontier";
 import { getColorAlias } from "@/entities/lookup/colors";
 import type { DecisionData, RendererProps } from "./types";
 import classes from "./renderers.module.css";
 import { RecentRolls } from "./combat/Dice";
+import { useExploreResults } from "./exploreResults";
 
 const BOMBARD_KINDS = ["bombardment" as const, "spaceCannonDefence" as const];
 
@@ -134,34 +134,15 @@ function produceLabel(c: Choice): Choice {
   return { ...c, label: c.label.replace(/^Produce /, "").replace(/\s*\(\d+\/\d+\)$/, ""), style: 2 };
 }
 
-/**
- * What this tactical action's explores found so far ("Quann → Mining World: gain 1 trade good"), oldest first: every
- * explore since the newest activation in this channel (and within this turn), so each step keeps the earlier results
- * in view and nothing from an earlier action leaks into a later one.
- */
-function useExploreResults(channelId: string): string[] {
-  const data = usePlay((s) => s.messages[channelId]);
-  if (!data) return [];
-  const out: string[] = [];
-  for (let i = data.ids.length - 1; i >= 0; i--) {
-    const m = data.byId[data.ids[i]];
-    if (!m?.author.bot) continue;
-    /* This action's only: stop at its activation, or at the turn boundary before it (a strategic action explores nothing). */
-    if (/\bactivated \d+|\bended turn\b|\bit is now your turn\b|\bplayed by\b/i.test(m.content)) break;
-    const embed = m.embeds?.[0];
-    if (!/\bexplored\b/i.test(m.content) || !embed?.title) continue;
-    const planet = cleanLabel(m.content).match(/explored\s+(?:\w+\s+)?Planet\s+(.+?)\s+in tile/i)?.[1]?.replace(/[_*]/g, "").trim();
-    const name = cleanLabel(embed.title).replace(/[_*]/g, "").trim();
-    const what = cleanLabel(embed.description ?? "").replace(/[_*]/g, "").trim();
-    out.unshift(`${planet ? `${planet} → ` : ""}${name}${what ? `: ${what}` : ""}`);
-  }
-  return out;
-}
 
 /** A step of a tactical action: the system / unit choices the bot offers, with my fleet numbers. */
 export function TacticalBody({ d, data, onPress, pressOn, pendingKey, onHoverChoice }: RendererProps) {
   const systems = d.choices.filter((c) => SYSTEM.test(baseId(c.customId)));
-  const done = d.choices.filter((c) => DONE.test(baseId(c.customId)) && !c.disabled);
+  const concluding = d.choices.some((c) => /^doneWithTacticalAction/.test(baseId(c.customId)));
+  const frontier = concluding ? frontierOutcome(data.web, data.me, d.position) : null;
+  const done = d.choices
+    .filter((c) => DONE.test(baseId(c.customId)) && !c.disabled)
+    .map((c) => (frontier === "explores" && /^doneWithTacticalAction/.test(baseId(c.customId)) ? { ...c, label: FRONTIER_CONCLUDE_LABEL } : c));
   const unitMoves = d.choices.filter((c) => UNIT_MOVE.test(baseId(c.customId)));
   const movingFrom = systems.some((c) => /^tacticalMoveFrom_/.test(baseId(c.customId)));
   const active = d.position ? tileAt(data, d.position) : undefined;
@@ -174,7 +155,7 @@ export function TacticalBody({ d, data, onPress, pressOn, pendingKey, onHoverCho
     Object.entries(p?.entities ?? {}).some(([f, units]) => f !== data.me?.faction && units.some((u) => u.entityType === "unit")),
   );
   const rest = d.choices
-    .filter((c) => !systems.includes(c) && !done.includes(c) && !unitMoves.includes(c))
+    .filter((c) => !systems.includes(c) && !done.some((x) => x.key === c.key) && !unitMoves.includes(c))
     .filter((c) => !(d.steps?.length && /^movedNExplored_/.test(baseId(c.customId))))
     .map(produceLabel)
     .map((c) => (/^(ring_|ChooseDifferentDestination|getTilesThisFarAway_)/.test(baseId(c.customId)) ? { ...c, style: 2 } : c));
@@ -184,7 +165,7 @@ export function TacticalBody({ d, data, onPress, pressOn, pendingKey, onHoverCho
   const moved = movingFrom && /\bmoved\b/i.test(d.text) ? d.text.replace(/^\*\*Tactical Action in system[^\n]*\n*/i, "") : "";
   if (movingFrom) text = moved ? "" : "Pick where your ships come from.";
   if (unitMoves.length) text = d.text.match(/from system [^\n(]+/i)?.[0]?.trim() ?? "";
-  if (d.title === "Finish the tactical action") text = "Nothing else to do in this system. Conclude the action to end it.";
+  if (d.title === "Finish the tactical action") text = frontier === "explores" ? "" : "Nothing else to do in this system. Conclude the action to end it.";
   if (d.choices.some((c) => /^deleteButtons_tacticalAction/.test(baseId(c.customId)))) {
     const total = d.text.match(/Producing a total of (\d+) units? \(PRODUCTION limit is (\d+)\) for a total cost of (\d+) resources?/i);
     text = total
@@ -243,6 +224,7 @@ export function TacticalBody({ d, data, onPress, pressOn, pendingKey, onHoverCho
         <p className={cx(classes.hint, classes.warn)}>Some of these ships do not have the move value to reach this system. Take them back or use an ability that allows it.</p>
       )}
       {text && <Prose text={text} clamp={4} muted={choosingSystem} />}
+      {frontier && <p className={classes.hint}>{FRONTIER_NOTE[frontier]}</p>}
       {unitMoves.length > 0 && <UnitMoveRows choices={unitMoves} data={data} onPress={onPress} pendingKey={pendingKey} />}
       {systems.length > 0 && (
         <div className={classes.systemGrid}>
