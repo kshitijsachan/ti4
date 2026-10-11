@@ -1,4 +1,4 @@
-import type { Board, PlayerView } from "./board.js";
+import { isShip, myUnits, type Board, type PlayerView, type SystemView } from "./board.js";
 import { baseId, lockOf, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { Steps } from "./steps.js";
@@ -37,8 +37,11 @@ export class BuildJob {
       if (!this.build) {
         const capacity = board.systems.get(this.target)?.production.get(me.color) ?? 2;
         const budget = spendable(board, me);
-        this.build = buildList(board, me, budget, capacity);
-        s.seat.log(`produce in ${this.target}: ${this.build.map((u) => statsOf(u).name).join(", ") || "nothing"} (budget ${budget}, production ${capacity})`);
+        // Ships beyond the fleet pool in that system would only be removed again.
+        const ships = myUnits(board.systems.get(this.target) ?? ({ space: new Map() } as SystemView), me.faction).filter((u) => isShip(u.unit) && u.unit !== "ff").reduce((n, u) => n + u.count, 0);
+        const fleetRoom = Math.max(0, me.fleetCC - ships);
+        this.build = buildList(board, me, budget, capacity, fleetRoom);
+        s.seat.log(`produce in ${this.target}: ${this.build.map((u) => statsOf(u).name).join(", ") || "nothing"} (budget ${budget}, production ${capacity}, fleet room ${fleetRoom})`);
       }
       const ours = p.controls.filter((c) => !lockOf(c.custom_id) || lockOf(c.custom_id) === faction);
       while (this.build.length) {

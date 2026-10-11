@@ -179,11 +179,12 @@ export function chooseGoal(board: Board, me: PlayerView): Goal {
 
 /**
  * What to build at a dock with `budget` resources and `capacity` units of production: carriers and infantry early,
- * then cruisers / destroyers, dreadnoughts from round 3. Returns unit ids (gf counts are single infantry).
+ * then cruisers / destroyers, dreadnoughts from round 3. At most `fleetRoom` ships (not fighters): the fleet pool
+ * left in that system. Returns unit ids (gf counts are single infantry).
  */
-export function buildList(board: Board, me: PlayerView, budget: number, capacity: number): string[] {
+export function buildList(board: Board, me: PlayerView, budget: number, capacity: number, fleetRoom = Infinity): string[] {
   const out: string[] = [];
-  const left = { budget, capacity };
+  const left = { budget, capacity, fleetRoom };
   const deployed = (u: string) => me.unitCounts[u]?.deployedCount ?? 0;
   const cap = (u: string) => me.unitCounts[u]?.unitCap ?? 99;
   const planned = (u: string) => out.filter((x) => x === u).length;
@@ -191,7 +192,10 @@ export function buildList(board: Board, me: PlayerView, budget: number, capacity
     const st = statsOf(u, me);
     if (left.budget < st.cost || left.capacity < st.per) return false;
     if (deployed(u) + planned(u) + st.per > cap(u)) return false;
+    const ship = isShip(u) && u !== "ff";
+    if (ship && left.fleetRoom < 1) return false;
     out.push(u);
+    if (ship) left.fleetRoom--;
     left.budget -= st.cost;
     left.capacity -= st.per;
     if (st.per === 2) out.push(u);

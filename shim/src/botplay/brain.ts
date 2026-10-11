@@ -4,6 +4,7 @@ import type { Seat } from "./seat.js";
 import { chooseGoal } from "./strategy.js";
 import { TACTICAL_ID, TacticalExecutor } from "./tactical.js";
 import { CardPlanner } from "./cards.js";
+import { ViolationDesk } from "./violations.js";
 
 /*
  * The planner of one autopilot seat: takes the decisions the rule table cannot (tactical actions, strategy card
@@ -13,6 +14,7 @@ import { CardPlanner } from "./cards.js";
 export class Brain {
   private tactical: TacticalExecutor;
   private cards: CardPlanner;
+  private violations: ViolationDesk;
   /** Per game, the newest prompt when our last tactical action ended. */
   private retired = new Map<string, string>();
   /** Turn prompts already answered (message id). */
@@ -21,6 +23,7 @@ export class Brain {
   constructor(private seat: Seat) {
     this.tactical = new TacticalExecutor(seat);
     this.cards = new CardPlanner(seat);
+    this.violations = new ViolationDesk(seat);
   }
 
   /** Prompts the rule table must leave alone in this game (the planner presses them). */
@@ -28,6 +31,7 @@ export class Brain {
     const planning = this.tactical.owns(game);
     if (p.controls.some((c) => TACTICAL_ID.test(baseId(c.custom_id)) && (planning || !/^(place_|deleteButtons_)/.test(baseId(c.custom_id))))) return true;
     if (this.cards.owns(game, p)) return true;
+    if (this.violations.owns(game, p)) return true;
     if (this.tactical.owns(game) && p.controls.some((c) => /^(spend_|reduceTG_)/.test(baseId(c.custom_id)))) return true;
     return false;
   }
@@ -44,6 +48,8 @@ export class Brain {
       return acted;
     }
     if (await this.cards.tick(game, faction)) return true;
+    // Fleet pool / capacity reminders for us: fix or dismiss them (never during our own tactical action, above).
+    if (await this.violations.tick(game, faction)) return true;
     const prompts = this.seat.prompts(game);
     // A tactical action under way that we do not have a plan for (e.g. after a restart): finish it.
     const retired = this.retired.get(game);
