@@ -7,6 +7,7 @@ import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
 import { chooseFaction } from "./policy/faction.js";
+import { chooseFactionGroupC } from "./policy/factionGroupC.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
@@ -69,6 +70,8 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   const cards = chooseCards(d, state, me, all);
   if (cards !== undefined) return cards;
   // Faction leaders / abilities (shared kinds leader.use, faction.ability; phase C faction areas).
+  const groupC = chooseFactionGroupC(d, state, me); // Jol-Nar, Winnu, Xxcha, Yin, Yssaril, Keleres overrides
+  if (groupC !== undefined) return groupC;
   const faction = chooseFaction(d, state, me);
   if (faction !== undefined) return faction;
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
