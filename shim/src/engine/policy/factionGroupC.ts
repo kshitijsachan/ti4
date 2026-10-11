@@ -33,7 +33,7 @@ export function chooseFactionGroupC(d: Decision, state: GameState | null, me: st
   // Reclamation (Mecatol Rex): free structures. A space dock first, then the PDS.
   const recl = of("reclamation");
   if (recl.length) {
-    const pick = recl.find((o) => o.value!.unit === "sd") ?? recl[0];
+    const pick = recl.find((o) => o.value!.unit === "sd" || o.value!.unit === "spacedock") ?? recl[0];
     return { option: pick, why: "Reclamation: place the free structure" };
   }
 
@@ -44,7 +44,7 @@ export function chooseFactionGroupC(d: Decision, state: GameState | null, me: st
   // Indoctrination (start of ground combat): replace an enemy infantry; a mech when offered.
   const indoc = of("indoctrination", "indoctrinate");
   if (indoc.length) {
-    const pick = indoc.find((o) => o.value!.unit === "mf") ?? indoc[0];
+    const pick = indoc.find((o) => o.value!.unit === "mf" || o.value!.unit === "mech") ?? indoc[0];
     return { option: pick, why: "Indoctrination: replace an opposing infantry" };
   }
 
