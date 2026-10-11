@@ -2,7 +2,7 @@
  * Save text -> the bot's web data, through a fork game (load the save with the bot's own rewind, then read
  * GET /api/public/game/{fork}/web-data) with the fork's ids and names mapped back to the original game's.
  */
-import { BOT_URL, getJson, sleep, type Json } from "./env.ts";
+import { BOT_URL, getJson, sleep, waitForStack, type Json } from "./env.ts";
 import { closeFork, createFork, loadSave, openFork, seatMap, type Fork } from "./fork.ts";
 import { parseSave, type ForkMap } from "./savefile.ts";
 import { WEB_PHASES } from "./invariants.ts";
@@ -96,6 +96,7 @@ export async function materializeAll(
   const extra = [...(o.extraChannelIds ?? [])];
   try {
     for (let i = 0; i < saves.length; i++) {
+      await waitForStack(undefined, log);
       const map = seatMap(fork, saves[i], o.usernames);
       for (const id of extra) map.otherChannelIds!.add(id);
       try {

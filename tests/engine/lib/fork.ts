@@ -46,7 +46,8 @@ export async function replaySeats(): Promise<Seat[]> {
     });
   }
   const seats: Seat[] = SEAT_NAMES.map((n) => {
-    const s = existing.find((x) => x.name === n) ?? created.find((x) => x.name === n);
+    const s: Json | undefined = existing.find((x) => x.name === n) ?? created.find((x) => x.name === n);
+    if (!s) throw new Error(`replay seat ${n} could not be created`);
     return { name: n, user_id: s.user_id, token: s.token, username: s.username ?? n.toLowerCase().replace(/[^a-z0-9_.]/g, "") };
   });
   writeFileSync(file, JSON.stringify(seats, null, 1));

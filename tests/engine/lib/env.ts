@@ -61,6 +61,30 @@ export async function webData(game: string): Promise<Json | null> {
   }
 }
 
+/**
+ * Waits until the shim is up and the bot is connected to it (others restart the stack while tests run): a step that
+ * starts during a restart would otherwise fail for no reason of its own. Throws after `timeoutMs`.
+ */
+export async function waitForStack(timeoutMs = 600000, log: (s: string) => void = () => {}): Promise<void> {
+  const end = Date.now() + timeoutMs;
+  let said = false;
+  while (Date.now() < end) {
+    try {
+      const h = await getJson(`${SHIM_URL}/healthz`);
+      if (h?.ok && h.bot) {
+        if (said) log("stack is back");
+        return;
+      }
+    } catch {
+      /* down */
+    }
+    if (!said) log("waiting for the shim / bot to come back…");
+    said = true;
+    await sleep(3000);
+  }
+  throw new Error(`the shim/bot did not come back within ${timeoutMs / 1000}s`);
+}
+
 export function fileExists(p: string) {
   return existsSync(p);
 }

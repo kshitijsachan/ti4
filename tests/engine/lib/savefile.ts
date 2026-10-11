@@ -212,8 +212,9 @@ export const VOLATILE_GAME_KEYS = new Set([
   "pinged_systems",
 ]);
 
-/** Stored values (check_reacts_info) that only steer where the bot posts or when it pings. */
-export const VOLATILE_STORED_KEYS = [/^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/];
+/** Stored values that only steer where the bot posts or when it pings, and per-message bookkeeping keyed by a Discord
+ * message id ("<message id>SCReacts" etc.: who reacted to which post; the follows themselves are in followed_sc). */
+export const VOLATILE_STORED_KEYS = [/^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/];
 
 /** The game's stored values: `check_reacts_info k1,v1:k2,v2:...` (see Game.getStoredValue). */
 export function storedValues(v: string): Map<string, string> {

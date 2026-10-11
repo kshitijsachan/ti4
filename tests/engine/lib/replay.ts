@@ -16,7 +16,7 @@
  *                 "replay with the recorded dice": the recorded post-roll state is used as the roll's outcome.
  */
 import { readFileSync } from "node:fs";
-import { gameFile, type Json } from "./env.ts";
+import { gameFile, waitForStack, type Json } from "./env.ts";
 import { clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves, type Fork } from "./fork.ts";
 import { diffNormalized, normalizeSave, parseSave, type ForkMap, type SaveDiff } from "./savefile.ts";
 import { recordingSaves, type Action, type Recording } from "./recording.ts";
@@ -145,10 +145,12 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
   };
 
   let chainLoaded = false;
+  let retried = -1;
   for (let i = startPos + 1; i <= endPos; i++) {
     const prev = saves[i - 1];
     const cur = saves[i];
     const a = byIndex.get(cur.index)!;
+    await waitForStack(undefined, log);
     const t0 = Date.now();
     const base: StepResult = { index: cur.index, label: a.label, kind: a.kind, status: "skipped", recordedDice: a.dice };
     const map = mapFor(prev.text);
@@ -251,7 +253,18 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
       }
       if (status === "diverged" && o.stopOnFirst) break;
     } catch (e) {
-      push({ ...base, status: "error", why: (e as Error).message, ms: Date.now() - t0 });
+      const msg = (e as Error).message;
+      // The stack restarted under us: wait for it and run the same step again (once).
+      if (/shim ws|fetch failed|ECONNREFUSED|-> 50\d/.test(msg) && retried !== cur.index) {
+        retried = cur.index;
+        log(`step ${cur.index}: ${msg}; retrying once the stack is back`);
+        await waitForStack(undefined, log);
+        if (o.mode === "chain") chainLoaded = false;
+        results.length && results.at(-1)!.index === cur.index && results.pop();
+        i--;
+        continue;
+      }
+      push({ ...base, status: "error", why: msg, ms: Date.now() - t0 });
       if (o.mode === "chain") chainLoaded = false;
     }
   }
