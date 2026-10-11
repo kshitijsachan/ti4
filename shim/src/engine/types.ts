@@ -38,7 +38,7 @@ export interface GameState {
   /** Exploration decks, relic deck, recent explore results / relic draws (G9). Older engines: absent. */
   exploration?: ExplorationState | null;
   /** The agenda in play (agenda phase); null otherwise. See kinds/agenda.ts. */
-  agenda: AgendaState | null;
+  agenda?: AgendaState | null;
 }
 
 export interface PlayerState {
