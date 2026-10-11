@@ -529,6 +529,8 @@ export function awaits(d: Decision, userId: UserId): boolean {
  * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only).
  */
 export function answersOutsideWindow(d: Decision, userId: UserId, state: GameState | null): boolean {
+  // Status scoring / homework: a player who declared or is ready may still press again, like the buttons.
+  if ((d.kind === "status.score" || d.kind === "status.homework") && d.window) return d.window.eligible.includes(userId);
   if (d.kind !== "strategy_card.resolve" || !d.window) return false;
   const holder = d.window.subject?.holder;
   const me = state?.players.find((p) => p.userId === userId);
