@@ -1151,7 +1151,7 @@ class SeatPilot {
       for (const d of mine) {
         const pick = chooseTyped(d, state, this.userId);
         if (!pick) continue;
-        const key = `${d.id}|${pick.option.id}`;
+        const key = `${d.id}@${d.revision}|${pick.option.id}`;
         if (this.engineTried.has(key)) continue;
         this.engineTried.add(key);
         if (this.engineTried.size > 5000) this.engineTried.clear();
