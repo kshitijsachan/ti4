@@ -1,0 +1,18 @@
+{
+  "name": "ac-combat-sabotage-cancel",
+  "description": "Space combat at 308 (pbd60): mentak plays Morale Boost, muaat cancels it with Sabotage from hand (action_card.sabotage cancel via ac). Both cards end in the discard; the temp mod button is cleared.",
+  "base": { "recording": "pbd60", "index": 122 },
+  "setup": [
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "mb2", "faction_or_color": "mentak" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "sabo1", "faction_or_color": "muaat" } }
+  ],
+  "steps": [
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "mb2" } }, "as": "mentak" },
+    { "answer": { "kind": "action_card.sabotage", "option": "^sabotage_ac_" }, "as": "muaat" },
+    { "wait": 1500 }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [{ "path": "players[faction=muaat].actionCards", "excludes": "sabo1" }]
+  }
+}
