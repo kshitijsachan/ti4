@@ -55,6 +55,12 @@ export function parseSave(text: string): ParsedSave {
       break;
     } else if (section === "game") {
       const [k, v] = kv(l);
+      if (k === "saved_message") {
+        // Its continuation lines (the loader ignores them) run up to bot_map_channel, the next key written.
+        let j = i + 1;
+        while (j < lines.length && !lines[j].startsWith("bot_map_channel ") && lines[j] !== "-endgameinfo-") j++;
+        if (j < lines.length && lines[j].startsWith("bot_map_channel ")) i = j - 1;
+      }
       if (!game.has(k)) game.set(k, v);
     } else if (section === "player" && player) {
       const [k, v] = kv(l);
@@ -284,7 +290,10 @@ export function normalizeSave(text: string, o: NormalizeOpts = {}): string[] {
       }
       continue;
     }
-    out.push(`game.${k} ${fix(!o.keepHandles && CARD_HANDLE_KEYS.test(k) ? stripHandles(v) : v)}`);
+    let val = !o.keepHandles && CARD_HANDLE_KEYS.test(k) ? stripHandles(v) : v;
+    // The agenda being voted on carries its random handle too: Law_For/Against_899_conscription.
+    if (!o.keepHandles && k === "current_agenda_info") val = val.replace(/_\d{1,4}_/, "_#_");
+    out.push(`game.${k} ${fix(val)}`);
   }
   for (const pl of p.players) {
     const uid = o.reverseUsers?.get(pl.userId) ?? pl.userId;

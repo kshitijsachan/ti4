@@ -11,8 +11,8 @@
  *   checkpoints  the bot's web data at some saves (materialized through a fork, see materialize.ts), and live.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { shimState, undoFile, type Json } from "./env.ts";
+import { dirname, join } from "node:path";
+import { BOT_STORAGE, shimState, undoFile, type Json } from "./env.ts";
 import { applyDelta, isRealPlayer, lineDelta, parseSave, type Delta } from "./savefile.ts";
 import type { Snapshot } from "./invariants.ts";
 
@@ -33,6 +33,8 @@ export type Action = {
   /** where the press happened (from #button-log) */
   channel?: { id: string; name: string };
   messageId?: string;
+  /** text of that message, if the shim still has it */
+  messageContent?: string;
   pressedAt?: number;
   /** dice the bot showed for this action (1-10), in posting order */
   dice?: number[];
@@ -55,6 +57,8 @@ export type Recording = {
   checkpoints: { index: number | "live"; web: Json }[];
   /** the original game's channels and threads (id -> name) */
   channels: Record<string, string>;
+  /** the bot's per-person settings (user_settings/<id>.json) at record time: handlers read them (auto-pass, colours) */
+  userSettings?: Record<string, Json>;
   notes: string[];
 };
 
@@ -303,6 +307,14 @@ export function buildRecording(game: string, saves: { index: number; text: strin
     prevSavedAt = savedAt;
   }
 
+  // The text of the message each press was made on: some handlers read it as state (e.g. "Done Gaining Command
+  // Tokens" parses "command tokens have gone from 3/3/2" out of its own message), so the replay's carrier repeats it.
+  for (const a of actions) {
+    if (!a.channel || !a.messageId) continue;
+    const m = (state.messages[a.channel.id] ?? []).find((x: Json) => x.id === a.messageId);
+    if (m?.content) a.messageContent = String(m.content).slice(0, 1800);
+  }
+
   const base = saves[0].text;
   const steps: { index: number; delta: Delta }[] = [];
   for (let i = 1; i < saves.length; i++) steps.push({ index: saves[i].index, delta: lineDelta(saves[i - 1].text, saves[i].text) });
@@ -317,8 +329,21 @@ export function buildRecording(game: string, saves: { index: number; text: strin
     presses,
     checkpoints: [],
     channels: Object.fromEntries(channels),
+    userSettings: readUserSettings(players.map((p) => p.userId)),
     notes,
   };
+}
+
+function readUserSettings(ids: string[]): Record<string, Json> {
+  const out: Record<string, Json> = {};
+  for (const id of ids) {
+    try {
+      out[id] = JSON.parse(readFileSync(join(BOT_STORAGE, "user_settings", `${id}.json`), "utf8"));
+    } catch {
+      /* none */
+    }
+  }
+  return out;
 }
 
 /** Save texts of a recording, in order: [{index, text}] */

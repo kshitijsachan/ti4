@@ -154,7 +154,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
     const t0 = Date.now();
     const base: StepResult = { index: cur.index, label: a.label, kind: a.kind, status: "skipped", recordedDice: a.dice };
     const map = mapFor(prev.text);
-    mirrorUserSettings(map);
+    mirrorUserSettings(map, rec.userSettings);
     const forkUser = a.user ? map.users.get(a.user.id) : undefined;
     const playable = a.replayable && (a.kind === "button" || a.kind === "hidden-button" || a.kind === "command") && !!forkUser;
     if (!playable) {
@@ -178,7 +178,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
           fork,
           prev.text,
           map,
-          isButton ? { customId: mapIdsInCustomId(a.customId!, map), label: a.buttonLabel ?? a.customId!, faction, channelId: ch.channelId, thread: ch.thread, watcher: forkUser } : undefined,
+          isButton ? { customId: mapIdsInCustomId(a.customId!, map), label: a.buttonLabel ?? a.customId!, faction, channelId: ch.channelId, thread: ch.thread, watcher: forkUser, message: carrierText(a, map) } : undefined,
           newNonce(),
         );
         chainLoaded = true;
@@ -194,6 +194,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
             channelId: ch.channelId,
             thread: ch.thread,
             watcher: forkUser,
+            message: carrierText(a, map),
           });
         }
       }
@@ -269,6 +270,12 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
     }
   }
   return results;
+}
+
+/** The carrier repeats the original message's text on one line (the save format keeps one line of saved_message). */
+function carrierText(a: Action, map: ForkMap): string | undefined {
+  if (!a.messageContent) return undefined;
+  return mapIdsInCustomId(a.messageContent, map).replace(/\s*\n\s*/g, " ").slice(0, 1800);
 }
 
 /** The newest message the client saw that carries a control with this custom id. */

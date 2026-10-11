@@ -401,7 +401,10 @@ function checkSave(p: ParsedSave, web: Json | null, add: Add) {
     if (!pnWhere.has(id) && !purged.has(id) && !inSetup(g.get("phase_of_game") ?? ""))
       add("cards.promissory-somewhere", "warn", `${x.kv.get("faction")}'s promissory note ${id} is in no hand, play area or purge`, x.kv.get("faction"));
   }
-  // Strategy cards played / held, from the save.
+  // Game.setOwnerID cuts ids to 18 characters; 19-digit snowflakes (all of the shim's, and newer Discord accounts)
+  // then name nobody, so owner-only actions fail for the game's creator.
+  if (p.ownerId && !p.players.some((x) => x.userId === p.ownerId) && p.players.some((x) => x.userId.startsWith(p.ownerId) && x.userId !== p.ownerId))
+    add("identity.owner-id-intact", "warn", `owner id ${p.ownerId} is a truncated player id (${p.players.find((x) => x.userId.startsWith(p.ownerId))!.userId})`);
   const speaker = g.get("speaker");
   if (!inSetup(g.get("phase_of_game") ?? "") && real.length && speaker && !p.players.some((x) => x.userId === speaker))
     add("speaker.is-player", "error", `speaker ${speaker} is not a player in the game`);
@@ -563,6 +566,7 @@ export const INVARIANTS: { id: string; severity: Severity; what: string }[] = [
   { id: "vp.monotone", severity: "error", what: "a player's VP never drop, except by losable points (e.g. Shard, Political Censure)" },
   { id: "techs.monotone / secrets.scored-monotone", severity: "warn", what: "technologies and scored secrets are not lost" },
   { id: "phase.forced-by-command / phase.transition-skipped", severity: "warn", what: "a phase set by /game start_phase, or a step the bot did not save (action -> statusHomework)" },
+  { id: "identity.owner-id-intact", severity: "warn", what: "the save's owner id is a whole user id (Game.setOwnerID truncates to 18 chars)" },
   { id: "progress.no-idle-streaks", severity: "warn", what: "no long run (>= 6) of saved actions that change nothing (stale prompts pressed in a loop)" },
   { id: "progress.no-cycles", severity: "warn", what: "the state does not return to an earlier state through different ones (actions going round in circles)" },
 ];

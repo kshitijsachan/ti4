@@ -58,14 +58,16 @@ export async function replaySeats(): Promise<Seat[]> {
  * The bot reads per-person settings (auto-pass timers, preferred colours, ...) from user_settings/<user id>.json on
  * every use: give each replay seat the settings of the person it stands in for (or none, if they had none).
  */
-export function mirrorUserSettings(map: ForkMap) {
+export function mirrorUserSettings(map: ForkMap, recorded?: Record<string, Json>) {
   const dir = join(BOT_STORAGE, "user_settings");
   for (const [orig, seat] of map.users) {
     const src = join(dir, `${orig}.json`);
     const dst = join(dir, `${seat}.json`);
     try {
-      if (existsSync(src)) {
-        const s = JSON.parse(readFileSync(src, "utf8"));
+      // Prefer the settings captured with the recording: the live file may have changed since.
+      const rec = recorded?.[orig];
+      if (rec || (!recorded && existsSync(src))) {
+        const s = rec ? { ...rec } : JSON.parse(readFileSync(src, "utf8"));
         s.userId = seat;
         writeFileSync(dst, JSON.stringify(s, null, 2));
       } else if (existsSync(dst)) rmSync(dst);
