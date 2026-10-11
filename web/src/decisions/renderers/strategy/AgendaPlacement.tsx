@@ -6,6 +6,7 @@ import { snowflakeTime } from "@/discord/shared/snowflake";
 import { agendas } from "@/entities/data/agendas";
 import type { AgendaInfo } from "../../model/classify";
 import { baseId, choicesOf, cleanLabel, type Choice } from "../../model/controls";
+import { DecisionFooter } from "../../ui/Footer";
 import { ChoiceButton } from "../../ui/ChoiceButtons";
 import { AgendaCard } from "../Agenda";
 import type { RendererProps } from "../types";
@@ -136,14 +137,16 @@ export function AgendaPlacementBody({ d, data }: RendererProps) {
           {tops.find((p) => p.id !== firstId)?.agenda.name}.
         </p>
       )}
-      <ChoiceButton
-        choice={{ key: "agendas-confirm", kind: "button", customId: "agendas-confirm", label: "Confirm", style: 3, disabled: !peeks.length, rank: "primary", component: { type: 2 } }}
-        onPress={confirm}
-        pending={false}
-        busy={busy}
-        emphasis
-      />
-      {runner.error && <span className={classes.error}>Did not go through: {runner.error}</span>}
+      <DecisionFooter>
+        <ChoiceButton
+          choice={{ key: "agendas-confirm", kind: "button", customId: "agendas-confirm", label: "Confirm", style: 3, disabled: !peeks.length, rank: "primary", component: { type: 2 } }}
+          onPress={confirm}
+          pending={false}
+          busy={busy}
+          emphasis
+        />
+        {runner.error && <span className={classes.error}>Did not go through: {runner.error}</span>}
+      </DecisionFooter>
     </div>
   );
 }

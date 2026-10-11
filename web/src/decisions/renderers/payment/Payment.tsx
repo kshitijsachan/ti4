@@ -32,6 +32,7 @@ import {
 import { showReceipt } from "./receipt";
 import { pressOn, usePressPlan, type PlanStep } from "../../ui/pressPlan";
 import { Quantity } from "../../ui/Quantity";
+import { DecisionFooter } from "../../ui/Footer";
 import { actionChoice, Meter, plural } from "./shared";
 import classes from "./payment.module.css";
 
@@ -316,13 +317,15 @@ export function PaymentBody(props: RendererProps) {
         pendingKey={pendingKey}
         channelId={d.prompt.channelId}
         trailing={
-          <ChoiceButton
-            choice={actionChoice("payment-pay", payLabel, 3, !done)}
-            onPress={pay}
-            pending={false}
-            busy={busy || !!pendingKey}
-            emphasis
-          />
+          <DecisionFooter>
+            <ChoiceButton
+              choice={actionChoice("payment-pay", payLabel, 3, !done)}
+              onPress={pay}
+              pending={false}
+              busy={busy || !!pendingKey}
+              emphasis
+            />
+          </DecisionFooter>
         }
       />
       {undoLanding && (

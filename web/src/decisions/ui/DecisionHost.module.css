@@ -55,7 +55,7 @@
   display: flex;
   flex-direction: column;
   width: min(380px, 100%);
-  max-height: min(100%, 56vh);
+  max-height: min(100%, 82vh);
   border-radius: 10px;
   background: var(--panel-texture, none), var(--details-card-bg, #0b1020);
   border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
@@ -167,11 +167,65 @@
 }
 
 .body {
+  flex: 1 1 auto;
   padding: 12px 14px;
   overflow-y: auto;
   overscroll-behavior: contain;
   min-height: 0;
   scrollbar-width: thin;
+  scrollbar-color: var(--panel-scroll-thumb) transparent;
+}
+
+/* A real, always-visible scrollbar: overlay scrollbars hid that a long prompt went on below the fold. */
+.body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.body::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--panel-scroll-thumb);
+}
+
+.body::-webkit-scrollbar-thumb:hover {
+  background: var(--panel-scroll-thumb-hover);
+}
+
+/* More out of sight: the edge fades out (a mask, so every theme's surface shows through unchanged). */
+.body[data-more-below] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+
+.body[data-more-above] {
+  mask-image: linear-gradient(to bottom, transparent, #000 24px);
+}
+
+.body[data-more-above][data-more-below] {
+  mask-image: linear-gradient(to bottom, transparent, #000 24px, #000 calc(100% - 32px), transparent);
+}
+
+/* The renderer's primary action (DecisionFooter), under the scrolling body so it is never below the fold. */
+.footer {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--play-hairline);
+}
+
+.footer:empty,
+.footer[hidden] {
+  display: none;
+}
+
+.footerPart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* Folded down to its header: an optional card out of the map's way until it is wanted. */
