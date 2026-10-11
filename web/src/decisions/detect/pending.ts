@@ -174,7 +174,8 @@ function diplomacySteps(state: PlayState, m: Message, channelId: string, faction
   const channel = state.messages[channelId];
   const later = (channel?.ids ?? []).filter((id) => compareSnowflakes(id, threadId) > 0).map((id) => channel.byId[id]);
   const lines = [...thread.ids.map((id) => thread.byId[id]), ...later]
-    .filter((x): x is Message => !!x?.author.bot)
+    /* Reports only: the readying prompt itself (still open, with its buttons) says "please choose the planets…" too. */
+    .filter((x): x is Message => !!x?.author.bot && !needsAnswer(x))
     .sort((a, b) => compareSnowflakes(a.id, b.id));
   let system: Message | undefined;
   let ready: Message | undefined;
@@ -188,7 +189,7 @@ function diplomacySteps(state: PlayState, m: Message, channelId: string, faction
     if (undone !== undefined) {
       const label = undone.replace(/\s*\([^)]*\)\s*$/, "").trim();
       const names = (line?: Message) => !!line && !!label && plain(line).includes(label);
-      if (ready && (/\bread(y|ied)\b/i.test(undone) || names(ready))) ready = undefined;
+      if (ready && (/\bread(y|ied|ying)\b/i.test(undone) || names(ready))) ready = undefined;
       else if (system && (/\bdiplo\b/i.test(undone) || names(system))) system = undefined;
       continue;
     }
