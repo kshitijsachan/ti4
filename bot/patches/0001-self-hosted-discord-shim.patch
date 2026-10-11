@@ -12041,10 +12041,10 @@ index 0000000..1afc874
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java b/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java
 new file mode 100644
-index 0000000..0cebb2a
+index 0000000..87b41d2
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,102 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -12140,7 +12140,11 @@ index 0000000..0cebb2a
 +    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
-+        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
++        if (ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game())) return true;
++        // While a milty draft runs, the draft seats the players: manual player setup is a leftover menu (live pbd108:
++        // the web showed it before the draft pick and it was pressed over and over).
++        ti4.selfhost.engine.EngineModels.SetupState s = ti4.selfhost.engine.SetupStateBuilder.build(ctx.game());
++        return s != null && "draft".equals(s.stage());
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PoliticsAgendaKind.java b/src/main/java/ti4/selfhost/engine/kinds/PoliticsAgendaKind.java

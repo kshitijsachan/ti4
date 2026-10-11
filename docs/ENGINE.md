@@ -273,6 +273,13 @@ prompt) override `classifies` so they never claim other areas' messages.
 Bot: engine on when self-hosted unless `TI4_ENGINE=off` (capture is passive; endpoints idle unless called).
 Shim: `TI4_ENGINE=off` → no EngineClient; autopilot/web run purely on the legacy heuristics.
 
+**Rollback (one line).** Both default to on; deploy/docker-compose.yml passes `TI4_ENGINE` (and `TI4_ENGINE_NATIVE`,
+`TI4_ENGINE_WEB`) from `deploy/.env` to the bot and shim containers. `TI4_ENGINE=off` in `deploy/.env` + `docker compose
+up -d` returns every player and bot to the legacy prompt paths (no data change); the legacy fallbacks (autopilot
+rules, trade scrape, web legacy UI) stay in the code until W-INFRA-4. Self-hosted test server: `TI4_ENGINE=off` in
+`/home/user/run/bot.env` and the shim's environment, or roll back the binaries (`rm /home/user/run/bot-override.jar`
++ stop-bot.sh; `rm /home/user/run/shim-dir` + start-shim.sh).
+
 ### 3.7 Typed kinds (engine-int)
 
 73 kinds (Java `kinds/*.java` ⇄ TS `shim/src/engine/kinds/<area>.ts`, policies in `shim/src/engine/{policy,…}`,

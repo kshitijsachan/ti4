@@ -417,6 +417,20 @@ function classifyPrompt(prompt: PendingPrompt, ctx: ClassifyContext): Decision {
       optional: true,
     };
   }
+  if (has(choices, /^(queueScPick_|restartSCQueue|queueMilyPick_|restartMiltyQueue|restartAllMiltyQueue|preDeclineSC_|getPreDeclineSCButtons_)/)) {
+    /* Decide-in-advance prompts in your cards thread (queue strategy-card / draft picks, pre-decline following a card):
+       shortcuts for async play; the real pick / follow prompt comes in turn. Never a popup or "Your move". */
+    const draft = has(choices, /^(queueMilyPick_|restartMiltyQueue|restartAllMiltyQueue)/);
+    const decline = has(choices, /PreDecline/i);
+    return {
+      ...base,
+      kind: "generic",
+      eyebrow: decline ? "Strategy cards · optional" : draft ? "Draft · optional" : "Strategy phase · optional",
+      title: decline ? "Decide now not to follow a strategy card?" : draft ? "Queue your draft picks?" : "Queue strategy card picks?",
+      text: generic.rest || text,
+      optional: true,
+    };
+  }
   if (has(choices, /^editRoundSummary_/)) {
     return {
       ...base,

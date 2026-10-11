@@ -50,6 +50,10 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-}
       WEB_DIST: /app/web
       BOT_API_URL: http://bot:8081
+      # Typed engine (docs/ENGINE.md): on by default; TI4_ENGINE=off in .env rolls back to the legacy paths.
+      TI4_ENGINE: ${TI4_ENGINE:-on}
+      # 1 = the web's engine-driven prompts are the default for players (else the legacy UI; ?engine=1 per browser).
+      TI4_ENGINE_WEB: ${TI4_ENGINE_WEB:-0}
     volumes:
       - shimdata:/data
     ports:
@@ -76,6 +80,10 @@ services:
         condition: service_healthy
     environment:
       DISCORD_API_BASE: http://shim:8090/api/v10/
+      # Typed engine (capture, decisions, answers): same switch as the shim's; off = legacy only.
+      TI4_ENGINE: ${TI4_ENGINE:-on}
+      # Engine answers run as engine-native interactions where proven safe; off = always the simulated click.
+      TI4_ENGINE_NATIVE: ${TI4_ENGINE_NATIVE:-on}
       # Bot token / user id / guild id are read from the shim's state.json by the entrypoint.
       SHIM_STATE_FILE: /shim-data/state.json
       DB_PATH: /opt/STORAGE
