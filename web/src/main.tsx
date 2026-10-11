@@ -172,6 +172,24 @@ const theme = createTheme({
   },
 });
 
+/*
+ * After a deploy the old build's code-split chunks are gone, so an open tab fails to load the next lazy module
+ * ("Failed to fetch dynamically imported module"). Reload once to pick up the new build; never loop.
+ */
+window.addEventListener("vite:preloadError", (event) => {
+  const key = "ti4.reloadedForNewBuild";
+  let last = 0;
+  try {
+    last = Number(sessionStorage.getItem(key) ?? 0);
+    if (Date.now() - last < 60_000) return;
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    /* storage unavailable: still reload once per page load */
+  }
+  event.preventDefault();
+  window.location.reload();
+});
+
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,
 );
