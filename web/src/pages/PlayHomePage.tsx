@@ -61,6 +61,43 @@ function summarize(data: PlayerDataResponse) {
  * route, with a visible "Opening"); modified clicks keep the link's own
  * behaviour (new tab, new window).
  */
+/** Ends a game for everyone with the bot's own `/game end` (no results posted; its channels are archived). */
+function sendEndGame(conn: ReturnType<typeof usePlayConnection>, game: GameChannels) {
+  conn.runCommand(game.actions.id, "game", [
+    {
+      type: 1,
+      name: "end",
+      options: [
+        { type: 3, name: "confirm", value: "YES" },
+        { type: 5, name: "publish", value: false },
+        { type: 5, name: "archive_channels", value: true },
+      ],
+    },
+  ]);
+}
+
+/** Ends every listed game, one at a time (the bot handles them in turn), after one confirmation. */
+function EndAllGames({ games, onEnded }: { games: GameChannels[]; onEnded: (name: string) => void }) {
+  const conn = usePlayConnection();
+  const [left, setLeft] = useState(0);
+  const endAll = async () => {
+    if (!window.confirm(`End all ${games.length} of your games for everyone? This can't be undone.`)) return;
+    const queue = [...games];
+    setLeft(queue.length);
+    for (const game of queue) {
+      sendEndGame(conn, game);
+      onEnded(game.name);
+      setLeft((n) => n - 1);
+      await new Promise((r) => window.setTimeout(r, 1500));
+    }
+  };
+  return (
+    <button type="button" className={classes.endAll} onClick={() => void endAll()} disabled={left > 0}>
+      {left > 0 ? `Ending… ${left} left` : "End all"}
+    </button>
+  );
+}
+
 function GameCard({
   game,
   onEnded,
@@ -93,23 +130,12 @@ function GameCard({
     void openGame(game.name).finally(() => setOpening(false));
   };
 
-  /** Ends the game for everyone with the bot's own `/game end` (no results posted; its channels are archived). */
   const endGame = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
     if (!window.confirm(`End ${game.name} for everyone? This can't be undone.`))
       return;
-    conn.runCommand(game.actions.id, "game", [
-      {
-        type: 1,
-        name: "end",
-        options: [
-          { type: 3, name: "confirm", value: "YES" },
-          { type: 5, name: "publish", value: false },
-          { type: 5, name: "archive_channels", value: true },
-        ],
-      },
-    ]);
+    sendEndGame(conn, game);
     onEnded(game.name);
   };
 
@@ -459,6 +485,7 @@ function Home() {
       <section className={classes.section}>
         <div className={classes.label}>
           Your games <span className={classes.count}>{games.length}</span>
+          {games.length > 1 && <EndAllGames games={games} onEnded={onEnded} />}
         </div>
         {games.length === 0 && loading ? (
           <p className={classes.note}>Loading your games…</p>

@@ -119,7 +119,7 @@ export class Lobby {
       if (!userId || !this.solo) return discordError(res, 401, 0, "unknown link");
       const seat = Object.values(this.store.state.seats).find((x) => x.user_id === userId);
       if (seat?.autopilot) return discordError(res, 400, 0, "that seat is played by the autopilot");
-      const bots = Math.min(7, Math.max(2, Math.round(Number(body.bots ?? 3)) || 3));
+      const bots = Math.min(7, Math.max(2, Math.round(Number(body.bots ?? 5)) || 5));
       const expansion: Expansion = ["te", "newPoK", "oldPoK"].includes(body.expansion) ? body.expansion : "te";
       try {
         const job = await this.solo.start(userId, bots, expansion, Array.isArray(body.factions) ? body.factions.map(String).slice(0, 8) : []);

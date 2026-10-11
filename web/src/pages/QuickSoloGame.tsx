@@ -42,7 +42,7 @@ export function QuickSoloGame({
   children?: ReactNode;
 }) {
   const openGame = useOpenGame();
-  const [bots, setBots] = useState(3);
+  const [bots, setBots] = useState(5);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<SoloStatus | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -285,7 +285,7 @@
   color: var(--mantine-color-gray-2);
 }
 
-/* End-game control: quiet until the card is hovered or the control is focused. */
+/* End-game control: faint until the card is hovered or the control is focused (still visible on touch screens). */
 .endGame {
   display: inline-flex;
   align-items: center;
@@ -298,7 +298,7 @@
   background: none;
   color: var(--mantine-color-gray-6);
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.4;
 }
 
 .card:hover .endGame,
@@ -313,4 +313,24 @@
 
 .cardTop .status {
   margin-left: auto;
+}
+
+.endAll {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--panel-hairline);
+  border-radius: 2px;
+  background: none;
+  font: inherit;
+  color: var(--mantine-color-gray-5);
+  cursor: pointer;
+}
+
+.endAll:hover:not(:disabled) {
+  border-color: var(--mantine-color-red-7);
+  color: var(--mantine-color-red-5);
+}
+
+.endAll:disabled {
+  cursor: default;
 }
