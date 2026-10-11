@@ -233,7 +233,7 @@ export class TradeDesk {
     if (!fresh.length) return false;
     if (Date.now() - (this.lastPropose.get(game) ?? 0) < 4000) return false;
     const opts = (await this.call(game, "GET", "options")) as Options | null;
-    if (!opts || opts.blockedReason) return false;
+    if (!opts || opts.blockedReason || !opts.me || !opts.counterparties) return false;
     for (const faction of fresh) {
       this.offeredReplenish.add(`${game}:${force.m.id}:${faction}`);
       const cp = opts.counterparties.find((c) => c.faction === faction);
@@ -278,8 +278,8 @@ export class TradeDesk {
     const [faction] = ready;
     due.delete(faction);
     const opts = (await this.call(game, "GET", "options")) as Options | null;
-    const cp = opts?.counterparties.find((c) => c.faction === faction);
-    if (!opts || !cp || !cp.canTrade || !cp.canSendCommodities || cp.commodities < 2 || opts.me.tg < 1) return false;
+    const cp = opts?.counterparties?.find((c) => c.faction === faction);
+    if (!opts || !opts.me || !cp || !cp.canTrade || !cp.canSendCommodities || cp.commodities < 2 || opts.me.tg < 1) return false;
     const n = Math.min(cp.commodities, opts.me.tg + 1);
     this.proposed.set(`${game}:${faction}`, opts.round);
     return this.send(game, cp, { give: { tg: n - 1 }, receive: { commodities: n }, note: `The wash for the free replenish: your ${n} commodities for ${n - 1} TG.` }, `the wash for the free replenish (${n} for ${n - 1})`);
@@ -295,7 +295,7 @@ export class TradeDesk {
     // Neighbours only in the action phase; outside it anyone may trade.
     const anyone = !/^action/.test(board.phase);
     const opts = (await this.call(game, "GET", "options")) as Options | null;
-    if (!opts || opts.blockedReason) return false;
+    if (!opts || opts.blockedReason || !opts.me) return false;
     const me = opts.me;
     if (me.commodities === 0 && me.tg === 0) return false;
     const pending = this.seat.prompts(game).filter((p) => p.controls.some((c) => /^acceptOffer_/.test(baseId(c.custom_id))));
