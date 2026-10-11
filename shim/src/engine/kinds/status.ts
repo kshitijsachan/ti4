@@ -40,6 +40,8 @@ export interface PlayerStatus {
   /** Pressed Ready on the homework prompt. */
   ready: boolean;
   actionCardLimit: number;
+  /** Only for the viewer (null for others): status-phase secrets in hand the engine knows are met now. */
+  scorableSecrets: string[] | null;
 }
 
 /**

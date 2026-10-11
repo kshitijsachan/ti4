@@ -60,9 +60,12 @@ export function chooseStatus(d: Decision, state: GameState | null, me: string, m
         const lists = mine.filter((x) => x.kind === "status.score_secret" && x.createdAt >= sd.createdAt);
         const anyMet = lists.some((x) => x.options.some((o: Option<any>) => !o.disabled && o.value?.met === true && o.value?.phase === "status"));
         if (lists.length && anyMet) return null; // the list answers it
+        // The engine tells the viewer which secrets it can score; without that (older engine) ask for the list once.
+        const scorable = st.scorableSecrets;
         const handSecrets = Object.keys(state?.players.find((p) => p.userId === me)?.hand?.secretObjectives ?? {}).length;
+        const worthAsking = scorable ? scorable.length > 0 : handSecrets > 0;
         const ask = find((v) => v.action === "score_secret");
-        if (!lists.length && handSecrets > 0 && ask) return { option: ask, why: "status: look for a secret objective we meet" };
+        if (!lists.length && worthAsking && ask) return { option: ask, why: "status: list our secret objectives to score one" };
         const no = find((v) => v.action === "no_secret");
         return no ? { option: no, why: "status: no secret objective met" } : null;
       }
