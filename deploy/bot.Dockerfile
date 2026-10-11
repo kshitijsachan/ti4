@@ -12,19 +12,23 @@
 ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-26
 ARG JRE_IMAGE=eclipse-temurin:26-jre
 
-# ---- 1. upstream source at the pinned commit + our patches ----
+# ---- 1. upstream source at the pinned commit, then our patches ----
 # Art/data (src/main/resources, ~900MB) ships beside the jar in /opt/resources, not inside it.
+# The download depends only on the pinned commit; the patches are applied in their own layer, so changing a patch
+# reuses the cached download and art and only recompiles.
 FROM --platform=$BUILDPLATFORM ${MAVEN_IMAGE} AS src
 WORKDIR /build
 COPY bot/UPSTREAM_COMMIT bot/fetch-upstream.sh bot/
-COPY bot/patches bot/patches
 RUN --mount=type=secret,id=build_ca,required=false \
     if [ -s /run/secrets/build_ca ]; then export GIT_SSL_CAINFO=/run/secrets/build_ca; fi; \
-    sh bot/fetch-upstream.sh /build/upstream \
+    NO_PATCHES=1 sh bot/fetch-upstream.sh /build/upstream \
  && rm -rf /build/upstream/.git \
  && mv /build/upstream/src/main/resources /build/resources \
  && mkdir -p /build/upstream/src/main/resources \
  && cp -r /build/resources/config /build/resources/logback.xml /build/upstream/src/main/resources/
+COPY bot/patches bot/patches
+RUN cd /build/upstream && for p in /build/bot/patches/*.patch; do \
+      [ -e "$p" ] || continue; echo "applying $(basename "$p")"; git apply --whitespace=nowarn "$p"; done
 
 # ---- 2. compile ----
 FROM --platform=$BUILDPLATFORM ${MAVEN_IMAGE} AS build

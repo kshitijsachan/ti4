@@ -22,6 +22,8 @@ git -c advice.detachedHead=false checkout -q --force FETCH_HEAD
 git reset -q --hard FETCH_HEAD
 git clean -qfdx
 
+# NO_PATCHES=1: fetch only (the Docker build applies the patches in a later layer, so a patch change doesn't re-download).
+[ "${NO_PATCHES:-0}" = 1 ] && { echo "upstream $COMMIT fetched (patches not applied) in $DEST"; exit 0; }
 for p in "$HERE"/patches/*.patch; do
   [ -e "$p" ] || continue
   echo "applying $(basename "$p")"
