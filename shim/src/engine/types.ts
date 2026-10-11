@@ -146,7 +146,40 @@ export interface Option<V = Record<string, unknown> | null> {
   value: V | null;
 }
 
+/**
+ * Everyone-answers-in-parallel prompt (strategy card follow, whens/afters, sabotage, agenda votes...). The decision
+ * has scope "table"; each eligible player answers once; the engine closes it when all eligible have responded.
+ */
+export interface ReactionWindow {
+  /** "follow" | "when" | "after" | "sabotage" | "vote" | "pre_vote" | "trade_follow" | ... (area-defined). */
+  kind: string;
+  /** What it is about, e.g. { strategyCard: 5 } or { actionCard: "sabo", player: "<uid>" }. */
+  subject: Record<string, unknown>;
+  eligible: UserId[];
+  responded: UserId[];
+  /** Optional per-player answer summaries, e.g. uid → "followed" / "passed" / "7 for Against". */
+  responses: Record<UserId, string>;
+}
+
+/**
+ * Sub-step state of a multi-step decision edited in place (movement, landing, hit assignment, payment, agenda
+ * voting, when/after queues). Derived by the engine from game state (never message text): reload-safe.
+ */
+export interface Progress<A = Record<string, unknown>> {
+  /** Groups consecutive prompts of one flow, e.g. "tactical:<uid>:r3:t2". */
+  flow: string | null;
+  /** Current sub-step: "select_units", "select_planets", "confirm", ... */
+  step: string;
+  /** Typed running selection, e.g. { units: [...], spent: { planets: [...], tg: 2 }, votes: 7 }. */
+  accumulated: A;
+  /** Still needed, e.g. { hits: 2 } or { resources: 3 }. */
+  required: Record<string, unknown>;
+  /** The commit option ("Done", "Confirm") is meaningful now. */
+  canCommit: boolean;
+}
+
 interface DecisionBase<K extends string, V> {
+  /** Stable for the life of the prompt message; edits in place keep it and bump `revision`. */
   id: string;
   game: string;
   kind: K;
@@ -162,6 +195,10 @@ interface DecisionBase<K extends string, V> {
   options: Option<V>[];
   source: { channelId: string; messageId: string; customIdPrefix: string | null; ephemeral: boolean };
   createdAt: number;
+  /** 1 on open; +1 on every change (edit in place, target / window / progress change). */
+  revision: number;
+  window: ReactionWindow | null;
+  progress: Progress | null;
 }
 
 // ---- typed kinds (add one member per KindSpec; keep alphabetical within an area) ----
@@ -233,6 +270,13 @@ export interface ResetEvent {
 export interface DecisionsSnapshot {
   seq: number;
   decisions: Decision[];
+}
+
+/** Is this decision waiting on `userId`? (player scope: target; table scope: eligible and not yet responded.) */
+export function awaits(d: Decision, userId: UserId): boolean {
+  if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
+  if (d.scope === "player") return d.target?.userId === userId;
+  return true;
 }
 
 /** Narrow helpers. */
