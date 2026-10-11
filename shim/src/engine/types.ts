@@ -16,6 +16,7 @@ import type { StrategyDecision } from "./kinds/strategy.js";
 import type { TacticalDecision } from "./kinds/tactical.js";
 import type { ThundersEdgeDecision, ThundersEdgeState } from "./kinds/te.js";
 import type { TradeForceReplenish, TradeOffer, TradeOfferSent, TradeState } from "./kinds/trade.js";
+import type { UiDecision } from "./kinds/ui.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
@@ -395,6 +396,7 @@ export type Decision =
   | CombatDecision
   | ProductionDecision
   | InputFormDecision
+  | UiDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -469,8 +471,18 @@ export interface DecisionsSnapshot {
   decisions: Decision[];
 }
 
+/** A non-decision affordance (ui.undo_affordance, ui.optional, ui.info_menu): never pending, bots ignore it. */
+export function isAffordance(d: Pick<Decision, "kind">): boolean {
+  return AFFORDANCE_KINDS.has(d.kind);
+}
+
+/** Kinds that are affordances, not questions (Java UiAffordanceKind, UiOptionalKind, InfoMenuSplit). */
+export const AFFORDANCE_KINDS: ReadonlySet<string> = new Set(["ui.undo_affordance", "ui.optional", "ui.info_menu"]);
+
 /** Is this decision waiting on `userId`? (player scope: target; table scope: eligible and not yet responded.) */
 export function awaits(d: Decision, userId: UserId): boolean {
+  // Undo / optional / info-menu affordances (ui.*): nobody is asked anything; answerable on click, never awaited.
+  if (isAffordance(d)) return false;
   if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
   if (d.scope === "player") return d.target?.userId === userId;
   // Mixed-owner menu: only the options owned by this user (or by nobody) are theirs.

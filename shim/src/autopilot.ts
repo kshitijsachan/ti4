@@ -167,9 +167,10 @@ const RULES: Rule[] = [
   },
   // Async-only preference question (auto-pass on Sabotage after N hours): the shortest timer, once; it stops the
   // question for this seat in later games. The autopilot answers Sabotage windows itself anyway.
-  { id: /^setAutoPassMedian_1$/, score: 40, why: "preferences: auto-pass on Sabotage" },
-  // Async-only preference questions: let the bot auto-pass our secret-objective scoring.
-  { id: /^sandbagPref_bot$/, score: 40, why: "preferences: let the bot auto-pass secret scoring" },
+  { id: /^setAutoPassMedian_1$/, score: 40, typed: true, why: "preferences: auto-pass on Sabotage" },
+  // Async-only preference questions: let the bot auto-pass our secret-objective scoring. (Typed: player.preference,
+  // engine/policy/ui.ts answers both while the engine is live; these two rules are the engine-off fallback.)
+  { id: /^sandbagPref_bot$/, score: 40, typed: true, why: "preferences: let the bot auto-pass secret scoring" },
   // Status phase: after everyone scored, someone reveals the next public objective (once per game per round; see
   // revealOnce).
   { id: /(^|_)reveal_stage_(1|2)(position_\d+)?$/, score: 63, table: true, typed: true, phase: /^status/, why: "status: reveal the next public objective" },

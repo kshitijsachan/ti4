@@ -2,7 +2,7 @@
  * Setup + draft decision kinds (workstream G1). Mirrors the bot's ti4.selfhost.engine.kinds.* setup kinds 1:1:
  * MiltyDraftPickKind, MiltyDraftQueueKind, MiltyDraftInfoKind, KeleresFlavorKind, PlayerSetupKind,
  * KeleresTechOptionsKind, TechTypeChoiceKind, DealSecretsKind, RevealObjectivesKind,
- * SetupPreferenceKind, GameSettingsKind. Live readiness (who still sets up, what is left in the draft) is in
+ * GameSettingsKind. Live readiness (who still sets up, what is left in the draft) is in
  * GameState.draft / GameState.setup, not in option values (those are snapshots taken when the prompt was posted).
  */
 import type { DecisionBase, FactionId, UserId } from "../types.js";
@@ -65,12 +65,7 @@ export type SetupDealSecrets = DecisionBase<"setup.deal_secrets", Record<string,
 /** Table step: reveal the first objectives and start the strategy phase (refused until stage reveal_objectives). */
 export type SetupRevealObjectives = DecisionBase<"setup.reveal_objectives", Record<string, never>>;
 
-
-/** Preference questions (survey, auto-pass timers, toggles). */
-export type SetupPreference = DecisionBase<
-  "setup.preference",
-  { preference: string; question: string | null; choice: string | null }
->;
+// Preference questions moved to player.preference (kinds/ui.ts): asked all game, not only during setup.
 
 /** Game creation: expansion, alternate modes, starting the draft, Milty settings pages. */
 export type SetupGameSettings = DecisionBase<
@@ -88,5 +83,4 @@ export type SetupDecision =
   | TechChooseType
   | SetupDealSecrets
   | SetupRevealObjectives
-  | SetupPreference
   | SetupGameSettings;
