@@ -69,6 +69,94 @@ index a54a239..1731da8 100644
          String lastGameName = CreateGameService.getLastPbdGameName();
          if (lastGameName == null) return false;
  
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java
+index 507d7b5..c3c5ee4 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/strategycard/PickStrategyCardButtonHandler.java
+@@ -22,6 +22,7 @@ import ti4.helpers.Helper;
+ import ti4.helpers.StringHelper;
+ import ti4.logging.BotLogger;
+ import ti4.message.MessageHelper;
++import ti4.selfhost.SelfHosted;
+ import ti4.service.emoji.ColorEmojis;
+ import ti4.service.game.StartPhaseService;
+ import ti4.service.leader.CommanderUnlockCheckService;
+@@ -80,6 +81,14 @@ public class PickStrategyCardButtonHandler {
+     public static boolean scPick(ButtonInteractionEvent event, Game game, Player player, String buttonID) {
+         String num = buttonID.replace("scPick_", "");
+         int scpick = Integer.parseInt(num);
++        if (SelfHosted.isEnabled() && !mayPickNow(game, player)) {
++            MessageHelper.sendMessageToChannel(
++                    player.getCardsInfoThread(),
++                    player.getRepresentationNoPing()
++                            + ", that strategy card button is stale: the Strategy Phase is over or you already hold all the strategy cards you may pick.");
++            ButtonHelper.deleteMessage(event);
++            return false;
++        }
+ 
+         String pdValue = game.getStoredValue("Public Disgrace");
+         String pdOnly = game.getStoredValue("Public Disgrace Only");
+@@ -138,6 +147,17 @@ public class PickStrategyCardButtonHandler {
+         return false;
+     }
+ 
++    /**
++     * A pick button left over from an earlier window (a second copy posted around an undo, a message the bot did not
++     * delete) must not hand out a card after the Strategy Phase or beyond the per-player count (pbd8: a bot took a
++     * fourth card in a 3-player game, once after "All players have picked" and once in a later phase).
++     */
++    static boolean mayPickNow(Game game, Player player) {
++        if (game.getLaws().containsKey("checks") || game.getLaws().containsKey("absol_checks")) return true;
++        if (!"strategy".equalsIgnoreCase(game.getPhaseOfGame())) return false;
++        return player.getSCs().size() < Math.max(1, game.getStrategyCardsPerPlayer());
++    }
++
+     static boolean isDeflectedStrategyCard(Game game, int scpick) {
+         return game.getStoredValue("deflectedSC").equalsIgnoreCase(String.valueOf(scpick));
+     }
+diff --git a/src/main/java/ti4/game/Game.java b/src/main/java/ti4/game/Game.java
+index 575a281..0f5fe34 100644
+--- a/src/main/java/ti4/game/Game.java
++++ b/src/main/java/ti4/game/Game.java
+@@ -4079,10 +4079,25 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
+ 
+     @Override
+     public void setOwnerID(String ownerID) {
+-        if (ownerID.length() > 18) ownerID = ownerID.substring(0, 18);
++        // Discord snowflakes are 17-20 digits now; only legacy non-numeric junk gets cut to 18 characters.
++        if (ownerID != null && ownerID.length() > 18 && !ownerID.matches("\\d+")) ownerID = ownerID.substring(0, 18);
+         super.setOwnerID(ownerID);
+     }
+ 
++    /**
++     * Saves written before the owner id stopped being truncated hold the first 18 digits of a 19-digit snowflake.
++     * Point such an owner back at the one player whose id it is a prefix of.
++     */
++    public void repairTruncatedOwnerID() {
++        String ownerID = getOwnerID();
++        if (ownerID == null || ownerID.length() != 18 || !ownerID.matches("\\d+") || players.containsKey(ownerID))
++            return;
++        List<String> matches = players.keySet().stream()
++                .filter(id -> id.length() > 18 && id.startsWith(ownerID))
++                .toList();
++        if (matches.size() == 1) super.setOwnerID(matches.getFirst());
++    }
++
+     public void setTileMap(Map<String, Tile> tileMap) {
+         this.tileMap = tileMap;
+         planets.clear();
+diff --git a/src/main/java/ti4/game/persistence/GameLoadService.java b/src/main/java/ti4/game/persistence/GameLoadService.java
+index 05ddef3..0658a64 100644
+--- a/src/main/java/ti4/game/persistence/GameLoadService.java
++++ b/src/main/java/ti4/game/persistence/GameLoadService.java
+@@ -163,6 +163,7 @@ class GameLoadService {
+             }
+             Map<String, Tile> tileMap = getTileMap(gameFileLines, game);
+             game.setTileMap(tileMap);
++            game.repairTruncatedOwnerID();
+             TransientGameInfoUpdater.update(game);
+             return game;
+         } catch (Exception e) {
 diff --git a/src/main/java/ti4/game/persistence/GameUndoService.java b/src/main/java/ti4/game/persistence/GameUndoService.java
 index d91d9d5..50e3842 100644
 --- a/src/main/java/ti4/game/persistence/GameUndoService.java
@@ -339,6 +427,32 @@ index 0000000..35c108f
 +        }
 +    }
 +}
+diff --git a/src/main/java/ti4/service/button/ReactionCheckService.java b/src/main/java/ti4/service/button/ReactionCheckService.java
+index b6fb6af..cb8ac2a 100644
+--- a/src/main/java/ti4/service/button/ReactionCheckService.java
++++ b/src/main/java/ti4/service/button/ReactionCheckService.java
+@@ -21,6 +21,7 @@ import ti4.helpers.Helper;
+ import ti4.logging.BotLogger;
+ import ti4.message.GameMessageManager;
+ import ti4.message.MessageHelper;
++import ti4.selfhost.SelfHosted;
+ import ti4.service.StatusCleanupService;
+ import ti4.service.emoji.CardEmojis;
+ import ti4.service.game.EndGameService;
+@@ -107,6 +108,13 @@ public class ReactionCheckService {
+     }
+ 
+     public static void respondAllHaveScored(Game game) {
++        // A late "No Public/Secret Objective Scored" press (a re-sent click, a second copy of the scoring message)
++        // completes the scoring check again after this round's objective is out: do not offer the reveal again,
++        // its only answer would be "already revealed".
++        if (SelfHosted.isEnabled()
++                && !game.getStoredValue("revealedPOInRound" + game.getRound()).isEmpty()) {
++            return;
++        }
+         String message2 =
+                 "All players have indicated scoring. Flip the relevant public objective using the buttons. This will automatically run status clean-up if it has not been run already.";
+         Button draw2Stage2 = Buttons.green("reveal_stage_2x2", "Reveal 2 Stage 2");
 diff --git a/src/main/java/ti4/service/game/CreateGameService.java b/src/main/java/ti4/service/game/CreateGameService.java
 index 5b8e62a..91f9ae3 100644
 --- a/src/main/java/ti4/service/game/CreateGameService.java
