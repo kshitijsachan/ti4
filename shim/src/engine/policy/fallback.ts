@@ -145,6 +145,13 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "units.remove": "blocking",
   "production.place": "blocking",
   "commodities.gain": "blocking",
+  // C6b tech follow-ups (the components policy answers our own: free gains taken, the rest declined)
+  "tech.step": "blocking",
+  // C8b
+  "units.modify": "optional", // Modify Units menu: opened by the player
+  "combat.automate": "blocking", // automate-ground-combat vote / confirm
+  "combat.modifier": "optional",
+  "strategy_card.construction_build": "blocking",
 };
 
 const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);

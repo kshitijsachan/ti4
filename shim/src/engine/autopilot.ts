@@ -20,6 +20,7 @@ import { chooseComponents, isComponentsKind } from "./policy/components.js";
 import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
 import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
+import { chooseManualBuild, chooseUnitsModify } from "./policy/units.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -170,9 +171,12 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
       return chooseCommodities(d, state, me, ctx.history);
     case "units.remove":
       return chooseUnitsRemove(d, me, ctx.history, ctx.open);
+    case "units.modify":
+      return chooseUnitsModify(d, me);
     case "production.produce":
-      // What to build is the planner's call (botplay BuildJob sends it as one production payload).
-      return null;
+      // What to build is the planner's call (botplay BuildJob sends it as one production payload); a build opened
+      // from the Modify Units menu builds nothing.
+      return chooseManualBuild(d, me);
     default:
       return null;
   }

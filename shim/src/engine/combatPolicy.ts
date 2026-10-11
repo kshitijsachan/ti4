@@ -8,6 +8,7 @@
  */
 import type { CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
 import type { Decision, GameState, Option } from "./types.js";
+import { chooseCombatAutomate, chooseCombatModifier } from "./policy/units.js";
 
 export type CombatChoice = { option: Option<any>; why: string };
 
@@ -29,6 +30,10 @@ export function chooseCombat(d: Decision, state: GameState | null, me: string, o
       return bombardDone(d, me);
     case "combat.retreat":
       return noRetreat(d, me);
+    case "combat.automate":
+      return chooseCombatAutomate(d, me);
+    case "combat.modifier":
+      return chooseCombatModifier(d, me);
     default:
       return null;
   }
