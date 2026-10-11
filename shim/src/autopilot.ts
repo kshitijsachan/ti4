@@ -1192,6 +1192,9 @@ class SeatPilot {
         if (!r) return false;
         log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option.label}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
+        // Tell the legacy roll guard (mayRoll) about rolls made here, so it never rolls the same dice again.
+        const rolled = pick.option.value?.action === "roll" ? String(pick.option.value.rollType ?? "") : "";
+        if (r.ok && rolled) this.recent.set(`${d.source.channelId}:roll:${rolled}`, Date.now());
         if (r.ok) {
           // What we answered on this decision (multi-part answers walk it; see engine/kinds/strategyPolicy.ts).
           this.engineDone.set(d.id, { options: [...(done?.options ?? []), pick.option.id], revision: d.revision });

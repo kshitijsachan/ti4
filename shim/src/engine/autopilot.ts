@@ -11,6 +11,7 @@ import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
 import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
+import { chooseCombat } from "./combatPolicy.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -20,6 +21,8 @@ export type TypedChoice = { option: Option<any>; why: string; payload?: Record<s
 
 export function chooseTyped(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx = { history: [], open: [], all: [] }): TypedChoice | null {
   const all = ctx.all;
+  // Combat (G4): ctx.open = this seat's other open decisions (no next roll while hits are owed).
+  if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, ctx.open);
   const setup = chooseSetup(d, state, me);
   if (setup !== undefined) return setup;
   if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);

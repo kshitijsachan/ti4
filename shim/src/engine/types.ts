@@ -6,6 +6,7 @@
 
 import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
+import type { CombatDecision, CombatState } from "./kinds/combat.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { SetupDecision } from "./kinds/setup.js";
 import type { StatusDecision, StatusState } from "./kinds/status.js";
@@ -60,6 +61,8 @@ export interface GameState {
   setup?: SetupState | null;
   /** The viewer's trade view (null without a viewer). See kinds/trade.ts. */
   trade?: TradeState | null;
+  /** Combat in the active system (G4); null when there is none. */
+  combat?: CombatState | null;
 }
 
 export interface PlayerState {
@@ -337,6 +340,7 @@ export type Decision =
   | TradeOffer
   | TradeOfferSent
   | TradeForceReplenish
+  | CombatDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
