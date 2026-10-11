@@ -330,7 +330,7 @@ export function cardIds(v: string | undefined): string[] {
 
 function checkSave(p: ParsedSave, web: Json | null, add: Add) {
   const g = p.game;
-  // -- content: web (self-hosted) games are official-only (bot ti4.selfhost.WebContent; TI4_OFFICIAL_ONLY) --
+  // -- content: web (self-hosted) games are official-only (bot ti4.selfhost.engine.WebContent; TI4_OFFICIAL_ONLY) --
   for (const flag of homebrewFlags(g)) add("content.no-homebrew", "error", `homebrew / alternate mode on: ${flag}`);
   const real = p.players.filter((x) => x.kv.get("faction") && x.kv.get("faction") !== "null" && x.kv.get("faction") !== "neutral");
   const zoneCheck = (kind: string, zones: [string, string[]][], fullSize?: number) => {
@@ -551,7 +551,7 @@ export function summarize(vs: Violation[]): Map<string, Violation[]> {
 }
 
 /**
- * Save-file flags that mean homebrew or an alternate game mode (mirror of bot ti4.selfhost.WebContent.violations;
+ * Save-file flags that mean homebrew or an alternate game mode (mirror of bot ti4.selfhost.engine.WebContent.violations;
  * the player count is not a criterion here, unlike Game.hasHomebrew()). Official: base, PoK, Thunder's Edge, codices.
  */
 const OFFICIAL_MODE_FLAGS = new Set(["base_game_mode", "thunders_edge_mode", "no_swap_mode", "veiled_heart_mode", "lore_mode", "limited_whispers_mode", "beta_test_mode", "cpti_explore_mode"]);

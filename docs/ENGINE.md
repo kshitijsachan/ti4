@@ -303,7 +303,7 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 
 **Official-only web games.** The self-hosted bot refuses homebrew / alternate-mode controls (Supported Homebrew,
 Galactic Events / Dane modes, Twilight's Fall, Franken, TK Nova / Twilight DS / O++ setups, homebrew sources and Alliance in
-the Milty settings): `ti4.selfhost.WebContent`, switch `TI4_OFFICIAL_ONLY` (default on when self-hosted; `off` disables).
+the Milty settings): `ti4.selfhost.engine.WebContent`, switch `TI4_OFFICIAL_ONLY` (default on when self-hosted; `off` disables).
 `WebContent.officialOnly(game)` / `violations(game)` is the invariant (checked on every state change: error log + metric
 `invariant.homebrew`; tests/engine `content.no-homebrew` on save files). Homebrew / DS / TF / Monuments / FoW handlers are
 out of scope for typing and for the legacy deletion.
