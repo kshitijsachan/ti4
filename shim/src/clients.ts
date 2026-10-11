@@ -268,7 +268,6 @@ export class Clients implements Listener {
     channelId: string,
     data: Json,
     message?: StoredMessage,
-    retryOf?: string,
   ) {
     if (!this.store.canView(c.userId, channelId)) {
       return this.send(c, { t: "interaction_done", nonce, error: "You cannot use that channel." });
@@ -283,14 +282,6 @@ export class Clients implements Listener {
       message_id: message?.id,
       command_name: type === 2 ? data.name : undefined,
     });
-    if (type === 3 && message) {
-      const retries = (this.store.interactions.get(retryOf ?? "")?.retries ?? 0) + (retryOf ? 1 : 0);
-      inter.retries = retries;
-      inter.replay = () => {
-        const fresh = this.store.findMessage(channelId, message.id);
-        if (fresh && this.clients.has(c)) this.dispatchInteraction(c, undefined, type, channelId, data, fresh, inter.id);
-      };
-    }
     const payload: Json = { ...this.basePayload(c, channelId), id: inter.id, token: inter.token, type, data };
     if (message) payload.message = stripPrivate(message);
     const timer = setTimeout(() => {
