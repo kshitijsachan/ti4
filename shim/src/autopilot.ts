@@ -407,7 +407,7 @@ class SeatPilot {
   private retries = new Map<string, number>();
   /** The planner (tactical actions, strategy card primaries, scoring); the rule table handles the rest. */
   private brain: Brain;
-  /** Trades: answers offers, proposes N-1 washes, runs the Trade card deal (botplay/trade.ts). */
+  /** Trades: proposes N-1 washes via the engine (offers are answered by chooseTyped, engine/tradePolicy.ts). */
   private trade: TradeDesk;
 
   constructor(
@@ -416,7 +416,7 @@ class SeatPilot {
   ) {
     this.conn = mgr.clients.attachVirtual(userId, (f) => this.onFrame(f));
     this.brain = new Brain(this.seat());
-    this.trade = new TradeDesk(this.seat(), mgr.botApi, () => Object.entries(this.store.state.seats).find(([, seat]) => seat.user_id === this.userId)?.[0]);
+    this.trade = new TradeDesk(this.seat(), () => mgr.engine);
     // Some turns change without a message this seat can see (e.g. the draft); look again now and then.
     this.poll = setInterval(() => this.schedule(), 8000);
     log.info(`autopilot ${this.name}: started`);

@@ -1,4 +1,4 @@
-/** Shapes of the bot's `/api/game/{game}/trade/**` endpoints (see TradeModels.java). */
+/** Trade panel shapes. Data comes from the engine API (GameState.trade, trade.* decisions); see api.ts. */
 
 export type CardRef = {
   id: string;
@@ -63,6 +63,8 @@ export type TradeOptions = {
   version: number;
   me: TradeSelf;
   counterparties: TradeCounterparty[];
+  /** Factions I may transact with now (neighbours; anyone in the agenda phase; Guild Ships, Trade Convoys, …). */
+  mayTransactWith: string[];
 };
 
 export type TradeSide = {
@@ -121,15 +123,19 @@ export type ProposeResponse = {
   warnings: string[];
 };
 
-export type ButtonRef = {
-  channelId: string;
+/** One option of an engine decision (answer with expectedSeq; a changed prompt answers 409 stale). */
+export type EngineChoice = {
+  decisionId: string;
+  optionId: string;
+  expectedSeq: number;
+  /** The bot message behind the decision (to match a legacy prompt to its offer). */
   messageId: string;
-  customId: string;
-  label?: string | null;
 };
 
 export type PendingOffer = {
   direction: "incoming" | "outgoing";
+  /** Incoming: my trade.offer decision; outgoing: the receiver's (not answerable by me). */
+  decisionId: string;
   otherFaction: string;
   otherUserId: string;
   otherUserName: string;
@@ -139,10 +145,10 @@ export type PendingOffer = {
   current: boolean;
   text: string;
   items: TradeItem[];
-  accept?: ButtonRef | null;
-  reject?: ButtonRef | null;
-  counter?: ButtonRef | null;
-  rescind?: ButtonRef | null;
+  accept?: EngineChoice | null;
+  reject?: EngineChoice | null;
+  counter?: EngineChoice | null;
+  rescind?: EngineChoice | null;
   createdAt: string;
   otherIcon?: string | null;
 };
@@ -151,12 +157,3 @@ export type PendingResponse = {
   incoming: PendingOffer[];
   outgoing: PendingOffer[];
 };
-
-/**
- * Presses a bot button through the shim (`/app/ws` click op). Resolve `{ error }` or reject to report a failure.
- */
-export type PressButton = (
-  channelId: string,
-  messageId: string,
-  customId: string,
-) => Promise<{ error?: string } | void> | void;

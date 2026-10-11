@@ -10,6 +10,7 @@ import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
 import { chooseSetup } from "./policy/setup.js";
+import { chooseTrade } from "./tradePolicy.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -89,6 +90,10 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
       const done = d.options.find((o) => !o.disabled && o.value?.op === "done");
       return done ? { option: done, why: "no units moved through a rift" } : null;
     }
+    case "trade.offer":
+    case "trade.offer_sent":
+    case "trade.force_replenish":
+      return chooseTrade(d, state, self);
     default:
       return null;
   }

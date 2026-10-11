@@ -7,7 +7,7 @@
  */
 import { log } from "../log.js";
 import { awaits } from "./types.js";
-import type { AnswerRequest, AnswerResult, Decision, DecisionsSnapshot, EngineEvent, GameState } from "./types.js";
+import type { AnswerRequest, AnswerResult, Decision, DecisionsSnapshot, EngineEvent, GameState, TradeProposal, TradeProposeResult } from "./types.js";
 
 export class EngineClient {
   /** game → decision id → decision (only while the stream is live). */
@@ -144,6 +144,22 @@ export class EngineClient {
       });
       if (!res.headers.get("content-type")?.includes("json")) return null;
       return (await res.json()) as AnswerResult;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Typed action trade.propose as `userId` (the receiver gets a trade.offer decision). */
+  async proposeTrade(game: string, proposal: TradeProposal & { userId: string }): Promise<TradeProposeResult | null> {
+    try {
+      const res = await fetch(this.url(`/${encodeURIComponent(game)}/actions/trade.propose`), {
+        method: "POST",
+        headers: this.headers(true),
+        body: JSON.stringify(proposal),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!res.headers.get("content-type")?.includes("json")) return null;
+      return (await res.json()) as TradeProposeResult;
     } catch {
       return null;
     }

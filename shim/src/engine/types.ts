@@ -12,6 +12,7 @@ import type { StatusDecision, StatusState } from "./kinds/status.js";
 import type { StrategyDecision } from "./kinds/strategy.js";
 import type { TacticalDecision } from "./kinds/tactical.js";
 import type { ThundersEdgeDecision, ThundersEdgeState } from "./kinds/te.js";
+import type { TradeForceReplenish, TradeOffer, TradeOfferSent, TradeState } from "./kinds/trade.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
@@ -20,6 +21,7 @@ export type * from "./kinds/setup.js";
 export type * from "./kinds/status.js";
 export type * from "./kinds/tactical.js";
 export type * from "./kinds/te.js";
+export type * from "./kinds/trade.js";
 
 export const CONTRACT_VERSION = 1;
 
@@ -56,6 +58,8 @@ export interface GameState {
   thundersEdge?: ThundersEdgeState | null;
   /** Setup progress (game creation → first strategy phase); null once the game is under way. */
   setup?: SetupState | null;
+  /** The viewer's trade view (null without a viewer). See kinds/trade.ts. */
+  trade?: TradeState | null;
 }
 
 export interface PlayerState {
@@ -202,6 +206,7 @@ export type ResolvedBy =
   | "draft_turn"
   | "speaker" // the speaker acts: agenda tie-break / resolution, reveal the next public objective
   | "agenda_voter" // a vote step: the current voter
+  | "sc_holder" // the player holding the strategy card the prompt is about
   | "mention" // weak: exactly one seated player mentioned
   | "mixed_owners"
   | "recent_press" // weak: whoever pressed a button in that channel just before (kind fallback)
@@ -329,6 +334,9 @@ export type Decision =
   | TacticalDecision
   | ThundersEdgeDecision
   | StrategyDecision
+  | TradeOffer
+  | TradeOfferSent
+  | TradeForceReplenish
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;

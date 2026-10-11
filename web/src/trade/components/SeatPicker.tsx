@@ -16,10 +16,10 @@ type Props = {
 function statusTag(cp: TradeCounterparty, phase: string) {
   if (!cp.canTrade) return { text: "Locked", cls: classes.tagBlocked, title: cp.reason ?? undefined };
   if (cp.neighbor) return { text: "Neighbor", cls: classes.tagLive, title: "Neighbors may always trade" };
-  if (phase.toLowerCase() !== "action") return {
+  if (phase.toLowerCase().includes("agenda")) return {
       text: "Open",
       cls: classes.tagLive,
-      title: "Outside the action phase anyone may trade",
+      title: "In the agenda phase anyone may trade",
     };
   return { text: "Allowed", cls: classes.tagLive, title: "An ability or law lets you trade" };
 }

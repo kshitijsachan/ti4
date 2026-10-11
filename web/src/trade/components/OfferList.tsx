@@ -2,14 +2,14 @@ import cx from "clsx";
 import type { CSSProperties } from "react";
 import { getPrimaryColorCSS } from "@/entities/lookup/colors";
 import { FRAGMENT_COLOR, ICONS, factionIcon } from "../icons";
-import type { ButtonRef, FragmentTrait, PendingOffer, TradeItem } from "../types";
+import type { EngineChoice, FragmentTrait, PendingOffer, TradeItem } from "../types";
 import classes from "../Trade.module.css";
 
 type Props = {
   offers: PendingOffer[];
   myFaction: string;
   busyKey: string | null;
-  onPress: (button: ButtonRef, offer: PendingOffer) => void;
+  onPress: (choice: EngineChoice, offer: PendingOffer) => void;
   onCounter: (offer: PendingOffer) => void;
   onHide: (offer: PendingOffer) => void;
 };
