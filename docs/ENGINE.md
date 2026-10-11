@@ -300,6 +300,7 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 | G10 Thunder's Edge | `te.{fracture.roll,fracture.ingress,galvanize,expedition,thunders_edge.place,visionaria.respond}` | `thundersEdge` |
 | G11 trade | `trade.{offer,offer_sent,force_replenish}`; game action `trade.propose` | `trade` (viewer only) |
 | INFRA-3 | `input.form` (forms opened by `needsInput` buttons) | — |
+| C6 components | `component.action` (component action menu), `relic.use`, `leader.agent` (generic agent exhaust step), generic single-choice `choose.{planet,system,player,unit,amount,card,confirm}` (rule tables in bot `Choose*Kind.RULES`: add a regex with named groups to type a one-step prompt; policy `policy/components.ts` + renderer `renderers/components` handle it) | — |
 
 All GameState area sections are optional in TS (`?:`) so an older engine without them still type-checks.
 
