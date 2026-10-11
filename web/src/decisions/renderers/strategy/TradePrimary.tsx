@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useStoredSet } from "../../model/stored";
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 import { usePlay } from "@/discord";
@@ -40,7 +40,7 @@ export function TradePrimaryBody({ d, data }: RendererProps) {
   const bundles = useFactionBundles();
   const run = useRunSequence();
   const runner = useRunner();
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [picked, setPicked] = useStoredSet("trade-players", d.id);
   const me = data.me;
 
   const targets = (force?.choices ?? [])

@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Loader } from "@mantine/core";
 import cx from "clsx";
 import { usePlay } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { baseId, choicesOf, type Choice } from "../../model/controls";
+import { useStoredState } from "../../model/stored";
 import { ChoiceButton, ChoiceButtons } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { useRunner } from "../strategy/runner";
@@ -93,14 +94,15 @@ export function ProductionBody({ d, data, onPress, pendingKey }: RendererProps) 
   const runner = useRunner();
   const busy = !!runner.running;
 
-  const [counts, setCounts] = useState<Counts>({});
-  const [bg, setBg] = useState<Counts>({});
+  /* What I set on the steppers and toggles survives a reload (per prompt, this tab). */
+  const [counts, setCounts] = useStoredState<Counts>("produce", d.id, {});
+  const [bg, setBg] = useStoredState<Counts>("produce-bg", d.id, {});
   const hasSarween = !!me?.techs?.some((t) => t === "st" || t === "absol_st") && !me?.exhaustedTechs?.includes("absol_st");
   /* Unset until I touch it: on by default once the game data says I have it. */
-  const [sarweenPick, setSarween] = useState<boolean | null>(null);
+  const [sarweenPick, setSarween] = useStoredState<boolean | null>("produce-sarween", d.id, null);
   const sarween = hasSarween && (sarweenPick ?? true);
   const hasBellum = me?.breakthrough?.breakthroughId === "solbt" && me.breakthrough.unlocked;
-  const [bellum, setBellum] = useState(true);
+  const [bellum, setBellum] = useStoredState("produce-bellum", d.id, true);
 
   const done = d.choices.find((c) => /^deleteButtons_\w+/.test(baseId(c.customId)) && /done producing/i.test(c.label));
   const reset = d.choices.find((c) => baseId(c.customId) === "resetProducedThings");

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useStoredState } from "../../model/stored";
 import { Loader, UnstyledButton } from "@mantine/core";
 import cx from "clsx";
 import { usePlay, type Message } from "@/discord";
@@ -67,8 +67,8 @@ export function AgendaPlacementBody({ d, data }: RendererProps) {
   const peeks = usePeeks(d);
   const run = useRunSequence();
   const runner = useRunner();
-  const [place, setPlace] = useState<Record<string, "top" | "bottom">>({});
-  const [first, setFirst] = useState<string | null>(null);
+  const [place, setPlace] = useStoredState<Record<string, "top" | "bottom">>("agenda-place", d.id, {});
+  const [first, setFirst] = useStoredState<string | null>("agenda-first", d.id, null);
   const busy = !!runner.running;
   const where = (p: Peek) => place[p.id] ?? "top";
   const tops = peeks.filter((p) => where(p) === "top");

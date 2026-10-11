@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useStoredSet, useStoredState } from "../../model/stored";
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconCheck, IconMinus, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
@@ -95,14 +95,14 @@ export function LeadershipBody({ d, data }: RendererProps) {
   const planets = (spend?.choices ?? []).filter((c) => SPEND.test(baseId(c.customId)) && !c.disabled);
   const tgButtons = (spend?.choices ?? []).filter((c) => TG.test(baseId(c.customId)));
   const maxTg = Math.min(me?.tg ?? 0, Math.max(0, ...tgButtons.map((c) => Number(baseId(c.customId).match(TG)?.[1] ?? 0))));
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [tg, setTg] = useState(0);
+  const [picked, setPicked] = useStoredSet("leadership-planets", d.id);
+  const [tg, setTg] = useStoredState("leadership-tg", d.id, 0);
   const influence = planets.filter((c) => picked.has(c.key)).reduce((n, c) => n + planetOf(c).inf, 0) + tg;
   const bought = Math.floor(influence / 3);
   const reinf = (me as { ccReinf?: number } | undefined)?.ccReinf;
   const total = Math.min(free + bought, reinf ?? Infinity);
   const capped = reinf !== undefined && free + bought > reinf;
-  const [alloc, setAlloc] = useState<Record<string, number>>({ tactic: 0, fleet: 0, strategy: 0 });
+  const [alloc, setAlloc] = useStoredState<Record<string, number>>("leadership-alloc", d.id, { tactic: 0, fleet: 0, strategy: 0 });
   const placed = alloc.tactic + alloc.fleet + alloc.strategy;
   const left = total - placed;
   const busy = !!runner.running;

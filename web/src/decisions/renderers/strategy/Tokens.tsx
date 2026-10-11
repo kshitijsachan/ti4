@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useStoredState } from "../../model/stored";
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -111,7 +111,7 @@ export function TokensBody({ d, data, onConfirmed }: RendererProps & { onConfirm
   /* Tokens already gained on this prompt came out of reinforcements; what is left there is the rest of the cap. */
   const ceiling = sum(current) + (reinf ?? Infinity);
   const required = Math.min(sum(original) + gain, ceiling);
-  const [target, setTarget] = useState<Counts | null>(null);
+  const [target, setTarget] = useStoredState<Counts | null>("tokens", d.id, null);
   const after = target ?? current;
   const left = required - sum(after);
   const busy = !!runner.running;

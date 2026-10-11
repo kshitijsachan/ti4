@@ -1,4 +1,4 @@
-import { useCallback, useState, type SetStateAction } from "react";
+import { useCallback, useMemo, useState, type SetStateAction } from "react";
 
 const KEY = "ti4.decision.selection";
 /** Prompts whose in-progress picks are kept (oldest dropped first). */
@@ -45,6 +45,17 @@ export function useStoredState<T>(scope: string, messageId: string, initial: T |
         return v;
       }),
     [key],
+  );
+  return [value, set] as const;
+}
+
+/** `useStoredState` for a set of picked keys (stored as an array). */
+export function useStoredSet(scope: string, messageId: string) {
+  const [list, setList] = useStoredState<string[]>(scope, messageId, []);
+  const value = useMemo(() => new Set(list), [list]);
+  const set = useCallback(
+    (next: SetStateAction<Set<string>>) => setList((prev) => [...(typeof next === "function" ? next(new Set(prev)) : next)]),
+    [setList],
   );
   return [value, set] as const;
 }
