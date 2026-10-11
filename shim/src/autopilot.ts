@@ -166,6 +166,9 @@ const RULES: Rule[] = [
   { id: /^po_no_scoring$/, score: 66, table: true, again: true, phase: /^status/, why: "status: no public objective" },
   { id: /^so_no_scoring$/, score: 65, table: true, again: true, phase: /^status/, why: "status: no secret objective" },
   { id: /^pass_on_abilities$/, score: 60, table: true, phase: /^status/, why: "status: ready for strategy phase" },
+  // The table-wide "Start Strategy Phase" (posted after the last "Redistribute Command Tokens" when there is no agenda
+  // phase): one autopilot presses it once every player said ready (see mayStartStrategy).
+  { id: /^startStrategyPhase$/, score: 59, table: true, phase: /^status/, why: "status: everyone is ready; start the strategy phase" },
   // Prompts addressed to us: move on.
   {
     label: /^(done|confirm|ready|no\b|decline|skip|pass\b|not following|end turn|continue|finish|none|no thanks)/i,
@@ -265,6 +268,8 @@ export class Autopilot {
   private states = new Map<string, { at: number; state: GameState | null }>();
   /** When an autopilot last revealed a public objective, per game: the bot may post the reveal buttons twice. */
   readonly lastReveal = new Map<string, number>();
+  /** When an autopilot last pressed "Start Strategy Phase", per game: one press per status phase, by one seat. */
+  readonly lastStrategyStart = new Map<string, number>();
 
   /** A game's phase (`strategy`, `action`, `status.scoring`, `agenda.voting`, ...) and whose turn it is, cached 3s. */
   async stateOf(game: string): Promise<GameState | null> {
@@ -704,7 +709,7 @@ class SeatPilot {
       // A table window we answered once stays answered, even if the bot edited it since (e.g. after a restart),
       // unless the whole game has been quiet for a while since: then our answer may have been lost (refused while the
       // bot was busy, or the bot restarted), and answering again is harmless.
-      if (rule.table && !rule.why.startsWith("status: reveal") && (press || answered) && this.tableStalled(m, game)) {
+      if (rule.table && !rule.why.startsWith("status: reveal") && !/startStrategyPhase/.test(String(rule.id)) && (press || answered) && this.tableStalled(m, game)) {
         if (rule.phase) {
           if (phase === undefined) phase = await this.mgr.phaseOf(game);
           if (phase && !rule.phase.test(phase)) continue;
@@ -723,6 +728,7 @@ class SeatPilot {
       // "Ready For Strategy / Agenda Phase": the last press moves the whole table on, so it must never be ours while a
       // person at the table is still doing their status-phase steps. Answer only after every person said ready.
       if (/pass_on_abilities/.test(String(rule.id)) && !(await this.peopleReady(m, game))) continue;
+      if (/startStrategyPhase/.test(String(rule.id)) && !(await this.mayStartStrategy(m, game))) continue;
       if (rule.phase) {
         if (phase === undefined) phase = await this.mgr.phaseOf(game);
         if (phase && !rule.phase.test(phase)) continue;
@@ -808,6 +814,40 @@ class SeatPilot {
       const name = s.users[id]?.global_name;
       return !!name && later.some((x) => String(x.content).includes(`${name} <`) || String(x.content).includes(`<@${id}>`));
     });
+  }
+
+  /**
+   * "Start Strategy Phase" moves the whole table on: press it only when
+   * - the game is still in the status phase (read fresh, not from the 3s cache),
+   * - every player of the game (people and autopilots) said "… is ready for strategy phase" after the newest
+   *   "Ready For Strategy Phase" window, the last of them a few seconds ago (the bot proceeds on its own once all are
+   *   ready, and that must not be doubled),
+   * - the bot has not announced the strategy phase since,
+   * - this is the newest such button, and no autopilot pressed one in this game in the last few minutes.
+   */
+  private async mayStartStrategy(m: StoredMessage, game: string) {
+    if (Date.now() - (this.mgr.lastStrategyStart.get(game) ?? 0) < 300000) return false;
+    const s = this.store.state;
+    const channels = Object.values(s.channels).filter((ch) => gameOf(ch, s.channels) === game && [0, 11, 12].includes(ch.type));
+    const all = channels.flatMap((ch) => this.store.messages(ch.id)).filter((x) => !x._ephemeral_for);
+    if (all.some((x) => BigInt(x.id) > BigInt(m.id) && controlsOf(x.components).some((c) => c.custom_id === "startStrategyPhase"))) return false;
+    const windows = all.filter((x) => controlsOf(x.components).some((c) => c.custom_id === "pass_on_abilities") || /^Ready For Strategy Phase/i.test(controlsOf(x.components).map((c) => c.label).join(" ")));
+    const window = windows.sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1)).at(-1);
+    if (!window) return false;
+    const after = all.filter((x) => BigInt(x.id) > BigInt(window.id) && s.users[x.author?.id]?.bot);
+    if (after.some((x) => /proceeding to strategy phase|strategy phase has started|indicated completion of status phase/i.test(String(x.content ?? "")))) return false;
+    this.mgr.forgetState(game);
+    const st = await this.mgr.stateOf(game);
+    if (!st || !st.phase || !/^status/.test(st.phase) || !st.players.size) return false;
+    const ready = after.filter((x) => / is ready for strategy phase/i.test(String(x.content ?? "")));
+    let last = 0;
+    for (const id of st.players.keys()) {
+      const name = s.users[id]?.global_name;
+      const said = ready.filter((x) => String(x.content).includes(`<@${id}>`) || (!!name && String(x.content).includes(`${name} <`)));
+      if (!said.length) return false;
+      last = Math.max(last, Date.parse(said[0].timestamp));
+    }
+    return Date.now() - last > 8000;
   }
 
   /** The game this table window belongs to has been silent for 3 minutes (nothing new in its actions channel). */
@@ -983,6 +1023,12 @@ class SeatPilot {
     if (/reveal_stage_/.test(control.custom_id)) {
       const game = gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "";
       if (!this.mayReveal(fresh, game)) return "already revealed";
+    }
+    // Another pilot may have started the strategy phase while we were deciding.
+    if (control.custom_id === "startStrategyPhase") {
+      const game = gameOf(this.store.channel(msg.channel_id) ?? {}, this.store.state.channels) ?? "";
+      if (!(await this.mayStartStrategy(fresh, game))) return "the strategy phase is under way";
+      this.mgr.lastStrategyStart.set(game, Date.now());
     }
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
