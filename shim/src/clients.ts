@@ -2,8 +2,9 @@ import type { WebSocket } from "ws";
 import { normalizeComponents, stripPrivate, type Hub, type Listener } from "./hub.js";
 import { PERMS_ALL, type Json, type StoredMessage } from "./store.js";
 import { log } from "./log.js";
+import type { EngineFanout, EngineSeat } from "./engine/fanout.js";
 
-type Client = { ws: WebSocket; userId: string };
+type Client = { ws: WebSocket; userId: string; seat?: EngineSeat };
 
 /**
  * Browser-facing realtime API. Each socket is one player (identified by their seat token).
@@ -12,6 +13,8 @@ type Client = { ws: WebSocket; userId: string };
 export class Clients implements Listener {
   private clients = new Set<Client>();
   private pendingInteractions = new Map<string, { client: Client; nonce?: string; timer: NodeJS.Timeout }>();
+  /** Typed engine stream to browsers (`t:"engine"` frames); see engine/fanout.ts. */
+  engine?: EngineFanout;
 
   constructor(private hub: Hub) {
     hub.listeners.push(this);
@@ -34,7 +37,10 @@ export class Clients implements Listener {
   attach(ws: WebSocket, userId: string) {
     const client: Client = { ws, userId };
     this.clients.add(client);
-    ws.on("close", () => this.clients.delete(client));
+    ws.on("close", () => {
+      this.clients.delete(client);
+      if (client.seat) this.engine?.unsubscribe(client.seat);
+    });
     ws.on("message", (raw) => {
       let msg: Json;
       try {
@@ -84,6 +90,10 @@ export class Clients implements Listener {
     };
   }
 
+  private seatOf(c: Client): EngineSeat {
+    return (c.seat ??= { userId: c.userId, send: (frame) => this.send(c, frame) });
+  }
+
   private send(c: Client, payload: Json) {
     if (c.ws.readyState === 1) c.ws.send(JSON.stringify(payload));
   }
@@ -102,6 +112,7 @@ export class Clients implements Listener {
         .map((c) => this.channelView(c)),
       commands: Object.values(s.commands),
       bot_online: this.hub.gateway.botReady,
+      engine: this.engine?.info() ?? { available: false, web_default: false },
     };
   }
 
@@ -200,6 +211,15 @@ export class Clients implements Listener {
         return this.dismiss(c, msg);
       case "ping":
         return this.send(c, { t: "pong", nonce: msg.nonce });
+      case "engine_sub":
+        if (typeof msg.game !== "string" || !msg.game) return;
+        return void this.engine?.subscribe(this.seatOf(c), msg.game, typeof msg.after === "number" ? msg.after : undefined);
+      case "engine_unsub":
+        if (c.seat) this.engine?.unsubscribe(c.seat);
+        return;
+      case "answer":
+        if (!this.engine) return this.send(c, { t: "engine", type: "answer", nonce: msg.nonce, decisionId: msg.decisionId, result: { ok: false, status: "unsupported", error: "The engine is off on this server." } });
+        return void this.engine.answer(this.seatOf(c), msg);
       default:
         this.send(c, { t: "error", nonce: msg.nonce, error: `unknown op ${msg.op}` });
     }
@@ -290,6 +310,23 @@ export class Clients implements Listener {
     }, 15000);
     this.pendingInteractions.set(inter.id, { client: c, nonce, timer });
     this.hub.gateway.dispatch("INTERACTION_CREATE", payload);
+  }
+
+  /**
+   * Engine answers (bot -> POST /api/v10/selfhost/interactions): registers a component interaction for a seat on a
+   * message, exactly like a browser press, but returns the INTERACTION_CREATE payload to the bot (which runs the
+   * handler itself, synchronously) instead of dispatching it through the gateway.
+   */
+  mintComponentInteraction(userId: string, channelId: string, messageId: string, customId: string, componentType = 2, values?: string[]): { payload?: Json; error?: string } {
+    const m = this.store.findMessage(channelId, messageId);
+    if (!m || !this.messageVisible(userId, m)) return { error: "Unknown message" };
+    m._presses = { ...m._presses, [userId]: { at: new Date().toISOString(), controls: controlIds(m.components) } };
+    this.store.scheduleSave();
+    const inter = this.store.newInteraction({ type: 3, user_id: userId, channel_id: channelId, message_id: messageId });
+    const data: Json = { custom_id: customId, component_type: componentType };
+    if (componentType !== 2) data.values = values ?? [];
+    const payload: Json = { ...this.basePayload({ userId } as Client, channelId), id: inter.id, token: inter.token, type: 3, data, message: stripPrivate(m) };
+    return { payload };
   }
 
   private component(c: Client, msg: Json, componentType: number) {

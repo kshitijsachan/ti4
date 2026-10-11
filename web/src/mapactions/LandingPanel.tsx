@@ -15,6 +15,7 @@ import classes from "./MapActions.module.css";
 const UNIT_NAMES: Record<string, string> = { gf: "Infantry", mf: "Mech" };
 
 type Props = {
+  gameName: string;
   target: string;
   targetName?: string;
   offer: LandingOffer;
@@ -69,6 +70,7 @@ function planetState(
 
 /** The landing step: each planet of the activated system with a stepper per ground unit, and one Land. */
 export function LandingPanel({
+  gameName,
   target,
   targetName,
   offer,
@@ -121,7 +123,7 @@ export function LandingPanel({
             ),
           ]),
         ),
-        { conn, scope, prompt, onProgress: setBusy },
+        { conn, scope, prompt, gameName, onProgress: setBusy },
       ).then(() => setLanding(() => ({}))),
     );
 

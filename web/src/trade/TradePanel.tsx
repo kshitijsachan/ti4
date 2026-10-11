@@ -2,7 +2,7 @@ import cx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDecisionRequests } from "@/decisions";
 import { useGameData } from "@/state/useGameContext";
-import { proposeTrade } from "./api";
+import { answerTrade, proposeTrade } from "./api";
 import { LedgerColumn } from "./components/LedgerColumn";
 import { OfferList } from "./components/OfferList";
 import { QuickDeals } from "./components/QuickDeals";
@@ -20,9 +20,9 @@ import {
   type TradeDraft,
 } from "./model";
 import { SELECT_PARTNER_EVENT, takeWantedPartner } from "./openTradeWith";
-import { createSocketPresser } from "./shimSocket";
 import classes from "./Trade.module.css";
-import type { ButtonRef, PendingOffer, PressButton } from "./types";
+import { createSocketPresser } from "./shimSocket";
+import { isEngineChoice, type PendingOffer, type PressButton, type TradeChoice } from "./types";
 import { useTradeData } from "./useTradeData";
 
 export type TradePanelProps = {
@@ -33,8 +33,8 @@ export type TradePanelProps = {
   /** Where the bot API is mounted (default `/bot`, the shim proxy). */
   botBase?: string;
   /**
-   * Presses a bot button (Accept / Reject / Rescind) through the shim. Pass the app's PlayConnection click to
-   * reuse its socket; without it the panel opens its own `/app/ws` connection for the token.
+   * Presses a bot button (legacy fallback, engine off: Accept / Reject / Rescind on the bot's offer message). Pass the
+   * app's PlayConnection click to reuse its socket; without it the panel opens its own `/app/ws` connection.
    */
   onPress?: PressButton;
   /** Preselects a trade partner (faction, color or user id). */
@@ -86,7 +86,6 @@ export function TradePanel({
   const [sending, setSending] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const presser = useRef<ReturnType<typeof createSocketPresser> | null>(null);
-
   useEffect(() => () => presser.current?.close(), []);
   useEffect(() => {
     if (refreshSignal !== undefined) void refresh();
@@ -123,34 +122,30 @@ export function TradePanel({
     const incoming = pending?.incoming ?? [];
     const live = new Set(incoming.filter((o) => o.current).map((o) => o.otherFaction));
     const visible = incoming.filter(
-      (o) => o.current || (!live.has(o.otherFaction) && !hidden.has(o.accept?.messageId ?? "")),
+      (o) => o.current || (!live.has(o.otherFaction) && !hidden.has(o.decisionId)),
     );
     return [...visible, ...(pending?.outgoing ?? [])];
   }, [pending, hidden]);
 
   const hide = (offer: PendingOffer) => {
-    const id = offer.accept?.messageId;
-    if (!id) return;
+    const id = offer.decisionId;
     const next = new Set(hidden).add(id);
     setHidden(next);
     writeHidden(gameName, next);
   };
 
-  const press = async (button: ButtonRef) => {
-    const fn = onPress ?? (presser.current ??= createSocketPresser(token)).press;
-    const res = await fn(button.channelId, button.messageId, button.customId);
-    if (res && res.error) throw new Error(res.error);
-  };
-
-  const pressOffer = async (button: ButtonRef, offer: PendingOffer) => {
+  const pressOffer = async (choice: TradeChoice, offer: PendingOffer) => {
     setBusyKey(`${offer.direction}:${offer.otherFaction}:${offer.offerNumber}:${offer.createdAt}`);
     try {
-      await press(button);
-      const verb = button.customId.startsWith("accept")
-        ? "Accepted"
-        : button.customId.startsWith("reject")
-          ? "Rejected"
-          : "Rescinded";
+      if (isEngineChoice(choice)) {
+        const res = await answerTrade(botBase, gameName, token, choice);
+        if (!res.ok) throw new Error(res.error ?? "The bot refused that.");
+      } else {
+        const fn = onPress ?? (presser.current ??= createSocketPresser(token)).press;
+        const res = await fn(choice.channelId, choice.messageId, choice.customId);
+        if (res && res.error) throw new Error(res.error);
+      }
+      const verb = choice === offer.accept ? "Accepted" : choice === offer.reject ? "Rejected" : "Rescinded";
       setStatus({ kind: "ok", text: `${verb} offer ${offer.direction === "incoming" ? "from" : "to"} ${offer.otherUserName}.` });
     } catch (e) {
       setStatus({ kind: "error", text: (e as Error).message });

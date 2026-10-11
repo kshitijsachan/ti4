@@ -6,6 +6,7 @@ import type {
   ServerFrame,
   Snowflake,
 } from "../types";
+import type { EngineFrame, EngineHello, EngineOp } from "@/engine/protocol";
 import { createPlayStore, EMPTY_CHANNEL, type PlayActions } from "./store";
 
 export type ConnectOptions = {
@@ -51,6 +52,10 @@ export class PlayConnection {
   /** nonce → channel the action came from, so a modal it opens knows its origin. */
   private nonceChannel = new Map<string, Snowflake>();
   private hadHello = false;
+  private engineListeners = new Set<(frame: EngineFrame) => void>();
+  private helloListeners = new Set<() => void>();
+  /** The engine fields of the latest hello (null before the first, or from a shim without the engine). */
+  engineInfo: EngineHello | null = null;
 
   constructor(private opts: ConnectOptions) {
     this.actions = createPlayStore(opts.token.slice(0, 8));
@@ -107,6 +112,10 @@ export class PlayConnection {
     } catch {
       return;
     }
+    if ((frame as { t: string }).t === "engine") {
+      for (const l of this.engineListeners) l(frame as unknown as EngineFrame);
+      return;
+    }
     if (frame.t === "hello") return this.onHello(frame);
     if (frame.t === "history" && frame.nonce) this.clearHistoryFlight(frame.channel_id, frame.nonce);
     if (frame.t === "autocomplete") {
@@ -124,8 +133,10 @@ export class PlayConnection {
     const resync = this.hadHello;
     this.hadHello = true;
     this.attempt = 0;
+    this.engineInfo = (frame as { engine?: EngineHello }).engine ?? { available: false, web_default: false };
     this.actions.apply(frame);
     this.actions.setStatus("open");
+    for (const l of this.helloListeners) l();
     window.clearInterval(this.pingTimer);
     this.pingTimer = window.setInterval(() => this.send({ op: "ping" }), PING_MS);
     if (!resync) return;
@@ -140,8 +151,20 @@ export class PlayConnection {
     if (this.historyInFlight.get(channelId) === nonce) this.historyInFlight.delete(channelId);
   }
 
+  /** `t:"engine"` frames (the typed engine stream, see src/engine). */
+  onEngineFrame(fn: (frame: EngineFrame) => void): () => void {
+    this.engineListeners.add(fn);
+    return () => this.engineListeners.delete(fn);
+  }
+
+  /** Every hello: the first connect and each reconnect (subscriptions must be renewed). */
+  onHelloFrame(fn: () => void): () => void {
+    this.helloListeners.add(fn);
+    return () => this.helloListeners.delete(fn);
+  }
+
   /** Send a raw op. Returns the nonce, or null when the socket is down. */
-  send(op: ClientOp, nonce = newNonce()): string | null {
+  send(op: ClientOp | EngineOp, nonce = newNonce()): string | null {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return null;
     this.ws.send(JSON.stringify({ ...op, nonce }));
     return nonce;

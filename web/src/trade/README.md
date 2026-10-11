@@ -1,9 +1,11 @@
 # Trade panel (`web/src/trade`)
 
-Propose trades to other players and answer the ones sent to you. A trade is the bot's own **transaction**: the panel
-builds the same transaction items the bot's `offerToTransact_` buttons build and calls the bot's `sendOffer`, so the
-receiver gets the usual **Accept / Reject / Reject and CounterOffer** buttons in their cards-info thread, and
-acceptance + execution are 100% bot logic. The panel also lists open offers and presses those bot buttons for you.
+Propose trades to other players and answer the ones sent to you. A trade is the bot's own **transaction**; the panel
+reads everything from the engine API (docs/ENGINE.md, workstream G11): `GameState.trade` for what you can offer and to
+whom (strict neighbour rule: `mayTransactWith`), the `trade.offer` (to you) / `trade.offer_sent` (yours) decisions for
+open offers, and the typed `trade.propose` action to send one. Accept / Reject / Rescind answer the decision's option
+(`POST /engine/decisions/{id}/answer`); acceptance and execution stay 100% bot logic. No Discord buttons are read or
+pressed.
 
 ## Usage
 
@@ -13,7 +15,6 @@ import { TradePanel } from "@/trade";
 <TradePanel
   gameName="pbd1"
   token={seatToken} // the player's seat token (localStorage), sent as `Authorization: Bearer`
-  onPress={(channelId, messageId, customId) => connection.click(channelId, messageId, customId)} // optional
 />;
 ```
 
@@ -21,7 +22,6 @@ import { TradePanel } from "@/trade";
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gameName`            | bot game id                                                                                                                                                     |
 | `token`               | seat token; used as Bearer for `/bot/api/game/{game}/trade/**`                                                                                                  |
-| `onPress`             | optional. Presses a bot button (Accept / Reject / Rescind). Pass the app's `PlayConnection.click` to reuse its socket; otherwise the panel opens its own `/app/ws?token=` connection lazily. Resolve `{ error }` or reject on failure. |
 | `botBase`             | where the bot API is mounted (default `/bot`, the shim proxy)                                                                                                   |
 | `initialCounterparty` | preselect a partner (faction, color, user id or name)                                                                                                           |
 | `refreshSignal`       | any value; a change triggers an immediate refetch (e.g. newest message id in the player's cards-info thread)                                                    |
@@ -29,7 +29,7 @@ import { TradePanel } from "@/trade";
 | `className`           | added to the root                                                                                                                                               |
 
 Also exported: `useTradeData(game, token, { botBase, pollMs })`, `fetchTradeOptions`, `fetchPendingTrades`,
-`proposeTrade`, and all types (`types.ts`).
+`proposeTrade`, `answerTrade`, `fetchEngineTrade`, and all types (`types.ts`).
 
 The panel fills its container width and is responsive (the two ledger columns stack below ~640px via a container query).
 
@@ -47,16 +47,15 @@ The panel fills its container width and is responsive (the two ledger columns st
   rejects the offer and loads it, mirrored, into the ledger to edit and send back. Offers that were rescinded or
   replaced show as *Withdrawn* (the bot refuses them) and can be hidden locally.
 
-## Bot endpoints (`ti4.spring.api.selfhost.TradeController`)
+## Engine endpoints (seat Bearer, under `/bot`)
 
-All need `Authorization: Bearer <seat token>`; through the shim they live under `/bot`.
+- `GET /api/game/{game}/engine/state` → `GameState` with `trade` (`me`, `partners`, `mayTransactWith`, `incoming`,
+  `outgoing`; see shim/src/engine/kinds/trade.ts).
+- `GET /api/game/{game}/engine/decisions` → my open decisions, incl. `trade.offer` / `trade.offer_sent`.
+- `POST /api/game/{game}/engine/decisions/{id}/answer` `{optionId, expectedSeq}`.
+- `POST /api/game/{game}/engine/actions/trade.propose` `{to, give, receive, note?}` → `{ok, offerNumber, items, error}`.
 
-- `GET /api/game/{game}/trade/options` → `TradeOptions` (`me` with tradeable assets; `counterparties` with
-  `canTrade`/`reason`/`neighbor`, public counts, requestable PNs, tradable relics, debt, `canTradeActionCards`).
-- `POST /api/game/{game}/trade/propose` body `{to, give, receive, note?}` (see `TradeSide` in `types.ts`) →
-  `{ok, offerNumber, to, items[], offerText}`; 400 `{error}` when the bot's rules don't allow it.
-- `GET /api/game/{game}/trade/pending` → `{incoming[], outgoing[]}` with decoded `items` and the bot button refs
-  (`channelId`, `messageId`, `customId`) to press via the shim's `/app/ws` `click` op.
+Typed decision renderers for the popup live in `web/src/engine/renderers/trade/`.
 
 ## Dev harness
 

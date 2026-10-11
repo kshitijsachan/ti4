@@ -10,6 +10,8 @@ import { Clients } from "./clients.js";
 import { Lobby } from "./lobby.js";
 import { Autopilot } from "./autopilot.js";
 import { SoloGames } from "./solo.js";
+import { EngineClient } from "./engine/client.js";
+import { EngineFanout } from "./engine/fanout.js";
 import { defaultAvatarPng, discordError, sendJson } from "./http.js";
 import { log } from "./log.js";
 
@@ -41,11 +43,18 @@ const hub = new Hub(store, gateway, () => PUBLIC_URL);
 const rest = new Rest(hub, () => INTERNAL_URL.replace(/^http/, "ws") + "/gateway", () => PUBLIC_URL);
 (hub as any).rest = rest;
 const clients = new Clients(hub);
+rest.engineMint = (u, c, m, id, t, v) => clients.mintComponentInteraction(u, c, m, id, t, v);
+// Typed engine API (docs/ENGINE.md). TI4_ENGINE=off keeps every consumer on the legacy message heuristics.
+const engine = process.env.TI4_ENGINE === "off" ? undefined : new EngineClient(BOT_API, () => store.state.bot_token);
+engine?.start();
+// Browsers get the same stream over their socket; TI4_ENGINE_WEB=1 makes the engine-driven UI their default.
+clients.engine = new EngineFanout(engine, process.env.TI4_ENGINE_WEB === "1");
 // Threads created before mention auto-join existed: replay it over stored messages (idempotent).
 for (const list of Object.values(store.state.messages)) for (const m of list) hub.autoJoinMentioned(m);
 const lobby = new Lobby(hub, clients);
 // Seats flagged `autopilot` are played by the shim itself (solo testing).
 lobby.autopilot = new Autopilot(hub, clients, BOT_API);
+lobby.autopilot.engine = engine;
 // One-click solo test games (autopilot opponents, set up as the human).
 lobby.solo = new SoloGames(hub, clients, lobby, BOT_API);
 void lobby.solo.resumeStewards();

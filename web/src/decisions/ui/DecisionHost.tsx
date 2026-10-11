@@ -308,7 +308,8 @@ function canHide(d: Decision) {
  * players view, a player's sheet) puts it underneath until it closes (`useCoversBoard`). It sits
  * in the board's area (under the top bar, over the hand bar) and left of an open side drawer.
  */
-function PopupLayer({ children, placement, rightInset, peeking }: {
+/** The popup's floating layer (portal), shared with the engine-driven host (src/engine/EngineDecisionHost). */
+export function PopupLayer({ children, placement, rightInset, peeking }: {
   children: ReactNode;
   placement: DecisionHostProps["placement"];
   rightInset: number;

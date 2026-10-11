@@ -15,6 +15,7 @@ import { ThemeSwatches } from "@/domains/game-shell/components/TabsControls/Them
 import { useMapLensCounts } from "@/domains/map/components/hooks/useMapLensCounts";
 import { MAP_LENSES, useSettingsStore } from "@/state/appStore";
 import { alertsEnabled, disableAlerts, enableAlerts } from "@/play/turn";
+import { engineStore, useEngine, useEngineEnabled } from "@/engine";
 import classes from "./SettingsMenu.module.css";
 
 type Props = { onRawChannels: () => void };
@@ -47,6 +48,8 @@ export function SettingsMenu({ onRawChannels }: Props) {
   const lensCounts = useMapLensCounts();
   const [alerts, setAlerts] = useState(readAlertState);
   const [advanced, setAdvanced] = useState(false);
+  const engineOn = useEngineEnabled();
+  const engineAvailable = useEngine((s) => s.server?.available ?? false);
 
   const toggleAlerts = async () => {
     if (alerts === "on") {
@@ -149,6 +152,14 @@ export function SettingsMenu({ onRawChannels }: Props) {
             <Menu.Item leftSection={<IconHash size={14} />} onClick={onRawChannels} closeMenuOnClick>
               Raw bot channels
             </Menu.Item>
+            {engineAvailable && (
+              <Menu.Item
+                leftSection={<Check on={engineOn} />}
+                onClick={() => engineStore.getState().setOverride(!engineOn)}
+              >
+                Engine-driven prompts (beta)
+              </Menu.Item>
+            )}
           </>
         )}
       </Menu.Dropdown>

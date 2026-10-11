@@ -5,8 +5,14 @@ import { log } from "./log.js";
 import { Brain } from "./botplay/brain.js";
 import { parseBoard, type Board } from "./botplay/board.js";
 import { controlsOf, type Control, type Prompt } from "./botplay/prompts.js";
-import type { Seat } from "./botplay/seat.js";
+import type { Seat, SeatEngine } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
+import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
+import type { EngineClient } from "./engine/client.js";
+import { chooseTyped } from "./engine/autopilot.js";
+import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
+import { isTableSetupStep } from "./engine/policy/setup.js";
+import { productionPayload } from "./engine/policy/production.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -63,6 +69,8 @@ type Rule = {
   last?: boolean;
   /** May be pressed on a message we already answered (scoring asks for a public and a secret objective). */
   again?: boolean;
+  /** Answered by a typed engine kind (engine/policy/*) when the engine is on: the rule only runs without it. */
+  typed?: boolean;
   /** Ranks matching controls (lower first). */
   rank?: (c: Control) => number;
   /**
@@ -89,6 +97,10 @@ type Rule = {
 
 /** Strategy cards an autopilot likes, best first (1 Leadership, 7 Technology, 8 Imperial, 6 Warfare, ...). */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
+/** How long a typed decision belongs to the engine path before the legacy rules may answer it (see engineOwns). */
+const ENGINE_GRACE_MS = 90_000;
+/** At most this many engine answers from one seat to one decision (multi-part answers walk a few options). */
+const ENGINE_MAX_ANSWERS = 8;
 
 /** Never pressed: take-backs, admin / settings, info, modals, and actions with real consequences we do not plan.
  * The strategy-card pick queue too: the planner picks when it is up, and the fallback filled the queue, pressed its
@@ -160,7 +172,7 @@ const RULES: Rule[] = [
   { id: /^sandbagPref_bot$/, score: 40, why: "preferences: let the bot auto-pass secret scoring" },
   // Status phase: after everyone scored, someone reveals the next public objective (once per game per round; see
   // revealOnce).
-  { id: /(^|_)reveal_stage_(1|2)(position_\d+)?$/, score: 63, table: true, phase: /^status/, why: "status: reveal the next public objective" },
+  { id: /(^|_)reveal_stage_(1|2)(position_\d+)?$/, score: 63, table: true, typed: true, phase: /^status/, why: "status: reveal the next public objective" },
   // Trades offered to us.
   { id: /^rejectOffer_/, score: 74, why: "reject transaction" },
   // Reaction windows everyone answers.
@@ -168,12 +180,12 @@ const RULES: Rule[] = [
   { id: /^no_sabotage$/, score: 70, table: true, why: "no sabotage" },
   { id: /^no_when(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no whens" },
   { id: /^no_after(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no afters" },
-  { id: /^po_no_scoring$/, score: 66, table: true, again: true, phase: /^status/, why: "status: no public objective" },
-  { id: /^so_no_scoring$/, score: 65, table: true, again: true, phase: /^status/, why: "status: no secret objective" },
-  { id: /^pass_on_abilities$/, score: 60, table: true, phase: /^status/, why: "status: ready for strategy phase" },
+  { id: /^po_no_scoring$/, score: 66, table: true, typed: true, again: true, phase: /^status/, why: "status: no public objective" },
+  { id: /^so_no_scoring$/, score: 65, table: true, typed: true, again: true, phase: /^status/, why: "status: no secret objective" },
+  { id: /^pass_on_abilities$/, score: 60, table: true, typed: true, phase: /^status/, why: "status: ready for strategy phase" },
   // The table-wide "Start Strategy Phase" (posted after the last "Redistribute Command Tokens" when there is no agenda
   // phase): one autopilot presses it once every player said ready (see mayStartStrategy).
-  { id: /^startStrategyPhase$/, score: 59, table: true, phase: /^status/, why: "status: everyone is ready; start the strategy phase" },
+  { id: /^startStrategyPhase$/, score: 59, table: true, typed: true, phase: /^status/, why: "status: everyone is ready; start the strategy phase" },
   // Prompts addressed to us: move on.
   {
     label: /^(done|confirm|ready|no\b|decline|skip|pass\b|not following|end turn|continue|finish|none|no thanks)/i,
@@ -240,6 +252,8 @@ export class Autopilot {
   private chain: Promise<unknown> = Promise.resolve();
   private drafts = new Map<string, { at: number; data: Json | null }>();
   private webFactions = new Map<string, { at: number; map: Map<string, string> }>();
+  /** Typed engine API (docs/ENGINE.md); when it answers, it is authoritative and the heuristics below are skipped. */
+  engine?: EngineClient;
 
   constructor(
     readonly hub: Hub,
@@ -330,6 +344,30 @@ export class Autopilot {
     this.states.delete(game);
   }
 
+  /**
+   * Whether the typed engine path owns this prompt, so the legacy rules / jobs must not press it as well. Mandatory
+   * fallback rule (every area): only when the engine is reachable (its event stream is live), the message is an open
+   * typed decision waiting on this seat, and the decision is younger than ENGINE_GRACE_MS (the typed policy had its
+   * chance; a prompt it leaves alone for longer goes back to the legacy rules). Engine off, down or restarting →
+   * false → the legacy paths play exactly as before.
+   */
+  async engineOwns(game: string, messageId: string, userId: string): Promise<boolean> {
+    const engine = this.engine;
+    if (!engine?.isLive) return false;
+    const open = (await engine.openDecisions(game)) ?? [];
+    const d = open.find((x) => x.source.messageId === messageId);
+    if (!d || d.kind === "legacy") return false;
+    const state = await engine.state(game, userId, 2000);
+    if (d.scope === "player" ? d.target?.userId !== userId : !!d.window && !awaits(d, userId)) {
+      // Not awaited by the window, but ours to answer (the strategy card we played): still the engine's.
+      if (!answersOutsideWindow(d, userId, state)) return false;
+    }
+    // Typed, but no bot policy answers it (now): the legacy rules may, without waiting out the grace period.
+    const mine = open.filter((x) => x.id !== d.id && x.target?.userId === userId);
+    if (!chooseTyped(d, state, userId, { history: [], open: mine, all: open })) return false;
+    return Date.now() - d.createdAt < ENGINE_GRACE_MS;
+  }
+
   async phaseOf(game: string): Promise<string | null> {
     return (await this.stateOf(game))?.phase ?? null;
   }
@@ -340,6 +378,8 @@ export class Autopilot {
    * buttons and ignore its own).
    */
   async factionOf(game: string, userId: string): Promise<string | undefined> {
+    const authoritative = await this.engine?.factionOf(game, userId);
+    if (authoritative) return authoritative;
     const hit = this.webFactions.get(game);
     if (hit && Date.now() - hit.at < 20000) return hit.map.get(userId);
     const map = new Map<string, string>();
@@ -424,8 +464,10 @@ class SeatPilot {
   private retries = new Map<string, number>();
   /** The planner (tactical actions, strategy card primaries, scoring); the rule table handles the rest. */
   private brain: Brain;
-  /** Trades: answers offers, proposes N-1 washes, runs the Trade card deal (botplay/trade.ts). */
+  /** Trades: proposes N-1 washes via the engine (offers are answered by chooseTyped, engine/tradePolicy.ts). */
   private trade: TradeDesk;
+  /** Engine off or unreachable: the old desk (bot /trade/pending + offer buttons) trades instead (until INFRA-4). */
+  private legacyTrade: LegacyTradeDesk;
 
   constructor(
     private mgr: Autopilot,
@@ -433,7 +475,8 @@ class SeatPilot {
   ) {
     this.conn = mgr.clients.attachVirtual(userId, (f) => this.onFrame(f));
     this.brain = new Brain(this.seat());
-    this.trade = new TradeDesk(this.seat(), mgr.botApi, () => Object.entries(this.store.state.seats).find(([, seat]) => seat.user_id === this.userId)?.[0]);
+    this.trade = new TradeDesk(this.seat(), () => mgr.engine);
+    this.legacyTrade = new LegacyTradeDesk(this.seat(), mgr.botApi, () => Object.entries(this.store.state.seats).find(([, seat]) => seat.user_id === this.userId)?.[0]);
     // Some turns change without a message this seat can see (e.g. the draft); look again now and then.
     this.poll = setInterval(() => this.schedule(), 8000);
     log.info(`autopilot ${this.name}: started`);
@@ -535,11 +578,16 @@ class SeatPilot {
             return false;
           }
         };
-        if ((await acted("planner", () => this.brain.tick(game))) || (await acted("trade desk", () => this.trade.tick(game)))) {
+        if ((await acted("planner", () => this.brain.tick(game))) || (await acted("trade desk", () => (this.mgr.engine?.isLive ? this.trade.tick(game) : this.legacyTrade.tick(game))))) {
           this.busy = false;
           this.schedule();
           return;
         }
+      }
+      if (await this.engineStep()) {
+        this.busy = false;
+        this.schedule();
+        return;
       }
       const choice = (await this.stalledPrompt()) ?? (await this.decide());
       if (!choice) {
@@ -707,7 +755,7 @@ class SeatPilot {
     if ((this.fails.get(m.id) ?? 0) >= MAX_FAILS) return null;
     let controls = controlsOf(m.components);
     if (!controls.length) return null;
-    if (this.brain.owns(game, { ch, m, controls }) || this.trade.owns(game, { ch, m, controls })) return null;
+    if (this.brain.owns(game, { ch, m, controls }) || (this.mgr.engine?.isLive ? this.trade.owns(game, { ch, m, controls }) : this.legacyTrade.owns(game, { ch, m, controls }))) return null;
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
     // When we answered this prompt (unchanged since): this run, a re-posted copy, or before a restart.
     const sig = signature(controls);
@@ -827,9 +875,13 @@ class SeatPilot {
     }
 
     let phase: string | null | undefined;
+    // Asked once per message, and only when a typed rule's own conditions hold (it reads the engine mirror + state).
+    let owned: boolean | undefined;
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
       if (rule.addressed && !ctx.addressed) continue;
+      if (rule.typed && rule.id && !controls.some((c) => rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id))) continue;
+      if (rule.typed && (owned ??= await this.mgr.engineOwns(game, m.id, me))) continue;
       const retryPhase = rule.retry && lost ? String((await this.mgr.phaseOf(game)) ?? "") : "";
       if (
         rule.retry &&
@@ -1092,6 +1144,12 @@ class SeatPilot {
 
   /** Milty draft: when it is our pick, the first option of a category we have not drafted yet. */
   private async milty(m: StoredMessage, controls: Control[], game: string): Promise<Choice | null> {
+    // With the engine up, drafting is typed (draft.milty.pick in engineStep): the engine validates turn, category and
+    // availability, so a pick cannot be doubled. Pressing board buttons here as well would race it.
+    if ((await this.mgr.engineOwns(game, m.id, this.userId)) && (await this.mgr.engine?.state(game, this.userId, 1000))?.draft) {
+      this.draftingSeenAt = Date.now();
+      return null;
+    }
     // Always read the draft fresh: a stale copy makes us miss our turn until the next poll.
     const draft = await this.mgr.draft(game, 0);
     if (draft?.status === "drafting") this.draftingSeenAt = Date.now();
@@ -1121,6 +1179,13 @@ class SeatPilot {
    * button is ours.
    */
   private async faction(game: string): Promise<string | undefined> {
+    const authoritative = family((await this.mgr.engine?.factionOf(game, this.userId)) ?? undefined);
+    if (authoritative) return this.noteFaction(game, authoritative, "the engine");
+    // The engine is up and says we have no faction yet (drafting, or Keleres choosing a flavour): believe it.
+    if (this.mgr.engine && (await this.mgr.engine.state(game, undefined, 5000))) {
+      this.factions.delete(game);
+      return undefined;
+    }
     const fromWeb = family(await this.mgr.factionOf(game, this.userId));
     if (fromWeb) return this.noteFaction(game, fromWeb, "the bot's game data");
     const draft = await this.mgr.draft(game, 10000);
@@ -1262,6 +1327,84 @@ class SeatPilot {
 
   // ---- the planner's view of this seat ----
 
+  /** Engine answers already sent (decision id | option id): each is tried once; afterwards the heuristics take over. */
+  private engineTried = new Set<string>();
+  /** Answers this seat sent per decision id (capped at ENGINE_MAX_ANSWERS). */
+  private engineAttempts = new Map<string, number>();
+  /** Per decision id: the options this seat answered successfully (in order) and the revision of the last one. */
+  private engineDone = new Map<string, { options: string[]; revision: number }>();
+
+  /**
+   * Typed decisions addressed to this seat (engine API): answered directly, with the target resolved by the engine
+   * (no faction guessing from buttons). Returns false when the engine is unavailable or nothing typed is ours, so
+   * the legacy rule table runs as before.
+   */
+  private async engineStep(): Promise<boolean> {
+    const engine = this.mgr.engine;
+    if (!engine) return false;
+    for (const game of this.liveGames()) {
+      const own = await engine.decisionsFor(game, this.userId);
+      // Plus the table-wide setup steps (deal secrets, reveal objectives): no target and no window, any seat may
+      // take them; the policy answers only when GameState.setup says the table is ready, the engine refuses otherwise.
+      const open = (await engine.openDecisions(game)) ?? [];
+      const table = open.filter(isTableSetupStep);
+      const state = await engine.state(game, this.userId, 2000);
+      // And the strategy cards we played: their windows list only followers; we resolve the primary on them.
+      const holding = open.filter((d) => answersOutsideWindow(d, this.userId, state) && !own?.some((x) => x.id === d.id));
+      const mine = [...(own ?? []), ...table, ...holding];
+      if (!mine.length) continue;
+      for (const d of mine) {
+        const done = this.engineDone.get(d.id);
+        const pick = chooseTyped(d, state, this.userId, {
+          history: done?.options ?? [],
+          lastRevision: done?.revision,
+          open: mine.filter((x) => x.id !== d.id),
+          all: open,
+        });
+        if (!pick) continue;
+        // Reaction windows (table decisions) are re-revised by every save at the table, so their key leaves the revision
+        // out: one answer per option per seat. Every decision gets at most ENGINE_MAX_ANSWERS answers from this seat
+        // (live pbd36: a press that never registered in the window was re-sent 142 times).
+        const windowed = d.scope === "table" || !!d.window;
+        const what = pick.option ? pick.option.id : JSON.stringify(pick.payload);
+        const key = windowed ? `${d.id}#${done?.options.length ?? 0}|${what}` : `${d.id}@${d.revision}#${done?.options.length ?? 0}|${what}`;
+        if (this.engineTried.has(key)) continue;
+        const attempts = (this.engineAttempts.get(d.id) ?? 0) + 1;
+        if (attempts > ENGINE_MAX_ANSWERS) continue;
+        this.engineAttempts.set(d.id, attempts);
+        if (this.engineAttempts.size > 2000) this.engineAttempts.delete(this.engineAttempts.keys().next().value!);
+        this.engineTried.add(key);
+        if (this.engineTried.size > 5000) this.engineTried.clear();
+        // The seq in the request id: a retry after "stale" (a window re-revised meanwhile) is a new request.
+        const requestId = `${key}@${d.seq}`;
+        const req = pick.payload
+          ? { payload: pick.payload, expectedSeq: d.seq, requestId, userId: this.userId }
+          : { optionId: pick.option?.id, expectedSeq: d.seq, requestId, userId: this.userId };
+        const r = await this.mgr.serial(() => engine.answer(game, d.id, req));
+        if (!r) return false;
+        log.info(`autopilot ${this.name}: engine ${d.kind} "${pick.option?.label ?? "payload"}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`);
+        if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
+        // The decision changed under us (windows are re-revised by every save at the table): not an answer; try again
+        // on the next look with the fresh revision (live: bots' "Not Following" went stale and was never re-sent).
+        if (r.status === "stale" && /changed/i.test(r.error ?? "")) {
+          this.engineTried.delete(key);
+          this.engineAttempts.set(d.id, attempts - 1);
+          continue;
+        }
+        // Tell the legacy roll guard (mayRoll) about rolls made here, so it never rolls the same dice again.
+        const rolled = pick.option?.value?.action === "roll" ? String(pick.option.value.rollType ?? "") : "";
+        if (r.ok && rolled) this.recent.set(`${d.source.channelId}:roll:${rolled}`, Date.now());
+        if (r.ok) {
+          // What we answered on this decision (multi-part answers walk it; see engine/kinds/strategyPolicy.ts).
+          this.engineDone.set(d.id, { options: [...(done?.options ?? []), ...(pick.option ? [pick.option.id] : [])], revision: d.revision });
+          if (this.engineDone.size > 2000) this.engineDone.delete(this.engineDone.keys().next().value!);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /** Games this seat sits in with something happening in the last hour (by their actions channel). */
   private liveGames(): string[] {
     const out: string[] = [];
@@ -1331,6 +1474,37 @@ class SeatPilot {
         }
       },
       log: (text) => log.info(`autopilot ${self.name}: ${text}`),
+      engine: this.mgr.engine ? this.seatEngine(this.mgr.engine) : undefined,
+      engineOwns: (game, messageId) => self.mgr.engineOwns(game, messageId, self.userId),
+      engineProduce: async (game, messageId, build) => {
+        const engine = self.mgr.engine;
+        if (!engine) return null;
+        const d = (await engine.decisionsFor(game, self.userId))?.find((x) => x.kind === "production.produce" && x.source.messageId === messageId);
+        if (!d || d.kind !== "production.produce") return null;
+        const payload = productionPayload(d, build);
+        const r = await self.mgr.serial(() => engine.answer(game, d.id, { payload: payload as unknown as Record<string, unknown>, expectedSeq: d.seq, requestId: `${d.id}@${d.revision}|produce`, userId: self.userId }));
+        log.info(`autopilot ${self.name}: engine production.produce ${JSON.stringify(payload.units)} in ${game} -> ${r?.status ?? "no answer"}${r?.error ? `: ${r.error}` : ""}`);
+        if (!r) return null;
+        return r.ok ? undefined : (r.error ?? r.status);
+      },
+    };
+  }
+
+  /** The planner's typed engine access as this seat (answers go through the same serial queue as presses). */
+  private seatEngine(engine: EngineClient): SeatEngine {
+    const me = this.userId;
+    const report = (what: string, game: string, r: AnswerResult | null) => {
+      log.info(`autopilot ${this.name}: engine ${what} in ${game} -> ${r ? r.status : "unavailable"}${r?.error ? `: ${r.error}` : ""}`);
+      return r;
+    };
+    return {
+      decisions: async (game) => (await engine.openDecisions(game))?.filter((d) => awaits(d, me)) ?? null,
+      answer: (game, d, optionId, why) =>
+        this.mgr.serial(async () => report(`${d.kind} (${why})`, game, await engine.answer(game, d.id, { optionId, expectedSeq: d.seq, userId: me }))),
+      move: (game, d, req, why) =>
+        this.mgr.serial(async () => report(`tactical move (${why})`, game, await engine.act(game, d.id, "move", { ...req, expectedSeq: d.seq, userId: me }))),
+      land: (game, d, req, why) =>
+        this.mgr.serial(async () => report(`tactical land (${why})`, game, await engine.act(game, d.id, "land", { ...req, expectedSeq: d.seq, userId: me }))),
     };
   }
 }

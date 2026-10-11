@@ -2,29 +2,21 @@ import { useState } from "react";
 import { UnstyledButton } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { getToken } from "@/play/session";
+import { fetchTradeOptions } from "@/trade";
 import type { PlayerData } from "@/entities/data/types";
 import { baseId, type Choice } from "../../model/controls";
 import { ChoiceButton, type PressFn } from "../../ui/ChoiceButtons";
 import { playerLabel } from "./shared";
 import classes from "./strategy.module.css";
 
-type Counterparty = { faction: string; canTrade: boolean; reason?: string | null };
-
-/** Whether I may transact with the Trade holder right now, from the bot's own rule (neighbours, Guild Ships, convoys…). */
+/** Whether I may transact with the Trade holder right now (engine GameState.trade: neighbours, Guild Ships, convoys…). */
 function useCanTradeWith(gameName: string, faction?: string) {
   const query = useQuery({
     queryKey: ["strategy", "tradeOptions", gameName],
     enabled: !!faction,
     staleTime: 10_000,
     retry: false,
-    queryFn: async () => {
-      const token = getToken();
-      const res = await fetch(`/bot/api/game/${encodeURIComponent(gameName)}/trade/options`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(`trade options ${res.status}`);
-      return (await res.json()) as { counterparties?: Counterparty[] };
-    },
+    queryFn: () => fetchTradeOptions("/bot", gameName, getToken() ?? ""),
   });
   const cp = query.data?.counterparties?.find((c) => c.faction === faction);
   return { loaded: !!query.data, canTrade: !!cp?.canTrade, reason: cp?.reason ?? undefined };

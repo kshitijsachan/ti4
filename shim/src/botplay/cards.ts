@@ -448,6 +448,10 @@ export class CardPlanner {
     const prompts = this.seat.prompts(game);
     for (let i = prompts.length - 1; i >= 0 && i >= prompts.length - 40; i--) {
       const p = prompts[i];
+      // Typed prompts (strategy card primaries / follows, status scoring and tokens) are answered by the engine
+      // policies; the legacy jobs below only take a prompt the engine path does not own (engine off or unreachable,
+      // untyped, or left alone past the grace period) — never both.
+      if (await this.seat.engineOwns?.(game, String(p.m.id))) continue;
       if (await this.primary(game, faction, p)) return true;
       if (await this.follow(game, faction, p)) return true;
       if (await this.scoring(game, faction, p)) return true;

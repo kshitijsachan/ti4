@@ -17,6 +17,7 @@ import {
   sleep,
   type Scope,
 } from "./driver";
+import { moveViaEngine } from "./engine";
 
 /** Units that never leave their planet. */
 const STRUCTURES = new Set(["pd", "sd"]);
@@ -166,6 +167,20 @@ export function displacementOf(
   return out;
 }
 
+/** The plan as the engine's move order: per origin and holder, how many of which unit (damaged ones last). */
+function unitsOf(plan: MovePlan, groups: Record<string, UnitGroup[]>) {
+  const out: { from: string; holder: string; unit: string; count: number; damaged: number }[] = [];
+  for (const [origin, picks] of Object.entries(plan)) {
+    for (const g of groups[origin] ?? []) {
+      const n = picks[groupKey(g)] ?? 0;
+      if (!n) continue;
+      const s = splitStates(g.states, n);
+      out.push({ from: origin, holder: g.holder, unit: g.unit, count: n, damaged: s[1] + s[3] });
+    }
+  }
+  return out;
+}
+
 async function postMovement(
   gameName: string,
   target: string,
@@ -232,6 +247,16 @@ export async function commitMove(
   const conclude = CONCLUDE(target);
   const empty = summarize(plan, groups).empty;
   let donePrompt: { channelId: string; messageId: string } | null = prompt;
+
+  onProgress?.(empty ? "Done moving…" : "Moving your fleet…");
+  const viaEngine = await moveViaEngine(unitsOf(plan, groups), target, {
+    conn,
+    gameName: deps.gameName,
+  });
+  if (viaEngine) {
+    conn.actions.noteInteraction(prompt.channelId, prompt.messageId);
+    return;
+  }
 
   if (!empty) {
     const baseline = newestId(conn.store.getState(), scope);

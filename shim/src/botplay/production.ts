@@ -20,7 +20,7 @@ export class BuildJob {
 
   constructor(
     seat: Seat,
-    game: string,
+    private readonly game: string,
     readonly target: string,
     since: string | undefined,
   ) {
@@ -42,6 +42,15 @@ export class BuildJob {
         const fleetRoom = Math.max(0, me.fleetCC - ships);
         this.build = buildList(board, me, budget, capacity, fleetRoom);
         s.seat.log(`produce in ${this.target}: ${this.build.map((u) => statsOf(u).name).join(", ") || "nothing"} (budget ${budget}, production ${capacity}, fleet room ${fleetRoom})`);
+        // Typed engine path: the whole build (or nothing) plus Done in one atomic answer.
+        const typed = await s.seat.engineProduce?.(this.game, String(p.m.id), this.build);
+        if (typed === undefined && s.seat.engineProduce) {
+          this.build = [];
+          this.stage = "pay";
+          this.doneAt = Date.now();
+          return "acted";
+        }
+        if (typeof typed === "string") s.seat.log(`engine refused the build (${typed}); pressing buttons instead`);
       }
       const ours = p.controls.filter((c) => !lockOf(c.custom_id) || lockOf(c.custom_id) === faction);
       while (this.build.length) {

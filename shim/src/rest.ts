@@ -13,6 +13,8 @@ type Handler = (ctx: Ctx) => void | Promise<void>;
 /** Discord REST API v10 subset, mounted at /api/v10. */
 export class Rest {
   private routes: { method: string; re: RegExp; handler: Handler }[] = [];
+  /** Set by index.ts: Clients.mintComponentInteraction. */
+  engineMint?: (userId: string, channelId: string, messageId: string, customId: string, componentType: number, values?: string[]) => { payload?: Json; error?: string };
 
   constructor(private hub: Hub, private publicWsUrl: () => string, private publicUrl: () => string) {
     this.register();
@@ -413,6 +415,13 @@ export class Rest {
       if (!ch) return;
       const atts = this.hub.resolveAttachments(ctx.body.json, ctx.body.files) ?? [];
       const msg = this.hub.buildMessage(ch.id, s().bot_id, ctx.body.json, atts);
+      // Engine answers have no interaction token: an ephemeral reply is a channel message with nonce "eph:<user>"
+      // (bot MessageSink). Store it like an interaction ephemeral: only that user sees it.
+      const nonce = String(ctx.body.json.nonce ?? "");
+      if (nonce.startsWith("eph:") && String(ctx.req.headers.authorization ?? "") === `Bot ${s().bot_token}`) {
+        msg._ephemeral_for = nonce.slice(4);
+        msg.flags = (msg.flags ?? 0) | 64;
+      }
       this.hub.postMessage(msg);
       sendJson(ctx.res, 200, stripPrivate(msg));
     });
@@ -572,6 +581,16 @@ export class Rest {
       this.store.scheduleSave();
       this.hub.channelCreate(ch);
       sendJson(res, 200, ch);
+    });
+
+    // ---- engine (bot-only): mint an interaction for a seat's answer; see src/engine and docs/ENGINE.md ----
+    this.on("POST", "/selfhost/interactions", (ctx) => {
+      if (String(ctx.req.headers.authorization ?? "") !== `Bot ${s().bot_token}`) return discordError(ctx.res, 401, 0, "401: Unauthorized");
+      if (!this.engineMint) return discordError(ctx.res, 503, 0, "engine minting not wired");
+      const b = ctx.body.json;
+      const out = this.engineMint(String(b.user_id), String(b.channel_id), String(b.message_id), String(b.custom_id), Number(b.component_type ?? 2), b.values);
+      if (out.error || !out.payload) return discordError(ctx.res, 404, 10008, out.error ?? "Unknown Message");
+      sendJson(ctx.res, 200, out.payload);
     });
 
     // ---- interactions ----

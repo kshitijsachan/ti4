@@ -172,3 +172,18 @@ done
 docker compose start
 ```
 Restore: create the volumes and untar into them the same way (`tar xzf ... -C /v`) before `up`.
+
+### Typed engine switch (rollback)
+
+The bot and the shim run a typed engine (docs/ENGINE.md): structured game state and decisions that the autopilot
+and (optionally) the web answer directly. It is on by default. To roll back to the legacy prompt paths, set one line in
+`deploy/.env` and restart both containers; no data changes, and it can be switched on again the same way:
+
+```sh
+cd /opt/ti4/deploy && echo "TI4_ENGINE=off" >> .env && docker compose up -d
+```
+
+`TI4_ENGINE_WEB=1` makes the engine-driven prompt UI the players' default (else the legacy UI; anyone can try it
+with `?engine=1` in the game URL). `TI4_ENGINE_NATIVE=off` keeps the engine but answers through the simulated
+Discord click only.
+
