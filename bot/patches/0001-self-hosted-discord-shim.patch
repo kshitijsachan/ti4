@@ -1,5 +1,5 @@
 diff --git a/src/main/java/ti4/discord/JdaService.java b/src/main/java/ti4/discord/JdaService.java
-index b3bb870..04d6b18 100644
+index b3bb870..fca05dd 100644
 --- a/src/main/java/ti4/discord/JdaService.java
 +++ b/src/main/java/ti4/discord/JdaService.java
 @@ -148,7 +148,7 @@ public class JdaService {
@@ -11,7 +11,7 @@ index b3bb870..04d6b18 100644
                  .setEventPool(EVENT_EXECUTOR)
                  .enableIntents(
                          // Needed to listen for joins/leaves
-@@ -165,8 +165,26 @@ public class JdaService {
+@@ -165,8 +165,28 @@ public class JdaService {
                  .setChunkingFilter(ChunkingFilter.ALL)
                  .disableCache(DISABLED_JDA_CACHE_FLAGS)
                  // This allows us to use our own ShutdownHook, created below
@@ -24,7 +24,8 @@ index b3bb870..04d6b18 100644
 +            builder.setRestConfig(new net.dv8tion.jda.api.requests.RestConfig().setBaseUrl(apiBase))
 +                    .setCompression(net.dv8tion.jda.api.utils.Compression.NONE)
 +                    .setHttpClientBuilder(net.dv8tion.jda.internal.utils.IOUtil.newHttpClientBuilder()
-+                            .addInterceptor(new ti4.selfhost.ShimRetryInterceptor()));
++                            .addInterceptor(new ti4.selfhost.ShimRetryInterceptor())
++                            .addInterceptor(new ti4.selfhost.engine.DecisionCapture()));
 +            String gateway = System.getenv()
 +                    .getOrDefault(
 +                            "DISCORD_GATEWAY_URL",
@@ -37,6 +38,7 @@ index b3bb870..04d6b18 100644
 +            });
 +        }
 +        jda = builder.build();
++        ti4.selfhost.engine.Engine.registerListeners(jda);
  
          BotLogger.info("INITIALIZING LISTENERS");
          ListenerManager.registerListeners(jda);
@@ -84,9 +86,18 @@ index d91d9d5..50e3842 100644
  
              generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
 diff --git a/src/main/java/ti4/helpers/ButtonHelper.java b/src/main/java/ti4/helpers/ButtonHelper.java
-index d4c34fb..351bbd1 100644
+index d4c34fb..9f83263 100644
 --- a/src/main/java/ti4/helpers/ButtonHelper.java
 +++ b/src/main/java/ti4/helpers/ButtonHelper.java
+@@ -4817,7 +4817,7 @@ public class ButtonHelper {
+         return buttons;
+     }
+ 
+-    @ButtonHandler("buttonID.startsWith")
++    @ButtonHandler("specialRex_") // was the literal "buttonID.startsWith": unreachable
+     public static void resolveSpecialRex(Player player, Game game, String buttonID, ButtonInteractionEvent event) {
+         String planet = buttonID.split("_")[1];
+         String faction = buttonID.split("_")[2];
 @@ -5052,7 +5052,11 @@ public class ButtonHelper {
          // Expeditions
          String expeditionText = game.getExpeditions().getTopLevelExpeditionButtonText();
@@ -337,6 +348,1883 @@ index 0000000..35c108f
 +                delay = Math.min(delay * 2, 4_000);
 +            }
 +        }
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
+new file mode 100644
+index 0000000..9bc523d
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
+@@ -0,0 +1,145 @@
++package ti4.selfhost.engine;
++
++import java.util.Collections;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
++import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
++import net.dv8tion.jda.api.utils.data.DataObject;
++import net.dv8tion.jda.internal.JDAImpl;
++import net.dv8tion.jda.internal.interactions.components.buttons.ButtonInteractionImpl;
++import okhttp3.MediaType;
++import okhttp3.OkHttpClient;
++import okhttp3.Request;
++import okhttp3.RequestBody;
++import okhttp3.Response;
++import org.apache.commons.lang3.function.Consumers;
++import ti4.discord.JdaService;
++import ti4.discord.interactions.buttons.ButtonProcessor;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.game.persistence.GameManager;
++import ti4.game.persistence.ManagedGame;
++import ti4.logging.BotLogger;
++import ti4.selfhost.engine.EngineModels.AnswerRequest;
++import ti4.selfhost.engine.EngineModels.AnswerResult;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Option;
++
++/**
++ * "Player P picks option O of decision D". Validates against the decision registry (open, seq, target, option) and
++ * the kind's own check, then runs the option's handler synchronously on this thread through the normal
++ * ButtonProcessor pipeline (game lock, ListenerContext ownership check, save, undo snapshot), using an interaction
++ * the shim mints for the player — no browser, no gateway round trip. Returns after the handler finished, with the
++ * decisions it opened.
++ *
++ * <p>Phase-1 limitation (see ENGINE.md): handlers still take a JDA ButtonInteractionEvent (2,274 of 2,323 handler
++ * methods do), so we synthesise a real one. Select menus and modal buttons are not answerable here yet.
++ */
++public final class ActionInvoker {
++    private static final MediaType JSON = MediaType.get("application/json");
++    private static final Set<String> inFlight = ConcurrentHashMap.newKeySet();
++    private static final Map<String, AnswerResult> byRequestId =
++            Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, true) {
++                @Override
++                protected boolean removeEldestEntry(Map.Entry<String, AnswerResult> e) {
++                    return size() > 2000;
++                }
++            });
++
++    private ActionInvoker() {}
++
++    public static AnswerResult answer(String gameName, String decisionId, String userId, AnswerRequest req) {
++        if (req.requestId() != null) {
++            AnswerResult prev = byRequestId.get(userId + ":" + req.requestId());
++            if (prev != null) return prev;
++        }
++        AnswerResult r = doAnswer(gameName, decisionId, userId, req);
++        if (req.requestId() != null && !"busy".equals(r.status()))
++            byRequestId.put(userId + ":" + req.requestId(), r);
++        return r;
++    }
++
++    private static AnswerResult doAnswer(String gameName, String decisionId, String userId, AnswerRequest req) {
++        Decision d = DecisionRegistry.get(decisionId);
++        if (d == null || !d.game().equals(gameName)) return fail("stale", "That decision is no longer open.", decisionId);
++        if (req.expectedSeq() != null && req.expectedSeq() != d.seq())
++            return fail("stale", "That decision changed; re-read it.", decisionId);
++        ManagedGame mg = GameManager.getManagedGame(gameName);
++        Game game = mg == null ? null : mg.getGame();
++        if (game == null) return fail("not_found", "No such game.", decisionId);
++        Player player = game.getPlayer(userId);
++        if (player == null) return fail("forbidden", "You are not a player of this game.", decisionId);
++        if ("player".equals(d.scope()) && d.target() != null && d.target().userId() != null
++                && !d.target().userId().equals(userId))
++            return fail("forbidden", "That decision is for someone else.", decisionId);
++        if (d.window() != null) {
++            if (!d.window().eligible().contains(userId))
++                return fail("forbidden", "You are not part of this reaction window.", decisionId);
++            if (d.window().responded().contains(userId))
++                return fail("stale", "You already responded to this window.", decisionId);
++        }
++        Option opt = null;
++        for (Option o : d.options()) if (o.id().equals(req.optionId())) opt = o;
++        if (opt == null) return fail("bad_option", "No such option.", decisionId);
++        if (opt.disabled()) return fail("bad_option", "That option is disabled.", decisionId);
++        if (opt.needsInput()) return fail("needs_input", "That option needs input; not supported yet.", decisionId);
++        if (opt.id().contains("#")) return fail("unsupported", "Select menus are not answerable yet.", decisionId);
++        KindSpec spec = DecisionKinds.byKind(d.kind());
++        if (spec != null) {
++            String err = spec.validate(game, player, d, opt.id());
++            if (err != null) return fail("refused", err, decisionId);
++        }
++        String flightKey = "table".equals(d.scope()) ? decisionId + "|" + userId : decisionId;
++        if (!inFlight.add(flightKey)) return fail("busy", "An answer to this decision is in progress.", decisionId);
++        long before = DecisionRegistry.currentSeq();
++        try {
++            DataObject interaction = mint(userId, d.source().channelId(), d.source().messageId(), opt.id());
++            JDAImpl jda = (JDAImpl) JdaService.jda;
++            ButtonInteractionEvent event = new ButtonInteractionEvent(jda, -1, new ButtonInteractionImpl(jda, interaction));
++            InteractionTracker.record(event);
++            if (!opt.id().contains("~MDL")) event.deferEdit().queue(Consumers.nop(), BotLogger::catchRestError);
++            ButtonProcessor.processNow(event);
++        } catch (Exception e) {
++            BotLogger.error("engine: answer " + decisionId + " / " + opt.id() + " by " + userId + " failed", e);
++            return fail("error", String.valueOf(e.getMessage()), decisionId);
++        } finally {
++            inFlight.remove(flightKey);
++        }
++        List<Decision> opened = DecisionRegistry.openedAfter(gameName, before);
++        return new AnswerResult(
++                true, "done", null, decisionId, DecisionRegistry.currentSeq(), game.getLastModifiedDate(), opened);
++    }
++
++    private static AnswerResult fail(String status, String error, String decisionId) {
++        return new AnswerResult(false, status, error, decisionId, DecisionRegistry.currentSeq(), 0, List.of());
++    }
++
++    /** Asks the shim to register an interaction for this user on this message; returns the INTERACTION_CREATE d. */
++    static DataObject mint(String userId, String channelId, String messageId, String customId) throws Exception {
++        String base = System.getenv("DISCORD_API_BASE");
++        if (base == null) throw new IllegalStateException("not self-hosted");
++        String token = JdaService.jda.getToken();
++        if (!token.startsWith("Bot ")) token = "Bot " + token;
++        DataObject body = DataObject.empty()
++                .put("user_id", userId)
++                .put("channel_id", channelId)
++                .put("message_id", messageId)
++                .put("custom_id", customId)
++                .put("component_type", 2);
++        OkHttpClient http = JdaService.jda.getHttpClient().newBuilder().callTimeout(10, TimeUnit.SECONDS).build();
++        Request request = new Request.Builder()
++                .url(base.replaceAll("/+$", "") + "/selfhost/interactions")
++                .header("Authorization", token)
++                .post(RequestBody.create(body.toString(), JSON))
++                .build();
++        try (Response res = http.newCall(request).execute()) {
++            String text = res.body() == null ? "" : res.body().string();
++            if (!res.isSuccessful()) throw new IllegalStateException("shim refused interaction: " + res.code() + " " + text);
++            return DataObject.fromJson(text);
++        }
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
+new file mode 100644
+index 0000000..5f9439e
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
+@@ -0,0 +1,383 @@
++package ti4.selfhost.engine;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.HashSet;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Objects;
++import java.util.Set;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++import net.dv8tion.jda.api.entities.channel.Channel;
++import net.dv8tion.jda.api.utils.data.DataArray;
++import net.dv8tion.jda.api.utils.data.DataObject;
++import okhttp3.Interceptor;
++import okhttp3.Request;
++import okhttp3.Response;
++import okio.Buffer;
++import ti4.discord.JdaService;
++import ti4.discord.interactions.routing.ComponentIdEnvelope;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.game.persistence.GameManager;
++import ti4.game.persistence.ManagedGame;
++import ti4.logging.BotLogger;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Option;
++import ti4.selfhost.engine.EngineModels.Progress;
++import ti4.selfhost.engine.EngineModels.ReactionWindow;
++import ti4.selfhost.engine.EngineModels.Source;
++import ti4.selfhost.engine.EngineModels.Target;
++import ti4.service.game.GameNameService;
++
++/**
++ * THE capture point: an OkHttp interceptor on JDA's REST client. Every message the engine posts, edits or deletes
++ * (channel messages, interaction replies, followups, ephemerals — all ~5,500 button construction sites) passes
++ * here, so decisions are captured without touching handler code. Target players are resolved from engine state
++ * (FFCC_ owner faction → Player, cards-info thread owner, interaction user), never from message text.
++ */
++public final class DecisionCapture implements Interceptor {
++
++    private static final Pattern CH_MSGS = Pattern.compile(".*/channels/(\\d+)/messages$");
++    private static final Pattern CH_MSG = Pattern.compile(".*/channels/(\\d+)/messages/(\\d+)$");
++    private static final Pattern CH_BULK = Pattern.compile(".*/channels/(\\d+)/messages/bulk-delete$");
++    private static final Pattern HOOK = Pattern.compile(".*/webhooks/(\\d+)/([^/]+)$");
++    private static final Pattern HOOK_MSG = Pattern.compile(".*/webhooks/(\\d+)/([^/]+)/messages/([^/]+)$");
++    private static final Pattern CALLBACK = Pattern.compile(".*/interactions/(\\d+)/([^/]+)/callback$");
++    private static final Pattern MENTION = Pattern.compile("<@!?(\\d+)>");
++
++    @Override
++    public Response intercept(Chain chain) throws IOException {
++        Request req = chain.request();
++        Response res = chain.proceed(req);
++        if (!Engine.enabled() || !res.isSuccessful()) return res;
++        try {
++            observe(req, res);
++        } catch (Exception e) {
++            BotLogger.error("engine: decision capture failed for " + req.method() + " " + req.url().encodedPath(), e);
++        }
++        return res;
++    }
++
++    private static void observe(Request req, Response res) throws IOException {
++        String path = req.url().encodedPath();
++        String method = req.method();
++        Matcher m;
++        if ("POST".equals(method) && (m = CH_BULK.matcher(path)).matches()) {
++            DataObject body = DataObject.fromJson(bodyString(req));
++            DataArray ids = body.getArray("messages");
++            for (int i = 0; i < ids.length(); i++) DecisionRegistry.closeByMessage(ids.getString(i), "deleted");
++            return;
++        }
++        if ((m = CH_MSGS.matcher(path)).matches() && "POST".equals(method)) {
++            onMessage(responseJson(res), null);
++            return;
++        }
++        if ((m = CH_MSG.matcher(path)).matches()) {
++            if ("DELETE".equals(method)) DecisionRegistry.closeByMessage(m.group(2), "deleted");
++            else if ("PATCH".equals(method)) onMessage(responseJson(res), null);
++            return;
++        }
++        if ((m = HOOK_MSG.matcher(path)).matches()) {
++            String token = m.group(2);
++            String id = m.group(3);
++            if ("@original".equals(id)) id = InteractionTracker.original(token);
++            if ("DELETE".equals(method)) {
++                if (id != null) DecisionRegistry.closeByMessage(id, "deleted");
++            } else if ("PATCH".equals(method)) {
++                DataObject msg = responseJson(res);
++                if (msg != null && "@original".equals(m.group(3)))
++                    InteractionTracker.setOriginal(token, msg.getString("id", null));
++                onMessage(msg, token);
++            }
++            return;
++        }
++        if ((m = HOOK.matcher(path)).matches() && "POST".equals(method)) {
++            onMessage(responseJson(res), m.group(2)); // interaction followup (or channel webhook: token unknown)
++            return;
++        }
++        if ((m = CALLBACK.matcher(path)).matches() && "POST".equals(method)) {
++            DataObject body = responseJson(res); // only present with ?with_response=true
++            if (body != null && body.hasKey("resource") && !body.isNull("resource")) {
++                DataObject resource = body.getObject("resource");
++                if (resource.hasKey("message") && !resource.isNull("message")) {
++                    DataObject msg = resource.getObject("message");
++                    int type = resource.getInt("type", 0);
++                    if (type == 4 || type == 5) InteractionTracker.setOriginal(m.group(2), msg.getString("id", null));
++                    onMessage(msg, m.group(2));
++                }
++            }
++        }
++    }
++
++    // ------------------------------------------------------------------ message -> decision
++
++    static void onMessage(DataObject msg, String interactionToken) {
++        if (msg == null || !msg.hasKey("id")) return;
++        String messageId = msg.getString("id");
++        String channelId = msg.getString("channel_id", null);
++        List<RawControl> controls = new ArrayList<>();
++        if (msg.hasKey("components") && !msg.isNull("components")) collect(msg.getArray("components"), controls);
++        if (controls.isEmpty()) {
++            DecisionRegistry.closeByMessage(messageId, "no_options");
++            return;
++        }
++        Game game = gameForChannel(channelId);
++        if (game == null) return;
++        Decision d = build(game, msg, controls, interactionToken);
++        if (d != null) DecisionRegistry.open(d);
++    }
++
++    /** Message → Decision for a known game; null when it equals the open revision. Pure apart from reading Game. */
++    static Decision build(Game game, DataObject msg, List<RawControl> controls, String interactionToken) {
++        String messageId = msg.getString("id");
++        String channelId = msg.getString("channel_id", null);
++        boolean ephemeral = (msg.getInt("flags", 0) & 64) != 0;
++        String content = msg.getString("content", "");
++
++        List<String> handlerIds = new ArrayList<>();
++        for (RawControl c : controls) handlerIds.add(ComponentIdEnvelope.decode(c.customId).handlerId());
++
++        Target resolved = resolveTarget(game, controls, channelId, ephemeral, interactionToken, content);
++        Player player = resolved == null || resolved.userId() == null ? null : game.getPlayer(resolved.userId());
++        KindSpec spec = DecisionKinds.classify(handlerIds);
++        KindSpec.CaptureContext ctx =
++                new KindSpec.CaptureContext(game, channelId, messageId, content, ephemeral, resolved, player);
++        Target target = resolved;
++        if (spec != null) {
++            target = spec.target(ctx, resolved);
++            if (!Objects.equals(target, resolved)) {
++                player = target == null || target.userId() == null ? null : game.getPlayer(target.userId());
++                ctx = new KindSpec.CaptureContext(game, channelId, messageId, content, ephemeral, target, player);
++            }
++        }
++
++        List<Option> options = new ArrayList<>();
++        for (int i = 0; i < controls.size(); i++) {
++            RawControl c = controls.get(i);
++            String h = handlerIds.get(i);
++            Map<String, Object> value = null;
++            if (spec != null && h != null && spec.matches(h)) {
++                try {
++                    value = spec.value(h, ctx);
++                } catch (Exception e) {
++                    BotLogger.error("engine: kind " + spec.kind() + " failed to type option " + c.customId, e);
++                }
++            }
++            options.add(new Option(
++                    c.optionId(),
++                    c.label,
++                    c.style,
++                    c.emoji,
++                    c.disabled,
++                    c.customId.contains("~MDL"),
++                    h,
++                    value));
++        }
++        String visibility = ephemeral || isPrivateChannel(game, channelId) ? "private" : "public";
++        ReactionWindow window = null;
++        Progress progress = null;
++        if (spec != null) {
++            try {
++                window = spec.window(ctx);
++                progress = spec.progress(ctx);
++            } catch (Exception e) {
++                BotLogger.error("engine: kind " + spec.kind() + " failed to build window/progress", e);
++            }
++        }
++        String scope = window != null
++                ? "table"
++                : spec != null ? spec.scope(ctx) : (target == null || target.userId() == null ? "table" : "player");
++        String prefix = commonPrefix(handlerIds);
++
++        Decision existing = byIdOrNull(DecisionRegistry.decisionIdForMessage(messageId));
++        if (existing != null
++                && Objects.equals(existing.target(), target)
++                && sameOptions(existing.options(), options)
++                && Objects.equals(existing.prompt(), content)
++                && Objects.equals(existing.window(), window)
++                && Objects.equals(existing.progress(), progress)) return null;
++
++        // Stable per message: an edit in place (multi-step prompts) is the same decision, revision+1.
++        Decision d = new Decision(
++                "d" + messageId,
++                game.getName(),
++                spec == null ? DecisionKinds.LEGACY : spec.kind(),
++                0,
++                game.getLastModifiedDate(),
++                target,
++                scope,
++                visibility,
++                content,
++                options,
++                new Source(channelId, messageId, prefix, ephemeral),
++                existing != null ? existing.createdAt() : System.currentTimeMillis(),
++                0,
++                window,
++                progress);
++        return d;
++    }
++
++    static List<RawControl> controls(DataObject msg) {
++        List<RawControl> controls = new ArrayList<>();
++        if (msg.hasKey("components") && !msg.isNull("components")) collect(msg.getArray("components"), controls);
++        return controls;
++    }
++
++    private static Decision byIdOrNull(String id) {
++        return id == null ? null : DecisionRegistry.get(id);
++    }
++
++    private static boolean sameOptions(List<Option> a, List<Option> b) {
++        if (a.size() != b.size()) return false;
++        for (int i = 0; i < a.size(); i++) {
++            Option x = a.get(i), y = b.get(i);
++            if (!x.id().equals(y.id()) || x.disabled() != y.disabled() || !Objects.equals(x.label(), y.label()))
++                return false;
++        }
++        return true;
++    }
++
++    // ------------------------------------------------------------------ target resolution
++
++    static Target resolveTarget(
++            Game game, List<RawControl> controls, String channelId, boolean ephemeral, String token, String content) {
++        // 1. FFCC_<faction>_ / dummyPlayerSpoof<faction>_ on the options (2,232 of 5,495 button sites).
++        Set<String> owners = new LinkedHashSet<>();
++        Set<String> spoofs = new LinkedHashSet<>();
++        int unowned = 0;
++        for (RawControl c : controls) {
++            ComponentIdEnvelope env = ComponentIdEnvelope.decode(c.customId);
++            if (env.ownerFaction() != null) owners.add(env.ownerFaction());
++            else if (env.spoofedFaction() != null) spoofs.add(env.spoofedFaction());
++            else unowned++;
++        }
++        if (owners.size() == 1 && spoofs.isEmpty()) {
++            Player p = game.getPlayerFromColorOrFaction(owners.iterator().next());
++            if (p != null) return target(p, "owner_prefix");
++        }
++        if (spoofs.size() == 1 && owners.isEmpty()) {
++            Player p = game.getPlayerFromColorOrFaction(spoofs.iterator().next());
++            if (p != null) return target(p, "spoof_prefix");
++        }
++        // 2. Interaction replies / followups / ephemerals: whoever made the interaction.
++        if (token != null) {
++            InteractionTracker.Info info = InteractionTracker.byToken(token);
++            if (info != null) {
++                Player p = game.getPlayer(info.userId());
++                if (p != null) return target(p, "interaction_user");
++            }
++        }
++        // 3. The player's own cards-info thread / private channel.
++        for (Player p : game.getPlayers().values()) {
++            if (channelId != null && channelId.equals(p.getCardsInfoThreadID())) return target(p, "cards_thread");
++            if (channelId != null && channelId.equals(p.getPrivateChannelID())) return target(p, "private_channel");
++        }
++        // 4. Exactly one seated player mentioned (weak; kinds may override).
++        if (content != null && owners.isEmpty()) {
++            Set<String> mentioned = new HashSet<>();
++            Matcher mm = MENTION.matcher(content);
++            while (mm.find()) if (game.getPlayer(mm.group(1)) != null) mentioned.add(mm.group(1));
++            if (mentioned.size() == 1) return target(game.getPlayer(mentioned.iterator().next()), "mention");
++        }
++        return new Target(null, null, null, owners.size() > 1 ? "mixed_owners" : "none");
++    }
++
++    static Target target(Player p, String how) {
++        return new Target(p.getUserID(), p.getFaction(), p.getColor(), how);
++    }
++
++    private static boolean isPrivateChannel(Game game, String channelId) {
++        if (channelId == null) return false;
++        for (Player p : game.getPlayers().values()) {
++            if (channelId.equals(p.getCardsInfoThreadID()) || channelId.equals(p.getPrivateChannelID())) return true;
++        }
++        return false;
++    }
++
++    static Game gameForChannel(String channelId) {
++        if (channelId == null || JdaService.jda == null) return null;
++        Channel ch = JdaService.jda.getChannelById(Channel.class, channelId);
++        if (ch == null) return null;
++        String name = GameNameService.getGameNameFromChannel(ch);
++        if (name == null) return null;
++        ManagedGame mg = GameManager.getManagedGame(name);
++        return mg == null ? null : mg.getGame();
++    }
++
++    // ------------------------------------------------------------------ components
++
++    record RawControl(String customId, String label, String style, String emoji, boolean disabled, String value) {
++        String optionId() {
++            return value == null ? customId : customId + "#" + value;
++        }
++    }
++
++    private static final String[] STYLES = {"", "primary", "secondary", "success", "danger", "link", "premium"};
++
++    private static void collect(DataArray arr, List<RawControl> out) {
++        for (int i = 0; i < arr.length(); i++) {
++            if (!arr.isType(i, net.dv8tion.jda.api.utils.data.DataType.OBJECT)) continue;
++            DataObject c = arr.getObject(i);
++            int type = c.getInt("type", 0);
++            if (type == 2 && c.hasKey("custom_id") && !c.isNull("custom_id")) {
++                int style = c.getInt("style", 2);
++                String emoji = null;
++                if (c.hasKey("emoji") && !c.isNull("emoji")) {
++                    DataObject e = c.getObject("emoji");
++                    emoji = e.isNull("id") || !e.hasKey("id") ? e.getString("name", null) : e.getString("id", null);
++                }
++                out.add(new RawControl(
++                        c.getString("custom_id"),
++                        c.getString("label", ""),
++                        style >= 0 && style < STYLES.length ? STYLES[style] : String.valueOf(style),
++                        emoji,
++                        c.getBoolean("disabled", false),
++                        null));
++            } else if (type == 3 && c.hasKey("custom_id")) {
++                DataArray opts = c.optArray("options").orElse(DataArray.empty());
++                for (int j = 0; j < opts.length(); j++) {
++                    DataObject o = opts.getObject(j);
++                    out.add(new RawControl(
++                            c.getString("custom_id"),
++                            o.getString("label", ""),
++                            "select",
++                            null,
++                            c.getBoolean("disabled", false),
++                            o.getString("value", "")));
++                }
++            }
++            if (c.hasKey("components") && !c.isNull("components")) collect(c.getArray("components"), out);
++            if (c.hasKey("accessory") && !c.isNull("accessory"))
++                collect(DataArray.empty().add(c.getObject("accessory")), out);
++        }
++    }
++
++    private static String commonPrefix(List<String> ids) {
++        Set<String> heads = new LinkedHashSet<>();
++        for (String h : ids) {
++            if (h == null) continue;
++            int us = h.indexOf('_');
++            heads.add(us < 0 ? h : h.substring(0, us + 1));
++        }
++        return heads.isEmpty() ? null : heads.iterator().next();
++    }
++
++    // ------------------------------------------------------------------ http helpers
++
++    private static DataObject responseJson(Response res) throws IOException {
++        if (res.body() == null) return null;
++        String s = res.peekBody(16L * 1024 * 1024).string();
++        if (s.isBlank() || !s.trim().startsWith("{")) return null;
++        return DataObject.fromJson(s);
++    }
++
++    private static String bodyString(Request req) throws IOException {
++        if (req.body() == null) return "{}";
++        Buffer b = new Buffer();
++        req.body().writeTo(b);
++        return b.readUtf8();
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/DecisionKinds.java b/src/main/java/ti4/selfhost/engine/DecisionKinds.java
+new file mode 100644
+index 0000000..f7eedb8
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/DecisionKinds.java
+@@ -0,0 +1,69 @@
++package ti4.selfhost.engine;
++
++import java.util.ArrayList;
++import java.util.Comparator;
++import java.util.List;
++import org.reflections.Reflections;
++import org.reflections.scanners.Scanners;
++import org.reflections.scanners.SubTypesScanner;
++import org.reflections.util.ClasspathHelper;
++import org.reflections.util.ConfigurationBuilder;
++import ti4.logging.BotLogger;
++
++/** All {@link KindSpec}s under ti4.selfhost.engine.kinds, highest priority first. */
++public final class DecisionKinds {
++    public static final String LEGACY = "legacy";
++
++    private static volatile List<KindSpec> specs;
++
++    private DecisionKinds() {}
++
++    public static List<KindSpec> all() {
++        List<KindSpec> s = specs;
++        if (s != null) return s;
++        synchronized (DecisionKinds.class) {
++            if (specs != null) return specs;
++            List<KindSpec> found = new ArrayList<>();
++            try {
++                // Same scan as AnnotationHandler.getAllClasses (known to work for the deployed -jar layout).
++                Reflections r = new Reflections(new ConfigurationBuilder()
++                        .setUrls(ClasspathHelper.forJavaClassPath())
++                        .setScanners(new SubTypesScanner(false)));
++                for (Class<?> raw : r.get(Scanners.SubTypes.of(Object.class).asClass())) {
++                    if (!KindSpec.class.isAssignableFrom(raw)) continue;
++                    @SuppressWarnings("unchecked")
++                    Class<? extends KindSpec> c = (Class<? extends KindSpec>) raw;
++                    if (c.isInterface() || java.lang.reflect.Modifier.isAbstract(c.getModifiers())) continue;
++                    if (!c.getPackageName().startsWith("ti4.selfhost.engine.kinds")) continue;
++                    try {
++                        found.add(c.getDeclaredConstructor().newInstance());
++                    } catch (Exception e) {
++                        BotLogger.error("engine: cannot instantiate decision kind " + c.getName(), e);
++                    }
++                }
++            } catch (Exception e) {
++                BotLogger.error("engine: decision kind scan failed", e);
++            }
++            found.sort(Comparator.comparingInt(KindSpec::priority).reversed().thenComparing(KindSpec::kind));
++            specs = List.copyOf(found);
++            BotLogger.info("engine: " + specs.size() + " decision kinds: "
++                    + specs.stream().map(KindSpec::kind).toList());
++            return specs;
++        }
++    }
++
++    public static KindSpec byKind(String kind) {
++        for (KindSpec k : all()) if (k.kind().equals(kind)) return k;
++        return null;
++    }
++
++    /** The kind for a message given its options' handler ids; null = legacy. */
++    public static KindSpec classify(List<String> handlerIds) {
++        for (KindSpec k : all()) {
++            for (String h : handlerIds) {
++                if (h != null && k.matches(h)) return k;
++            }
++        }
++        return null;
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/DecisionRegistry.java b/src/main/java/ti4/selfhost/engine/DecisionRegistry.java
+new file mode 100644
+index 0000000..dcb3e09
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/DecisionRegistry.java
+@@ -0,0 +1,157 @@
++package ti4.selfhost.engine;
++
++import java.util.ArrayDeque;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.Deque;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.CopyOnWriteArrayList;
++import java.util.function.Consumer;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.EngineEvent;
++
++/**
++ * Open decisions per game plus the ordered event log (ring buffer) that the stream endpoint replays. One global seq
++ * orders every event of every game. In memory only: after a bot restart clients re-read the snapshot (the bot re-sends
++ * no buttons on restart, so decisions opened before a restart reappear only when the engine re-asks; see ENGINE.md).
++ */
++public final class DecisionRegistry {
++    private static final int LOG_SIZE = 5000;
++
++    private static long seq;
++    private static final Deque<EngineEvent> log = new ArrayDeque<>();
++    /** game -> decision id -> decision */
++    private static final Map<String, Map<String, Decision>> open = new ConcurrentHashMap<>();
++    /** message id -> decision id (one open revision per message) */
++    private static final Map<String, String> byMessage = new ConcurrentHashMap<>();
++    private static final Map<String, String> gameOfDecision = new ConcurrentHashMap<>();
++    private static final List<Consumer<EngineEvent>> listeners = new CopyOnWriteArrayList<>();
++
++    private DecisionRegistry() {}
++
++    public static synchronized long currentSeq() {
++        return seq;
++    }
++
++    /** Opens (or replaces the open revision on the same message with) a decision. Returns the stored decision. */
++    // Listeners are called under the registry lock so they see events in seq order; they must not block
++    // (the stream endpoint only enqueues).
++
++    /**
++     * Opens a decision, or — when the same message already has an open decision with the same id — replaces it in
++     * place (revision+1, event decision.updated). A different decision on the message closes the old one.
++     */
++    public static synchronized Decision open(Decision d) {
++        String prevId = byMessage.get(d.source().messageId());
++        Decision prev = prevId == null ? null : get(prevId);
++        if (prev != null && prev.id().equals(d.id()) && prev.game().equals(d.game())) {
++            d = d.withSeq(++seq, prev.revision() + 1);
++            open.get(d.game()).put(d.id(), d);
++            fire(append(new EngineEvent(d.seq(), "decision.updated", d.game(), d.stateVersion(), d, null)));
++            return d;
++        }
++        if (prevId != null) closeLocked(prevId, "replaced");
++        d = d.withSeq(++seq, 1);
++        open.computeIfAbsent(d.game(), g -> new ConcurrentHashMap<>()).put(d.id(), d);
++        byMessage.put(d.source().messageId(), d.id());
++        gameOfDecision.put(d.id(), d.game());
++        fire(append(new EngineEvent(d.seq(), "decision.opened", d.game(), d.stateVersion(), d, null)));
++        return d;
++    }
++
++    /** Replaces an open decision in place (same id), e.g. a new target or window; emits decision.updated. */
++    public static synchronized Decision update(Decision d) {
++        Map<String, Decision> m = open.get(d.game());
++        Decision prev = m == null ? null : m.get(d.id());
++        if (prev == null) return null;
++        d = d.withSeq(++seq, prev.revision() + 1);
++        m.put(d.id(), d);
++        fire(append(new EngineEvent(d.seq(), "decision.updated", d.game(), d.stateVersion(), d, null)));
++        return d;
++    }
++
++    public static synchronized void closeByMessage(String messageId, String reason) {
++        String id = byMessage.get(messageId);
++        if (id != null) closeLocked(id, reason);
++    }
++
++    public static synchronized void close(String decisionId, String reason) {
++        closeLocked(decisionId, reason);
++    }
++
++    private static EngineEvent closeLocked(String decisionId, String reason) {
++        String game = gameOfDecision.remove(decisionId);
++        if (game == null) return null;
++        Map<String, Decision> m = open.get(game);
++        Decision d = m == null ? null : m.remove(decisionId);
++        if (d == null) return null;
++        byMessage.remove(d.source().messageId(), decisionId);
++        EngineEvent ev = append(new EngineEvent(++seq, "decision.closed", game, d.stateVersion(), d, reason));
++        fire(ev);
++        return ev;
++    }
++
++    public static synchronized void stateChanged(String game, long stateVersion) {
++        fire(append(new EngineEvent(++seq, "state.changed", game, stateVersion, null, null)));
++    }
++
++    public static Decision get(String decisionId) {
++        String game = gameOfDecision.get(decisionId);
++        if (game == null) return null;
++        Map<String, Decision> m = open.get(game);
++        return m == null ? null : m.get(decisionId);
++    }
++
++    public static String decisionIdForMessage(String messageId) {
++        return byMessage.get(messageId);
++    }
++
++    public static List<Decision> openDecisions(String game) {
++        Map<String, Decision> m = open.get(game);
++        if (m == null) return List.of();
++        List<Decision> out = new ArrayList<>(m.values());
++        out.sort((a, b) -> Long.compare(a.seq(), b.seq()));
++        return out;
++    }
++
++    /** Events with seq > after (optionally one game). null when `after` is older than the buffer: re-snapshot. */
++    public static synchronized List<EngineEvent> since(long after, String game) {
++        if (!log.isEmpty() && after < log.peekFirst().seq() - 1 && after < seq) return null;
++        List<EngineEvent> out = new ArrayList<>();
++        for (EngineEvent e : log) if (e.seq() > after && (game == null || game.equals(e.game()))) out.add(e);
++        return out;
++    }
++
++    public static List<Decision> openedAfter(String game, long after) {
++        List<Decision> out = new ArrayList<>();
++        for (Decision d : openDecisions(game)) if (d.seq() > after) out.add(d);
++        return out;
++    }
++
++    public static Runnable subscribe(Consumer<EngineEvent> l) {
++        listeners.add(l);
++        return () -> listeners.remove(l);
++    }
++
++    public static Collection<String> games() {
++        return open.keySet();
++    }
++
++    private static EngineEvent append(EngineEvent e) {
++        log.addLast(e);
++        while (log.size() > LOG_SIZE) log.removeFirst();
++        return e;
++    }
++
++    private static void fire(EngineEvent e) {
++        for (Consumer<EngineEvent> l : listeners) {
++            try {
++                l.accept(e);
++            } catch (Exception ignored) {
++                // a broken subscriber must not break the engine
++            }
++        }
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
+new file mode 100644
+index 0000000..295ddf5
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/Engine.java
+@@ -0,0 +1,66 @@
++package ti4.selfhost.engine;
++
++import java.util.Objects;
++import net.dv8tion.jda.api.JDA;
++import ti4.game.Game;
++import ti4.logging.BotLogger;
++import ti4.selfhost.SelfHosted;
++import ti4.game.Player;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Progress;
++import ti4.selfhost.engine.EngineModels.ReactionWindow;
++import ti4.selfhost.engine.EngineModels.Target;
++
++/**
++ * Entry points the (tiny) patches into upstream code call. Enabled when self-hosted unless TI4_ENGINE=off.
++ * Capture is passive; nothing changes for Discord-style play when no client uses the engine API.
++ */
++public final class Engine {
++    private static final boolean ENABLED =
++            SelfHosted.isEnabled() && !"off".equalsIgnoreCase(System.getenv().getOrDefault("TI4_ENGINE", "on"));
++
++    private Engine() {}
++
++    public static boolean enabled() {
++        return ENABLED;
++    }
++
++    /** JdaService: after build(). */
++    public static void registerListeners(JDA jda) {
++        if (!ENABLED) return;
++        jda.addEventListener(new InteractionTracker());
++        BotLogger.info("engine: decision capture on (" + DecisionKinds.all().size() + " typed kinds)");
++    }
++
++    /** GameWebStatePipeline.queue: every save and every undo. */
++    public static void onStateChanged(Game game) {
++        if (!ENABLED || game == null) return;
++        try {
++            DecisionRegistry.stateChanged(game.getName(), game.getLastModifiedDate());
++            retarget(game);
++        } catch (Exception e) {
++            BotLogger.error("engine: state change hook failed for " + game.getName(), e);
++        }
++    }
++
++    /** Kinds that are dynamic() get target / window / progress recomputed after each state change. */
++    private static void retarget(Game game) {
++        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
++            KindSpec spec = DecisionKinds.byKind(d.kind());
++            if (spec == null || !spec.dynamic()) continue;
++            Player p = d.target() == null || d.target().userId() == null ? null : game.getPlayer(d.target().userId());
++            KindSpec.CaptureContext ctx = new KindSpec.CaptureContext(
++                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(),
++                    d.target(), p);
++            Target t = spec.target(ctx, d.target());
++            Player tp = t == null || t.userId() == null ? null : game.getPlayer(t.userId());
++            ctx = new KindSpec.CaptureContext(
++                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(), t, tp);
++            ReactionWindow w = spec.window(ctx);
++            Progress pr = spec.progress(ctx);
++            if (Objects.equals(t, d.target()) && Objects.equals(w, d.window()) && Objects.equals(pr, d.progress()))
++                continue;
++            DecisionRegistry.update(d.withDynamic(game.getLastModifiedDate(), t, w, pr));
++        }
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/EngineController.java b/src/main/java/ti4/selfhost/engine/EngineController.java
+new file mode 100644
+index 0000000..e424c03
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/EngineController.java
+@@ -0,0 +1,215 @@
++package ti4.selfhost.engine;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.LinkedBlockingQueue;
++import java.util.concurrent.TimeUnit;
++import org.springframework.http.CacheControl;
++import org.springframework.http.HttpStatus;
++import org.springframework.http.MediaType;
++import org.springframework.http.ResponseEntity;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.RequestBody;
++import org.springframework.web.bind.annotation.RequestHeader;
++import org.springframework.web.bind.annotation.RequestParam;
++import org.springframework.web.bind.annotation.RestController;
++import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
++import ti4.discord.JdaService;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.game.persistence.GameManager;
++import ti4.game.persistence.ManagedGame;
++import ti4.selfhost.engine.EngineModels.AnswerRequest;
++import ti4.selfhost.engine.EngineModels.AnswerResult;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.EngineEvent;
++import ti4.spring.context.RequestContext;
++
++/**
++ * Engine API. Two audiences:
++ * <ul>
++ *   <li>The shim (trusted; {@code Authorization: Bot <bot token>}, i.e. the shim's own state.bot_token), under
++ *   /api/public/selfhost/engine/** — full state with any viewer's hand, every decision, answer as any seated user,
++ *   and the SSE firehose. The shim fans out to browsers and drives autopilot seats.</li>
++ *   <li>A seat ({@code Authorization: Bearer <seat token>}) under /api/game/{game}/engine/** — own view only.</li>
++ * </ul>
++ */
++@RestController
++public class EngineController {
++
++    // ------------------------------------------------------------------ trusted (shim)
++
++    @GetMapping("/api/public/selfhost/engine/{game}/state")
++    public ResponseEntity<?> state(
++            @PathVariable String game,
++            @RequestParam(required = false) String viewer,
++            @RequestHeader(value = "Authorization", required = false) String auth) {
++        Game g = game(game);
++        if (g == null) return notFound();
++        String v = trusted(auth) ? viewer : null; // without the bot token: public view (no hand)
++        return ok(StateSnapshotBuilder.build(g, v));
++    }
++
++    @GetMapping("/api/public/selfhost/engine/{game}/decisions")
++    public ResponseEntity<?> decisions(
++            @PathVariable String game, @RequestHeader(value = "Authorization", required = false) String auth) {
++        if (!trusted(auth)) return unauthorized();
++        return ok(Map.of("seq", DecisionRegistry.currentSeq(), "decisions", DecisionRegistry.openDecisions(game)));
++    }
++
++    @PostMapping("/api/public/selfhost/engine/{game}/decisions/{id}/answer")
++    public ResponseEntity<?> answerAs(
++            @PathVariable String game,
++            @PathVariable String id,
++            @RequestBody AnswerRequest req,
++            @RequestHeader(value = "Authorization", required = false) String auth) {
++        if (!trusted(auth)) return unauthorized();
++        if (req.userId() == null) return ResponseEntity.badRequest().body(Map.of("error", "userId required"));
++        return answerResponse(ActionInvoker.answer(game, id, req.userId(), req));
++    }
++
++    /**
++     * Server-sent events, one per EngineEvent (event name = type, id = seq, data = EngineEvent JSON). Resume with
++     * ?after=&lt;seq&gt; (or the Last-Event-ID header). If the buffer no longer covers `after`, a "reset" event
++     * tells the client to re-read state + decisions and continue from the seq given there.
++     */
++    @GetMapping(value = "/api/public/selfhost/engine/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
++    public Object stream(
++            @RequestParam(required = false) Long after,
++            @RequestParam(required = false) String game,
++            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
++            @RequestHeader(value = "Authorization", required = false) String auth) {
++        if (!trusted(auth)) return unauthorized();
++        long from = after != null ? after : lastEventId != null ? parse(lastEventId) : DecisionRegistry.currentSeq();
++        SseEmitter emitter = new SseEmitter(0L);
++        LinkedBlockingQueue<EngineEvent> queue = new LinkedBlockingQueue<>();
++        Runnable unsubscribe = DecisionRegistry.subscribe(e -> {
++            if (game == null || game.equals(e.game())) queue.add(e);
++        });
++        List<EngineEvent> backlog = DecisionRegistry.since(from, game);
++        Thread.ofVirtual().name("engine-sse").start(() -> {
++            try {
++                long sent = from;
++                if (backlog == null) {
++                    emitter.send(SseEmitter.event()
++                            .name("reset")
++                            .data(Map.of("seq", DecisionRegistry.currentSeq()), MediaType.APPLICATION_JSON));
++                    sent = DecisionRegistry.currentSeq();
++                } else {
++                    for (EngineEvent e : backlog) {
++                        send(emitter, e);
++                        sent = e.seq();
++                    }
++                }
++                while (true) {
++                    EngineEvent e = queue.poll(15, TimeUnit.SECONDS);
++                    if (e == null) {
++                        emitter.send(SseEmitter.event().comment("ping"));
++                        continue;
++                    }
++                    if (e.seq() <= sent) continue; // already in the backlog
++                    send(emitter, e);
++                    sent = e.seq();
++                }
++            } catch (Exception closed) {
++                // client went away
++            } finally {
++                unsubscribe.run();
++                emitter.complete();
++            }
++        });
++        emitter.onCompletion(unsubscribe);
++        emitter.onTimeout(unsubscribe);
++        emitter.onError(t -> unsubscribe.run());
++        return emitter;
++    }
++
++    // ------------------------------------------------------------------ seat (own view)
++
++    @GetMapping("/api/game/{gameName}/engine/state")
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public ResponseEntity<?> myState(@PathVariable String gameName) {
++        Player me = RequestContext.getPlayer();
++        return ok(StateSnapshotBuilder.build(RequestContext.getGame(), me == null ? null : me.getUserID()));
++    }
++
++    @GetMapping("/api/game/{gameName}/engine/decisions")
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public ResponseEntity<?> myDecisions(@PathVariable String gameName) {
++        Player me = RequestContext.getPlayer();
++        List<Decision> out = new ArrayList<>();
++        for (Decision d : DecisionRegistry.openDecisions(gameName)) if (visibleTo(d, me)) out.add(d);
++        return ok(Map.of("seq", DecisionRegistry.currentSeq(), "decisions", out));
++    }
++
++    @PostMapping("/api/game/{gameName}/engine/decisions/{id}/answer")
++    @PreAuthorize("@security.canAccessGame(#gameName)")
++    public ResponseEntity<?> answer(@PathVariable String gameName, @PathVariable String id, @RequestBody AnswerRequest req) {
++        Player me = RequestContext.getPlayer();
++        if (me == null) return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "not a player"));
++        return answerResponse(ActionInvoker.answer(gameName, id, me.getUserID(), req));
++    }
++
++    // ------------------------------------------------------------------ helpers
++
++    public static boolean visibleTo(Decision d, Player me) {
++        if (me == null) return "public".equals(d.visibility());
++        if ("private".equals(d.visibility()))
++            return d.target() != null && me.getUserID().equals(d.target().userId());
++        return true;
++    }
++
++    private static void send(SseEmitter emitter, EngineEvent e) throws IOException {
++        emitter.send(SseEmitter.event().id(String.valueOf(e.seq())).name(e.type()).data(e, MediaType.APPLICATION_JSON));
++    }
++
++    private static long parse(String s) {
++        try {
++            return Long.parseLong(s.trim());
++        } catch (Exception e) {
++            return 0;
++        }
++    }
++
++    private static ResponseEntity<?> answerResponse(AnswerResult r) {
++        HttpStatus status = switch (r.status()) {
++            case "done" -> HttpStatus.OK;
++            case "stale", "busy" -> HttpStatus.CONFLICT;
++            case "forbidden" -> HttpStatus.FORBIDDEN;
++            case "not_found" -> HttpStatus.NOT_FOUND;
++            case "error" -> HttpStatus.INTERNAL_SERVER_ERROR;
++            default -> HttpStatus.UNPROCESSABLE_ENTITY;
++        };
++        return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).body(r);
++    }
++
++    static boolean trusted(String auth) {
++        if (auth == null || JdaService.jda == null) return false;
++        String token = JdaService.jda.getToken();
++        String bare = token.startsWith("Bot ") ? token.substring(4) : token;
++        return auth.equals("Bot " + bare);
++    }
++
++    private static Game game(String name) {
++        if (!GameManager.isValid(name)) return null;
++        ManagedGame mg = GameManager.getManagedGame(name);
++        return mg == null ? null : mg.getGame();
++    }
++
++    private static ResponseEntity<?> ok(Object body) {
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
++    }
++
++    private static ResponseEntity<?> notFound() {
++        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "no such game"));
++    }
++
++    private static ResponseEntity<?> unauthorized() {
++        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "bot token required"));
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/EngineModels.java b/src/main/java/ti4/selfhost/engine/EngineModels.java
+new file mode 100644
+index 0000000..a95256d
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/EngineModels.java
+@@ -0,0 +1,201 @@
++package ti4.selfhost.engine;
++
++import java.util.List;
++import java.util.Map;
++
++/**
++ * Wire contract of the engine API (mirrored 1:1 by shim/src/engine/types.ts — change both together and bump
++ * {@link #CONTRACT_VERSION}). All ids are strings; numbers are plain ints.
++ */
++public final class EngineModels {
++    private EngineModels() {}
++
++    public static final int CONTRACT_VERSION = 1;
++
++    // ------------------------------------------------------------------ state
++
++    public record GameState(
++            int contract,
++            String game,
++            /** Game.getLastModifiedDate(): changes on every save and on undo. */
++            long stateVersion,
++            /** Engine event seq at snapshot time; resume the stream with after=seq. */
++            long seq,
++            String phase,
++            int round,
++            String activePlayer,
++            String speaker,
++            List<PlayerState> players,
++            List<StrategyCardState> strategyCards,
++            List<TileState> tiles,
++            Map<String, List<String>> publicObjectives,
++            List<String> laws,
++            DraftState draft) {}
++
++    /** Hidden information (hand contents) is only filled for the viewer's own player ({@code self=true}). */
++    public record PlayerState(
++            String userId,
++            String userName,
++            String faction,
++            String color,
++            boolean self,
++            boolean real,
++            boolean passed,
++            boolean eliminated,
++            boolean speaker,
++            boolean active,
++            int victoryPoints,
++            int tg,
++            int commodities,
++            int commoditiesMax,
++            CommandTokens commandTokens,
++            List<Integer> strategyCards,
++            List<String> techs,
++            List<String> exhaustedTechs,
++            List<String> planets,
++            List<String> exhaustedPlanets,
++            List<String> relics,
++            List<String> fragments,
++            List<String> leaders,
++            List<String> promissoryNotesInPlayArea,
++            Map<String, Integer> secretsScored,
++            int actionCardCount,
++            int secretObjectiveCount,
++            int promissoryNoteCount,
++            Hand hand) {}
++
++    public record CommandTokens(int tactic, int fleet, int strategy) {}
++
++    /** Only for the viewer's own player. Keys are card ids, values the per-player numeric handles the engine uses. */
++    public record Hand(
++            Map<String, Integer> actionCards,
++            Map<String, Integer> secretObjectives,
++            Map<String, Integer> promissoryNotes) {}
++
++    public record StrategyCardState(int number, String holder, int tradeGoods, boolean played) {}
++
++    public record TileState(String position, String tileId, List<HolderState> holders) {}
++
++    /** "space" or a planet id. */
++    public record HolderState(String name, List<UnitStack> units, List<String> tokens, List<String> control) {}
++
++    /** owner = faction of the unit's colour (null if no player has that colour). */
++    public record UnitStack(String owner, String color, String unit, int count, int damaged, int galvanized) {}
++
++    public record DraftState(String type, String currentPlayer, List<String> order) {}
++
++    // ------------------------------------------------------------------ decisions
++
++    /**
++     * One question the engine asked. Opened when a message carrying components is posted, updated when it is edited,
++     * closed when it is deleted, its components removed, or it is answered.
++     */
++    public record Decision(
++            /** Stable for the life of the prompt message (edits in place keep the id; see revision). */
++            String id,
++            String game,
++            /** Discriminant: "legacy" or a typed kind such as "strategy_card.pick". See DecisionKinds. */
++            String kind,
++            /** Engine event seq at which this revision was opened. */
++            long seq,
++            long stateVersion,
++            Target target,
++            /** "player" (only target may answer), "table" (any seated player, each answers for themself). */
++            String scope,
++            /** "public" or "private" (cards-info thread, private channel or ephemeral: only target may see it). */
++            String visibility,
++            String prompt,
++            List<Option> options,
++            Source source,
++            long createdAt,
++            /** Increments each time the prompt changes (edit in place, new target, window/progress change). */
++            int revision,
++            /** Set for "everyone answers in parallel" prompts (scope table); null otherwise. */
++            ReactionWindow window,
++            /** Set for multi-step prompts that accumulate choices before committing; null otherwise. */
++            Progress progress) {
++
++        public Decision withSeq(long newSeq, int newRevision) {
++            return new Decision(id, game, kind, newSeq, stateVersion, target, scope, visibility, prompt, options,
++                    source, createdAt, newRevision, window, progress);
++        }
++
++        public Decision withDynamic(long newStateVersion, Target newTarget, ReactionWindow newWindow, Progress newProgress) {
++            return new Decision(id, game, kind, seq, newStateVersion, newTarget, scope, visibility, prompt, options,
++                    source, createdAt, revision, newWindow, newProgress);
++        }
++    }
++
++    /**
++     * A reaction window: every eligible player answers (in parallel, any order); it is over when everyone eligible
++     * has responded (the engine then closes the decision). kind: "follow" (strategy card secondary), "when",
++     * "after", "sabotage", "vote", "pre_vote", "trade_follow", ... (area-defined, document new ones in types.ts).
++     * subject: what the window is about, e.g. {"strategyCard": 5} or {"actionCard": "ac_id", "player": uid}.
++     * responses: optional per-player answer summaries, e.g. uid → "followed" / "passed" / "3 votes for Against".
++     */
++    public record ReactionWindow(
++            String kind,
++            Map<String, Object> subject,
++            List<String> eligible,
++            List<String> responded,
++            Map<String, String> responses) {}
++
++    /**
++     * Sub-step state of a multi-step decision (movement, landing, hit assignment, payment, agenda voting, when/after
++     * queues): what has been chosen so far and what is left, derived by the kind from engine state (stored values,
++     * the game), never from message text — so it survives reloads and restarts. step: the current sub-step name
++     * ("select_units", "select_planets", "confirm", ...). accumulated: the typed running selection (e.g.
++     * {"units": [...], "spent": {"planets": [...], "tg": 2}, "votes": 7}). required: what is still needed, e.g.
++     * {"hits": 2} or {"resources": 3}. canCommit: the "Done"/"Confirm" option is meaningful now.
++     */
++    public record Progress(
++            String flow,
++            String step,
++            Map<String, Object> accumulated,
++            Map<String, Object> required,
++            boolean canCommit) {}
++
++    /**
++     * userId null when nobody specific is targeted. resolvedBy says how the engine knows: owner_prefix (FFCC_),
++     * spoof_prefix, cards_thread, private_channel, interaction_user (ephemeral/followup), draft_turn, mention, none.
++     */
++    public record Target(String userId, String faction, String color, String resolvedBy) {}
++
++    /**
++     * id is opaque to clients (today: the component custom id, plus "#value" for select options). value is the
++     * kind-specific typed payload, null for options outside the kind's vocabulary (e.g. "Done").
++     */
++    public record Option(
++            String id,
++            String label,
++            String style,
++            String emoji,
++            boolean disabled,
++            /** Needs free-form input (a Discord modal): not answerable through the engine yet. */
++            boolean needsInput,
++            String handler,
++            Map<String, Object> value) {}
++
++    public record Source(String channelId, String messageId, String customIdPrefix, boolean ephemeral) {}
++
++    // ------------------------------------------------------------------ actions
++
++    public record AnswerRequest(String optionId, Long expectedSeq, String requestId, String userId) {}
++
++    public record AnswerResult(
++            boolean ok,
++            String status,
++            String error,
++            String decisionId,
++            long seq,
++            long stateVersion,
++            List<Decision> opened) {}
++
++    // ------------------------------------------------------------------ events
++
++    /**
++     * type: decision.opened | decision.updated | decision.closed | state.changed. Stream order == seq order.
++     * decision is set for decision.* (on closed: only id/game/target meaningful), reason for closed.
++     */
++    public record EngineEvent(long seq, String type, String game, long stateVersion, Decision decision, String reason) {}
++}
+diff --git a/src/main/java/ti4/selfhost/engine/InteractionTracker.java b/src/main/java/ti4/selfhost/engine/InteractionTracker.java
+new file mode 100644
+index 0000000..42e2f9a
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/InteractionTracker.java
+@@ -0,0 +1,77 @@
++package ti4.selfhost.engine;
++
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import javax.annotation.Nonnull;
++import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
++import net.dv8tion.jda.api.events.interaction.component.GenericComponentInteractionCreateEvent;
++import net.dv8tion.jda.api.hooks.ListenerAdapter;
++
++/**
++ * Remembers who made each interaction (by interaction token and id), so replies, followups and ephemeral messages
++ * sent through the interaction webhook are attributed to that player, not guessed from text.
++ */
++public final class InteractionTracker extends ListenerAdapter {
++    private static final long TTL_MS = 15 * 60 * 1000;
++
++    public record Info(String userId, String channelId, String messageId, String customId, long at) {}
++
++    private static final Map<String, Info> byToken = new ConcurrentHashMap<>();
++    private static final Map<String, Info> byId = new ConcurrentHashMap<>();
++    /** interaction token -> message id of its @original response, once known. */
++    private static final Map<String, String> originals = new ConcurrentHashMap<>();
++
++    @Override
++    public void onGenericInteractionCreate(@Nonnull GenericInteractionCreateEvent event) {
++        record(event);
++    }
++
++    public static void record(GenericInteractionCreateEvent event) {
++        try {
++            String messageId = null;
++            String customId = null;
++            if (event instanceof GenericComponentInteractionCreateEvent c) {
++                messageId = c.getMessageId();
++                customId = c.getComponentId();
++            }
++            Info info = new Info(
++                    event.getUser().getId(),
++                    event.getChannel() == null ? null : event.getChannel().getId(),
++                    messageId,
++                    customId,
++                    System.currentTimeMillis());
++            byToken.put(event.getToken(), info);
++            byId.put(event.getId(), info);
++            prune();
++        } catch (Exception ignored) {
++            // best effort
++        }
++    }
++
++    public static Info byToken(String token) {
++        return byToken.get(token);
++    }
++
++    public static Info byId(String id) {
++        return byId.get(id);
++    }
++
++    public static void setOriginal(String token, String messageId) {
++        if (token != null && messageId != null) originals.put(token, messageId);
++    }
++
++    public static String original(String token) {
++        return originals.get(token);
++    }
++
++    private static void prune() {
++        if (byToken.size() < 2000) return;
++        long cutoff = System.currentTimeMillis() - TTL_MS;
++        byToken.entrySet().removeIf(e -> {
++            boolean old = e.getValue().at() < cutoff;
++            if (old) originals.remove(e.getKey());
++            return old;
++        });
++        byId.values().removeIf(i -> i.at() < cutoff);
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/KindSpec.java b/src/main/java/ti4/selfhost/engine/KindSpec.java
+new file mode 100644
+index 0000000..7267848
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/KindSpec.java
+@@ -0,0 +1,89 @@
++package ti4.selfhost.engine;
++
++import java.util.Map;
++import javax.annotation.Nullable;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Target;
++
++/**
++ * A typed decision kind. Implementations live in {@code ti4.selfhost.engine.kinds} and are discovered by classpath
++ * scan (public class, public no-arg constructor): adding a kind needs no edit to any shared file.
++ *
++ * <p>A captured message gets the kind of the highest-priority spec that {@link #matches} at least one of its options;
++ * otherwise it is "legacy". Every option of the message is still listed; {@link #value} types the ones the kind
++ * understands (others get value null, e.g. a "Done" button).
++ */
++public interface KindSpec {
++
++    /** Discriminant, "area.verb" (e.g. "strategy_card.pick"). Must match the TS union member in engine/types.ts. */
++    String kind();
++
++    /** Higher wins when several kinds match one message. Default 0; legacy is below everything. */
++    default int priority() {
++        return 0;
++    }
++
++    /** Whether this option (handler id = custom id without FFCC_/spoof prefix and delete markers) belongs to us. */
++    boolean matches(String handlerId);
++
++    /** Typed value for one of our options; null if it carries no typed meaning. */
++    @Nullable
++    Map<String, Object> value(String handlerId, CaptureContext ctx);
++
++    /**
++     * Override the target the generic resolver found (e.g. the draft's current player). Also called again after
++     * every state change while the decision is open when {@link #dynamic()} is true.
++     */
++    @Nullable
++    default Target target(CaptureContext ctx, @Nullable Target resolved) {
++        return resolved;
++    }
++
++    /**
++     * True when target / window / progress move with game state: they are recomputed after every state change while
++     * the decision is open (emitting decision.updated when they change).
++     */
++    default boolean dynamic() {
++        return false;
++    }
++
++    /**
++     * Reaction window for "everyone answers" prompts: eligible players and who has responded, from engine state
++     * (stored values etc.). When set, scope is "table" and an answer is accepted from each eligible player once.
++     */
++    @Nullable
++    default EngineModels.ReactionWindow window(CaptureContext ctx) {
++        return null;
++    }
++
++    /** Sub-step state for multi-step prompts edited in place (see EngineModels.Progress). */
++    @Nullable
++    default EngineModels.Progress progress(CaptureContext ctx) {
++        return null;
++    }
++
++    /** "player" (only the target answers) or "table" (any seated player answers for themself). */
++    default String scope(CaptureContext ctx) {
++        return ctx.target() == null || ctx.target().userId() == null ? "table" : "player";
++    }
++
++    /**
++     * Extra check before an answer is executed (the handler validates again). Return an error text to refuse.
++     */
++    @Nullable
++    default String validate(Game game, Player answering, Decision decision, String optionId) {
++        return null;
++    }
++
++    /** What the engine knows when it captures a message. */
++    record CaptureContext(
++            Game game,
++            String channelId,
++            String messageId,
++            String content,
++            boolean ephemeral,
++            @Nullable Target target,
++            @Nullable Player player) {}
++}
+diff --git a/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java b/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java
+new file mode 100644
+index 0000000..d2b118c
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java
+@@ -0,0 +1,175 @@
++package ti4.selfhost.engine;
++
++import java.util.ArrayList;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import javax.annotation.Nullable;
++import ti4.game.Game;
++import ti4.game.Leader;
++import ti4.game.Player;
++import ti4.game.Tile;
++import ti4.game.UnitHolder;
++import ti4.helpers.Units.UnitKey;
++import ti4.selfhost.engine.EngineModels.CommandTokens;
++import ti4.selfhost.engine.EngineModels.DraftState;
++import ti4.selfhost.engine.EngineModels.GameState;
++import ti4.selfhost.engine.EngineModels.Hand;
++import ti4.selfhost.engine.EngineModels.HolderState;
++import ti4.selfhost.engine.EngineModels.PlayerState;
++import ti4.selfhost.engine.EngineModels.StrategyCardState;
++import ti4.selfhost.engine.EngineModels.TileState;
++import ti4.selfhost.engine.EngineModels.UnitStack;
++import ti4.service.milty.MiltyDraftManager;
++
++/**
++ * Builds the authoritative structured state straight from Game/Player (no text, no image pipeline). Callers hold
++ * the game's read lock or accept a racy read (the web-data endpoint does the same). Grow it per area: add fields to
++ * EngineModels + types.ts together.
++ */
++public final class StateSnapshotBuilder {
++    private StateSnapshotBuilder() {}
++
++    public static GameState build(Game game, @Nullable String viewerUserId) {
++        List<PlayerState> players = new ArrayList<>();
++        Player active = game.getActivePlayer();
++        Player speaker = game.getSpeaker();
++        for (Player p : game.getPlayers().values()) {
++            if (p == null) continue;
++            players.add(player(game, p, p.getUserID().equals(viewerUserId), p == active, p == speaker));
++        }
++        List<StrategyCardState> scs = new ArrayList<>();
++        for (Integer sc : game.getSCList()) {
++            if (sc == null || sc <= 0) continue;
++            String holder = null;
++            for (Player p : game.getPlayers().values()) {
++                if (p != null && p.getSCs() != null && p.getSCs().contains(sc)) holder = p.getUserID();
++            }
++            Integer tg = game.getScTradeGoods().get(sc);
++            Boolean played = game.getScPlayed().get(sc);
++            scs.add(new StrategyCardState(sc, holder, tg == null ? 0 : tg, played != null && played));
++        }
++        List<TileState> tiles = new ArrayList<>();
++        for (Map.Entry<String, Tile> e : game.getTileMap().entrySet()) {
++            Tile t = e.getValue();
++            List<HolderState> holders = new ArrayList<>();
++            for (Map.Entry<String, UnitHolder> he : t.getUnitHolders().entrySet()) {
++                UnitHolder uh = he.getValue();
++                List<UnitStack> units = new ArrayList<>();
++                for (Map.Entry<UnitKey, List<Integer>> ue : uh.getUnitsByState().entrySet()) {
++                    List<Integer> st = ue.getValue();
++                    int total = 0;
++                    for (Integer n : st) total += n == null ? 0 : n;
++                    if (total == 0) continue;
++                    UnitKey k = ue.getKey();
++                    Player owner = game.getPlayerFromColorOrFaction(k.getColor());
++                    int dmg = st.size() > 1 ? nz(st.get(1)) + (st.size() > 3 ? nz(st.get(3)) : 0) : 0;
++                    int glv = st.size() > 2 ? nz(st.get(2)) + (st.size() > 3 ? nz(st.get(3)) : 0) : 0;
++                    units.add(new UnitStack(
++                            owner == null ? null : owner.getFaction(),
++                            k.getColor(),
++                            k.asyncID(),
++                            total,
++                            dmg,
++                            glv));
++                }
++                holders.add(new HolderState(
++                        he.getKey(),
++                        units,
++                        new ArrayList<>(uh.getTokenList()),
++                        new ArrayList<>(uh.getControlList())));
++            }
++            tiles.add(new TileState(e.getKey(), t.getTileID(), holders));
++        }
++        Map<String, List<String>> objectives = new LinkedHashMap<>();
++        for (String po : game.getRevealedPublicObjectives().keySet()) {
++            List<String> scorers = game.getScoredPublicObjectives().get(po);
++            objectives.put(po, scorers == null ? List.of() : List.copyOf(scorers));
++        }
++        return new GameState(
++                EngineModels.CONTRACT_VERSION,
++                game.getName(),
++                game.getLastModifiedDate(),
++                DecisionRegistry.currentSeq(),
++                game.getPhaseOfGame(),
++                game.getRound(),
++                active == null ? null : active.getUserID(),
++                speaker == null ? null : speaker.getUserID(),
++                players,
++                scs,
++                tiles,
++                objectives,
++                new ArrayList<>(game.getLaws().keySet()),
++                draft(game));
++    }
++
++    private static int nz(Integer i) {
++        return i == null ? 0 : i;
++    }
++
++    private static PlayerState player(Game game, Player p, boolean self, boolean active, boolean speaker) {
++        List<String> leaders = new ArrayList<>();
++        for (Leader l : p.getLeaders()) {
++            leaders.add(l.getId() + (l.isLocked() ? ":locked" : l.isExhausted() ? ":exhausted" : ""));
++        }
++        Hand hand = self
++                ? new Hand(
++                        new LinkedHashMap<>(p.getActionCards()),
++                        new LinkedHashMap<>(p.getSecrets()),
++                        new LinkedHashMap<>(p.getPromissoryNotes()))
++                : null;
++        return new PlayerState(
++                p.getUserID(),
++                p.getUserName(),
++                normalize(p.getFaction()),
++                normalize(p.getColor()),
++                self,
++                p.isRealPlayer(),
++                p.isPassed(),
++                p.isEliminated(),
++                speaker,
++                active,
++                safeVp(p),
++                p.getTg(),
++                p.getCommodities(),
++                p.getCommoditiesTotal(),
++                new CommandTokens(p.getTacticalCC(), p.getFleetCC(), p.getStrategicCC()),
++                new ArrayList<>(p.getSCs()),
++                new ArrayList<>(p.getTechs()),
++                new ArrayList<>(p.getExhaustedTechs()),
++                new ArrayList<>(p.getPlanets()),
++                new ArrayList<>(p.getExhaustedPlanets()),
++                new ArrayList<>(p.getRelics()),
++                new ArrayList<>(p.getFragments()),
++                leaders,
++                new ArrayList<>(p.getPromissoryNotesInPlayArea()),
++                new LinkedHashMap<>(p.getSecretsScored()),
++                p.getActionCards().size(),
++                p.getSecrets().size(),
++                p.getPromissoryNotes().size(),
++                hand);
++    }
++
++    private static int safeVp(Player p) {
++        try {
++            return p.getTotalVictoryPoints();
++        } catch (Exception e) {
++            return 0;
++        }
++    }
++
++    private static String normalize(String s) {
++        return s == null || "null".equals(s) || s.isBlank() ? null : s;
++    }
++
++    private static DraftState draft(Game game) {
++        try {
++            MiltyDraftManager m = game.getMiltyDraftManager();
++            if (m == null || m.getDraftOrder() == null || m.getDraftOrder().isEmpty()) return null;
++            Player cur = m.getCurrentDraftPlayer(game);
++            return new DraftState("milty", cur == null ? null : cur.getUserID(), List.copyOf(m.getDraftOrder()));
++        } catch (Exception e) {
++            return null;
++        }
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
+new file mode 100644
+index 0000000..e71d8e9
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
+@@ -0,0 +1,78 @@
++package ti4.selfhost.engine.kinds;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Target;
++import ti4.selfhost.engine.KindSpec;
++import ti4.service.milty.MiltyDraftManager;
++
++/**
++ * Milty draft pick: milty_&lt;category&gt;_&lt;value&gt; on the shared draft board in the main channel. The board is
++ * not addressed to anyone; the target is the draft's current player (re-resolved on every state change).
++ */
++public class MiltyDraftPickKind implements KindSpec {
++
++    @Override
++    public String kind() {
++        return "draft.milty.pick";
++    }
++
++    @Override
++    public int priority() {
++        return 100;
++    }
++
++    @Override
++    public boolean matches(String handlerId) {
++        return handlerId.startsWith("milty_");
++    }
++
++    @Override
++    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
++        if (!matches(handlerId)) return null;
++        String rest = handlerId.substring("milty_".length());
++        int us = rest.indexOf('_');
++        Map<String, Object> v = new LinkedHashMap<>();
++        // categories seen: slice, faction, order
++        v.put("category", us < 0 ? rest : rest.substring(0, us));
++        v.put("pick", us < 0 ? "" : rest.substring(us + 1));
++        return v;
++    }
++
++    @Override
++    public Target target(CaptureContext ctx, Target resolved) {
++        return currentDrafter(ctx.game());
++    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    @Override
++    public String scope(CaptureContext ctx) {
++        return "player";
++    }
++
++    @Override
++    public String validate(Game game, Player answering, Decision decision, String optionId) {
++        MiltyDraftManager m = game.getMiltyDraftManager();
++        Player cur = m == null ? null : m.getCurrentDraftPlayer(game);
++        if (cur == null || cur != answering) return "It is not your turn to draft.";
++        return null;
++    }
++
++    public static Target currentDrafter(Game game) {
++        try {
++            MiltyDraftManager m = game.getMiltyDraftManager();
++            Player p = m == null ? null : m.getCurrentDraftPlayer(game);
++            if (p == null) return new Target(null, null, null, "draft_turn");
++            return new Target(p.getUserID(), p.getFaction(), p.getColor(), "draft_turn");
++        } catch (Exception e) {
++            return new Target(null, null, null, "draft_turn");
++        }
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java b/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java
+new file mode 100644
+index 0000000..c3bd902
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java
+@@ -0,0 +1,49 @@
++package ti4.selfhost.engine.kinds;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++import ti4.selfhost.engine.KindSpec;
++
++/**
++ * Discard a secret objective (setup: "keep one of two" = discard the other). discardSecret_&lt;n&gt;[redraw] /
++ * SODISCARD_&lt;n&gt; where n is the player's numeric handle for the card (Player.getSecrets()).
++ */
++public class SecretObjectiveDiscardKind implements KindSpec {
++
++    @Override
++    public String kind() {
++        return "secret_objective.discard";
++    }
++
++    @Override
++    public int priority() {
++        return 50;
++    }
++
++    @Override
++    public boolean matches(String handlerId) {
++        return handlerId.startsWith("discardSecret_") || handlerId.startsWith("SODISCARD_");
++    }
++
++    @Override
++    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
++        if (!matches(handlerId)) return null;
++        String rest = handlerId.replace("discardSecret_", "").replace("SODISCARD_", "");
++        boolean redraw = rest.endsWith("redraw");
++        rest = rest.replace("redraw", "");
++        Map<String, Object> v = new LinkedHashMap<>();
++        try {
++            int handle = Integer.parseInt(rest);
++            v.put("handle", handle);
++            if (ctx.player() != null) {
++                for (Map.Entry<String, Integer> e : ctx.player().getSecrets().entrySet()) {
++                    if (e.getValue() == handle) v.put("secretObjective", e.getKey());
++                }
++            }
++        } catch (NumberFormatException e) {
++            return null;
++        }
++        v.put("redraw", redraw);
++        return v;
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java
+new file mode 100644
+index 0000000..bd61adc
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java
+@@ -0,0 +1,45 @@
++package ti4.selfhost.engine.kinds;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.KindSpec;
++
++/** Strategy phase: pick a strategy card. Buttons: FFCC_&lt;faction&gt;_scPick_&lt;n&gt; (Helper.getRemainingSCButtons). */
++public class StrategyCardPickKind implements KindSpec {
++
++    @Override
++    public String kind() {
++        return "strategy_card.pick";
++    }
++
++    @Override
++    public int priority() {
++        return 100;
++    }
++
++    @Override
++    public boolean matches(String handlerId) {
++        return handlerId.matches("scPick_\\d+");
++    }
++
++    @Override
++    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
++        if (!matches(handlerId)) return null;
++        int sc = Integer.parseInt(handlerId.substring("scPick_".length()));
++        Map<String, Object> v = new LinkedHashMap<>();
++        v.put("strategyCard", sc);
++        Integer tg = ctx.game().getScTradeGoods().get(sc);
++        v.put("tradeGoods", tg == null ? 0 : tg);
++        return v;
++    }
++
++    @Override
++    public String validate(Game game, Player answering, Decision decision, String optionId) {
++        Player active = game.getActivePlayer();
++        if (active != null && active != answering) return "It is not your turn to pick a strategy card.";
++        return null;
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/kinds/TechGainKind.java b/src/main/java/ti4/selfhost/engine/kinds/TechGainKind.java
+new file mode 100644
+index 0000000..7839528
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/kinds/TechGainKind.java
+@@ -0,0 +1,44 @@
++package ti4.selfhost.engine.kinds;
++
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import ti4.selfhost.engine.KindSpec;
++
++/**
++ * Gain a technology: getTech_&lt;alias&gt;[__&lt;payment&gt;][__comp][__noPay]... (PlayerTechService.getTech). The setup
++ * "choose your starting technology" prompt is this kind with free=true in round 1 (value.starting).
++ */
++public class TechGainKind implements KindSpec {
++
++    @Override
++    public String kind() {
++        return "tech.gain";
++    }
++
++    @Override
++    public int priority() {
++        return 50;
++    }
++
++    @Override
++    public boolean matches(String handlerId) {
++        return handlerId.startsWith("getTech_");
++    }
++
++    @Override
++    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
++        if (!matches(handlerId)) return null;
++        List<String> parts = new ArrayList<>(Arrays.asList(handlerId.substring("getTech_".length()).split("__")));
++        String tech = parts.removeFirst();
++        boolean free = parts.contains("noPay") || parts.contains("shareKnowledge");
++        Map<String, Object> v = new LinkedHashMap<>();
++        v.put("tech", tech);
++        v.put("free", free);
++        v.put("starting", free && ctx.game().getRound() <= 1 && !"action".equals(ctx.game().getPhaseOfGame()));
++        v.put("flags", parts);
++        return v;
 +    }
 +}
 diff --git a/src/main/java/ti4/service/game/CreateGameService.java b/src/main/java/ti4/service/game/CreateGameService.java
@@ -3113,3 +5001,15 @@ index 0000000..6a3ff03
 +        return new String[] {"", command};
 +    }
 +}
+diff --git a/src/main/java/ti4/spring/websocket/GameWebStatePipeline.java b/src/main/java/ti4/spring/websocket/GameWebStatePipeline.java
+index e668642..2bf3983 100644
+--- a/src/main/java/ti4/spring/websocket/GameWebStatePipeline.java
++++ b/src/main/java/ti4/spring/websocket/GameWebStatePipeline.java
+@@ -28,6 +28,7 @@ public class GameWebStatePipeline {
+     private static final Set<String> pendingGameNames = ConcurrentHashMap.newKeySet();
+ 
+     public static void queue(@Nullable Game game) {
++        ti4.selfhost.engine.Engine.onStateChanged(game);
+         if (game == null || game.isFowMode() || System.getenv("TESTING") != null) return;
+         WebSocketNotifier notifier = getNotifierIfAvailable();
+         if (notifier == null) return;
