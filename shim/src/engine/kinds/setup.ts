@@ -5,7 +5,7 @@
  * SetupPreferenceKind, GameSettingsKind. Live readiness (who still sets up, what is left in the draft) is in
  * GameState.draft / GameState.setup, not in option values (those are snapshots taken when the prompt was posted).
  */
-import type { DecisionBase, FactionId, UserId } from "../types.js";
+import type { ColorName, DecisionBase, FactionId, TilePosition, UserId } from "../types.js";
 
 export type DraftCategory = "slice" | "faction" | "order";
 
@@ -34,7 +34,7 @@ export type SetupKeleresFlavor = DecisionBase<
     faction: FactionId;
     preset: boolean;
     contested: boolean;
-    homePosition: string | null;
+    homePosition: TilePosition | null;
     speaker: boolean | null;
   }
 >;
@@ -46,8 +46,8 @@ export type SetupPlayerStep = DecisionBase<
     step: "start" | "user" | "faction" | "color" | "home" | "speaker";
     userId: UserId | null;
     faction: FactionId | null;
-    color: string | null;
-    position: string | null;
+    color: ColorName | null;
+    position: TilePosition | null;
     speaker: boolean | null;
     page: string | null;
   }

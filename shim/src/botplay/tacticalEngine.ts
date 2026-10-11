@@ -3,7 +3,9 @@ import { countUnit, playerOf } from "./board.js";
 import { BuildJob } from "./production.js";
 import type { Seat, SeatEngine } from "./seat.js";
 import { spendable, type ExpandGoal, type ProduceGoal } from "./strategy.js";
-import type { AnswerResult, Decision, Option } from "../engine/types.js";
+// The planner (botplay/board.ts) reads the legacy web state, whose unit / holder / planet strings are the same async
+// ids the engine uses: they are cast to the engine unions where they cross into an engine request.
+import type { AnswerResult, Decision, HolderName, Option, PlanetId, UnitId } from "../engine/types.js";
 import type {
   TacticalActivate,
   TacticalConclude,
@@ -182,7 +184,7 @@ export class EngineTactical {
     }
     plan.target ??= position;
     const goal = plan.goal;
-    const units = goal.kind === "expand" && (!position || position === goal.target) ? goal.moves.map((m) => ({ from: m.origin, holder: m.holder, unit: m.unit, count: m.count })) : [];
+    const units = goal.kind === "expand" && (!position || position === goal.target) ? goal.moves.map((m) => ({ from: m.origin, holder: m.holder as HolderName, unit: m.unit as UnitId, count: m.count })) : [];
     plan.moved = true;
     let r = await this.engine.move(plan.game, d, { units, conclude: true }, goal.kind === "expand" ? goal.why : "move nothing");
     if (r && !r.ok && units.length && r.status === "refused") {
@@ -199,13 +201,13 @@ export class EngineTactical {
     if (plan.landed) return false;
     const inSpace = d.progress?.accumulated.inSpace ?? [];
     let gf = inSpace.filter((u) => u.unit === "gf").reduce((n, u) => n + u.count, 0);
-    const offered = new Set(live(d).flatMap((o) => (o.value!.op === "land" && o.value!.unit === "gf" ? [o.value!.planet] : [])));
-    const landings: { planet: string; unit: string; count: number }[] = [];
+    const offered = new Set<string>(live(d).flatMap((o) => (o.value!.op === "land" && o.value!.unit === "gf" ? [o.value!.planet] : [])));
+    const landings: { planet: PlanetId; unit: UnitId; count: number }[] = [];
     if (plan.goal.kind === "expand") {
       for (const [planet, n] of Object.entries(plan.goal.land)) {
         const count = Math.min(n, gf);
         if (count < 1 || !offered.has(planet)) continue;
-        landings.push({ planet, unit: "gf", count });
+        landings.push({ planet: planet as PlanetId, unit: "gf", count });
         gf -= count;
       }
     }

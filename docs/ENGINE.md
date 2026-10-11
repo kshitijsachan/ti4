@@ -311,6 +311,26 @@ hits); `combat.assign_units` carries the running assignment as `progress`; `comb
 records rolls through one upstream hook in `CombatRollService`. Bot policy: `shim/src/engine/combatPolicy.ts` (never
 rolls the same dice twice; no next roll while hits are owed).
 
+### 3.8 Ids (closed unions)
+
+Every id the contract carries is typed by a string-literal union from `shim/src/engine/ids.ts`, **generated** by
+`node tools/engine-ids/generate.mjs` (`--check` fails when stale) from the bot's own data files
+(`src/main/resources/data/**`, `planets/`, `systems/`) — official content only (`source` ∈ base, pok, codex1–4,
+thunders_edge): `FactionId`, `TechId`, `PlanetId`, `TileId`, `UnitId` (async unit ids: gf, ff, dd, …), `ActionCardId`,
+`AgendaId`, `PublicObjectiveId`, `SecretObjectiveId`, `RelicId`, `RelicFragmentId`, `ExploreCardId`,
+`PromissoryNoteId` (faction notes + `` `${ColorName}_${suffix}` ``), `LeaderId` / `LeaderStatus`, `StrategyCardId`,
+`StrategyCardNumber`, `BreakthroughId`, `ColorName`, `TechType`, … plus `Phase` (every literal the engine passes to
+`setPhaseOfGame`). Each comes with a const array, a name lookup (`FACTION_NAMES`, …) and a guard (`is.faction(x)`).
+Open sets stay `string` on purpose: display text (`prompt`, `label`, `name`), `Option.id` (opaque), board positions
+(`TilePosition`), custom objective names (`RevealedObjectiveKey`), tokens.
+
+Java has no generated mirror: `StateSnapshotBuilder` and the kinds emit the ids `Mapper` loaded from the same data
+files (`Player.getTechs()`, `Planet` names, `UnitKey.asyncID()`, …), so both sides agree by construction; regenerate
+`ids.ts` when the bot's data changes. Homebrew ids still arrive at runtime (the unions are deliberately official-only):
+`shim/src/engine/validate.ts` walks every GameState / Decision the shim's `EngineClient` receives and logs each id
+outside its union once (`engine contract drift: unknown faction "…" at …`). It never throws or drops data; on by
+default, off with `NODE_ENV=production` unless `ENGINE_VALIDATE=1` (`ENGINE_VALIDATE=0`: off everywhere).
+
 ## 4. Where things are
 
 | Piece | File |
