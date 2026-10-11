@@ -50,7 +50,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
   const hidden = useEngine((s) => s.hidden);
   const answer = useEngineAnswer();
-  const { queue, offers } = useMemo(() => orderDecisions(decisions, answeredAtSeq, hidden), [decisions, answeredAtSeq, hidden]);
+  const { queue, offers } = useMemo(() => orderDecisions(decisions, answeredAtSeq, hidden, state), [decisions, answeredAtSeq, hidden, state]);
 
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [offerId, setOfferId] = useState<string | null>(null);

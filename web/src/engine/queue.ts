@@ -3,6 +3,7 @@ import type { Decision, GameState } from "./contract";
 import { openToAll } from "./reducer";
 import { factionName } from "./names";
 import { useEngine, useMyDecisions } from "./store";
+import { nothingToDecide, setupOnly } from "./optionKinds";
 
 /** Plain-words titles per kind; `legacy` (untyped) prompts take a title from their own text. */
 const TITLES: Record<string, string> = {
@@ -144,10 +145,19 @@ const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/
  * 4. everything else oldest first, 5. table steps that move the phase on (after my homework), 6. my turn menu,
  * which stays up while what it spawned is answered, 7. untyped prompts (often leftovers). Prompts I hid are left out.
  */
-export function orderDecisions(mine: Decision[], answeredAtSeq: number | null, hidden?: ReadonlySet<string>): { queue: Decision[]; offers: Decision[] } {
-  const shown = hidden?.size ? mine.filter((d) => !hidden.has(d.id)) : mine;
-  const offers = shown.filter(openToAll);
-  const own = shown.filter((d) => !openToAll(d));
+export function orderDecisions(
+  mine: Decision[],
+  answeredAtSeq: number | null,
+  hidden?: ReadonlySet<string>,
+  state?: GameState | null,
+): { queue: Decision[]; offers: Decision[] } {
+  /* Untyped leftovers the game never closed: setup prompts once the game is under way are dropped, info panels
+     (nothing but utilities / undo) go behind "Available now". */
+  const underWay = !!state && !state.setup && !(state.draft && state.draft.status === "drafting");
+  const shown = mine.filter((d) => !hidden?.has(d.id) && !(d.kind === "legacy" && underWay && setupOnly(d.options)));
+  const background = (d: Decision) => openToAll(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+  const offers = shown.filter(background);
+  const own = shown.filter((d) => !background(d));
   const homework = own.some((d) => HOMEWORK.test(d.kind) && !PHASE_STEP.has(d.kind));
   const rank = (d: Decision) => {
     /* Opened since my last answer (stream positions, not clocks): its next step. */
@@ -172,5 +182,6 @@ export function useMyQueue(): Decision[] {
   const mine = useMyDecisions();
   const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
   const hidden = useEngine((s) => s.hidden);
-  return useMemo(() => orderDecisions(mine, answeredAtSeq, hidden).queue, [mine, answeredAtSeq, hidden]);
+  const state = useEngine((s) => s.view.state);
+  return useMemo(() => orderDecisions(mine, answeredAtSeq, hidden, state).queue, [mine, answeredAtSeq, hidden, state]);
 }
