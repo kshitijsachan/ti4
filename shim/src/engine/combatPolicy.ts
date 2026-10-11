@@ -6,7 +6,7 @@
  * to roll, from the round trackers), never ahead of its opponent and never while it still owes hits; barrage and
  * space cannon once per prompt; it never bombards, retreats or cancels hits.
  */
-import type { CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue } from "./kinds/combat.js";
+import type { CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
 import type { Decision, GameState, Option } from "./types.js";
 
 export type CombatChoice = { option: Option<any>; why: string };
@@ -24,10 +24,68 @@ export function chooseCombat(d: Decision, state: GameState | null, me: string, o
     case "combat.hits":
       return autoAssign(d, me);
     case "combat.assign_units":
-      return finishMenu(d, me);
+      return finishMenu(d, me) ?? pickUnit(d, me);
+    case "combat.bombard":
+      return bombardDone(d, me);
+    case "combat.retreat":
+      return noRetreat(d, me);
     default:
-      return null; // retreat: a bot never retreats
+      return null;
   }
+}
+
+/** The engine auto-assigned every bombardment unit to a planet when the step opened: roll as assigned. */
+function bombardDone(d: CombatBombard, me: string): CombatChoice | null {
+  if (d.target?.userId !== me) return null;
+  const done = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.op === "done");
+  return done ? { option: done, why: "bombardment: roll with the engine's assignment" } : null;
+}
+
+/** A bot never retreats; a retreat prompt addressed to it (someone announced one for it) is closed. */
+function noRetreat(d: CombatRetreat, me: string): CombatChoice | null {
+  if (d.target?.userId !== me) return null;
+  const done = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "done");
+  return done ? { option: done, why: "combat: bots do not retreat" } : null;
+}
+
+/** Cheapest first: what a hit should take when no sustain is left. */
+const UNIT_COST = ["ff", "gf", "inf", "dd", "ca", "mf", "cv", "pd", "sd", "dn", "fs", "ws"];
+const cost = (unit: string) => (UNIT_COST.indexOf(unit) < 0 ? 50 : UNIT_COST.indexOf(unit));
+
+/**
+ * The manual menu while hits are still owed (opened by a units.remove / assign-manual press): sustain an undamaged
+ * unit that can, else destroy the cheapest unit. Without engine progress (removal menus), close it.
+ */
+function pickUnit(d: CombatAssignUnits, me: string): CombatChoice | null {
+  if (d.target?.userId !== me) return null;
+  const live = d.options.filter((o) => !o.disabled && !forDummy(o) && o.value);
+  const left = Number((d.progress?.required as Record<string, unknown> | undefined)?.hits ?? 0);
+  const done = live.find((o) => o.value!.action === "done");
+  if (!d.progress || left <= 0) return done ? { option: done, why: "combat: nothing owed; close the menu" } : null;
+  const units = live.filter((o) => o.value!.action === "sustain" || o.value!.action === "destroy") as Option<Extract<CombatAssignUnits["options"][number]["value"], { unit: string }>>[];
+  const sustain = units.find((o) => o.value!.action === "sustain" && !o.value!.damaged);
+  if (sustain) return { option: sustain, why: `combat: sustain damage on ${sustain.value!.unit} (${left} hit(s) left)` };
+  const destroy = units.filter((o) => o.value!.action === "destroy").sort((a, b) => cost(a.value!.unit) - cost(b.value!.unit))[0];
+  if (destroy) return { option: destroy, why: `combat: destroy ${destroy.value!.unit} (${left} hit(s) left)` };
+  return done ? { option: done, why: "combat: no unit left to assign" } : null;
+}
+
+/**
+ * Stand-alone removal opener (units.remove): hits from bombardment / barrage / space cannon are owed, so open the
+ * menu once (its per-unit policy is pickUnit) and close the opener afterwards; a "remove" prompt (fleet pool /
+ * capacity / rift) is optional for a bot: close it.
+ */
+export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[], open: Decision[]): CombatChoice | null {
+  if (d.target?.userId !== me) return null;
+  if (open.some((x) => x.kind === "combat.assign_units" && x.target?.userId === me)) return null;
+  const live = d.options.filter((o) => !o.disabled && !forDummy(o) && o.value);
+  const done = live.find((o) => o.value!.action === "done");
+  const opener = live.find((o) => o.value!.action === "open" && o.value!.assignType !== "remove");
+  if (opener && !history.includes(opener.id)) return { option: opener, why: `units: assign ${opener.value!.assignType} hits` };
+  const anyOpen = live.find((o) => o.value!.action === "open");
+  if (done) return { option: done, why: "units: nothing left to remove" };
+  if (anyOpen && !history.includes(anyOpen.id)) return { option: anyOpen, why: "units: open the removal menu" };
+  return null;
 }
 
 function autoAssign(d: CombatHits, me: string): CombatChoice | null {

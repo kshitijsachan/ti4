@@ -6,7 +6,7 @@
 
 import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
-import type { CombatDecision, CombatState } from "./kinds/combat.js";
+import type { CombatDecision, CombatState, UnitsRemove } from "./kinds/combat.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { InputFormDecision } from "./kinds/input.js";
 import type { ProductionDecision } from "./kinds/production.js";
@@ -393,6 +393,7 @@ export type Decision =
   | TradeOfferSent
   | TradeForceReplenish
   | CombatDecision
+  | UnitsRemove
   | ProductionDecision
   | InputFormDecision
   | LegacyDecision;

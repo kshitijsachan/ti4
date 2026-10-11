@@ -97,10 +97,13 @@ const SETTING_TITLE: Record<string, string> = {
 /** Game creation prompts (expansion, modes, draft settings): the engine's controls, grouped under one title. */
 export const GameSettingsRenderer: Renderer<"setup.game_settings"> = ({ decision, answer }) => {
   const setting = decision.options.find((o) => o.value)?.value?.setting ?? "";
+  // Official-only server: the engine leaves homebrew / alternate-mode controls untyped (value null) and refuses
+  // them, so only typed options (plus "Done") are offered.
+  const options = decision.options.filter((o) => o.value || (o.handler ?? "").startsWith("deleteButtons"));
   return (
     <div className={classes.stack}>
       <p className={classes.title}>{SETTING_TITLE[setting] ?? "Game settings"}</p>
-      <Options options={decision.options} answer={answer} />
+      <Options options={options} answer={answer} />
     </div>
   );
 };

@@ -86,7 +86,21 @@ export type CombatHits = DecisionBase<"combat.hits", CombatHitsValue>;
 export type CombatAssignUnits = DecisionBase<"combat.assign_units", CombatUnitPickValue>;
 export type CombatRetreat = DecisionBase<"combat.retreat", CombatRetreatValue>;
 
-export type CombatDecision = CombatRound | CombatHits | CombatAssignUnits | CombatRetreat;
+/** BOMBARDMENT target step (bombarding player; edited in place). source: unit async id | plasmascoring | argentcommander. */
+export type CombatBombardValue =
+  | { op: "assign" | "unassign"; source: string; planet: string; galvanized: boolean; type: "UNIT" | "TECH" | "LEADER" }
+  | { op: "done"; tile: string | null };
+/** progress: flow "combat.bombard", accumulated.assigned = [{source, planet, galvanized, type}], canCommit always true. */
+export type CombatBombard = DecisionBase<"combat.bombard", CombatBombardValue>;
+
+/**
+ * A stand-alone opener of the per-unit removal menu (fleet pool / capacity violation, rift: "remove"; hits taken
+ * outside the combat controls: "bombardment", "afb", "pds", "spacecombat", "groundcombat"). "done" closes it.
+ */
+export type UnitsRemoveValue = { action: "open"; tile: string; assignType: string } | { action: "done"; tile: null; assignType: null };
+export type UnitsRemove = DecisionBase<"units.remove", UnitsRemoveValue>;
+
+export type CombatDecision = CombatRound | CombatHits | CombatAssignUnits | CombatRetreat | CombatBombard;
 
 // ---------------------------------------------------------------- GameState.combat
 
