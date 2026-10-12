@@ -26,7 +26,7 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ENGINE_DIR, RECORDINGS_DIR, ensureRunDir, gameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
+import { ENGINE_DIR, RECORDINGS_DIR, ensureRunDir, gameFile, readGameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
 import { createFork, openFork, closeFork, clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
 import { gameChannels, loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
@@ -115,7 +115,7 @@ function buildCommand(spec, ctx) {
 /* ------------------------------------------------------------------ seats, interpolation */
 
 function players(fork) {
-  return parseSave(readFileSync(gameFile(fork.game), "utf8")).players;
+  return parseSave(readGameFile(fork.game)).players;
 }
 
 function userOf(who, ctx) {
@@ -207,7 +207,7 @@ class Runner {
   }
 
   save() {
-    return readFileSync(gameFile(this.fork.game), "utf8");
+    return readGameFile(this.fork.game);
   }
 
   /** Runs one step; returns {ok, error?, detail}. */

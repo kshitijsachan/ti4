@@ -16,7 +16,7 @@
  *                 "replay with the recorded dice": the recorded post-roll state is used as the roll's outcome.
  */
 import { readFileSync } from "node:fs";
-import { gameFile, waitForStack, type Json } from "./env.ts";
+import { gameFile, readGameFile, waitForStack, type Json } from "./env.ts";
 import { clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves, type Fork } from "./fork.ts";
 import { diffNormalized, normalizeSave, parseSave, type ForkMap, type SaveDiff } from "./savefile.ts";
 import { recordingSaves, type Action, type Recording } from "./recording.ts";
@@ -212,7 +212,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
         carrierMsg = latestCarrying(client, mapIdsInCustomId(a.customId!, map));
         if (!carrierMsg) {
           const ch = carrierChannel(fork, map, a, forkUser!);
-          carrierMsg = await loadSave(fork, readFileSync(gameFile(fork.game), "utf8"), identityMap(fork), {
+          carrierMsg = await loadSave(fork, readGameFile(fork.game), identityMap(fork), {
             customId: mapIdsInCustomId(a.customId!, map),
             label: a.buttonLabel ?? a.customId!,
             faction,
@@ -252,7 +252,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
         const s = await waitForSaves(fork.game, since);
         return { e, s };
       });
-      const actual = readFileSync(gameFile(fork.game), "utf8");
+      const actual = readGameFile(fork.game);
       const diffs = compare(cur.text, actual, fork, map, ignore);
       const replayDice = texts.flatMap(diceOf);
       // At a recorded web-data checkpoint, also compare what the web client would render.
