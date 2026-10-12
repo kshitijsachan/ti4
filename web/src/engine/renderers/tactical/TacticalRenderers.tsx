@@ -132,8 +132,14 @@ function followWaits(options: TurnOpt[]): FollowWait[] {
   return [];
 }
 
+/**
+ * My turn menu. A tactical action starts on the map (click a system: it is activated after one confirm there), so
+ * the menu says so instead of offering a "Tactical action" button that would only lead to a list of systems.
+ */
 export function TurnActionView({ decision, state, answer }: RendererProps<TurnAction>) {
   const me = state?.players.find((p) => p.userId === decision.target?.userId);
+  const tactical = decision.options.find((o) => o.value?.action === "tactical");
+  const tokens = tactical?.value?.action === "tactical" ? (me?.commandTokens.tactic ?? tactical.value.tacticTokens ?? null) : null;
   const mine = useMyDecisions();
   const answerOther = useEngineAnswer();
   const opts = live(decision.options) as TurnOpt[];
@@ -168,9 +174,16 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
           Waiting for {pending.join(", ")} to follow {waits.map((w) => w.name).join(" and ")}. Your turn ends once every player has answered.
         </span>
       )}
+      {tactical && (
+        <p className={tactical.disabled || tokens === 0 ? classes.muted : classes.hint} data-map-activate-hint>
+          {tactical.disabled || tokens === 0
+            ? "Tactical action: no command tokens in your tactic pool."
+            : `Tactical action: click a system on the map to activate it (${tokens ?? "?"} tactic token${tokens === 1 ? "" : "s"}).`}
+        </p>
+      )}
       <div className={classes.row}>
         {opts
-          .filter((o) => o.value!.action !== "end_turn_when_followed")
+          .filter((o) => o.value!.action !== "end_turn_when_followed" && o.value!.action !== "tactical")
           .map((o) => (
             <Button key={o.id} size="xs" variant={variant(o)} disabled={disabled(o)} onClick={() => answer(o.id)}>
               {label(o)}
@@ -188,30 +201,13 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   );
 }
 
+/** The bot's system menu (rings, then systems) is answered by clicking the map; the panel only says so. */
 export function TacticalActivateView({ decision, answer }: RendererProps<TacticalActivate>) {
-  const opts = live(decision.options);
-  const systems = opts.filter((o) => o.value!.step === "system");
-  const menus = opts.filter((o) => o.value!.step !== "system");
   return (
     <div className={classes.panel}>
-      <span className={classes.heading}>Activate a system (or click it on the map)</span>
-      <div className={classes.row}>
-        {systems.map((o) => {
-          const v = o.value!;
-          if (v.step !== "system") return null;
-          return <OptionButton key={o.id} id={o.id} label={systemName(v.position, v.tileId)} answer={answer} />;
-        })}
-      </div>
-      {menus.length > 0 && (
-        <div className={classes.row}>
-          {menus.map((o) => {
-            const v = o.value!;
-            const what = v.step === "ring" ? `Ring ${v.ring.replace("_", " ")}` : v.step === "distance" ? `${v.distance} away` : "";
-            const n = v.step === "system" ? 0 : v.positions.length;
-            return <OptionButton key={o.id} id={o.id} label={`${what} (${n})`} answer={answer} variant="subtle" />;
-          })}
-        </div>
-      )}
+      <p className={classes.hint} data-map-activate-hint>
+        Click a system on the map to activate it (−1 tactic token). Systems you can't activate are greyed, with the reason on hover.
+      </p>
       <Extras options={decision.options} answer={answer} />
     </div>
   );
