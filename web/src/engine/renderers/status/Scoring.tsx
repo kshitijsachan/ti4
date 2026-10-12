@@ -9,7 +9,7 @@ type PublicValue = Extract<ScoreValue, { action: "score_public" }>;
 
 function declared(id: string | null | undefined, what: string) {
   if (!id) return null;
-  if (id === "none") return <p className={classes.done}>No {what} objective this round.</p>;
+  if (id === "none") return <p className={classes.done}>You score no {what} objective this round.</p>;
   return <p className={classes.done}>Scored {objectiveName(id)}.</p>;
 }
 
@@ -100,6 +100,9 @@ export function StatusScoreSecretRenderer({ decision, state, answer }: StatusRen
   return (
     <div className={classes.stack}>
       <h4 className={classes.heading}>Score a secret objective</h4>
+      {decision.options.every((o) => !o.value || o.disabled || o.value.met === false || (inStatus && o.value.phase !== "status")) && (
+        <p className={classes.hint}>None you can score now. Under “Score objectives”, choose “Score no secret objective”.</p>
+      )}
       {decision.options.map((o) => {
         const v = o.value;
         if (!v) return null;

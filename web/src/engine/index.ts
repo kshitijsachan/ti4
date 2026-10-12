@@ -15,6 +15,7 @@ export { EngineDecisionHost, decisionTitle } from "./EngineDecisionHost";
 export { openToAll } from "./reducer";
 export { orderDecisions, useMyQueue } from "./queue";
 export { engineTurn } from "./board";
+export { useEngineDraftPick } from "./draftPick";
 export { GenericDecision } from "./GenericDecision";
 export { RENDERERS, rendererFor } from "./registry";
 export type { EngineRenderer, EngineRendererProps } from "./registry";

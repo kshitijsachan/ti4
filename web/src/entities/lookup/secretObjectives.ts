@@ -9,3 +9,10 @@ export function getSecretObjectiveData(
 ): SecretObjective | undefined {
   return secretObjectivesMap.get(objectiveAlias);
 }
+
+const byName = indexBy(secretObjectives, (obj) => obj.name.toLowerCase());
+
+/** A secret objective by its printed name (prompts that only carry the label). */
+export function getSecretObjectiveByName(name: string): SecretObjective | undefined {
+  return byName.get(name.trim().toLowerCase());
+}

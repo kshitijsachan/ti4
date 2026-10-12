@@ -1,3 +1,4 @@
+import { planetName } from "../tactical/names";
 import type { GameState, Option, UnitId } from "../../../../../shim/src/engine/types";
 import type { CombatPlanEntry, HittableUnit } from "../../../../../shim/src/engine/kinds/combat";
 import { playerLabel } from "../../names";
@@ -29,7 +30,7 @@ const UNIT_NAMES: Record<string, string> = {
 
 export const unitName = (id: string) => UNIT_NAMES[id] ?? id;
 
-export const holderName = (holder: string) => (holder === "space" ? "space" : holder);
+export const holderName = (holder: string) => (holder === "space" ? "space" : planetName(holder));
 
 export function unitLabel(u: HittableUnit) {
   return `${u.count} ${unitName(u.unit)}${u.damaged ? ` (${u.damaged} damaged)` : ""}`;
