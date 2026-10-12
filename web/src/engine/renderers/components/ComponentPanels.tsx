@@ -8,6 +8,7 @@ import type {
   TechStep,
 } from "../../../../../shim/src/engine/kinds/components";
 import type { GameState, Option } from "../../../../../shim/src/engine/types";
+import { strategyCardName } from "../tactical/names";
 import classes from "./components.module.css";
 
 export type RendererProps<D> = {
@@ -45,6 +46,14 @@ const SOURCE_NAMES: Record<string, string> = {
   research: "Research a technology",
   entropicscar: "Entropic Scar",
   ground_hit: "Hit an opposing ground force",
+  imperialarbiter: "Imperial Arbiter",
+  minister_peace: "Minister of Peace",
+  ixthian_artifact: "Ixthian Artifact",
+  pay_debt: "Pay a debt",
+  checks_and_balances: "Checks and Balances: give the strategy card to",
+  colonial_redistribution: "Colonial Redistribution: give the planet to",
+  remove_cc: "Remove one of your command tokens",
+  return_play_area_pn: "Return a play-area promissory note",
 };
 
 export const sourceName = (s: string | undefined | null) =>
@@ -105,6 +114,7 @@ const str = (x: unknown): string => (typeof x === "string" || typeof x === "numb
 const cap = (x: string) => x.replace(/^\w/, (c) => c.toUpperCase());
 
 function cardText(a: Record<string, unknown>): string {
+  if (a.cardName) return str(a.cardName);
   const relic = str(a.relicName) || str(a.relic);
   if (a.relic2Name) return `${relic} ⇄ ${str(a.relic2Name)}`;
   if (relic) return a.faction ? `${relic} (${str(a.faction)})` : relic;
@@ -114,6 +124,39 @@ function cardText(a: Record<string, unknown>): string {
 }
 
 const JR_CHOICES: Record<string, string> = { sd: "Place a space dock", pds: "Place a PDS", monument: "Place a monument", tg: "Gain 1 trade good" };
+
+const sc = (n: unknown) => (typeof n === "number" ? strategyCardName(n) : "");
+
+/** choose.confirm options whose text depends on the source (else the choice, else Yes/No). */
+function confirmText(a: Record<string, unknown>, state: GameState | null): string {
+  switch (a.source) {
+    case "jrxs455o":
+      return JR_CHOICES[str(a.choice)] ?? "";
+    case "imperialarbiter":
+      return a.confirm ? "Swap strategy cards" : "Decline";
+    case "minister_peace":
+      return "End the active player's turn";
+    case "ixthian_artifact":
+      return a.choice === "ignore_speaker" ? "Roll anyway" : "Roll";
+    case "pay_debt": {
+      const n = typeof a.amount === "number" ? a.amount : 1;
+      const to = factionLabel(state, str(a.faction));
+      if (a.choice === "debt") return `Erase ${n} debt owed to ${to}`;
+      return `Send ${n} ${a.choice === "tg" ? (n === 1 ? "trade good" : "trade goods") : n === 1 ? "commodity" : "commodities"} to ${to}`;
+    }
+    default:
+      return "";
+  }
+}
+
+/** choose.player: the player, plus what they get (a strategy card swap / gift, a planet). */
+function playerText(a: Record<string, unknown>, state: GameState | null): string {
+  const who = factionLabel(state, str(a.faction));
+  if (a.source === "imperialarbiter" && typeof a.strategyCard === "number")
+    return `${who}: their ${sc(a.strategyCard)} for our ${sc(a.strategyCard2)}`;
+  if (a.planet) return `${who} (${str(a.planetName) || str(a.planet)})`;
+  return who;
+}
 
 /** One line for a typed choose.* option, from its value only. */
 function chooseText(kind: string, v: ChooseValue, state: GameState | null): string {
@@ -125,13 +168,13 @@ function chooseText(kind: string, v: ChooseValue, state: GameState | null): stri
     case "choose.system":
       return `${str(a.tileName) || str(a.tile) || str(a.tileId)}${at(a.tile)}`;
     case "choose.player":
-      return factionLabel(state, str(a.faction));
+      return playerText(a, state);
     case "choose.unit":
       return `${str(a.unit)}${at(str(a.planetName) || str(a.tile))}`;
     case "choose.card":
       return cardText(a);
     case "choose.confirm":
-      return (a.source === "jrxs455o" && JR_CHOICES[str(a.choice)]) || str(a.choice) || (a.confirm ? "Yes" : "No");
+      return confirmText(a, state) || str(a.choice) || (a.confirm ? "Yes" : "No");
     default:
       return "";
   }

@@ -6,7 +6,8 @@
  *    look for that; leaders/relics/PNs are not planned).
  *  - relic.use: Crown of Emphidia is purged for the point (Maw of Worlds is not: it exhausts every planet);
  *    Prophet's Tears draws an action card; exhaust/use effects that help us are used; peeking at decks is declined.
- *  - choose.confirm: yes (Silver Flame: take the point); choose.planet: Stellar Converter on someone else's planet, Nano-Forge on one of ours, else first;
+ *  - choose.confirm: yes (Silver Flame: take the point; Minister of Peace; Ixthian Artifact roll as speaker), except
+ *    Imperial Arbiter (keep our strategy card) and the debt reminder (no payment: deals go through trades); choose.planet: Stellar Converter on someone else's planet, Nano-Forge on one of ours, else first;
  *    choose.player: someone other than us; choose.card/system/unit: the first offered; JR-XS455-O: a PDS, else
  *    the trade good.
  *  - tech.step: free gains are taken (Graviton / Bio-Stims / Magen / Dacxive offers, Bio-Stims readies a planet
@@ -61,6 +62,10 @@ export function chooseComponents(d: ComponentsDecision, state: GameState | null,
       if (t[0]?.value!.source === "jrxs455o") {
         return pick(t.find((o) => o.value!.choice === "pds") ?? t.find((o) => o.value!.choice === "tg") ?? t[0], "JR-XS455-O: a PDS, else a trade good") ?? decline("none");
       }
+      if (t[0]?.value!.source === "imperialarbiter") {
+        return pick(t.find((o) => o.value!.confirm === false), "Imperial Arbiter: keep our strategy card") ?? decline("Imperial Arbiter: keep our strategy card");
+      }
+      if (t[0]?.value!.source === "pay_debt") return decline("debt reminder: no payment now");
       return (
         pick(t.find((o) => o.value!.confirm && o.value!.choice === "Point"), "take the point") ??
         pick(t.find((o) => o.value!.confirm), `use ${t[0]?.value?.source ?? ""}`) ??
