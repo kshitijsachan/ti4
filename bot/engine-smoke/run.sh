@@ -8,7 +8,8 @@ J=/home/user/tools/jdk-26.0.2+10/bin
 W=${W:-/home/user/asyncti4/engine-int}
 CP=$W/target/classes:$(ls $S/libs/BOOT-INF/lib/*.jar | tr '\n' ':')
 OUT=$(mktemp -d); trap "rm -rf $OUT" EXIT
-$J/javac -proc:none -nowarn -cp "$CP" -d $OUT $T/*.java $(find $W/src/test/java/ti4/selfhost -name "*.java") 2>&1 | grep -v "^Note:\|JAVA_TOOL" | head -20
+# JUnit tests under ti4/selfhost are skipped (no junit in the jar libs); the smoke helpers are plain classes.
+$J/javac -proc:none -nowarn -cp "$CP" -d $OUT $T/*.java $(find $W/src/test/java/ti4/selfhost -name "*.java" -exec grep -L "org.junit" {} +) 2>&1 | grep -v "^Note:\|JAVA_TOOL" | head -20
 cd $W
 if [ "$1" = overlap ]; then
   timeout 300 $J/java -cp "$OUT:$CP" ti4.selfhost.engine.KindOverlap ${MESSAGES:-$S/int-smoke/messages.tsv} 2>&1 | grep -v "^Info\|JAVA_TOOL\|Reflections"
