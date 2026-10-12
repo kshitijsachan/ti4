@@ -85,7 +85,11 @@ export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<C
   const mine = !!self && !!w && w.eligible.includes(self.userId) && !w.responded.includes(self.userId);
   const waitingOn = w ? w.eligible.filter((u) => !w.responded.includes(u) && u !== self?.userId) : [];
   const options = d.options.filter(live).filter((o) => !o.id.includes("dummyPlayerSpoof"));
-  const rolls = options.filter((o): o is Option<CombatRollValue> => o.value?.action === "roll");
+  /* Bombardment comes after the space combat: not offered while both fleets still have ships in it. */
+  const spaceFight = holder === "space" && (combat?.fronts.find((f) => f.holder === "space")?.sides.filter((x) => x.units.length > 0).length ?? 0) > 1;
+  const rolls = options
+    .filter((o): o is Option<CombatRollValue> => o.value?.action === "roll")
+    .filter((o) => !(spaceFight && o.value?.rollType === "bombardment"));
   const others = options.filter((o) => o.value?.action !== "roll");
   const blocked = !!w && !mine;
   const names = waitingOn.map((u) => state?.players.find((p) => p.userId === u)?.userName ?? u);
@@ -107,6 +111,7 @@ export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<C
         {rolls.map((o) => (
           <Button key={o.id} size="xs" variant={mine && o.value?.rollType === rollType ? "filled" : "default"} disabled={blocked} onClick={() => answer(o.id)}>
             Roll {ROLL_NAMES[String(o.value?.rollType)]?.toLowerCase() ?? ""}
+            {o.value && (o.value.holder !== holder || rolls.filter((x) => x.value?.rollType === o.value?.rollType).length > 1) ? ` · ${holderName(o.value.holder)}` : ""}
           </Button>
         ))}
         {others.map((o) => (

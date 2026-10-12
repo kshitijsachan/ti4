@@ -110,7 +110,7 @@ export function CombatHitsPanel({ decision: d, state, answer }: RendererProps<Co
               <Button size="xs" variant="subtle" onClick={() => setRows(initial)}>
                 Reset
               </Button>
-              {cancels.map((o) => (
+              {auto.hits > 0 && cancels.map((o) => (
                 <Button key={o.id} size="xs" variant="subtle" onClick={() => answer(o.id)}>
                   Cancel a hit (ability)
                 </Button>

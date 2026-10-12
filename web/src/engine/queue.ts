@@ -151,8 +151,8 @@ const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/
 
 /**
  * My decisions in the order to answer them (head first), and the background ones behind "Available now":
- * 0. combat, 1. the next step of what I just answered (pay after build, gain after pay), 3. my turn menu while it is
- * my turn, trade offers to me, 4. everything else oldest first, 5. table steps that move the phase on (after my
+ * 0. combat, 1. the next step of what I just answered (pay after build, gain after pay), 3. trade offers to me,
+ * 4. everything else oldest first (on my turn: then my turn menu, then reaction windows like follows), 5. table steps that move the phase on (after my
  * homework), 6. the turn menu when it is not my turn, 7. untyped prompts (often leftovers). Perpetual action-card
  * panels go behind "Available now"; prompts I hid are left out.
  */
@@ -191,8 +191,10 @@ export function orderDecisions(
     if (nextStep(d)) return 1;
     /* Untyped prompts come last: the engine can't tell a live one from a leftover the game never closed. */
     if (d.kind === "legacy") return 7;
-    /* My turn: the table waits on it, so it goes before follows and other answer-any-time prompts. */
-    if (d.kind === "turn.action") return myTurn ? 3 : 6;
+    /* My turn: the table waits on it, so it goes before follows and other answer-any-time windows (after what is
+       already under way for me, like a payment). */
+    if (d.kind === "turn.action") return myTurn ? 4.4 : 6;
+    if (myTurn && d.window) return 4.5;
     if (PHASE_STEP.has(d.kind)) return homework ? 5 : 4;
     if (d.kind === "trade.offer") return 3;
     return 4;
