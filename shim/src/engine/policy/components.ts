@@ -43,7 +43,9 @@ const DECLINE_LABEL = /^(cancel|decline|no\b|done|close|dismiss|not now|skip)/i;
 /** Answer a components-area decision; null only when the seat has no pressable option at all. */
 export function chooseComponents(d: ComponentsDecision, state: GameState | null, me: string): ComponentsChoice | null {
   const self = state?.players.find((p) => p.userId === me);
-  const opts = (optionsFor(d, me) as Option<any>[]).filter((o) => !o.disabled && !o.needsInput);
+  const opts = (optionsFor(d, me) as Option<any>[]).filter(
+    (o) => !o.disabled && !o.needsInput && !(o.value as { unavailable?: string | null } | null)?.unavailable,
+  );
   if (!opts.length) return null;
   const typed = opts.filter((o) => o.value);
   const untyped = opts.filter((o) => !o.value);

@@ -147,6 +147,9 @@ export type RelicUse = DecisionBase<
       | "purge_for_technology"
       | "purge_for_point"
       | string;
+    /** Exhaust / purge uses only: why it cannot be used now ("<relic> is exhausted", "You do not have <relic>",
+     * "You must control the Tomb of Emphidia"); null = it can. Re-read on state change; validate() refuses it. */
+    unavailable?: string | null;
   }
 >;
 
@@ -178,6 +181,8 @@ export type TechStep = DecisionBase<
     unit?: string;
     color?: string;
     choice?: string;
+    /** step "exhaust" only: "<tech> is exhausted" while it cannot be used (null = it can); validate() refuses it. */
+    unavailable?: string | null;
     unitUpgradeOnly?: boolean;
   }
 >;
