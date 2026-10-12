@@ -26,6 +26,18 @@ export const BOT_RESOURCES =
 
 export const mapsDir = () => join(BOT_STORAGE, "maps");
 export const gameFile = (game: string) => join(mapsDir(), `${game}.txt`);
+
+/** The game's live save, retried while the bot replaces it (the file can be missing for a moment mid-save: ENOENT). */
+export function readGameFile(game: string): string {
+  for (let i = 0; ; i++) {
+    try {
+      return readFileSync(gameFile(game), "utf8");
+    } catch (e: any) {
+      if (e?.code !== "ENOENT" || i >= 40) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    }
+  }
+}
 export const undoDir = (game: string) => join(mapsDir(), "undo", game);
 export const undoFile = (game: string, index: number) => join(undoDir(game), `${game}_${index}.txt`);
 

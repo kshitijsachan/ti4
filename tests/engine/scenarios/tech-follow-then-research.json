@@ -1,0 +1,73 @@
+{
+  "name": "tech-follow-then-research",
+  "description": "Technology secondary in two presses (pbd101 r1): Mentak first spends a strategy token (sc_follow_7), then presses Get a Technology (must not cost a second token), researches AMD and pays with Moll Primus.",
+  "base": {
+    "recording": "pbd101",
+    "index": 47
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "sc_follow_7"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "acquireATechWithSC_first"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "getTech_amd"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "mollprimus"
+          ]
+        }
+      },
+      "as": "mentak",
+      "legacy": [
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_mollprimus_restech"
+          },
+          "as": "mentak"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
+          "as": "mentak"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=mentak].techs",
+        "includes": "amd"
+      }
+    ],
+    "save": [
+      {
+        "key": "player[mentak].strategy_cc",
+        "eq": "1"
+      }
+    ]
+  }
+}
