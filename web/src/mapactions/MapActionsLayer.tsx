@@ -20,6 +20,7 @@ import { baseId } from "@/decisions/model/controls";
 import { useMapActionContext } from "./context";
 import { activationOf, type Activation } from "./eligibility";
 import { activateSystem as driveActivation } from "./activate";
+import { activateClick, activateLabel } from "./activateClick";
 import { buttonsOf, pressButton } from "./driver";
 import { promptHasMoves, unitsAt, type UnitGroup } from "./movement";
 import { distancesTo, maxBoost } from "./range";
@@ -266,7 +267,7 @@ export function MapActionsLayer({
       setChip({
         position: requested,
         kind: "activate",
-        label: `Activate ${names[requested] || requested}?`,
+        label: activateLabel(names[requested] || requested),
       });
     else
       setError(
@@ -280,13 +281,10 @@ export function MapActionsLayer({
     if (busy) return true;
     setError(null);
     if (activating) {
-      const a = activation[position];
-      if (!a?.ok) return false;
-      setChip({
-        position,
-        kind: "activate",
-        label: `Activate ${names[position] || "system"}?`,
-      });
+      const click = activateClick(position, !!activation[position]?.ok, chip, names[position] ?? "");
+      if (click.kind === "ignore") return false;
+      if (click.kind === "confirm") confirmChip();
+      else setChip({ position, kind: "activate", label: click.label });
       return true;
     }
     if (moving && groups[position]) {
@@ -566,6 +564,7 @@ export function MapActionsLayer({
             }
             role="dialog"
             aria-label={chip.label}
+            title={chip.kind === "activate" ? "Click the system again (or ✓, or Enter) to activate" : undefined}
           >
             <span className={classes.chipText}>{chip.label}</span>
             <span className={cx(classes.mono, classes.muted)}>
