@@ -1,0 +1,48 @@
+{
+  "name": "te-bt-nomad-keleres",
+  "description": "pbd114 r1: Nomad Thunder's Paradox (startThundersParadox -> useThundersParadox_step2_<agent> -> _step3_<f> -> _step4_<f>_<agent>), Keleres Executive Order (useExecutiveOrder_top)",
+  "base": {
+    "recording": "pbd114",
+    "index": 269,
+    "repost": false
+  },
+  "setup": [
+    "/breakthrough unlock breakthrough:nomadbt faction_or_color:nomad",
+    "/leaders exhaust leader:jolnaragent faction_or_color:jolnar",
+    "/tech add tech:executiveorder faction_or_color:keleresa"
+  ],
+  "steps": [
+    {
+      "press": "startThundersParadox",
+      "as": "nomad"
+    },
+    {
+      "answer": {
+        "kind": "/te.breakthrough|legacy/",
+        "option": "step2_nomadagentmercer"
+      },
+      "as": "nomad"
+    },
+    {
+      "answer": {
+        "kind": "/te.breakthrough|legacy/",
+        "option": "step3_jolnar"
+      },
+      "as": "nomad"
+    },
+    {
+      "answer": {
+        "kind": "/te.breakthrough|legacy/",
+        "option": "step4_"
+      },
+      "as": "nomad"
+    },
+    {
+      "press": "FFCC_keleresa_useExecutiveOrder_top",
+      "as": "keleresa"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "name": "te-firmament-techs",
+  "description": "Firmament (TE) on pbd116 r1: Black Ops played by its holder (resolvePNPlay_blackops: 2 TG + CC buttons, plot picker for the Firmament), Neural Parasite (startNeuralParasite -> neuralParasiteS2_<f> -> resolveNeuralParasite_), Planesplitter (planesplitterStep1_ -> planesplitterStep2_)",
+  "base": {
+    "recording": "pbd116",
+    "index": 42,
+    "repost": false
+  },
+  "setup": [
+    "/pn send promissory_note_id:blackops target_faction_or_color:naalu faction_or_color:firmament",
+    "/tech add tech:parasite-firm tech2:planesplitter-firm faction_or_color:firmament"
+  ],
+  "steps": [
+    {
+      "press": "resolvePNPlay_blackops",
+      "as": "naalu"
+    },
+    {
+      "press": "FFCC_firmament_startNeuralParasite",
+      "as": "firmament"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "neuralParasiteS2_"
+      },
+      "as": "firmament"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "resolveNeuralParasite_"
+      },
+      "as": "firmament"
+    },
+    {
+      "press": "FFCC_firmament_planesplitterStep1_page0",
+      "as": "firmament"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "planesplitterStep1_\\d"
+      },
+      "as": "firmament"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "planesplitterStep2_\\d"
+      },
+      "as": "firmament"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
