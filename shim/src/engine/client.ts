@@ -180,6 +180,27 @@ export class EngineClient {
     }
   }
 
+  /**
+   * Re-snapshot a game on the engine side: `rebuild` re-captures every prompt still on screen (a decision closed while
+   * its message stayed up comes back), `recover` re-posts a step the game waits for whose prompt is gone. Returns the
+   * engine's JSON (null when unavailable).
+   */
+  async resnapshot(game: string, how: "rebuild" | "recover"): Promise<Record<string, unknown> | null> {
+    try {
+      const res = await fetch(this.url(`/${encodeURIComponent(game)}/${how}`), {
+        method: "POST",
+        headers: this.headers(true),
+        body: "{}",
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!res.ok || !res.headers.get("content-type")?.includes("json")) return null;
+      this.stateCache.clear();
+      return (await res.json()) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
   /** Typed action trade.propose as `userId` (the receiver gets a trade.offer decision). */
   async proposeTrade(game: string, proposal: TradeProposal & { userId: string }): Promise<TradeProposeResult | null> {
     try {
