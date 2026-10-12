@@ -1,13 +1,14 @@
 {
   "name": "faction-nomad",
-  "description": "Nomad: agent Artuno with trade goods (exhaustAgent_nomadagentartuno_<tg>), Temporal Command Suite (exhaustTCS_/useTCS_), The Cavalry PN (cavStep2_)",
+  "description": "Nomad: agent Artuno with trade goods (exhaustAgent_nomadagentartuno_<tg>), Temporal Command Suite readying it (useTCS_<agent>_<faction>), agent Field Marshal Mercer on a planet (exhaustAgent_nomadagentmercer_<tile>_<planet>)",
   "base": {
-    "recording": "pbd114",
-    "index": 269,
+    "recording": "pbd83",
+    "index": 165,
     "repost": false
   },
   "setup": [
-    "/tech add tech:tcs faction_or_color:nomad"
+    "/tech add tech:tcs faction_or_color:nomad",
+    "/leaders ready leader:nomadagentartuno faction_or_color:nomad"
   ],
   "trigger": {
     "press": "exhaustAgent_nomadagentartuno_2",
@@ -16,6 +17,10 @@
   "steps": [
     {
       "press": "FFCC_nomad_useTCS_nomadagentartuno_nomad",
+      "as": "nomad"
+    },
+    {
+      "press": "exhaustAgent_nomadagentmercer_313_arcturus",
       "as": "nomad"
     }
   ],
