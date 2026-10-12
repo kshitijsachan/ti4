@@ -213,6 +213,11 @@ while (Date.now() < end2 && !done) {
   } else if (await dialog.getByRole("button", { name: "Get a Technology" }).count()) {
     say(`my decision: ${title} -> Get a Technology`);
     await dialog.getByRole("button", { name: "Get a Technology" }).click();
+  } else if (/type of technology/i.test(title) && (await dialog.getByRole("button", { name: /Propulsion|Biotic|Cybernetic|Warfare/ }).count())) {
+    // A "Get a Technology" start (Deepwrought, …) asks for the technology colour first.
+    const type = dialog.getByRole("button", { name: /Propulsion|Biotic|Cybernetic|Warfare/ }).first();
+    say(`my decision: ${title} -> ${(await type.textContent())?.trim()}`);
+    await type.click();
   } else {
     say(`not mine to script (left alone): ${title}`);
     await nextDecision(dialog, title);
