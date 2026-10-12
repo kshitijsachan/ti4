@@ -257,7 +257,12 @@ autopilot players, 2 games to the end, plus one human/web game through setup, co
 * Precondition: every `chooseTyped` case returns an answer for its kinds. c11 is checking that the bot never leaves
   a decision "to a person".
 
-**Step 2: web legacy UI (after c10 makes engine UI the default).**
+**Step 2: web legacy UI (after c10 makes engine UI the default).** *Prepared on branch `delete-legacy-web`* (merge
+after a clean day with `TI4_ENGINE_WEB=1`): `web/src/decisions/`, `play/attention.ts`, engine-off branches and the
+trade drawer's legacy endpoints are gone; reused pieces moved to `web/src/engine/{focus.ts,ui/CombatOutcome.tsx,
+ui/FactionIcon.tsx}` and `web/src/prompts/` (Discord-prompt reading still used by map actions, setup waiting,
+rewind phrasing, combat reports — next to port onto `GameState` / `mapactions/engine.ts`). Still open below:
+mapactions on `prompts/`, select `#value` / `needsInput` presses.
 
 * Delete `web/src/decisions/` (12.6k lines): `detect/{games,pending,waiting}.ts`, `model/{classify,controls,queue,
   focus,frontier,expedition,scoring,stored,text,usePress}.ts`, `renderers/*` (legacy renderers), `ui/DecisionHost.tsx`

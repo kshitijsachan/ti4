@@ -60,14 +60,3 @@
     display: none;
   }
 }
-
-/* The decision popup docks right (a bottom sheet on phones); keep the hand bar uncovered. */
-.decision.decision {
-  padding-bottom: 48px;
-}
-
-@media (min-width: 721px) {
-  .decision.decision {
-    padding: 12px 12px 48px;
-  }
-}

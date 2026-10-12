@@ -617,7 +617,6 @@ export function selectPending(state: PlayState, game: GameChannels, ctx: Pending
     .sort((a, b) => compareSnowflakes(b.message.id, a.message.id));
 }
 
-const TURN_MENU = /^(tacticalAction(?!Build)|endOfTurnAbilities|turnEnd)/;
 /** The steps inside one tactical action: pick a system, the ships, land, conclude. */
 const TACTICAL_STEP = /^(ringTile_|ring_|getTilesThisFarAway_|tacticalMoveFrom_|unitTacticalMove_|doneWithOneSystem|concludeMove_|landUnits_|doneLanding_|doneWithTacticalAction)/;
 
@@ -667,30 +666,6 @@ function latestTurnStart(state: PlayState, actionsId: string, meId: string) {
   for (let i = data.ids.length - 1; i >= 0; i--) {
     const m = data.byId[data.ids[i]];
     if (m?.author.bot && /\bit is now your turn\b/i.test(m.content) && (m.mentions ?? []).some((u) => u.id === meId)) return m.id;
-  }
-  return undefined;
-}
-
-/**
- * My turn, yet nothing waits on me: a step got lost (an "only you can see this" prompt dropped by a reconnect, a press
- * that failed). Offer my newest turn menu again, so the turn never dead-ends.
- */
-export function turnMenuFallback(state: PlayState, game: GameChannels, faction: string | undefined): PendingPrompt | undefined {
-  const roundStart = latestRoundStart(state, game.actions.id);
-  const data = state.messages[game.actions.id];
-  if (!data || !faction) return undefined;
-  let acted = false;
-  for (let i = data.ids.length - 1; i >= 0; i--) {
-    const m = data.byId[data.ids[i]];
-    if (!m?.author.bot || state.dismissedPrompts[m.id]) continue;
-    if (roundStart && compareSnowflakes(m.id, roundStart) < 0) return undefined;
-    if (/\bactivated \d+\b/i.test(m.content)) acted = true;
-    const ids = choicesOf(m).filter((c) => idFaction(c.customId) === faction).map((c) => baseId(c.customId));
-    /* Mid tactical action: the step that concludes it, not a fresh turn menu (that would start a second action). */
-    if (ids.includes("doneWithTacticalAction")) return { message: m, channelId: game.actions.id, where: "actions", reason: "faction" as const };
-    if (!ids.some((id) => TURN_MENU.test(id))) continue;
-    if (acted && ids.some((id) => /^tacticalAction(?!Build)/.test(id)) && !ids.some((id) => /^turnEnd/.test(id))) return undefined;
-    return { message: m, channelId: game.actions.id, where: "actions", reason: "faction" as const };
   }
   return undefined;
 }

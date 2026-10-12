@@ -8,7 +8,7 @@ import { EMPTY_VIEW, myDecisions, reduce, settleAnswer, startAnswer, subscribeVi
 
 export type EngineStore = {
   view: EngineView;
-  /** This browser's explicit flag (null = follow the server). */
+  /** This browser's explicit flag (null = follow the server); only `false` (legacy asked for) still means anything. */
   override: boolean | null;
   /** What the shim said in its hello frame. */
   server: EngineHello | null;
@@ -88,29 +88,25 @@ export function useEngine<T>(selector: (s: EngineStore) => T): T {
   return useStore(engineStore, selector);
 }
 
-/** The engine flag: this browser's choice, else the server default. Off when the shim has no engine. */
-export function useEngineEnabled(): boolean {
-  const override = useEngine((s) => s.override);
-  const server = useEngine((s) => s.server);
-  if (server && !server.available) return false;
-  return override ?? server?.web_default ?? false;
+/**
+ * Whether this browser asked for the legacy decision UI (`?engine=0`, or the old settings toggle). That UI is gone:
+ * the engine UI runs regardless and the page says so (`<LegacyRemovedNotice/>`) until the choice is cleared.
+ */
+export function useLegacyRequested(): boolean {
+  return useEngine((s) => s.override === false);
 }
 
 /**
- * Whether engine data drives the UI right now: flag on and the stream live for this game. While it connects the
- * legacy path is not shown either (no flash of the old popup); if the engine turns out unavailable, legacy runs.
+ * Whether engine data drives the UI right now: "engine" once the game's stream is live, "waiting" while it
+ * connects or reconnects (the engine unavailable, bot restarting). There is no other decision UI to fall back to.
  */
-export function useEngineMode(gameName: string): "engine" | "legacy" | "waiting" {
-  const enabled = useEngineEnabled();
+export function useEngineMode(gameName: string): "engine" | "waiting" {
   const game = useEngine((s) => s.view.game);
   const status = useEngine((s) => s.view.status);
-  if (!enabled) return "legacy";
-  if (game !== gameName) return "waiting";
-  if (status === "live") return "engine";
-  return status === "unavailable" ? "legacy" : "waiting";
+  return game === gameName && status === "live" ? "engine" : "waiting";
 }
 
-/** Engine state of the game on screen, or null (flag off, not live yet, or another game). */
+/** Engine state of the game on screen, or null (not live yet, or another game). */
 export function useEngineState(gameName: string) {
   const mode = useEngineMode(gameName);
   const state = useEngine((s) => s.view.state);

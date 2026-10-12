@@ -4,8 +4,6 @@ import { Tooltip, UnstyledButton } from "@mantine/core";
 import { IconListDetails, IconMessageCircle, IconTarget, IconTransfer, IconUsers } from "@tabler/icons-react";
 import cx from "clsx";
 import { usePlay } from "@/discord";
-import { useWaitingOnMe } from "@/engine/focus";
-import { useSetupWaiting } from "@/prompts/waiting";
 import { UndoButton } from "@/rollback";
 import type { TurnState } from "@/play/turn";
 import { SettingsMenu } from "./SettingsMenu";
@@ -92,7 +90,7 @@ type Props = {
   onPlayers?: () => void;
   talkUnread: number;
   incomingTrades: number;
-  /** Decisions waiting on me from the engine stream; replaces the legacy prompt detection when given. */
+  /** Decisions waiting on me from the engine stream (absent while it connects). */
   waiting?: { count: number; title: string | null; note?: string | null };
 };
 
@@ -113,12 +111,9 @@ export function TopBar({
   waiting,
 }: Props) {
   const toggle = (name: DrawerName) => onDrawer(drawer === name ? null : name);
-  const legacyCount = useWaitingOnMe((s) => s.count);
-  const legacyTitle = useWaitingOnMe((s) => s.title);
-  const legacySetup = useSetupWaiting(gameName);
-  const waitingOnMe = waiting ? waiting.count : legacyCount;
-  const firstDecision = waiting ? waiting.title : legacyTitle;
-  const setup = waiting ? (waiting.note ? { text: waiting.note, me: false } : null) : legacySetup;
+  const waitingOnMe = waiting?.count ?? 0;
+  const firstDecision = waiting?.title ?? null;
+  const setup = waiting?.note ? { text: waiting.note, me: false } : null;
   /* A decision of mine is up (setup, agenda, a follow…): the table waits on me even when it is nobody's turn. */
   const myMove = turn.mine || waitingOnMe > 0 || !!setup?.me;
   let turnText = "";

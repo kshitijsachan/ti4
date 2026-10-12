@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent,
 import { Tooltip, UnstyledButton } from "@mantine/core";
 import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEye, IconEyeOff, IconLoader2, IconMap, IconX } from "@tabler/icons-react";
 import cx from "clsx";
-import { useDecisionFocus, useWaitingOnMe } from "@/engine/focus";
+import { useDecisionFocus } from "./focus";
 import { useMovementUI } from "@/mapactions/store";
 import { useReserveRect } from "@/state/reservedArea";
 import type { Decision, GameState } from "./contract";
@@ -106,12 +106,6 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const more = queue.filter((d) => d.id !== shown?.id).length;
   const collapsed = !!shown && collapsedId === shown.id && !errors[shown.id];
   const stalled = useTurnStalled(state, !shown && queue.length === 0);
-
-  /* The header's "Your move" pill: what is really waiting on me (background prompts never count). */
-  const publishWaiting = useWaitingOnMe((s) => s.set);
-  const firstTitle = ordered.queue[0] ? decisionTitle(ordered.queue[0], state) : null;
-  useEffect(() => publishWaiting(ordered.queue.length, firstTitle), [publishWaiting, ordered.queue.length, firstTitle]);
-  useEffect(() => () => publishWaiting(0, null), [publishWaiting]);
 
   /* Half-made selections of decisions that closed are forgotten (only once the stream is live: not mid-reload). */
   useEffect(() => {

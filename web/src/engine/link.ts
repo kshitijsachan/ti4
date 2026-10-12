@@ -1,22 +1,21 @@
 import { useEffect } from "react";
 import { usePlayConnection } from "@/discord";
 import type { Decision } from "./contract";
-import { engineStore, useEngineEnabled } from "./store";
+import { engineStore } from "./store";
 
-/** No snapshot after this long: treat the engine as unavailable for now and let the legacy UI run. */
+/** No snapshot after this long: treat the engine as unavailable for now (the page shows "reconnecting"). */
 const SUBSCRIBE_TIMEOUT_MS = 15000;
 /** While the engine is unavailable (bot restarting, or without the engine), ask again this often. */
 const RETRY_MS = 30000;
 const ANSWER_TIMEOUT_MS = 60000;
 
 /**
- * Follows one game's engine stream over the play socket while the engine flag is on. Every (re)connect
+ * Follows one game's engine stream over the play socket (the only source of decisions). Every (re)connect
  * resubscribes, resuming from the last seq applied (the shim answers with the missed events, or a full snapshot
  * when it can't vouch for them), so reload and reconnect land on the server's view exactly.
  */
 export function useEngineLink(gameName: string) {
   const conn = usePlayConnection();
-  const enabled = useEngineEnabled();
 
   useEffect(() => {
     const sync = () => engineStore.getState().setServer(conn.engineInfo);
@@ -25,7 +24,6 @@ export function useEngineLink(gameName: string) {
   }, [conn]);
 
   useEffect(() => {
-    if (!enabled) return;
     let timer: number | undefined;
     const subscribe = () => {
       const { view } = engineStore.getState();
@@ -59,7 +57,7 @@ export function useEngineLink(gameName: string) {
       conn.send({ op: "engine_unsub" });
       engineStore.getState().unfollow();
     };
-  }, [conn, gameName, enabled]);
+  }, [conn, gameName]);
 }
 
 /**

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Continuous fuzzing: ws-fuzz back to back (a fresh solo game and seed each run, seat "Fuzz 1"), and ui-fuzz in
-# browser chunks (<= 5 min each, under flock /tmp/ti4-heavy.lock, seat "Fuzz 2", alternating ?engine=1 / ?engine=0,
+# browser chunks (<= 5 min each, under flock /tmp/ti4-heavy.lock, seat "Fuzz 2", ?engine=1 (the legacy UI is removed),
 # one game kept across UI_CHUNKS_PER_GAME chunks). Every game the fuzzers create is ended. Violations are folded
 # (deduped) into $FUZZ_DIR/VIOLATIONS.md after every run.
 #   Stop:    touch /home/user/run/fuzz/STOP   (finishes the current run / chunk, ends the games, exits)
@@ -66,7 +66,7 @@ ui_loop() {
     flock /tmp/ti4-heavy.lock timeout 330 node "$HERE/ui-fuzz.mjs" --seed "$s" --seat "Fuzz 2" --game "$ui_game" --engine "$ui_mode" --minutes "$UI_MINUTES" > "$F/ui-current.out" 2>&1
     pkill -f "ui-fuzz.mjs --seed $s" 2>/dev/null
     log "ui: seed $s done: $(grep -E '^[0-9:]+ done:' "$F/ui-current.out" | tail -1)"
-    ui_chunks=$((ui_chunks + 1)); ui_mode=$((1 - ui_mode))
+    ui_chunks=$((ui_chunks + 1))  # engine UI only: the legacy web UI is removed
     phase=$(curl -s -m 10 "http://127.0.0.1:8081/api/public/game/$ui_game/web-data" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const w=JSON.parse(s);console.log(w.gameState.winner?"over":w.gameState.phase)}catch{console.log("gone")}})')
     if [ "$ui_chunks" -ge "$UI_CHUNKS_PER_GAME" ] || [ "$phase" = over ] || [ "$phase" = gone ] || [ "$phase" = finished ]; then ui_end_game; fi
     fold

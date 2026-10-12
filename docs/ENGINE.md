@@ -276,7 +276,9 @@ Shim: `TI4_ENGINE=off` → no EngineClient; autopilot/web run purely on the lega
 **Rollback (one line).** Both default to on; deploy/docker-compose.yml passes `TI4_ENGINE` (and `TI4_ENGINE_NATIVE`,
 `TI4_ENGINE_WEB`) from `deploy/.env` to the bot and shim containers. `TI4_ENGINE=off` in `deploy/.env` + `docker compose
 up -d` returns every player and bot to the legacy prompt paths (no data change); the legacy fallbacks (autopilot
-rules, trade scrape, web legacy UI) stay in the code until W-INFRA-4. Self-hosted test server: `TI4_ENGINE=off` in
+rules, trade scrape) stay in the code until W-INFRA-4. The web legacy decision UI is deleted (branch
+`delete-legacy-web`): the web always renders the engine UI and shows "reconnecting to the game engine" while the
+stream is down, so with `TI4_ENGINE=off` web players have no decision popup (Discord-style channels still work). Self-hosted test server: `TI4_ENGINE=off` in
 `/home/user/run/bot.env` and the shim's environment, or roll back the binaries (`rm /home/user/run/bot-override.jar`
 + stop-bot.sh; `rm /home/user/run/shim-dir` + start-shim.sh).
 
@@ -452,9 +454,9 @@ answer path, SSE, shim client, autopilot uses engine for faction + SC pick / sta
   every hello; shim answers `snapshot {seq, state, decisions}` (or `events` when its ring covers `after`), then live
   `event` / `state` (per-viewer GameState after each `state.changed`) / `answer {nonce, result}` / `unavailable`.
   Private decisions reach only their target; events racing a snapshot are queued and flushed above its seq. Web:
-  `useEngine`, `useMyDecisions` (`awaits`), `useEngineMode(game)`; flag = `?engine=1|0` (remembered) or Settings →
-  Advanced → "Engine-driven prompts", default from shim `TI4_ENGINE_WEB=1`; falls back to legacy when the engine is
-  unavailable. Renderers: `web/src/engine/renderers/<area>/index.ts` exporting `renderers` (picked up by
+  `useEngine`, `useMyDecisions` (`awaits`), `useEngineMode(game)` ("engine" | "waiting"). The legacy popup
+  (`web/src/decisions`) is deleted: no flag; `?engine=0` only shows a "legacy UI removed" notice
+  (`engine/ui/EngineStatus.tsx`), and a down stream shows "reconnecting to the game engine". Renderers: `web/src/engine/renderers/<area>/index.ts` exporting `renderers` (picked up by
   `import.meta.glob`, props `EngineRendererProps`); `answer(optionId)` sends `op:"answer"` (select `#value` and
   `needsInput` options take the legacy press so modals still open).
 * **W-INFRA-3 Interaction abstraction** — *landed (bot `infra3-interaction`)*: see §3.4 "Engine-native answers";

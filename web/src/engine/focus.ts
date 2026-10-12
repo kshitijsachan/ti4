@@ -28,25 +28,6 @@ export const useDecisionFocus = create<DecisionFocusState>((set, get) => ({
   },
 }));
 
-type WaitingOnMe = {
-  /** Required decisions waiting on me right now, in any phase. */
-  count: number;
-  /** Title of the first one ("Choose a flavor of Keleres"), for the header's tooltip. */
-  title: string | null;
-  set: (count: number, title: string | null) => void;
-};
-
-/** What the decision popup holds for me, for the header's "Your move" pill (setup and agenda included). */
-export const useWaitingOnMe = create<WaitingOnMe>((set, get) => ({
-  count: 0,
-  title: null,
-  set: (count, title) => {
-    const cur = get();
-    if (cur.count === count && cur.title === title) return;
-    set({ count, title });
-  },
-}));
-
 export type TradeRequest = {
   /** Bumps per request. */
   key: number;

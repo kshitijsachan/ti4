@@ -3,11 +3,9 @@ import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import GameMapPage from "@/pages/GameMapPage";
 import { DraftView } from "@/draft";
-import { usePressButton } from "@/play/usePressButton";
 import { usePlayerData } from "@/api/usePlayerData";
 import { usePlay } from "@/discord";
 import { findGame } from "@/play/games";
-import { useAttention } from "@/play/attention";
 import { useTurn, useTurnAlerts } from "@/play/turn";
 import { GameScreen } from "@/board/GameScreen";
 import { engineTurn, useEngineDraftPick, useEngineMode, useEngineState, useMyQueue } from "@/engine";
@@ -68,7 +66,6 @@ function useDraftStatus(gameName: string, hasBoard: boolean) {
 
 function Draft({ gameName }: { gameName: string }) {
   const me = usePlay((s) => s.me);
-  const press = usePressButton();
   const engineMode = useEngineMode(gameName);
   const engineDraftPick = useEngineDraftPick();
   const actionsId = usePlay((s) => findGame(s.channels, gameName)?.actions.id);
@@ -87,10 +84,10 @@ function Draft({ gameName }: { gameName: string }) {
         myUserId={me.id}
         botBase="/bot"
         refreshSignal={lastAction}
-        onPick={(customId, channelId, messageId) =>
+        onPick={(customId) =>
           engineMode === "engine"
             ? engineDraftPick(customId)
-            : press(channelId, messageId, customId)
+            : Promise.resolve({ error: "Reconnecting to the game engine — try the pick again in a moment." })
         }
       />
     </div>
@@ -121,12 +118,11 @@ export default function GamePage() {
       picking: draftSummary.picking.name,
     },
   );
-  const attention = useAttention(mapid, turn.mine);
-  /* Engine on and live: the tab title / notifications follow the engine's turn and decision queue. */
+  /* The tab title / notifications follow the engine's turn and decision queue (the game document's turn while the stream connects). */
   const engineState = useEngineState(mapid);
   const engineQueue = useMyQueue();
   const alertTurn = engineState ? engineTurn(engineState, me?.id) : turn;
-  const alertIds = engineState ? engineQueue.map((d) => d.id) : attention.map((a) => a.message.id);
+  const alertIds = engineQueue.map((d) => d.id);
   useTurnAlerts(
     mapid,
     alertTurn,

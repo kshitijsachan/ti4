@@ -1,6 +1,6 @@
-import { DecisionHost } from "@/decisions";
-import { CombatOutcome } from "@/engine/ui/CombatOutcome";
 import { EngineDecisionHost, useEngineMode } from "@/engine";
+import { CombatOutcome } from "@/engine/ui/CombatOutcome";
+import { EngineStatus } from "@/engine/ui/EngineStatus";
 import { GameLog, type GameLogProps } from "@/gamelog";
 import { HandTray } from "@/hand";
 
@@ -9,20 +9,21 @@ import { HandTray } from "@/hand";
  * over the table), the hand tray (in front of you) and the game log.
  */
 
-/** The engine-driven popup when the engine flag is on and its stream is live; the legacy one otherwise. */
-export function DecisionSlot({ gameName, className, rightInset }: { gameName: string; className?: string; rightInset?: number }) {
+/** The engine-driven popup once the game's engine stream is live; until then a "connecting to the game engine" chip. */
+export function DecisionSlot({ gameName, rightInset }: { gameName: string; rightInset?: number }) {
   const mode = useEngineMode(gameName);
-  if (mode === "engine") {
-    return (
-      <>
-        <EngineDecisionHost gameName={gameName} placement="contained" rightInset={rightInset} />
-        {/* Ended-combat reports still come from the log (the engine has no combat history yet). */}
-        <CombatOutcome gameName={gameName} rightInset={rightInset} />
-      </>
-    );
-  }
-  if (mode === "waiting") return null;
-  return <DecisionHost gameName={gameName} placement="contained" className={className} rightInset={rightInset} />;
+  return (
+    <>
+      <EngineStatus gameName={gameName} rightInset={rightInset} />
+      {mode === "engine" && (
+        <>
+          <EngineDecisionHost gameName={gameName} placement="contained" rightInset={rightInset} />
+          {/* Ended-combat reports still come from the log (the engine has no combat history yet). */}
+          <CombatOutcome gameName={gameName} rightInset={rightInset} />
+        </>
+      )}
+    </>
+  );
 }
 
 export function HandSlot({ gameName }: { gameName: string }) {

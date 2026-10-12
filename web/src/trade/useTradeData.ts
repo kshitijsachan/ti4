@@ -11,7 +11,7 @@ type TradeData = {
 };
 
 /**
- * Polls one player's trade view and open offers: from the engine (GameState.trade + trade.* decisions), or the bot's legacy trade endpoints when the engine is unavailable. Polling pauses while the tab is hidden and
+ * Polls one player's trade view and open offers: from the engine (GameState.trade + trade.* decisions). Polling pauses while the tab is hidden and
  * unchanged responses keep their previous object so React skips the re-render.
  */
 export function useTradeData(

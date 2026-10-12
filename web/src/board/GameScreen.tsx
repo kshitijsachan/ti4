@@ -66,14 +66,14 @@ type Props = {
 };
 
 /** The game, laid out like a table: header, seats, the map, your hand, and drawers for the rest. */
-export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing }: Props) {
+export function GameScreen({ gameName, turn: documentTurn, takeover, boardMissing }: Props) {
   const data = useGameData();
   const me = usePlay((s) => s.me);
   useEngineLink(gameName);
   /* Engine flag on and its stream live: the header and seats read the engine's state, not the web-data document. */
   const engineState = useEngineState(gameName);
   const myQueue = useMyQueue();
-  const turn = engineState ? engineTurn(engineState, me?.id) : legacyTurn;
+  const turn = engineState ? engineTurn(engineState, me?.id) : documentTurn;
   const channels = usePlay((s) => s.channels);
   const game = findGame(channels, gameName);
   const [drawer, setDrawer] = useState<DrawerName | null>(null);
@@ -158,7 +158,7 @@ export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing 
             <HandSlot gameName={gameName} />
           </div>
         )}
-        <DecisionSlot gameName={gameName} className={classes.decision} rightInset={drawer ? (drawer === "raw" ? 560 : 460) : 0} />
+        <DecisionSlot gameName={gameName} rightInset={drawer ? (drawer === "raw" ? 560 : 460) : 0} />
       </main>
       <GameDrawers
         game={game}

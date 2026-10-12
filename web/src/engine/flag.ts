@@ -1,7 +1,7 @@
 /**
- * Whether the web runs on the engine stream (typed State + Decisions) instead of the legacy message heuristics.
- * `?engine=1` / `?engine=0` on any page sets it for this browser; the settings menu toggles it; otherwise the
- * server's default (shim env TI4_ENGINE_WEB=1, sent in the hello frame) applies.
+ * The old engine flag. The web always runs on the engine stream now (the legacy decision UI was removed);
+ * `?engine=0` (or a stored "off" from the old settings toggle) is still read so the page can say the legacy UI is
+ * gone instead of silently ignoring it. `?engine=1` clears nothing and changes nothing.
  */
 const KEY = "ti4online.engine";
 
