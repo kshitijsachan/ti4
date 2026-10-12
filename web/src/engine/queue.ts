@@ -149,6 +149,7 @@ export function decisionEyebrow(d: Decision): string | null {
 }
 
 const COMBAT = /^combat\./;
+const IN_ADVANCE_KINDS = new Set(["strategy_card.pre_decline", "strategy_card.queue_pick"]);
 const AGENDA_BLOCKING = new Set(["action_card.sabotage", "agenda.when", "agenda.after", "agenda.vote", "agenda.vote_step", "agenda.tiebreak", "agenda.resolve"]);
 /** Table-wide steps that move the phase on: after my own homework, so I'm not asked to start the next phase first. */
 const PHASE_STEP = new Set(["status.advance", "setup.deal_secrets", "setup.reveal_objectives", "status.reveal_objective", "agenda.next"]);
@@ -186,6 +187,7 @@ export function orderDecisions(
   /* Perpetual "play an action card" panels sit open all game: on offer, unless one is what my last answer opened. */
   const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && !nextStep(d);
   const background = (d: Decision) => openToAll(d) || perpetual(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+  const myFaction = state?.players.find((p) => p.self)?.faction;
   const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
   const offers = shown.filter(background);
   const own = shown.filter((d) => !background(d));
@@ -195,6 +197,10 @@ export function orderDecisions(
     if (COMBAT.test(d.kind)) return 0;
     /* The agenda windows hold up the whole table: answered before anything else of mine. */
     if (AGENDA_BLOCKING.has(d.kind)) return 0.5;
+    /* A step of a strategy card's primary (place a structure, choose a system…): before the card's own panel. */
+    if (d.kind.startsWith("strategy_card.") && !d.window && !IN_ADVANCE_KINDS.has(d.kind) && d.kind !== "strategy_card.pick") return 1.4;
+    /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */
+    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return 1.5;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
     if (nextStep(d)) return 1;
     /* Untyped prompts come last: the engine can't tell a live one from a leftover the game never closed. */
