@@ -1010,7 +1010,7 @@ class SeatPilot {
         if (phase && !rule.phase.test(phase)) continue;
       }
       if (rule.myTurn && ((await this.midAction(game)) || !(await this.myTurn(game)))) continue;
-      let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true) && !rule.notId?.test(c.custom_id));
+      let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "").replace(/~o\d+$/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true) && !rule.notId?.test(c.custom_id));
       if (rule.distinct) hits = hits.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= 600000);
       if (!hits.length) continue;
       if (rule.rank) hits = [...hits].sort((a, b) => rule.rank!(a) - rule.rank!(b));
