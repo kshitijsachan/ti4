@@ -4415,10 +4415,10 @@ index 0000000..8f3d5d0
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..aea0798
+index 0000000..56fe853
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,726 @@
+@@ -0,0 +1,731 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -4847,7 +4847,12 @@ index 0000000..aea0798
 +            "getAgentSelection_",
 +            // Emelpar's "Ready Another Player's Components" -> faction picker -> that faction's emelparReady_ menu.
 +            "getOtherFactionsEmelpar",
-+            "getEmelparButtons_");
++            "getEmelparButtons_",
++            // "Get a Technology" -> colour picker -> that colour's techs (no save until the tech is taken): a step of
++            // a technology gain, not an info view (live pbd230: Deepwrought's starting-tech colour prompt was closed
++            // as an info menu, so setup waited on the bot forever).
++            "getAllTechOfType_",
++            "acquireAFreeTech");
 +
 +    /**
 +     * An info menu, not a decision: every option opens a read-only handler (save = false: info, decks, views,
