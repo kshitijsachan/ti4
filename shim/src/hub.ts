@@ -376,7 +376,10 @@ export class Hub {
         const phase = data?.gameState?.phase;
         if (!phase) continue;
         if (phase !== "finished") {
-          if (chans.some((c) => c._archived || c.parent_id === cat.id)) restored += this.unarchiveGameChannels(game, chans);
+          if (chans.some((c) => c._archived || c.parent_id === cat.id)) {
+            restored += this.unarchiveGameChannels(game, chans);
+            await this.resumeRestoredGame(botApi, game, chans);
+          }
           continue;
         }
         for (const ch of chans) {
@@ -451,6 +454,33 @@ export class Hub {
     const cat = this.store.createChannel({ type: 4, name, position: 1000 });
     this.channelCreate(cat);
     return cat;
+  }
+
+  /**
+   * A game the sweep restored (un-ended by a rewind before its channels came back) was idle since: the autopilots
+   * only look at games with a message in the last hour, and a prompt the game waits for may be gone (live 22:28:
+   * pbd303 / pbd346 restored, open tactical.conclude for an autopilot seat, nobody moved). Say so in the actions
+   * channel (fresh activity) and ask the bot to re-post any prompt the game waits for (engine /recover).
+   */
+  async resumeRestoredGame(botApi: string, game: string, chans: Json[]) {
+    const actions = chans.find((c) => c.type === 0 && /-actions$/i.test(String(c.name ?? "")));
+    if (actions) {
+      const msg = this.buildMessage(actions.id, this.store.state.bot_id, {
+        content: "This game is on again (a rewind un-ended it): its channels are back from the archive.",
+      });
+      this.postMessage(msg);
+    }
+    // Give the bot a moment to take the CHANNEL_CREATEs in before it posts anything there.
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      await fetch(`${botApi}/api/public/selfhost/engine/${encodeURIComponent(game)}/recover`, {
+        method: "POST",
+        headers: { authorization: `Bot ${this.store.state.bot_token}` },
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      /* the open prompts still stand; the autopilots look again on the fresh activity */
+    }
   }
 
   /** Moves a game's archived channels back to its normal category and restores them. Returns how many. */

@@ -20,9 +20,10 @@ function setup() {
   return { dir, store, hub, sent, cat, tt, act, thread, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
+const calls: string[] = [];
 const phaseFetch = (phase: string) => {
   const orig = globalThis.fetch;
-  globalThis.fetch = (async () => new Response(JSON.stringify({ gameState: { phase } }))) as any;
+  globalThis.fetch = (async (u: string) => (calls.push(String(u)), new Response(JSON.stringify({ gameState: { phase } })))) as any;
   return () => (globalThis.fetch = orig);
 };
 
@@ -45,7 +46,7 @@ test("a channel moved into the archive is archived; moved back out, it is restor
 });
 
 test("sweep: a not-finished game's archived channels go back to its PBD category and are not re-archived", async () => {
-  const { hub, sent, cat, tt, act, done } = setup();
+  const { hub, store, sent, cat, tt, act, done } = setup();
   const limbo = hub.ensureArchiveCategory();
   for (const ch of [tt, act]) {
     ch.parent_id = limbo.id;
@@ -59,6 +60,8 @@ test("sweep: a not-finished game's archived channels go back to its PBD category
       assert.equal(ch._archived, undefined);
       assert.equal(ch.parent_id, cat.id);
     }
+    assert.match(String(store.messages(act.id).at(-1)?.content), /on again/);
+    assert.ok(calls.some((u) => u.endsWith("/engine/pbd346/recover")));
     assert.equal(sent.filter(([t]) => t === "CHANNEL_CREATE").length, 2);
     sent.length = 0;
     assert.deepEqual(await hub.sweepEndedGames("http://bot"), { archived: 0, restored: 0, unreachable: 0 });
