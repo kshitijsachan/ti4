@@ -136,15 +136,17 @@ const RULES: Rule[] = [
   { id: /^milty_slice_/, score: 92, why: "draft: first slice" },
   { id: /^milty_faction_/, score: 91, why: "draft: first faction" },
   { id: /^milty_order_/, score: 90, why: "draft: first speaker order" },
+  // typed (engine-off fallback only, like every rule marked typed): setup secrets (secret_objective.discard), starting
+  // technologies (tech.choose_type / tech.gain), agenda abstain / pre-pass (agenda.*) have engine policies.
   // Setup: keep the first secret objective, discard the other.
-  { id: /^discardSecret_/, score: 80, retry: true, retryIn: /^setup/, addressed: true, last: true, why: "setup: keep the first secret objective" },
+  { id: /^discardSecret_/, score: 80, typed: true, retry: true, retryIn: /^setup/, addressed: true, last: true, why: "setup: keep the first secret objective" },
   // Setup: Keleres picks its flavor once the draft is over (the player's own setup waits on it).
   { id: /^setupStep5_\d+_keleres[a-z]_/, score: 84, addressed: true, why: "setup: Keleres flavor" },
   // Setup: starting technology. Most factions get a list of their allowed techs (getTech_<alias>__noPay__comp, once
   // or twice); open choices come as "Get a Technology" → a tech type → a tech; Keleres asks once the others are done.
-  { id: /(^|_)acquireAFreeTech$/, score: 83, addressed: true, retry: true, retryIn: /^setup/, why: "setup: get a starting technology" },
-  { id: /(^|_)getAllTechOfType_/, score: 82, addressed: true, retry: true, retryIn: /^setup/, why: "setup: first technology type" },
-  { id: /(^|_)getTech_.+__noPay/, score: 81, addressed: true, retry: true, retryIn: /^setup/, distinct: true, why: "setup: first starting technology" },
+  { id: /(^|_)acquireAFreeTech$/, score: 83, typed: true, addressed: true, retry: true, retryIn: /^setup/, why: "setup: get a starting technology" },
+  { id: /(^|_)getAllTechOfType_/, score: 82, typed: true, addressed: true, retry: true, retryIn: /^setup/, why: "setup: first technology type" },
+  { id: /(^|_)getTech_.+__noPay/, score: 81, typed: true, addressed: true, retry: true, retryIn: /^setup/, distinct: true, why: "setup: first starting technology" },
   { id: /(^|_)getKeleresTechOptions$/, score: 60, addressed: true, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
@@ -178,11 +180,11 @@ const RULES: Rule[] = [
   { id: /_passingAbilities$/, score: 84, typed: true, phase: /^action/, myTurn: true, why: "pass" },
   // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
   { id: /^resolvePreassignment_Abstain On Agenda$/, score: 79, why: "agenda: pre-abstain" },
-  { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, why: "agenda: pre-pass on shenanigans" },
+  { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, typed: true, why: "agenda: pre-pass on shenanigans" },
   { id: /^declineToQueueA(When|nAfter)$/, score: 72, why: "agenda: no whens / afters" },
-  { id: /resolveAgendaVote_0$/, score: 78, why: "agenda: abstain" },
+  { id: /resolveAgendaVote_0$/, score: 78, typed: true, why: "agenda: abstain" },
   { id: /^resolveAgendaVote_outcomeTie/, score: 74, retry: true, why: "agenda: speaker breaks the tie" },
-  { label: /^(?!pre-).*\babstain\b/i, score: 77, why: "agenda: abstain" },
+  { label: /^(?!pre-).*\babstain\b/i, score: 77, typed: true, why: "agenda: abstain" },
   // Combat: auto-assign hits, roll dice.
   { id: /^autoAssign/, score: 76, why: "combat: auto-assign hits" },
   // The same combat message offers the combat roll for every round, plus one-off rolls (anti-fighter barrage,
