@@ -66,3 +66,15 @@
   color: var(--play-ink-muted);
   border-style: dashed;
 }
+
+/* A use the player cannot make right now: greyed out, reason underneath. */
+.option[data-unavailable] {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reason {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--play-ink-muted);
+}

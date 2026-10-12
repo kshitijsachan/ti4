@@ -1,0 +1,22 @@
+{
+  "name": "relic-tech-ready-guards",
+  "description": "Rules audit (deliberate improvement over the original): 'exhaust this card' needs it ready, purging needs it held. A second Prophet's Tears press (draw an action card) and a second Predictive Intelligence exhaust are refused (engine: validate / value.unavailable; legacy: the handler refuses, nothing changes); The Crown of Emphidia's purge-for-a-point is refused without control of the Tomb of Emphidia (the original scored it for whoever pressed).",
+  "base": { "recording": "pbd105", "index": 174, "repost": false },
+  "setup": [
+    { "command": "relic draw_specific", "options": { "relic": "prophetstears", "player": "${faction:ralnel}", "force": true } },
+    { "command": "relic draw_specific", "options": { "relic": "emphidia", "player": "${faction:ralnel}", "force": true } },
+    "/tech add tech:pi faction_or_color:ralnel"
+  ],
+  "steps": [
+    { "press": "prophetsTears_AC", "as": "ralnel" },
+    { "press": "prophetsTears_AC", "as": "ralnel", "refused": true },
+    { "press": "exhaustTech_pi", "as": "ralnel" },
+    { "press": "exhaustTech_pi", "as": "ralnel", "refused": true },
+    { "press": "resolveCrownOfE", "as": "ralnel", "refused": true },
+    { "wait": 1000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [ { "path": "players[faction=ralnel].relics", "includes": "emphidia" } ]
+  }
+}
