@@ -49,6 +49,12 @@ function stepOf(
   active?: string | null,
 ): TacticalStep | null {
   const ids = buttonsOf(prompt.message, faction).map((c) => baseId(c.customId));
+  /*
+   * Moving and landing happen in the activated system: with none active (the activation was undone, or the action
+   * ended) a move / land prompt still on screen is a leftover, not the step (playtest 5, pbd273: after Undo the map
+   * stayed in "Move into …" mode and no system could be activated).
+   */
+  if (!active && ids.some((id) => LAND.test(id) || MOVE.test(id))) return null;
   if (ids.some((id) => LAND.test(id))) {
     const target =
       ids
