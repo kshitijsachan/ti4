@@ -131,18 +131,29 @@ function useEngineChoice(): boolean | null {
 
 /**
  * Whether engine data drives the UI right now: flag on and the stream live for this game. While it connects the
- * legacy path is not shown either (no flash of the old popup); if the engine turns out unavailable, legacy runs.
+ * legacy path is not shown either (no flash of the old popup). While the server has an engine that does not answer
+ * for this game yet (bot restarting: it re-reads every game first), this keeps waiting too: the legacy popup's
+ * options lead nowhere then (playtest 5: a "Tactical action (3)" panel, then "the engine has not offered your
+ * options yet"). Legacy runs only on a server without the engine, or when this browser chose it.
  */
 export function useEngineMode(gameName: string): "engine" | "legacy" | "waiting" {
   const choice = useEngineChoice();
   const game = useEngine((s) => s.view.game);
   const status = useEngine((s) => s.view.status);
+  const server = useEngine((s) => s.server);
   /* Not known until the socket's hello (first visit, server offline): neither popup, so the legacy one never flashes. */
   if (choice === null) return "waiting";
   if (!choice) return "legacy";
   if (game !== gameName) return "waiting";
   if (status === "live") return "engine";
-  return status === "unavailable" ? "legacy" : "waiting";
+  return status === "unavailable" && server && !server.available ? "legacy" : "waiting";
+}
+
+/** The engine stream for this game is down while the server has an engine (it is restarting / catching up). */
+export function useEngineRestarting(gameName: string): boolean {
+  const game = useEngine((s) => s.view.game);
+  const status = useEngine((s) => s.view.status);
+  return game === gameName && status === "unavailable";
 }
 
 /** Engine state of the game on screen, or null (flag off, not live yet, or another game). */

@@ -155,3 +155,19 @@ void test("follow helpers: what I owe, and who holds the turn", async () => {
   assert.deepEqual(followHeader(s, ME), { mine: "follow Leadership", others: null });
   assert.deepEqual(followHeader(s, "u2"), { mine: null, others: "Waiting for Me to follow Leadership" });
 });
+
+void test("my starting technology is a required setup step even while the engine still has it as a table prompt (pbd283)", () => {
+  const setup = { stage: "player_setup", waitingOn: [ME], players: [{ userId: ME, faction: "firmament", startingTechsNeeded: 1, secretObjectivesToDiscard: 0, keleresFlavorPending: false }] };
+  const s = state({ phase: "setup" as GameState["phase"], round: 1, activePlayer: null, setup: setup as unknown as GameState["setup"] });
+  const tech = dec("tech.gain", {
+    scope: "table",
+    options: [{ id: "getTech_nm", label: "Neural Motivator", style: "primary", emoji: null, disabled: false, needsInput: false, handler: "getTech_nm", value: { tech: "nm", free: true, starting: true, flags: [] } }],
+  } as Partial<Decision>);
+  const deal = dec("setup.deal_secrets", { scope: "table", target: null });
+  const r = orderDecisions([tech, deal], null, undefined, s);
+  assert.deepEqual(kinds(r), ["tech.gain"]);
+  assert.ok(r.offers.some((d) => d.kind === "setup.deal_secrets"));
+  /* Once I owe none, a leftover table copy goes back behind "Available now". */
+  const done = state({ ...s, setup: { ...setup, players: [{ ...setup.players[0], startingTechsNeeded: 0 }] } as unknown as GameState["setup"] });
+  assert.deepEqual(kinds(orderDecisions([tech], null, undefined, done)), []);
+});

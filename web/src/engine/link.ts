@@ -6,7 +6,7 @@ import { engineStore, useEngineEnabled } from "./store";
 /** No snapshot after this long: treat the engine as unavailable for now and let the legacy UI run. */
 const SUBSCRIBE_TIMEOUT_MS = 15000;
 /** While the engine is unavailable (bot restarting, or without the engine), ask again this often. */
-const RETRY_MS = 30000;
+const RETRY_MS = 10000;
 const ANSWER_TIMEOUT_MS = 60000;
 
 /**

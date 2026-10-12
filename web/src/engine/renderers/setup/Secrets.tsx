@@ -30,16 +30,24 @@ export const SecretDiscardRenderer: Renderer<"secret_objective.discard"> = ({ de
           return (
             <Choice
               key={o.id}
-              name={data?.name ?? cardName(o)}
+              name={keepMode ? `Keep ${data?.name ?? cardName(o)}` : (data?.name ?? cardName(o))}
               sub={data?.text}
               selected={o.id === selected}
               disabled={o.disabled || !!pending}
-              onClick={() => setSelected(o.id)}
+              pending={keepMode && !!pending && pending !== o.id}
+              onClick={() => {
+                /* Keeping one of two: one click on the card keeps it (its partner's option discards that one). */
+                const other = keepMode ? options.find((x) => x.id !== o.id) : undefined;
+                if (other) {
+                  setSelected(o.id);
+                  void press(other.id);
+                } else setSelected(o.id);
+              }}
             />
           );
         })}
       </div>
-      {current && target && (
+      {!keepMode && current && target && (
         <div className={classes.row}>
           <Choice
             name={keepMode ? `Keep ${cardName(current)}` : `${redraw ? "Swap out" : "Discard"} ${cardName(current)}`}
@@ -50,7 +58,11 @@ export const SecretDiscardRenderer: Renderer<"secret_objective.discard"> = ({ de
           />
         </div>
       )}
-      {!current && <p className={classes.hint}>{keepMode ? "Pick the one you want to keep." : "Pick one."}</p>}
+      {keepMode ? (
+        <p className={classes.hint}>Click the one you want to keep; the other is discarded.</p>
+      ) : (
+        !current && <p className={classes.hint}>Pick one.</p>
+      )}
       {extra.length > 0 && (
         <div className={classes.row}>
           {extra.map((o) => (

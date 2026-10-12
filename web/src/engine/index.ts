@@ -10,7 +10,7 @@
 export type * from "./contract";
 export { useEngineLink, useEngineAnswer } from "./link";
 export type { AnswerPayload } from "./link";
-export { engineStore, useEngine, useEngineEnabled, useEngineMode, useEngineState, useMyDecisions } from "./store";
+export { engineStore, useEngine, useEngineEnabled, useEngineMode, useEngineRestarting, useEngineState, useMyDecisions } from "./store";
 export { EngineConnecting, EngineDecisionHost, decisionTitle } from "./EngineDecisionHost";
 export { openToAll } from "./reducer";
 export { orderDecisions, useMyQueue } from "./queue";

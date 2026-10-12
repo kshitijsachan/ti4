@@ -4,6 +4,7 @@ import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEye, I
 import cx from "clsx";
 import { useDecisionFocus, useWaitingOnMe } from "@/decisions/model/focus";
 import { useMovementUI } from "@/mapactions/store";
+import { mapTargets, useEngineMapPick } from "@/mapactions/enginePick";
 import { useReserveRect } from "@/state/reservedArea";
 import type { Decision, GameState } from "./contract";
 import { forgetClosedDrafts } from "./draftState";
@@ -15,6 +16,7 @@ import { DecisionFooter, FooterSlot, PopupLayer, popupClasses as classes, usePee
 import { EngineOutcomeToast } from "./ui/OutcomeToast";
 import { gameOverHeadline, gameOverView } from "./gameOver";
 import { WinnerPanel } from "./renderers/game/WinnerPanel";
+import { planetName } from "./renderers/tactical/names";
 
 export { decisionTitle };
 
@@ -53,7 +55,7 @@ const CONNECTING_NOTE_MS = 1500;
  * The popup's place while the engine stream connects (reload, server restart): after a moment, a one-line status
  * where the prompts will appear, instead of an empty corner (or the legacy popup flashing in).
  */
-export function EngineConnecting({ rightInset = 0 }: { rightInset?: number }) {
+export function EngineConnecting({ rightInset = 0, restarting = false }: { rightInset?: number; restarting?: boolean }) {
   const [show, setShow] = useState(false);
   useEffect(() => {
     const t = window.setTimeout(() => setShow(true), CONNECTING_NOTE_MS);
@@ -64,7 +66,7 @@ export function EngineConnecting({ rightInset = 0 }: { rightInset?: number }) {
     <PopupLayer contained rightInset={rightInset}>
       <div className={classes.stalled} role="status" data-engine-connecting>
         <IconLoader2 size={14} className={classes.spin} />
-        Loading your prompts…
+        {restarting ? "The game engine is restarting — your options will be back in a moment…" : "Loading your prompts…"}
       </div>
     </PopupLayer>
   );
@@ -159,6 +161,17 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const focusLabel = shown?.kind.startsWith("combat.") ? "Combat" : null;
   useEffect(() => setFocus(position, "prompt", focusLabel), [position, focusLabel, setFocus]);
   useEffect(() => () => setFocus(null, null), [setFocus]);
+
+  /* Map-first: the shown decision's systems / planets answer from the map too (its buttons stay as the fallback). */
+  const setMapPick = useEngineMapPick((s) => s.set);
+  const shownPending = !!shown && !!pending[shown.id];
+  const targets = useMemo(() => (shownPending ? null : mapTargets(shown, state, planetName)), [shown, state, shownPending]);
+  useEffect(() => {
+    if (!shown || !targets) return setMapPick(null);
+    setMapPick({ decisionId: shown.id, byPosition: targets, answer: (optionId) => answer(shown, optionId) });
+    /* `answer` is a new function every render: the pick follows the decision and its targets only. */
+  }, [shown, targets, setMapPick]);
+  useEffect(() => () => setMapPick(null), [setMapPick]);
 
   /* The queue and "Available now" lists close on any click outside them (and on Escape, below). */
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ActionIcon, Button, Group } from "@mantine/core";
 import type { Option } from "../../../../../shim/src/engine/types";
 import type {
@@ -12,6 +13,7 @@ import { OptionButtons, Waiting, me, myStatus, type StatusRendererProps } from "
 import classes from "./Status.module.css";
 import { DecisionFooter } from "../../ui/Popup";
 import { useDecisionState } from "../../draftState";
+import { useEngine } from "../../store";
 
 /** required.gainCap of a command_tokens.adjust panel (mirrors shim kinds/status.ts commandTokensGainCap). */
 function commandTokensGainCap(d: { progress?: { required?: unknown } | null }): CommandTokensGainCap | null {
@@ -34,10 +36,13 @@ type EditorProps = {
   gain: number;
   noLoss: boolean;
   onConfirm: (pools: CommandTokenPools) => void;
+  /** Status homework: the main button also says ready (one click); `onConfirm` then only sets the tokens. */
+  onConfirmAndReady?: (pools: CommandTokenPools) => void;
+  readyLabel?: string;
 };
 
 /** Set the final tactic / fleet / strategy pools in one go, within base + gain (and no losses for Deliberate Action). */
-export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, draftKey }: EditorProps & { draftKey?: string }) {
+export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, onConfirmAndReady, readyLabel, draftKey }: EditorProps & { draftKey?: string }) {
   const [pools, setPools] = useDecisionState<CommandTokenPools>(draftKey ?? "tokens", "pools", start);
   const left = maxTotal - total(pools);
   const step = (k: keyof CommandTokenPools, d: number) => setPools((p) => ({ ...p, [k]: p[k] + d }));
@@ -65,9 +70,20 @@ export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, dr
       </div>
       <DecisionFooter>
         <Group gap={6}>
-          <Button size="xs" disabled={left < 0} onClick={() => onConfirm(pools)}>
-            Confirm {pools.tactic}/{pools.fleet}/{pools.strategy}
-          </Button>
+          {onConfirmAndReady ? (
+            <>
+              <Button size="xs" disabled={left < 0} onClick={() => onConfirmAndReady(pools)}>
+                Confirm {pools.tactic}/{pools.fleet}/{pools.strategy} · {readyLabel ?? "ready"}
+              </Button>
+              <Button size="xs" variant="default" disabled={left < 0} onClick={() => onConfirm(pools)} title="Set the tokens without saying ready yet">
+                Set only
+              </Button>
+            </>
+          ) : (
+            <Button size="xs" disabled={left < 0} onClick={() => onConfirm(pools)}>
+              Confirm {pools.tactic}/{pools.fleet}/{pools.strategy}
+            </Button>
+          )}
           <Button size="xs" variant="subtle" onClick={() => setPools(base)}>
             Reset
           </Button>
@@ -93,6 +109,18 @@ export function StatusHomeworkRenderer({ decision, state, answer }: StatusRender
   const isReady = !!decision.window?.responded.includes(self.userId);
   const next = ready?.value?.action === "ready" ? (NEXT[ready.value.next] ?? "the next phase") : "the next phase";
   const tokensSet = st?.tokensConfirmed;
+  /* "Confirm 3/3/0 · ready": the tokens first; once the engine has them, Ready (one decision answers one at a time). */
+  const [readyAfter, setReadyAfter] = useDecisionState<CommandTokenPools | null>(decision.id, "readyAfter", null);
+  const inFlight = useEngine((s) => !!s.view.pending[decision.id]);
+  const failed = useEngine((s) => !!s.view.errors[decision.id]);
+  const canReady = !!ready && !ready.disabled && !isReady;
+  useEffect(() => {
+    if (!readyAfter || inFlight) return;
+    if (failed || !canReady || !ready) return setReadyAfter(null);
+    if (!tokensSet || !POOLS.every((k) => tokensSet[k] === readyAfter[k])) return;
+    setReadyAfter(null);
+    answer(ready.id);
+  }, [readyAfter, inFlight, failed, canReady, tokensSet, ready, answer, setReadyAfter]);
 
   return (
     <div className={classes.stack}>
@@ -109,6 +137,15 @@ export function StatusHomeworkRenderer({ decision, state, answer }: StatusRender
             gain={st.tokenGain}
             noLoss={st.noTokenLoss}
             onConfirm={(pools) => answer({ optionId: tokens.id, payload: { ...pools } })}
+            onConfirmAndReady={
+              canReady
+                ? (pools) => {
+                    setReadyAfter({ ...pools });
+                    answer({ optionId: tokens.id, payload: { ...pools } });
+                  }
+                : undefined
+            }
+            readyLabel={`ready for the ${next}`}
           />
         )}
         {/* No token editor (the engine typed the option without a payload, or the status facts are missing): the
@@ -127,7 +164,14 @@ export function StatusHomeworkRenderer({ decision, state, answer }: StatusRender
           <p className={classes.done}>You are ready for the {next}.</p>
         ) : (
           <>
-            {!tokensSet && <p className={classes.hint}>Set your command tokens above, then press Ready (it ends your status phase).</p>}
+            {!tokensSet && (
+              <p className={classes.hint}>
+                {canReady
+                  ? "Confirming your command tokens above also says ready (it ends your status phase)."
+                  : "Set your command tokens above, then press Ready (it ends your status phase)."}
+              </p>
+            )}
+            {readyAfter && <p className={classes.hint}>Setting your tokens, then ready…</p>}
             {ready && (
               <Group>
                 <Button size="xs" variant={tokensSet ? "filled" : "default"} disabled={ready.disabled} onClick={() => answer(ready.id)}>

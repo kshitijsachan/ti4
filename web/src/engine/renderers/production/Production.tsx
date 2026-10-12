@@ -36,7 +36,18 @@ function linesOf(options: Option<ProductionValue>[]): Line[] {
     if (!prev) byKey.set(key, { key, unit: v.unit, holder: v.holder, tile: v.tile, cost: perUnit, step: 1 });
     else if (prev.cost === null) prev.cost = perUnit;
   }
-  return [...byKey.values()];
+  /* Ground forces: onto a planet first, into space after (both are legal; the planet is the usual choice). */
+  const rank = (l: Line) => (GROUND.has(l.unit) ? (l.holder === "space" ? 2 : 1) : 0);
+  return [...byKey.values()].sort((a, b) => rank(a) - rank(b));
+}
+
+/** Ground forces may be produced onto a planet or into space (carried by ships); ships only say their name. */
+const GROUND = new Set<string>(["gf", "mf"]);
+
+function lineLabel(l: Line): string {
+  const name = UNIT_NAME[l.unit] ?? l.unit;
+  if (l.holder !== "space") return `${name} on ${planetName(l.holder)}`;
+  return GROUND.has(l.unit) ? `${name} in space (on a ship)` : name;
 }
 
 /**
@@ -96,7 +107,7 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
           return (
             <Stepper
               key={l.key}
-              label={`${UNIT_NAME[l.unit] ?? l.unit}${l.holder === "space" ? "" : ` on ${planetName(l.holder)}`}`}
+              label={lineLabel(l)}
               value={n}
               max={excluded ? n : n + fits}
               onChange={(v) => setCounts((c) => ({ ...c, [l.key]: v }))}
