@@ -46,9 +46,12 @@ const short = (s, n = 110) => (String(s).length > n ? String(s).slice(0, n - 1) 
 
 /* ------------------------------------------------------------------ slash commands from the shim's registry */
 
+let commandCache = null;
 function commandSchema() {
+  // The registry does not change during a run; the full shim state is large and re-read after every shim save.
+  if (commandCache) return commandCache;
   const cmds = shimState().commands;
-  return Array.isArray(cmds) ? cmds : Object.values(cmds ?? {});
+  return (commandCache = Array.isArray(cmds) ? cmds : Object.values(cmds ?? {}));
 }
 
 if (flag("--commands")) {

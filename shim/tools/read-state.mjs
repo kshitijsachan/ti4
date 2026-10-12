@@ -35,7 +35,9 @@ export function readShimState(path) {
     try {
       return readSharded(store);
     } catch (e) {
-      if (attempt >= 5 || e?.code !== "ENOENT") throw e;
+      // Busy shims (100+ games) save several times a second while a full read takes longer: retry with a short pause.
+      if (attempt >= 40 || e?.code !== "ENOENT") throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50 + attempt * 25);
     }
   }
 }
