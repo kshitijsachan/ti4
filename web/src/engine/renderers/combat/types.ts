@@ -1,4 +1,4 @@
-import type { GameState, Option } from "../../../../../shim/src/engine/types";
+import type { GameState, Option, UnitId } from "../../../../../shim/src/engine/types";
 import type { CombatPlanEntry, HittableUnit } from "../../../../../shim/src/engine/kinds/combat";
 import { playerLabel } from "../../names";
 
@@ -15,7 +15,6 @@ export const live = <V,>(o: Option<V>) => !o.disabled && !o.needsInput && !!o.va
 
 const UNIT_NAMES: Record<string, string> = {
   ff: "Fighter",
-  inf: "Infantry",
   gf: "Infantry",
   mf: "Mech",
   dd: "Destroyer",
@@ -26,7 +25,7 @@ const UNIT_NAMES: Record<string, string> = {
   ws: "War Sun",
   pd: "PDS",
   sd: "Space Dock",
-};
+} satisfies Partial<Record<UnitId, string>>;
 
 export const unitName = (id: string) => UNIT_NAMES[id] ?? id;
 

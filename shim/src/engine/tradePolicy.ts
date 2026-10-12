@@ -8,7 +8,7 @@
  *   commodities we accept being 1 behind (the N-1 wash). Never give away promissory notes, action cards, relics,
  *   fragments or debt. Dark Pact (Empyrean) adds the +1 TG it pays to a full-value commodity gift.
  */
-import type { Decision, DecisionOf, GameState, Option, PlayerState } from "./types.js";
+import type { Decision, DecisionOf, FactionId, GameState, Option, PlayerState } from "./types.js";
 import type { TradeCounterparty, TradeItem, TradeSelf, TradeSide, TradeState } from "./kinds/trade.js";
 
 export type Verdict = { accept: boolean; why: string };
@@ -74,7 +74,7 @@ export function washDeal(me: TradeSelf, cp: TradeCounterparty, state: GameState 
   return null;
 }
 
-export function mayTransact(trade: TradeState | null | undefined, faction: string): boolean {
+export function mayTransact(trade: TradeState | null | undefined, faction: FactionId): boolean {
   return !!trade && !trade.blockedReason && trade.mayTransactWith.includes(faction);
 }
 

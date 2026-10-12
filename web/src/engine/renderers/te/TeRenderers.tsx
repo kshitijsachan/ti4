@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { UnstyledButton } from "@mantine/core";
 import cx from "clsx";
-import type { Decision, GameState, Option } from "../../../../../shim/src/engine/types";
+import type { Decision, GameState, Option, UnitId } from "../../../../../shim/src/engine/types";
 import type {
   ExpeditionKey,
   TeExpedition,
@@ -42,7 +42,7 @@ const UNIT_NAME: Record<string, string> = {
   gf: "Infantry",
   pd: "PDS",
   sd: "Space dock",
-};
+} satisfies Partial<Record<UnitId, string>>;
 
 function live<V>(d: { options: Option<V>[] }) {
   return d.options.filter((o) => !o.disabled && !o.needsInput);

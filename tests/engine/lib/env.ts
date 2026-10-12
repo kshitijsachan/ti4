@@ -5,12 +5,13 @@
  *   SHIM_URL        shim HTTP/ws base                (http://127.0.0.1:8090)
  *   BOT_URL         bot Spring API, direct           (http://127.0.0.1:8081)
  *   BOT_STORAGE     bot DB_PATH (maps/, maps/undo/)  (/home/user/run/bot-storage)
- *   SHIM_STATE      shim state.json                  (/home/user/run/shim-data/state.json)
+ *   SHIM_STATE      shim data dir or its state.json  (/home/user/run/shim-data/state.json; read with shim/tools/read-state.mjs)
  *   ENGINE_RUN_DIR  harness scratch (seats, forks)   (/home/user/run/engine)
  */
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readShimState, shimStateStamp } from "../../../shim/tools/read-state.mjs";
 
 export const SHIM_URL = process.env.SHIM_URL ?? "http://127.0.0.1:8090";
 export const BOT_URL = process.env.BOT_URL ?? "http://127.0.0.1:8081";
@@ -35,11 +36,11 @@ export function ensureRunDir(): string {
 
 export type Json = Record<string, any>;
 
-let shimCache: { mtime: number; state: Json } | null = null;
+let shimCache: { mtime: string; state: Json } | null = null;
 /** The shim's persisted state (users, channels, messages). ~60MB: cached until the file changes. */
 export function shimState(): Json {
-  const mtime = statSync(SHIM_STATE).mtimeMs;
-  if (!shimCache || shimCache.mtime !== mtime) shimCache = { mtime, state: JSON.parse(readFileSync(SHIM_STATE, "utf8")) };
+  const mtime = shimStateStamp(SHIM_STATE);
+  if (!shimCache || shimCache.mtime !== mtime) shimCache = { mtime, state: readShimState(SHIM_STATE) };
   return shimCache.state;
 }
 
@@ -87,4 +88,31 @@ export async function waitForStack(timeoutMs = 600000, log: (s: string) => void 
 
 export function fileExists(p: string) {
   return existsSync(p);
+}
+
+/** The bot token (engine API: `Authorization: Bot …`): $BOT_TOKEN, else DISCORD_BOT_TOKEN from $BOT_ENV (/home/user/run/bot.env). */
+export function botToken(): string {
+  if (process.env.BOT_TOKEN) return process.env.BOT_TOKEN;
+  const file = process.env.BOT_ENV ?? "/home/user/run/bot.env";
+  const m = /^DISCORD_BOT_TOKEN=(.*)$/m.exec(readFileSync(file, "utf8"));
+  if (!m) throw new Error(`no DISCORD_BOT_TOKEN in ${file}`);
+  return m[1].trim().replace(/^["']|["']$/g, "");
+}
+
+/** GET/POST on the bot's trusted engine API (/api/public/selfhost/engine…). Returns {status, body}; never throws on HTTP errors. */
+export async function engineApi(path: string, body?: Json, timeoutMs = 60000): Promise<{ status: number; body: any }> {
+  const r = await fetch(`${BOT_URL}/api/public/selfhost/engine${path}`, {
+    method: body ? "POST" : "GET",
+    headers: { authorization: `Bot ${botToken()}`, accept: "application/json", ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const text = await r.text();
+  let parsed: any = text;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    /* plain text */
+  }
+  return { status: r.status, body: parsed };
 }

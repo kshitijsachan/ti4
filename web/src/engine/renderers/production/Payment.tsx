@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { UnstyledButton } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 import type { PaymentPayload, PaymentPlanetValue, PaymentSpend } from "../../../../../shim/src/engine/kinds/production";
+import type { PlanetId } from "../../../../../shim/src/engine/types";
 import { isPaymentDone, planPayment } from "./model";
 import { ExtraOptions, Meter, selfOf, Stepper, type AreaRendererProps } from "./shared";
 import classes from "./production.module.css";
@@ -55,7 +56,7 @@ export function PaymentRenderer({ decision, state, answer, pendingOptionId }: Ar
   const extras = options.filter((o) => !o.value && !o.disabled);
   const reset = options.find((o) => o.value && "action" in o.value && o.value.action === "reset");
 
-  const toggle = (id: string) => {
+  const toggle = (id: PlanetId) => {
     const next = new Set(chosen);
     if (next.has(id)) next.delete(id);
     else next.add(id);

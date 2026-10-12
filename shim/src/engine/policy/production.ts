@@ -3,7 +3,7 @@
  * engine states (cost / already counted come from the decision, planet values include attachments). Production:
  * turns a planner's build list into one production.produce payload.
  */
-import type { GameState, Option } from "../types.js";
+import type { GameState, Option, PlanetId } from "../types.js";
 import {
   isPaymentDone,
   isPlacement,
@@ -53,7 +53,7 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
   const commHeld = hasComm && done.keleresAgent ? (self?.commodities ?? 0) : 0;
   const tgv = Math.max(1, done.tgValue);
 
-  let best: { set: string[]; tg: number; comm: number; score: number } | null = null;
+  let best: { set: PlanetId[]; tg: number; comm: number; score: number } | null = null;
   if (due <= 0) best = { set: [], tg: 0, comm: 0, score: 0 };
   for (let tg = 0; tg <= Math.min(tgHeld, Math.ceil(due / tgv)) && due > 0; tg++) {
     for (let comm = 0; comm <= Math.min(commHeld, Math.ceil(due / tgv)); comm++) {
@@ -66,7 +66,7 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
       }
       for (let mask = 1; mask < 1 << planets.length; mask++) {
         let t = 0;
-        const set: string[] = [];
+        const set: PlanetId[] = [];
         for (let i = 0; i < planets.length; i++)
           if (mask & (1 << i)) {
             t += planets[i].v;
@@ -102,7 +102,7 @@ export function productionPayload(d: ProductionProduce, build: string[]): Produc
     if (!offered.length) continue;
     const spot = offered.find((p) => p.holder !== "space") ?? offered[0];
     const ground = unit === "gf" || unit === "mf";
-    units.push(ground ? { unit, count, holder: spot.holder } : { unit, count });
+    units.push(ground ? { unit: spot.unit, count, holder: spot.holder } : { unit: spot.unit, count });
   }
   return { units };
 }
