@@ -12,7 +12,7 @@ import type { EngineClient } from "./engine/client.js";
 import { chooseTyped, ENGINE_GRACE_MS, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
-import { productionPayload } from "./engine/policy/production.js";
+import { planPayment, productionPayload } from "./engine/policy/production.js";
 import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
 import { actionInFlight } from "./engine/policy/turn.js";
 import type { Decision } from "./engine/types.js";
@@ -148,6 +148,8 @@ const RULES: Rule[] = [
   { id: /(^|_)getKeleresTechOptions$/, score: 60, addressed: true, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
+    // typed: strategy_card.pick (chooseTyped: SC_PREFERENCE); engine-off fallback only.
+    typed: true,
     id: /_scPick_\d+$/,
     score: 80,
     retry: true,
@@ -1777,6 +1779,22 @@ class SeatPilot {
         return self.seatEngineFor.api;
       },
       engineOwns: (game, messageId) => self.mgr.engineOwns(game, messageId, self.userId),
+      engineLive: () => !!self.mgr.engine?.isLive,
+      enginePay: async (game, messageId) => {
+        const engine = self.mgr.engine;
+        if (!engine?.isLive) return null;
+        // payment.spend is often table-scoped (no target): match it by message, not by "waits on me".
+        const d = (await engine.openDecisions(game))?.find((x) => x.kind === "payment.spend" && x.source.messageId === messageId);
+        if (!d || d.kind !== "payment.spend") return null;
+        const state = await engine.state(game, self.userId, 1000);
+        const plan = planPayment(d, state, self.userId);
+        if (!plan) return null;
+        const payload = plan.payload as unknown as Record<string, unknown>;
+        const r = await self.mgr.serial(() => engine.answer(game, d.id, { payload, expectedSeq: d.seq, requestId: `${d.id}@${d.revision}|pay`, userId: self.userId }));
+        log.info(`autopilot ${self.name}: engine payment.spend "payload" in ${game} (${plan.why}) -> ${r?.status ?? "unavailable"}${r?.error ? `: ${r.error}` : ""}`);
+        if (!r) return null;
+        return r.ok ? undefined : (r.error ?? r.status);
+      },
       engineProduce: async (game, messageId, build) => {
         const engine = self.mgr.engine;
         if (!engine) return null;

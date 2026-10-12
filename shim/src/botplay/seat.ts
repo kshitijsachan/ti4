@@ -32,6 +32,14 @@ export interface Seat {
    * one atomic answer. undefined = done; null = no typed decision (use the buttons); string = the engine's refusal.
    */
   engineProduce?(game: string, messageId: string, build: string[]): Promise<string | null | undefined>;
+  /**
+   * Pay this bill (a payment.spend decision on this message) in one atomic engine answer, planned by the engine's
+   * payment policy (engine/policy/production.ts planPayment). undefined = paid; null = no typed decision or no plan
+   * (unknown cost: use the buttons); string = the engine's refusal.
+   */
+  enginePay?(game: string, messageId: string): Promise<string | null | undefined>;
+  /** The engine stream is live: typed prompts are the engine policies' (planner jobs for them stand down). */
+  engineLive?(): boolean;
 }
 
 /** Typed decisions and actions as this seat. Every method resolves null when the engine is unavailable. */
