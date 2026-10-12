@@ -1,0 +1,10 @@
+{
+  "name": "leaders-am-muaat-hero-locked",
+  "description": "Rules audit leaders A-M: Adjudicator Ba'al (Muaat hero) is locked: a novaSeed_ press is refused (original: destroyed every other unit in the system and placed the supernova, only the purge was conditional).",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [ "/add_units tile_name:308 unit_names:warsun faction_or_color:muaat" ],
+  "steps": [
+    { "press": "FFCC_muaat_novaSeed_308", "as": "muaat", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "leaders-am-agent-exhausted",
+  "description": "Rules audit leaders A-M: 'Exhaust this card' needs a readied agent. Carth of Golden Sands (Hacan agent) already exhausted: pressing exhaustAgent_hacanagent again is refused (original: exhausted it again and offered the commodity gain).",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "setup": [ "/leaders exhaust leader:hacanagent faction_or_color:hacan" ],
+  "steps": [
+    { "press": "FFCC_hacan_exhaustAgent_hacanagent", "as": "hacan", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}
