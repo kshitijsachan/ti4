@@ -183,7 +183,8 @@ and (optionally) the web answer directly. It is on by default. To roll back to t
 cd /opt/ti4/deploy && echo "TI4_ENGINE=off" >> .env && docker compose up -d
 ```
 
-`TI4_ENGINE_WEB=1` makes the engine-driven prompt UI the players' default (else the legacy UI; anyone can try it
-with `?engine=1` in the game URL). `TI4_ENGINE_NATIVE=off` keeps the engine but answers through the simulated
+`TI4_ENGINE_WEB=1` (the default) makes the engine-driven prompt UI the players' default; `TI4_ENGINE_WEB=0` puts the
+legacy UI back as the default (rollback: one env var + `docker compose up -d`). Either way `?engine=0` / `?engine=1` in
+the game URL overrides it per player. `TI4_ENGINE_NATIVE=off` keeps the engine but answers through the simulated
 Discord click only.
 

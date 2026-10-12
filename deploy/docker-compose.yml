@@ -55,7 +55,7 @@ services:
       # Typed engine (docs/ENGINE.md): on by default; TI4_ENGINE=off in .env rolls back to the legacy paths.
       TI4_ENGINE: ${TI4_ENGINE:-on}
       # 1 = the web's engine-driven prompts are the default for players (else the legacy UI; ?engine=1 per browser).
-      TI4_ENGINE_WEB: ${TI4_ENGINE_WEB:-0}
+      TI4_ENGINE_WEB: ${TI4_ENGINE_WEB:-1}
     volumes:
       - shimdata:/data
     ports:
