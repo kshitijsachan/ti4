@@ -115,7 +115,7 @@ const ENGINE_LIFETIME_ANSWERS = 24;
 const ENGINE_MAX_REFUSALS = 2;
 /**
  * Our milty pick with no board offering a category we owe (pbd223): after this grace (a board edit may be in flight)
- * ask the engine to re-snapshot the game (rebuild, then recover, alternating), at most once per DRAFT_RESNAP_EVERY_MS.
+ * ask the engine to rebuild the game's decisions (re-captures the boards on screen), at most once per DRAFT_RESNAP_EVERY_MS.
  */
 const DRAFT_RESNAP_GRACE_MS = 20_000;
 const DRAFT_RESNAP_EVERY_MS = 60_000;
@@ -1543,8 +1543,8 @@ class SeatPilot {
 
   /**
    * Our milty pick, but no open draft.milty.pick offers a category we still owe (the board's decision was closed while
-   * its message stayed up, or the board is gone): re-snapshot instead of waiting forever — rebuild re-captures the
-   * boards on screen, recover re-posts them (bot PromptRecovery "milty_draft").
+   * its message stayed up: pbd223 / pbd224): re-snapshot instead of waiting forever — rebuild re-captures the boards
+   * on screen (the bot's 2-min PromptRecovery sweep does the same; this is quicker and works on older bots).
    */
   private async draftResnapshot(game: string, open: Decision[], state: EngineState | null, now: number, urgent = false) {
     const engine = this.mgr.engine;
@@ -1560,7 +1560,7 @@ class SeatPilot {
     }
     if (urgent) r.since = Math.min(r.since, now - DRAFT_RESNAP_GRACE_MS);
     if (now - r.since < DRAFT_RESNAP_GRACE_MS || now - r.at < DRAFT_RESNAP_EVERY_MS) return;
-    const how = r.n % 2 === 0 ? "rebuild" : "recover";
+    const how = "rebuild";
     r.at = now;
     r.n++;
     const res = await engine.resnapshot(game, how);

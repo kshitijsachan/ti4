@@ -1,22 +1,61 @@
 {
   "name": "setup-milty-slice-after-faction-order",
-  "description": "Live pbd223 stall (08:48): round 3 of a 5-player milty draft, Bot Zeta 6 (seat5) already holds a faction and speaker position and owes a slice. The slice board's decision was closed as obsolete mid-draft (a half-loaded MiltyDraftManager seen by a concurrent edit capture), so only the faction / speaker boards were open; the bot pressed those, both were refused ('You already drafted…'), and the draft never advanced. Here: seat4 takes speaker position 4, then seat5 must be able to take a slice through the engine, then seat3 a faction (the last seat's speaker position is auto-picked and the draft finishes).",
-  "base": { "game": "pbd223", "index": 18, "repost": false },
-  "setup": ["/milty show"],
+  "description": "Live pbd223 stall (08:48): a milty drafter already holding a faction and a speaker position owes a slice, while the slice board was last touched several picks earlier. In pbd223 the slice board's decision had been closed as obsolete mid-draft (a half-loaded MiltyDraftManager seen by a concurrent edit capture), only the faction / speaker boards stayed open, the bot pressed those, both were refused ('You already drafted\u2026') and the draft never advanced (pbd223's own saves are pruned; same situation from pbd108). Here: seat3 (Bot Beta) takes Last Bastion and seat2's last speaker position is auto-picked; seat4 (Bot Gamma: muaat + 1st) must be able to take slice C through the engine (stops before the last pick: finishing the draft assigns colours at random).",
+  "base": {
+    "recording": "pbd108",
+    "index": 17,
+    "repost": false
+  },
+  "setup": [
+    "/milty show"
+  ],
   "steps": [
-    { "answer": { "kind": "draft.milty.pick", "value": { "category": "order", "pick": "4" } }, "as": "seat4",
-      "legacy": [{ "press": "milty_order_4" }] },
-    { "answer": { "kind": "draft.milty.pick", "value": { "category": "slice", "pick": "E" } }, "as": "seat5",
-      "legacy": [{ "press": "milty_slice_E" }] },
-    { "answer": { "kind": "draft.milty.pick", "value": { "category": "faction", "pick": "hacan" } }, "as": "seat3",
-      "legacy": [{ "press": "milty_faction_hacan" }] },
-    { "wait": 3000 }
+    {
+      "answer": {
+        "kind": "draft.milty.pick",
+        "value": {
+          "category": "faction",
+          "pick": "bastion"
+        }
+      },
+      "as": "seat3",
+      "legacy": [
+        {
+          "press": "milty_faction_bastion"
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "draft.milty.pick",
+        "value": {
+          "category": "slice",
+          "pick": "C"
+        }
+      },
+      "as": "seat4",
+      "legacy": [
+        {
+          "press": "milty_slice_C"
+        }
+      ]
+    },
+    {
+      "wait": 2000
+    }
   ],
   "expect": {
     "invariants": true,
     "save": [
-      { "key": "game.milty_draft_manager", "match": "naaz,E,1" },
-      { "key": "game.milty_draft_manager", "match": "hacan,B,2" }
-    ]
+      {
+        "key": "game.milty_draft_manager",
+        "match": "muaat,C,1"
+      }
+    ],
+    "decision": {
+      "kind": "draft.milty.pick",
+      "as": "seat1",
+      "open": true
+    }
   }
 }
