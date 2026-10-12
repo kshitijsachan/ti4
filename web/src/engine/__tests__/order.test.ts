@@ -72,8 +72,8 @@ void test("in-advance prompts never head the queue", () => {
   assert.equal(r.offers.length, 2);
 });
 
-const opt = (id: string, value: unknown, disabled = false) =>
-  ({ id, label: id, style: "primary", emoji: null, disabled, needsInput: false, handler: id, value }) as Decision["options"][number];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const opt = (id: string, value: unknown, disabled = false): any => ({ id, label: id, style: "primary", emoji: null, disabled, needsInput: false, handler: id, value });
 
 void test("a secret list left open past the status phase never takes focus, and drops out when nothing scores", () => {
   const unmet = dec("status.score_secret", { options: [opt("a", { secretObjective: "x", met: false, phase: "status" })] });
