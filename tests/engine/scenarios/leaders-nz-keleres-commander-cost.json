@@ -1,0 +1,20 @@
+{
+  "name": "leaders-nz-keleres-commander-cost",
+  "description": "Rules audit (leaders N-Z): Suffi An's unlock costs 1 trade good. At 0 TG the original unlocked it for free; the engine refuses pay1tgforKeleres and the commander stays locked.",
+  "base": { "recording": "pbd110", "index": 45, "repost": false },
+  "setup": [
+    "/leaders lock leader:kelerescommander faction_or_color:keleresa",
+    "/player stats trade_goods:0 faction_or_color:keleresa"
+  ],
+  "trigger": { "command": "/player stats commodities:0 faction_or_color:keleresa" },
+  "steps": [
+    { "press": "pay1tgforKeleres", "as": "keleresa", "refused": true }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "players[faction=keleresa].leaders", "includes": "kelerescommander:locked" },
+      { "path": "players[faction=keleresa].tg", "eq": 0 }
+    ]
+  }
+}

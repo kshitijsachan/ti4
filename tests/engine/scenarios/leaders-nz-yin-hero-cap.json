@@ -1,0 +1,20 @@
+{
+  "name": "leaders-nz-yin-hero-cap",
+  "description": "Rules audit (leaders N-Z): Dannel of the Tenth commits up to 3 infantry in total. After 3 land on Everra, the original still landed more on Cresius; the engine refuses yinHeroInfantry_cresius_1.",
+  "base": { "recording": "pbd94", "index": 43, "repost": false },
+  "setup": [
+    "/leaders unlock leader:yinhero faction_or_color:yin"
+  ],
+  "trigger": { "command": "/leaders hero_play leader:yinhero faction_or_color:yin", "as": "yin" },
+  "steps": [
+    { "press": "FFCC_yin_yinHeroInfantry_everra_3", "as": "yin" },
+    { "press": "FFCC_yin_yinHeroInfantry_cresius_1", "as": "yin", "refused": true }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "tiles[position=210].holders[name=everra].units[owner=yin].count", "eq": 3 },
+      { "path": "tiles[position=212].holders[name=cresius].units", "eq": [] }
+    ]
+  }
+}
