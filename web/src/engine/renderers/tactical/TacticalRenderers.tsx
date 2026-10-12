@@ -156,7 +156,8 @@ export function TacticalActivateView({ decision, answer }: RendererProps<Tactica
   );
 }
 
-export function TacticalMoveView({ decision, answer }: RendererProps<TacticalMove>) {
+export function TacticalMoveView({ decision, state, answer }: RendererProps<TacticalMove>) {
+  const me = state?.players.find((p) => p.userId === decision.target?.userId);
   const opts = live(decision.options);
   const done = opts.find((o) => o.value!.action === "done");
   const doneValue = done?.value?.action === "done" ? done.value : null;
@@ -179,7 +180,7 @@ export function TacticalMoveView({ decision, answer }: RendererProps<TacticalMov
         {staged.map((s) => (
           <li key={`${s.from}-${s.holder}-${s.unit}-${s.color}`} className={classes.item}>
             <span className={classes.mono}>{s.count}</span>
-            <span>{unitName(s.unit, s.count)}</span>
+            <span>{unitName(s.unit, s.count, me)}</span>
             <span className={classes.muted}>
               from {s.from}
               {s.holder !== "space" ? ` (${planetName(s.holder)})` : ""}
@@ -207,7 +208,11 @@ export function TacticalMoveView({ decision, answer }: RendererProps<TacticalMov
   );
 }
 
-export function TacticalLandView({ decision, answer }: RendererProps<TacticalLand>) {
+export function TacticalLandView({ decision, state, answer }: RendererProps<TacticalLand>) {
+  // Names follow the owner's real unit (faction unit, upgraded only with its upgrade tech): Xxcha without
+  // Infantry II research lands "Infantry", never "Infantry II" (playtest 3, pbd203).
+  const me = state?.players.find((p) => p.userId === decision.target?.userId);
+  const ownerOf = (faction?: string | null) => state?.players.find((p) => p.faction === faction) ?? me;
   const opts = live(decision.options);
   const done = opts.find((o) => o.value!.op === "done");
   const progress = decision.progress?.accumulated;
@@ -215,15 +220,15 @@ export function TacticalLandView({ decision, answer }: RendererProps<TacticalLan
     const v = o.value!;
     if (v.op === "done") return "Done landing";
     const verb = v.op === "land" ? "Land" : "Lift";
-    return `${verb} ${v.count} ${unitName(v.unit, v.count)}${v.damaged ? " (damaged)" : ""} ${v.op === "land" ? "on" : "from"} ${planetName(v.planet)}`;
+    return `${verb} ${v.count} ${unitName(v.unit, v.count, ownerOf(v.owner))}${v.damaged ? " (damaged)" : ""} ${v.op === "land" ? "on" : "from"} ${planetName(v.planet)}`;
   };
   return (
     <div className={classes.panel}>
       {progress && (
         <span className={classes.muted}>
-          In space: {progress.inSpace.map((u) => `${u.count} ${unitName(u.unit, u.count)}`).join(", ") || "none"}
+          In space: {progress.inSpace.map((u) => `${u.count} ${unitName(u.unit, u.count, me)}`).join(", ") || "none"}
           {progress.onPlanets.length > 0 &&
-            ` · landed: ${progress.onPlanets.map((u) => `${u.count} ${unitName(u.unit, u.count)} on ${planetName(u.planet)}`).join(", ")}`}
+            ` · landed: ${progress.onPlanets.map((u) => `${u.count} ${unitName(u.unit, u.count, me)} on ${planetName(u.planet)}`).join(", ")}`}
         </span>
       )}
       <div className={classes.row}>
