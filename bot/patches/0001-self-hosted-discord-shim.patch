@@ -1601,10 +1601,44 @@ index 11f8248..0cb8c14 100644
                  MessageHelper.sendMessageToChannelWithButtons(
                          channel, "Use these buttons to spend 5 influence.", buttons);
 diff --git a/src/main/java/ti4/game/Game.java b/src/main/java/ti4/game/Game.java
-index 575a281..0f5fe34 100644
+index 575a281..c9e084e 100644
 --- a/src/main/java/ti4/game/Game.java
 +++ b/src/main/java/ti4/game/Game.java
-@@ -4079,10 +4079,25 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
+@@ -485,19 +485,27 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
+         return miltyDraftManager;
+     }
+ 
++    /**
++     * Lazily parsed from the save string. Built in a local and published only once fully loaded: the engine shares one
++     * loaded Game between threads (capture of concurrent message edits), and publishing the empty manager before
++     * loadSuperSaveString finished let another thread see a draft with no order ("draft over") and close the slice
++     * board's decision mid-draft (live pbd223 stall).
++     */
+     @NotNull
+-    public MiltyDraftManager getMiltyDraftManager() {
+-        if (miltyDraftManager == null) {
+-            miltyDraftManager = new MiltyDraftManager();
++    public synchronized MiltyDraftManager getMiltyDraftManager() {
++        MiltyDraftManager m = miltyDraftManager;
++        if (m == null) {
++            m = new MiltyDraftManager();
+             if (StringUtils.isNotBlank(miltyDraftString)) {
+                 try {
+-                    miltyDraftManager.loadSuperSaveString(miltyDraftString);
++                    m.loadSuperSaveString(miltyDraftString);
+                 } catch (Exception e) {
+-                    miltyDraftManager = new MiltyDraftManager();
++                    m = new MiltyDraftManager();
+                 }
+             }
++            miltyDraftManager = m;
+         }
+-        return miltyDraftManager;
++        return m;
+     }
+ 
+     @NotNull
+@@ -4079,10 +4087,25 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
  
      @Override
      public void setOwnerID(String ownerID) {
@@ -3751,10 +3785,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..7ee76c3
+index 0000000..8f3d5d0
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,621 @@
+@@ -0,0 +1,624 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -3983,6 +4017,9 @@ index 0000000..7ee76c3
 +                && DecisionRegistry.get(decisionId) != null) {
 +            DecisionRegistry.close(decisionId, "answered");
 +            EngineMetrics.count("answer.closed_on_answer");
++        } else if (form == null && !d.source().ephemeral()) {
++            // The prompt as posted a moment later is what the registry should show (handlers edit asynchronously).
++            DecisionRebuild.recaptureLater(gameName, d.source().channelId(), d.source().messageId());
 +        }
 +        List<Decision> opened = DecisionRegistry.openedAfter(gameName, before);
 +        return new AnswerResult(
@@ -5181,10 +5218,10 @@ index 0000000..0a37097
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionRebuild.java b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
 new file mode 100644
-index 0000000..f99440d
+index 0000000..971404a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,219 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -5338,6 +5375,52 @@ index 0000000..f99440d
 +
 +    private static void add(Set<String> s, String id) {
 +        if (id != null && !id.isBlank() && id.chars().allMatch(Character::isDigit)) s.add(id);
++    }
++
++    /**
++     * Re-reads one prompt a moment after it was answered and re-captures it (or closes its decision when the message
++     * is gone). Handlers often edit their prompt asynchronously after the answer returns (MiltyDraftDisplayService
++     * edits the draft boards from a queued history read); such an edit has been seen to leave the board without a
++     * decision (live pbd224: the slice board's draft.milty.pick vanished after a bot's slice pick). This makes the
++     * registry converge on what is posted, whatever path edited it.
++     */
++    static void recaptureLater(String gameName, String channelId, String messageId) {
++        if (channelId == null || messageId == null) return;
++        Thread.ofVirtual().name("engine-recapture").start(() -> {
++            try {
++                Thread.sleep(3000);
++                String base = System.getenv("DISCORD_API_BASE");
++                if (base == null) return;
++                String token = JdaService.jda.getToken();
++                if (!token.startsWith("Bot ")) token = "Bot " + token;
++                OkHttpClient http = JdaService.jda.getHttpClient().newBuilder().callTimeout(10, TimeUnit.SECONDS).build();
++                Request request = new Request.Builder()
++                        .url(base.replaceAll("/+$", "") + "/channels/" + channelId + "/messages/" + messageId)
++                        .header("Authorization", token)
++                        .get()
++                        .build();
++                try (Response res = http.newCall(request).execute()) {
++                    if (res.code() == 404) {
++                        DecisionRegistry.closeByMessage(messageId, "deleted");
++                        return;
++                    }
++                    if (!res.isSuccessful() || res.body() == null) return;
++                    // Only heal a prompt that lost its decision: an open one keeps its capture-time attribution.
++                    String open = DecisionRegistry.decisionIdForMessage(messageId);
++                    if (open != null && DecisionRegistry.get(open) != null) return;
++                    DataObject m = DataObject.fromJson(res.body().string());
++                    if (!m.hasKey("channel_id") || m.isNull("channel_id")) m.put("channel_id", channelId);
++                    ManagedGame mg = GameManager.getManagedGame(gameName);
++                    Game game = mg == null ? null : mg.getGame();
++                    if (game != null) DecisionCapture.onMessage(m, null, game);
++                    if (DecisionRegistry.decisionIdForMessage(messageId) != null) EngineMetrics.count("answer.recaptured");
++                }
++            } catch (InterruptedException e) {
++                Thread.currentThread().interrupt();
++            } catch (Exception e) {
++                BotLogger.error("engine: re-capture of " + messageId + " failed", e);
++            }
++        });
 +    }
 +
 +    private static DataArray fetch(String channelId) throws Exception {
@@ -7118,10 +7201,10 @@ index 0000000..f43527b
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/PromptRecovery.java b/src/main/java/ti4/selfhost/engine/PromptRecovery.java
 new file mode 100644
-index 0000000..5a5ec3d
+index 0000000..f641b0f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/PromptRecovery.java
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,171 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -7138,6 +7221,7 @@ index 0000000..5a5ec3d
 +import ti4.executors.ExecutionLockManager;
 +import ti4.executors.ExecutionLockType;
 +import ti4.game.Game;
++import ti4.game.Player;
 +import ti4.game.persistence.GameManager;
 +import ti4.game.persistence.ManagedGame;
 +import ti4.logging.BotLogger;
@@ -7167,6 +7251,7 @@ index 0000000..5a5ec3d
 +    /** What is owed but has no prompt, or null when nothing is missing. */
 +    static String missingStep(Game game) {
 +        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame();
++        if ("miltydraft".equals(phase) && draftBoardMissing(game)) return "draft_board";
 +        if ("statusHomework".equals(phase)) {
 +            StatusState st = ti4.selfhost.engine.kinds.StatusPhase.state(game);
 +            boolean someoneOwes = st == null
@@ -7174,6 +7259,32 @@ index 0000000..5a5ec3d
 +            if (someoneOwes && !offered(game.getName(), "pass_on_abilities")) return "status_homework";
 +        }
 +        return null;
++    }
++
++    /**
++     * The active drafter still needs a slice / faction / position but no open draft.milty.pick of theirs offers that
++     * category (live pbd223 / pbd224: the slice board's decision vanished after a bot's pick; a /rebuild restored it).
++     */
++    private static boolean draftBoardMissing(Game game) {
++        ti4.service.milty.MiltyDraftManager m = game.getMiltyDraftManager();
++        if (m == null || m.isFinished()) return false;
++        Player active = m.getCurrentDraftPlayer(game);
++        if (active == null) return false;
++        ti4.service.milty.MiltyDraftManager.PlayerDraft pd = m.getPlayerDraft(active);
++        if (pd == null) return false;
++        java.util.Set<String> offered = new java.util.HashSet<>();
++        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
++            if (!"draft.milty.pick".equals(d.kind())) continue;
++            for (Option o : d.options()) {
++                String h = o.handler() == null ? "" : o.handler();
++                if (h.startsWith("milty_slice_")) offered.add("slice");
++                else if (h.startsWith("milty_faction_")) offered.add("faction");
++                else if (h.startsWith("milty_order_")) offered.add("order");
++            }
++        }
++        return (pd.getSlice() == null && !offered.contains("slice"))
++                || (pd.getFaction() == null && !offered.contains("faction"))
++                || (pd.getPosition() == null && !offered.contains("order"));
 +    }
 +
 +    private static boolean offered(String gameName, String handler) {
@@ -7192,6 +7303,13 @@ index 0000000..5a5ec3d
 +            String step = missingStep(game);
 +            if (step == null) return null;
 +            if ("status_homework".equals(step)) postHomework(game);
++            if ("draft_board".equals(step)) {
++                try {
++                    DecisionRebuild.rebuild(game); // the boards are still posted; only their decision went missing
++                } catch (Exception e) {
++                    BotLogger.error("engine: draft board rebuild failed for " + gameName, e);
++                }
++            }
 +            lastRecovery.put(gameName, System.currentTimeMillis());
 +            missingSince.remove(gameName);
 +            BotLogger.warning("engine: re-posted the missing " + step + " prompt in " + gameName);
@@ -7236,13 +7354,16 @@ index 0000000..5a5ec3d
 +                            Game game = mg.getGame();
 +                            if (game != null && !DecisionRegistry.openDecisions(mg.getName()).isEmpty())
 +                                Engine.closeObsolete(game); // prompts left open from before a restart / an obsolete() rule
-+                            if (game == null || missingStep(game) == null) {
++                            String step = game == null ? null : missingStep(game);
++                            if (step == null) {
 +                                missingSince.remove(mg.getName());
 +                                continue;
 +                            }
 +                            long since = missingSince.computeIfAbsent(mg.getName(), k -> now);
-+                            if (now - since < MISSING_FOR_MS) continue;
-+                            if (now - lastRecovery.getOrDefault(mg.getName(), 0L) < COOLDOWN_MS) continue;
++                            // A missing draft board is only re-read (no new post): heal it fast.
++                            boolean draft = "draft_board".equals(step);
++                            if (now - since < (draft ? 60_000L : MISSING_FOR_MS)) continue;
++                            if (now - lastRecovery.getOrDefault(mg.getName(), 0L) < (draft ? 120_000L : COOLDOWN_MS)) continue;
 +                            recover(mg.getName());
 +                        } catch (Exception e) {
 +                            BotLogger.error("engine: prompt recovery failed for " + mg.getName(), e);
@@ -19698,10 +19819,10 @@ index 0000000..4a31cfa
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
 new file mode 100644
-index 0000000..ba2a69b
+index 0000000..6f32509
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,117 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -19763,13 +19884,20 @@ index 0000000..ba2a69b
 +        return "player";
 +    }
 +
-+    /** The draft is over (fuzz pbd118: a leftover board pressed during player setup reset starting techs). */
++    /**
++     * The draft is over (fuzz pbd118: a leftover board pressed during player setup reset starting techs). A manager
++     * with no draft order while the game is still in the draft phase is not "over" but unreadable (pbd223: a manager
++     * seen half-loaded closed the slice board mid-draft and the draft stalled): keep the board; validate refuses
++     * picks until the draft reads correctly.
++     */
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
 +        Game game = ctx.game();
++        if (SetupStateBuilder.pastSetup(game)) return true;
 +        MiltyDraftManager m = game.getMiltyDraftManager();
-+        return m == null || m.isFinished() || m.getDraftIndex() >= m.getDraftOrder().size()
-+                || SetupStateBuilder.pastSetup(game);
++        if (m == null || m.isFinished()) return true;
++        if (m.getDraftOrder().isEmpty()) return !"miltydraft".equalsIgnoreCase(game.getPhaseOfGame());
++        return m.getDraftIndex() >= m.getDraftOrder().size();
 +    }
 +
 +    @Override
