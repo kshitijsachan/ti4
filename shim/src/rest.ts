@@ -6,6 +6,7 @@ import { discordError, noContent, readBody, sendJson, type Body } from "./http.j
 import { normalizeComponents, stripPrivate, type Hub } from "./hub.js";
 import { newRole, type Interaction, type Json, type StoredMessage } from "./store.js";
 import { log } from "./log.js";
+import { activity } from "./lag.js";
 
 type Ctx = { req: IncomingMessage; res: ServerResponse; params: string[]; query: URLSearchParams; body: Body };
 type Handler = (ctx: Ctx) => void | Promise<void>;
@@ -38,12 +39,18 @@ export class Rest {
       const body = method === "GET" || method === "DELETE" ? { json: {}, files: [] } : await readBody(req);
       const params = m.slice(1).map(decodeURIComponent);
       // Anything but a message / interaction / reaction write may change who sees what: drop cached canView answers.
-      if (method !== "GET" && !/\/(messages|interactions|reactions|webhooks|typing)(\/|$)/.test(path)) this.store.invalidateViews();
+      // Before and after: the handler may await, and a canView answered meanwhile must not outlive the change.
+      const permsMayChange = method !== "GET" && !/\/(messages|interactions|reactions|webhooks|typing)(\/|$)/.test(path);
+      if (permsMayChange) this.store.invalidateViews();
+      const done = activity(`rest ${method} ${path}`);
       try {
         await r.handler({ req, res, params, query, body });
       } catch (e) {
         log.error(`${method} ${path} failed: ${(e as Error).stack}`);
         if (!res.headersSent) discordError(res, 500, 0, "shim error");
+      } finally {
+        done();
+        if (permsMayChange) this.store.invalidateViews();
       }
       if (!res.headersSent) noContent(res);
       log.debug(`${method} ${path} -> ${res.statusCode}`);

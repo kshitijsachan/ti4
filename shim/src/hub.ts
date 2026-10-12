@@ -357,6 +357,7 @@ export class Hub {
         if (data?.gameState?.phase !== "finished") continue;
         for (const ch of chans) {
           ch.parent_id = cat.id;
+          this.store.invalidateViews();
           this.channelUpdate(ch);
           this.archiveChannel(ch);
           n++;
@@ -379,6 +380,7 @@ export class Hub {
     delete this.store.state.channels[ch.id];
     delete this.store.state.messages[ch.id];
     delete this.store.state.thread_members[ch.id];
+    this.store.invalidateViews();
     this.store.scheduleSave(ch.id);
     this.gateway.dispatch(
       isThread ? "THREAD_DELETE" : "CHANNEL_DELETE",
@@ -421,6 +423,7 @@ export class Hub {
     const i = list.indexOf(userId);
     if (i < 0) return;
     list.splice(i, 1);
+    this.store.invalidateViews();
     this.store.scheduleSave(threadId);
     this.gateway.dispatch("THREAD_MEMBERS_UPDATE", {
       id: threadId,
