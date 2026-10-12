@@ -1,0 +1,58 @@
+{
+  "name": "explore-deep-mining",
+  "description": "Deep Mining (via TF Deep Installations tech): Ral Nel with a mech on Lisis and Velnor explores both; accepts the trade good on Lisis (deep_mining_accept), declines on Velnor (deep_mining_decline_ -> normal explore). explore.outcome.",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    "/tech add tech:tf-deepinstallations faction_or_color:ralnel",
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "317",
+        "unit_names": "mech lisis, mech velnor",
+        "faction_or_color": "ralnel"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "command": "explore planet",
+      "options": {
+        "planet": "lisis",
+        "faction_or_color": "ralnel"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "deep_mining_accept"
+      },
+      "as": "ralnel"
+    },
+    {
+      "command": "explore planet",
+      "options": {
+        "planet": "velnor",
+        "faction_or_color": "ralnel"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "deep_mining_decline_velnor"
+      },
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

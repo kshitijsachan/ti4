@@ -1,0 +1,52 @@
+{
+  "name": "relic-neuraloop",
+  "description": "Neuraloop: a stage 1 objective is revealed; Ral Nel (holding Neuraloop + Dynamis Core) replaces it with a stage 1 objective, purging Dynamis Core (neuraloopPart1 / neuraloopPart2).",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "neuraloop",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    },
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "dynamiscore",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "command": "/status po_reveal_stage1"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "neuraloopPart1;.*;stage1"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "neuraloopPart2;.*dynamiscore"
+      },
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

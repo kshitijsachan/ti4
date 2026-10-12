@@ -1,0 +1,37 @@
+{
+  "name": "relic-prophets-tears",
+  "description": "The Prophet's Tears: exhaust for an action card (prophetsTears_AC, relic.use).",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "prophetstears",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "press": "prophetsTears_AC",
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[ralnel].exhausted_relics",
+        "includes": "prophetstears"
+      }
+    ]
+  }
+}
