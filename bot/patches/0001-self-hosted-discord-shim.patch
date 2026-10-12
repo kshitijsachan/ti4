@@ -5347,10 +5347,10 @@ index 0000000..853beb8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineModels.java b/src/main/java/ti4/selfhost/engine/EngineModels.java
 new file mode 100644
-index 0000000..0dc360f
+index 0000000..ec7dc55
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineModels.java
-@@ -0,0 +1,443 @@
+@@ -0,0 +1,445 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -5375,6 +5375,8 @@ index 0000000..0dc360f
 +            /** Engine event seq at snapshot time; resume the stream with after=seq. */
 +            long seq,
 +            String phase,
++            /** The game is over (ended or won): nothing is asked of anyone any more (phase keeps its last value). */
++            boolean ended,
 +            int round,
 +            String activePlayer,
 +            String speaker,
@@ -6644,10 +6646,10 @@ index 0000000..6216ba1
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java b/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java
 new file mode 100644
-index 0000000..9031883
+index 0000000..2d01dd6
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java
-@@ -0,0 +1,204 @@
+@@ -0,0 +1,205 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -6744,6 +6746,7 @@ index 0000000..9031883
 +                game.getLastModifiedDate(),
 +                DecisionRegistry.currentSeq(),
 +                game.getPhaseOfGame(),
++                game.isHasEnded(),
 +                game.getRound(),
 +                active == null ? null : active.getUserID(),
 +                speaker == null ? null : speaker.getUserID(),
@@ -10181,10 +10184,10 @@ index 0000000..396d372
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardSabotageKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardSabotageKind.java
 new file mode 100644
-index 0000000..4729a53
+index 0000000..6c495dd
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardSabotageKind.java
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,215 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -10322,7 +10325,9 @@ index 0000000..4729a53
 +        Optional<GameMessage> gm = GameMessageManager.getOne(game.getName(), messageId);
 +        boolean over = false;
 +        if (gm.isPresent()) registered.add(messageId);
-+        else if (registered.contains(messageId)) over = true;
++        else if (registered.contains(messageId) || olderThan(messageId, 60_000)) over = true;
++        // (registered is in memory: after a restart a window whose GameMessage is already gone is over too, judged by
++        // the message's age — live pbd161: two windows stayed open for an hour and bots answered "No Sabotage" ~450x.)
 +        String playedBy = playedBy(game, messageId, gm.orElse(null));
 +        Player actor = playedBy == null ? null : game.getPlayerFromColorOrFaction(playedBy);
 +
@@ -10347,6 +10352,27 @@ index 0000000..4729a53
 +        subject.put("faction", playedBy);
 +        subject.put("player", actor == null ? null : actor.getUserID());
 +        return new ReactionWindow("sabotage", subject, eligible, responded, responses);
++    }
++
++    /** The message (a snowflake id) was posted more than ms ago. */
++    private static boolean olderThan(String messageId, long ms) {
++        try {
++            long at = (Long.parseUnsignedLong(messageId) >>> 22) + 1420070400000L;
++            return System.currentTimeMillis() - at > ms;
++        } catch (NumberFormatException e) {
++            return false;
++        }
++    }
++
++    /** Engine answers count at once (WindowResponses), before the bot's reaction record catches up. */
++    @Override
++    public boolean recordsResponses() {
++        return true;
++    }
++
++    @Override
++    public boolean countsAsResponse(String handlerId) {
++        return "no_sabotage".equals(handlerId) || handlerId.startsWith("sabotage_");
 +    }
 +
 +    /** C7: the player who played the card is not in the window but may press its "Pause Timer" (validate: only that). */
@@ -11360,7 +11386,7 @@ index 0000000..56a4f59
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/AgendaTieBreakKind.java b/src/main/java/ti4/selfhost/engine/kinds/AgendaTieBreakKind.java
 new file mode 100644
-index 0000000..84f2ec0
+index 0000000..4c4016e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/AgendaTieBreakKind.java
 @@ -0,0 +1,68 @@
@@ -11428,13 +11454,13 @@ index 0000000..84f2ec0
 +    @Override
 +    public String validate(Game game, Player answering, Decision decision, String optionId) {
 +        Player speaker = game.getSpeaker();
-+        if (speaker != null && speaker != answering) return "Only the speaker breaks ties.";
++        if (speaker != null && !speaker.getUserID().equals(answering.getUserID())) return "Only the speaker breaks ties.";
 +        return null;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/AgendaVoteKind.java b/src/main/java/ti4/selfhost/engine/kinds/AgendaVoteKind.java
 new file mode 100644
-index 0000000..9adcc6f
+index 0000000..b95fbcb
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/AgendaVoteKind.java
 @@ -0,0 +1,216 @@
@@ -11521,7 +11547,7 @@ index 0000000..9adcc6f
 +    public String validate(Game game, Player answering, Decision decision, String optionId) {
 +        if (optionId.contains("forceAbstainForPlayer_")) return null;
 +        Player active = game.getActivePlayer();
-+        if (active != null && active != answering) return "It is not your turn to vote.";
++        if (active != null && !active.getUserID().equals(answering.getUserID())) return "It is not your turn to vote.";
 +        return null;
 +    }
 +
@@ -12876,10 +12902,10 @@ index 0000000..3f740c4
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChooseUnitKind.java b/src/main/java/ti4/selfhost/engine/kinds/ChooseUnitKind.java
 new file mode 100644
-index 0000000..ac79add
+index 0000000..b81b7b8
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChooseUnitKind.java
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,34 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import static ti4.selfhost.engine.kinds.ChooseSupport.rule;
@@ -12895,7 +12921,14 @@ index 0000000..ac79add
 +
 +    public static final List<ChooseSupport.Rule> RULES = List.of(
 +            // Industrex (TE legendary planet): the ship type to place (then placeOneNDone_ picks the system).
-+            rule("industrex", "industrexPickType_(?<unit>[a-z]+)"));
++            rule("industrex", "industrexPickType_(?<unit>[a-z]+)"),
++            // "Remove one <unit type>" lists (ButtonHelperModifyUnits.getRemoveThisTypeOfUnitButton): the unit plastic /
++            // cardboard limit warning PlayerAreaGenerator posts on every render, and the capacity / fleet-pool lists of
++            // Vortex-style removals; "Done Resolving" (deleteButtons) is chrome. unit = display name ("Space Dock"),
++            // holder = "space" or a planet id, color = the owner's color; destroy = "_destroy" when it destroys.
++            rule(
++                    "remove_unit_type",
++                    "removeThisTypeOfUnit_(?<unit>[^_]+)_(?<tile>[^_]+)_(?<holder>[^_]+)(?:_(?<color>[a-z]+))?(?:_(?<destroy>destroy))?"));
 +
 +    @Override
 +    public String kind() {
@@ -18157,10 +18190,10 @@ index 0000000..9a130f4
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/LeaderUseKind.java b/src/main/java/ti4/selfhost/engine/kinds/LeaderUseKind.java
 new file mode 100644
-index 0000000..070d293
+index 0000000..2ab34ef
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/LeaderUseKind.java
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,96 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -18207,6 +18240,48 @@ index 0000000..070d293
 +    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
 +        FactionSteps.Step s = FactionSteps.Registry.find(handlerId, ctx);
 +        return s == null || !KIND.equals(s.kind()) ? null : s.value();
++    }
++
++    /**
++     * An agent prompt (exhaustAgent_&lt;agent&gt;[_…]) whose agent is already exhausted can no longer be used: pressing it
++     * again re-runs the agent's effect without the readied card (live pbd31: the Winnu agent's "use on" buttons
++     * stayed on the payment summary after the agent was spent; a bot pressed "Hacan" 783 times, each press posting
++     * "has exhausted Berekar Berekon … on Hacan" and adding the agent to Hacan's spent things). Every option must be
++     * such an agent prompt (Decline / UNDO aside).
++     */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        ti4.game.Game game = ctx.game();
++        if (game == null) return false;
++        List<String> ids = ctx.handlerIds();
++        if (ids == null && ctx.messageId() != null) {
++            String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
++            ti4.selfhost.engine.EngineModels.Decision d = id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
++            if (d != null) ids = d.options().stream()
++                    .map(o -> ti4.discord.interactions.routing.ComponentIdEnvelope.decode(o.id().split("#")[0]).handlerId())
++                    .toList();
++        }
++        if (ids == null) return false;
++        boolean any = false;
++        for (String raw : ids) {
++            if (raw == null) continue;
++            String h = raw.replaceFirst("^FFCC_[^_]+_", "");
++            if (FactionSteps.Registry.chrome(h)) continue;
++            if (!h.startsWith("exhaustAgent_")) return false;
++            FactionSteps.Step s = FactionSteps.Registry.find(h, null);
++            if (s == null || !KIND.equals(s.kind()) || s.faction() == null) return false;
++            ti4.game.Player owner = game.getPlayerFromColorOrFaction(s.faction());
++            if (owner == null) return false;
++            ti4.game.Leader leader = owner.getLeader(s.component()).orElse(null);
++            if (leader == null || !leader.isExhausted()) return false;
++            any = true;
++        }
++        return any;
++    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
 +    }
 +
 +    @Override
@@ -18281,7 +18356,7 @@ index 0000000..4a31cfa
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
 new file mode 100644
-index 0000000..b55f4ee
+index 0000000..ba2a69b
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftPickKind.java
 @@ -0,0 +1,110 @@
@@ -18362,7 +18437,7 @@ index 0000000..b55f4ee
 +                || SetupStateBuilder.pastSetup(game) || SetupStateBuilder.draftFinished(game, m))
 +            return "The draft is over.";
 +        Player cur = m.getCurrentDraftPlayer(game);
-+        if (cur == null || cur != answering) return "It is not your turn to draft.";
++        if (cur == null || !cur.getUserID().equals(answering.getUserID())) return "It is not your turn to draft.";
 +        String h = SetupKindSupport.handlerOf(decision, optionId);
 +        if (!matches(h)) return null;
 +        String rest = h.substring("milty_".length());
@@ -21180,10 +21255,10 @@ index 0000000..7801778
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusScoreSecretKind.java b/src/main/java/ti4/selfhost/engine/kinds/StatusScoreSecretKind.java
 new file mode 100644
-index 0000000..90368ed
+index 0000000..9b3aec0
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StatusScoreSecretKind.java
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,95 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -21245,6 +21320,18 @@ index 0000000..90368ed
 +            if (e.getValue() != null && e.getValue() == handle) return e.getKey();
 +        }
 +        return null;
++    }
++
++    /**
++     * In the status phase, once this player declared a secret objective this round every option is refused ("You
++     * already declared…"): the list is closed (live pbd160: a bot's list stayed open and was re-pressed for 20 min).
++     */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        Player p = ctx.player();
++        if (p == null || !StatusPhase.inStatus(ctx.game())) return false;
++        String declared = StatusPhase.scoredThisRound(ctx.game(), p, "SO");
++        return declared != null && !"none".equals(declared);
 +    }
 +
 +    @Override
@@ -21391,7 +21478,7 @@ index 0000000..5b9b901
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategicActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategicActionKind.java
 new file mode 100644
-index 0000000..934880c
+index 0000000..2588947
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategicActionKind.java
 @@ -0,0 +1,67 @@
@@ -21456,7 +21543,7 @@ index 0000000..934880c
 +    public static String validateAction(Game game, Player answering, Map<String, Object> v) {
 +        if (v == null || !(v.get("strategyCard") instanceof Number n)) return null;
 +        int sc = n.intValue();
-+        if (game.getActivePlayer() != null && game.getActivePlayer() != answering) return "It is not your turn.";
++        if (game.getActivePlayer() != null && !game.getActivePlayer().getUserID().equals(answering.getUserID())) return "It is not your turn.";
 +        if (answering.getSCs() == null || !answering.getSCs().contains(sc)) return "You do not hold that strategy card.";
 +        if (game.getPlayedSCs().contains(sc)) return "That strategy card has already been played.";
 +        return null;
@@ -21464,7 +21551,7 @@ index 0000000..934880c
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java
 new file mode 100644
-index 0000000..05638d3
+index 0000000..7c657b4
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java
 @@ -0,0 +1,62 @@
@@ -21521,7 +21608,7 @@ index 0000000..05638d3
 +    @Override
 +    public String validate(Game game, Player answering, Decision decision, String optionId) {
 +        Player active = game.getActivePlayer();
-+        if (active != null && active != answering) return "It is not your turn to pick a strategy card.";
++        if (active != null && !active.getUserID().equals(answering.getUserID())) return "It is not your turn to pick a strategy card.";
 +        Map<String, Object> v = StrategyCards.optionValue(decision, optionId);
 +        if (v != null && v.get("strategyCard") instanceof Number n) {
 +            for (Player p : game.getRealPlayers())
@@ -24017,7 +24104,7 @@ index 0000000..10b1653
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TradeForceReplenishKind.java b/src/main/java/ti4/selfhost/engine/kinds/TradeForceReplenishKind.java
 new file mode 100644
-index 0000000..ab57291
+index 0000000..1303c99
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TradeForceReplenishKind.java
 @@ -0,0 +1,73 @@
@@ -24083,7 +24170,7 @@ index 0000000..ab57291
 +    @Override
 +    public String validate(Game game, Player answering, Decision decision, String optionId) {
 +        Player holder = holder(game);
-+        if (holder != null && holder != answering) return "Only the Trade holder replenishes other players.";
++        if (holder != null && !holder.getUserID().equals(answering.getUserID())) return "Only the Trade holder replenishes other players.";
 +        return null;
 +    }
 +
@@ -24282,7 +24369,7 @@ index 0000000..3cfacb3
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
 new file mode 100644
-index 0000000..4999fd9
+index 0000000..1bf913e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
 @@ -0,0 +1,101 @@
@@ -24380,7 +24467,7 @@ index 0000000..4999fd9
 +                            game))
 +                return "The action phase is over; there is nothing to pass.";
 +            Player active = game.getActivePlayer();
-+            if (active != null && active != answering && !game.isNaaluAgent()) return "It is not your turn.";
++            if (active != null && !active.getUserID().equals(answering.getUserID()) && !game.isNaaluAgent()) return "It is not your turn.";
 +            if ("tactical".equals(action) && answering.getTacticalCC() < 1)
 +                return "You have no command tokens in your tactic pool.";
 +        }
