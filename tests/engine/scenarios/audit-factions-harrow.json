@@ -1,6 +1,6 @@
 {
   "name": "audit-factions-harrow",
-  "description": "Rules audit (factions): L1Z1X Harrow — during ground combat on tarmann (210), the active L1Z1X player's ground-combat prompt offers 'Harrow: BOMBARDMENT' (the engine answer finds that option; the original offered no bombardment after the invasion started).",
+  "description": "Rules audit (factions): L1Z1X Harrow — during ground combat on tarmann (210), the active L1Z1X player's ground-combat prompt offers 'Harrow: BOMBARDMENT' (the engine answer finds that option; the original offered no bombardment after the invasion started). (TE: start_combat posts the coexist/engage choice first; L1Z1X engages.)",
   "base": {
     "recording": "pbd104",
     "index": 44,
@@ -13,6 +13,22 @@
     "/combat start_combat tile_name:210"
   ],
   "steps": [
+    {
+      "wait": 3000
+    },
+    {
+      "answer": {
+        "kind": "combat.engage",
+        "option": "startCombatOn_tarmann"
+      },
+      "as": "l1z1x",
+      "legacy": [
+        {
+          "press": "startCombatOn_tarmann",
+          "as": "l1z1x"
+        }
+      ]
+    },
     {
       "wait": 3000
     },
