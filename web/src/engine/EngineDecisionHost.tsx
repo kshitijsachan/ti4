@@ -124,6 +124,18 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   useEffect(() => setFocus(position, "prompt", focusLabel), [position, focusLabel, setFocus]);
   useEffect(() => () => setFocus(null, null), [setFocus]);
 
+  /* The queue and "Available now" lists close on any click outside them (and on Escape, below). */
+  useEffect(() => {
+    if (!queueOpen && !offerList) return;
+    const onDown = (e: globalThis.PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.("[data-engine-menu]")) return;
+      setQueueOpen(false);
+      setOfferList(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [queueOpen, offerList]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || typingIn(e.target)) return;
@@ -150,7 +162,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
     </Tooltip>
   );
   const offerPill = (offers.length > 0 || unhidePill) && (
-    <div ref={offersRef} className={classes.offers}>
+    <div ref={offersRef} className={classes.offers} data-engine-menu>
       {offerList && (
         <div className={classes.offerList} role="menu" aria-label="Available now">
           {offers.map((o) => (
@@ -205,7 +217,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const Renderer = rendererFor(shown.kind);
   const error = errors[shown.id];
   const title = decisionTitle(shown, state);
-  const eyebrow = openOffer ? "Available now · optional" : decisionEyebrow(shown);
+  const eyebrow = openOffer ? "Available now · optional" : decisionEyebrow(shown, state);
 
   return (
     <>
@@ -227,7 +239,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
                 <h2 className={classes.title}>{title}</h2>
               </div>
               {more > 0 && (
-                <span className={classes.moreWrap}>
+                <span className={classes.moreWrap} data-engine-menu>
                   <UnstyledButton className={classes.moreText} onClick={() => setQueueOpen((v) => !v)} aria-expanded={queueOpen}>
                     {more === 1 ? "1 more after this" : `${more} more waiting`}
                   </UnstyledButton>

@@ -37,7 +37,8 @@ export function controlsOf(components: Json[] | undefined): Control[] {
  * (`deleteButtons_<ctx>~pay`, `~prod`, `~ccgain`, `~ccredist`, `~cclose`, `~fleetlose`): those say what the closer
  * finishes in the id instead of the label, and every match here is on the plain closer id.
  */
-export const baseId = (id: string) => id.replace(/^FFCC_[^_]+_/, "").replace(/~(pay|prod|ccgain|ccredist|cclose|fleetlose)$/, "");
+/** The handler id: no FFCC_<faction>_ lock, no DoneRole suffix (~pay…), no strategy-card re-offer suffix (~o<n>, ScOffer). */
+export const baseId = (id: string) => id.replace(/^FFCC_[^_]+_/, "").replace(/~o\d+$/, "").replace(/~(pay|prod|ccgain|ccredist|cclose|fleetlose)$/, "");
 
 /** The faction a control is locked to, if any. */
 export const lockOf = (id: string) => /^FFCC_([^_]+)_/.exec(id)?.[1];

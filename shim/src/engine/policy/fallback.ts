@@ -151,6 +151,7 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   // C8b
   "units.modify": "optional", // Modify Units menu: opened by the player
   "combat.automate": "blocking", // automate-ground-combat vote / confirm
+  "combat.engage": "blocking", // engage in combat or coexist (combatPolicy engages)
   "combat.modifier": "optional",
   "strategy_card.construction_build": "blocking",
 };

@@ -57,6 +57,7 @@
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: min(380px, 100%);
@@ -439,15 +440,15 @@
 }
 
 .moreWrap {
-  position: relative;
   align-self: center;
 }
 
 /* The queue, opened from "2 more waiting": jump to any decision. */
+/* Opens beside the card (left of it), so the card's own buttons — End turn — stay reachable while it is open. */
 .queueList {
   position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  top: 0;
+  right: calc(100% + 8px);
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -527,5 +528,14 @@
 @keyframes engineSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Narrow screens: no room beside the card, so the queue drops under the header, kept short. */
+@media (max-width: 640px) {
+  .queueList {
+    top: 44px;
+    right: 8px;
+    max-height: 40vh;
   }
 }

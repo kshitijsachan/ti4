@@ -1,0 +1,22 @@
+{
+  "name": "te-bastion",
+  "description": "Last Bastion (TE): Galvanize via te.galvanize (toggleGalvanize_<pos> -> galvanize_/ungalvanize_<pos>_<unit>_<holder>, Done), hero Lyra Keen (purgeBastionHero_<pos>), The Icon (useTheIcon, te.breakthrough). Liberate is covered by the pbd90 148-151 replay.",
+  "base": { "recording": "pbd90", "index": 148, "repost": false },
+  "setup": [
+    "/leaders unlock leader:bastionhero faction_or_color:bastion",
+    "/breakthrough unlock breakthrough:bastionbt faction_or_color:bastion"
+  ],
+  "trigger": { "press": "FFCC_bastion_toggleGalvanize_316", "as": "bastion" },
+  "steps": [
+    { "answer": { "kind": "te.galvanize", "option": "_galvanize_316_dn_space$" }, "as": "bastion" },
+    { "answer": { "kind": "te.galvanize", "option": "ungalvanize_316_dn_space$" }, "as": "bastion" },
+    { "answer": { "kind": "te.galvanize", "option": "_galvanize_316_ff_space$" }, "as": "bastion" },
+    { "answer": { "kind": "te.galvanize", "option": "^deleteButtons" }, "as": "bastion" },
+    { "press": "FFCC_bastion_purgeBastionHero_316", "as": "bastion" },
+    { "press": "useTheIcon", "as": "bastion" }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "player[bastion].leaders", "excludes": "bastionhero" } ]
+  }
+}

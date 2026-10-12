@@ -1,0 +1,9 @@
+{
+  "name": "combat-engage",
+  "description": "'Engage in Combat' / 'They Are Coexisting' (startCombatOn_, pbd203: untyped, a bot waited 122 s) is typed combat.engage: muaat engages mentak's infantry on andeara (pbd60@162, both have ground forces there after a manual add).",
+  "base": { "recording": "pbd60", "index": 162, "repost": false },
+  "setup": [ "/add_units tile_name:308 unit_names:\"1 gf andeara\" faction_or_color:mentak" ],
+  "trigger": { "press": "startCombatOn_andeara", "as": "muaat" },
+  "steps": [ { "wait": 2000 } ],
+  "expect": { "invariants": true }
+}

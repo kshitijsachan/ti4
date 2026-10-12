@@ -12,7 +12,7 @@ import type { EngineClient } from "./engine/client.js";
 import { chooseTyped, ENGINE_GRACE_MS, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
-import { productionPayload } from "./engine/policy/production.js";
+import { planPayment, productionPayload } from "./engine/policy/production.js";
 import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
 import { actionInFlight } from "./engine/policy/turn.js";
 import type { Decision } from "./engine/types.js";
@@ -148,6 +148,8 @@ const RULES: Rule[] = [
   { id: /(^|_)getKeleresTechOptions$/, score: 60, addressed: true, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
+    // typed: strategy_card.pick (chooseTyped: SC_PREFERENCE); engine-off fallback only.
+    typed: true,
     id: /_scPick_\d+$/,
     score: 80,
     retry: true,
@@ -946,7 +948,11 @@ class SeatPilot {
       // An extra roll (anti-fighter barrage, space cannon) whose button we pressed on this message is done, also across
       // restarts (the shim keeps who pressed what).
       const extraDone = (c: Control) => /^combatRoll_[^_]+_[^_]+_\w+/.test(c.custom_id) && !!m._presses?.[me];
-      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && !extraDone(c) && this.mayRoll(ch.id, c.custom_id, faction, round)));
+      // Rules order, as the engine enforces it (pbd203: this legacy path rolled round 1 before barrage): a combat round
+      // waits while the engine's roll window says why (hits owed / barrage first), and space round 1 waits for our own
+      // barrage when this combat offers one we have not pressed yet.
+      const held = await this.heldRounds(game, ch.id, controls, m, round);
+      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && !extraDone(c) && !held.has(c.custom_id) && this.mayRoll(ch.id, c.custom_id, faction, round)));
     }
 
     let phase: string | null | undefined;
@@ -1010,7 +1016,7 @@ class SeatPilot {
         if (phase && !rule.phase.test(phase)) continue;
       }
       if (rule.myTurn && ((await this.midAction(game)) || !(await this.myTurn(game)))) continue;
-      let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true) && !rule.notId?.test(c.custom_id));
+      let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "").replace(/~o\d+$/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true) && !rule.notId?.test(c.custom_id));
       if (rule.distinct) hits = hits.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= 600000);
       if (!hits.length) continue;
       if (rule.rank) hits = [...hits].sort((a, b) => rule.rank!(a) - rule.rank!(b));
@@ -1217,6 +1223,33 @@ class SeatPilot {
   private pressedRecently(m: StoredMessage, c: Control) {
     const at = this.recent.get(this.repostKey(m, c));
     return at !== undefined && Date.now() - at < REPOST_MS;
+  }
+
+  /** Combat-round roll ids (combatRoll_<pos>_<holder>) on this message that must wait (see the caller). */
+  private async heldRounds(game: string, channelId: string, controls: Control[], m: StoredMessage, round: number | null): Promise<Set<string>> {
+    const held = new Set<string>();
+    const rounds = controls.filter((c) => /^combatRoll_[^_]+_[^_]+$/.test(c.custom_id));
+    if (!rounds.length) return held;
+    const engine = this.mgr.engine;
+    if (engine?.isLive) {
+      const open = (await engine.openDecisions(game)) ?? [];
+      for (const d of open) {
+        if (!d.kind.startsWith("combat.") || !d.window?.subject?.waitingFor) continue;
+        for (const o of d.options) if (rounds.some((c) => c.custom_id === o.id)) held.add(o.id);
+      }
+    }
+    // Our barrage in this combat first (round 1 only): an anti-fighter barrage prompt here that we have not pressed.
+    if (round != null && round > 1) return held;
+    for (const c of rounds) {
+      if (held.has(c.custom_id) || !/_space$/.test(c.custom_id)) continue;
+      const afbId = `${c.custom_id}_afb`;
+      for (const other of this.store.messages(channelId)) {
+        if (other.id === m.id && !controls.some((x) => x.custom_id === afbId)) continue;
+        const has = (other.components ?? []).some((row: any) => (row.components ?? []).some((x: any) => x.custom_id === afbId));
+        if (has && !other._presses?.[this.userId] && !this.recent.has(`${channelId}:roll:afb`)) held.add(c.custom_id);
+      }
+    }
+    return held;
   }
 
   private mayRoll(channelId: string, customId: string, faction: string | undefined, round: number | null = null): boolean {
@@ -1777,6 +1810,22 @@ class SeatPilot {
         return self.seatEngineFor.api;
       },
       engineOwns: (game, messageId) => self.mgr.engineOwns(game, messageId, self.userId),
+      engineLive: () => !!self.mgr.engine?.isLive,
+      enginePay: async (game, messageId) => {
+        const engine = self.mgr.engine;
+        if (!engine?.isLive) return null;
+        // payment.spend is often table-scoped (no target): match it by message, not by "waits on me".
+        const d = (await engine.openDecisions(game))?.find((x) => x.kind === "payment.spend" && x.source.messageId === messageId);
+        if (!d || d.kind !== "payment.spend") return null;
+        const state = await engine.state(game, self.userId, 1000);
+        const plan = planPayment(d, state, self.userId);
+        if (!plan) return null;
+        const payload = plan.payload as unknown as Record<string, unknown>;
+        const r = await self.mgr.serial(() => engine.answer(game, d.id, { payload, expectedSeq: d.seq, requestId: `${d.id}@${d.revision}|pay`, userId: self.userId }));
+        log.info(`autopilot ${self.name}: engine payment.spend "payload" in ${game} (${plan.why}) -> ${r?.status ?? "unavailable"}${r?.error ? `: ${r.error}` : ""}`);
+        if (!r) return null;
+        return r.ok ? undefined : (r.error ?? r.status);
+      },
       engineProduce: async (game, messageId, build) => {
         const engine = self.mgr.engine;
         if (!engine) return null;

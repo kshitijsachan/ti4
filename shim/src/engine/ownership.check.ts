@@ -8,7 +8,7 @@
  * the watchdog's fallback was due — and the rule table / planner won the race against a decision not yet mirrored.
  */
 import assert from "node:assert/strict";
-import { chooseTyped, ENGINE_GRACE_MS, ENGINE_SETTLE_MS, engineOwnership } from "./autopilot.js";
+import { chooseTyped, ENGINE_GRACE_MS, engineOwnership } from "./autopilot.js";
 import type { Decision, GameState, Option } from "./types.js";
 
 const ME = "u1";
@@ -43,7 +43,7 @@ const owns = (d: Decision | undefined, st: GameState | null = state(), messageId
 
 // ---- a message the mirror has not captured (yet)
 assert.equal(owns(undefined, null, snow(NOW - 2_000)).owned, true, "fresh message: its decision may be on the way");
-assert.equal(owns(undefined, null, snow(NOW - ENGINE_SETTLE_MS - 1)).owned, false, "old untyped message: legacy");
+assert.equal(owns(undefined, null, snow(NOW - 3_600_000)).owned, true, "closed decision, buttons left over (old card's Not Following)");
 assert.equal(owns(dec("legacy", [opt("x", null)])).owned, false, "untyped decision: legacy");
 
 // ---- "Not Following" (live pbd161: engine declined at 01:29:43, legacy pressed again at 01:29:51)
@@ -79,8 +79,10 @@ assert.equal(owns(turn()).owned, true, "held on purpose is still the engine's (i
 assert.equal(owns(turn(), state({ activePlayer: OTHER } as Partial<GameState>)).owned, true, "a stale menu: nobody presses it");
 assert.equal(owns(turn(NOW - ENGINE_GRACE_MS - 1)).owned, false, "outlived the grace: the legacy rules may help");
 
-// ---- another player's prompt: the legacy paths' own owner checks decide
-assert.equal(owns(dec("turn.action", turn().options, { target: { userId: OTHER, faction: "sol", color: "red", resolvedBy: "owner_prefix" } })).owned, false);
+// ---- another player's prompt (e.g. the speaker's Reveal Stage 1): the engine's, until the grace runs out
+const theirs = (createdAt = NOW - 2_000) => dec("status.reveal_objective", [opt("reveal_stage_1", { action: "reveal", stage: 1 }, "Reveal Stage 1")], { createdAt, target: { userId: OTHER, faction: "sol", color: "red", resolvedBy: "speaker" } as any });
+assert.equal(owns(theirs()).owned, true);
+assert.equal(owns(theirs(NOW - ENGINE_GRACE_MS - 1)).owned, false, "a person who never reveals: the rule table may help");
 
 // ---- status scoring / homework the planner re-answered
 const homework = (responded: string[]) =>
@@ -108,6 +110,8 @@ assert.equal(chooseTyped(plastic, state(), ME)?.option?.id, "deleteButtons", "ke
 assert.equal(owns(plastic).owned, true);
 
 // ---- an optional offer no policy answers: the legacy rules keep it
-assert.equal(owns(dec("ui.optional", [opt("editRoundSummary_1~MDL", { action: "round_summary", undoes: null, ref: "1" })])).owned, false);
+assert.equal(owns(dec("action_card.play", [opt("ac_play_from_hand_1", { card: "x" }, "(1) Sabotage")])).owned, false);
+// ---- affordances: never pressed by a bot (live: "Edit Summaries" pressed as the rule table's "only option")
+assert.equal(owns(dec("ui.optional", [opt("editRoundSummary_1~MDL", { action: "round_summary", undoes: null, ref: "1" })], { createdAt: NOW - 3_600_000 })).owned, true);
 
 console.log("ownership.check: ok");
