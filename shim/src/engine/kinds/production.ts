@@ -95,7 +95,24 @@ export interface ProductionPayload {
   units: { unit: UnitId; count: number; holder?: HolderName; tile?: TilePosition }[];
 }
 
-export type ProductionDecision = PaymentSpend | ProductionProduce;
+// ---------------------------------------------------------------- production.place
+
+/**
+ * Free placements (Parasite, commanders, heroes, action cards; the Mitosis choice itself is faction.ability): placeOneNDone_. holder: planet id or "space";
+ * tile: position (null when unknown). free: placed (no production) vs produced.
+ */
+export type FreePlacementValue =
+  | { op: "place"; unit: UnitId; count: number; holder: HolderName; tile: TilePosition | null; free: boolean }
+  | { op: "done" };
+export type ProductionPlace = DecisionBase<"production.place", FreePlacementValue>;
+
+// ---------------------------------------------------------------- commodities.gain
+
+/** Gain / convert commodities outside exploration (stay: the prompt stays after the press). */
+export type CommoditiesValue = { op: "gain" | "convert"; amount: number; stay: boolean } | { op: "done" };
+export type CommoditiesGain = DecisionBase<"commodities.gain", CommoditiesValue>;
+
+export type ProductionDecision = PaymentSpend | ProductionProduce | ProductionPlace | CommoditiesGain;
 
 export function isPaymentDone(v: PaymentValue | null | undefined): v is PaymentDoneValue {
   return !!v && "action" in v && v.action === "done";

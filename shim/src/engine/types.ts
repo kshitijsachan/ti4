@@ -6,7 +6,8 @@
 
 import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
-import type { CombatDecision, CombatState } from "./kinds/combat.js";
+import type { CombatDecision, CombatState, UnitsModify, UnitsRemove } from "./kinds/combat.js";
+import type { ComponentsDecision } from "./kinds/components.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { FactionDecision } from "./kinds/faction.js";
 import type { InputFormDecision } from "./kinds/input.js";
@@ -21,6 +22,7 @@ import type { UiDecision } from "./kinds/ui.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
+export type * from "./kinds/components.js";
 export type * from "./kinds/explore.js";
 export type * from "./kinds/faction.js";
 export type * from "./kinds/input.js";
@@ -427,10 +429,13 @@ export type Decision =
   | TradeOfferSent
   | TradeForceReplenish
   | CombatDecision
+  | UnitsRemove
+  | UnitsModify
   | ProductionDecision
   | InputFormDecision
   | FactionDecision
   | UiDecision
+  | ComponentsDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -526,14 +531,17 @@ export function awaits(d: Decision, userId: UserId): boolean {
 
 /**
  * The player may answer although the window does not await them (KindSpec.answersOutsideWindow): the holder of a
- * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only).
+ * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only);
+ * the player who played an action card may press "Pause Timer" on its sabotage window.
  */
 export function answersOutsideWindow(d: Decision, userId: UserId, state: GameState | null): boolean {
   // Status scoring / homework: a player who declared or is ready may still press again, like the buttons.
   if ((d.kind === "status.score" || d.kind === "status.homework") && d.window) return d.window.eligible.includes(userId);
-  if (d.kind !== "strategy_card.resolve" || !d.window) return false;
-  const holder = d.window.subject?.holder;
+  if (!d.window) return false;
   const me = state?.players.find((p) => p.userId === userId);
+  if (d.kind === "action_card.sabotage") return !!me?.faction && d.window.subject?.faction === me.faction;
+  if (d.kind !== "strategy_card.resolve") return false;
+  const holder = d.window.subject?.holder;
   return !!holder && !!me?.faction && me.faction === holder;
 }
 

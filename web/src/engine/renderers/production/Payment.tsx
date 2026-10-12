@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { UnstyledButton } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 import type { PaymentPayload, PaymentPlanetValue, PaymentSpend } from "../../../../../shim/src/engine/kinds/production";
@@ -6,6 +6,8 @@ import type { PlanetId } from "../../../../../shim/src/engine/types";
 import { isPaymentDone, planPayment } from "./model";
 import { ExtraOptions, Meter, selfOf, Stepper, type AreaRendererProps } from "./shared";
 import classes from "./production.module.css";
+import { useDecisionState } from "../../draftState";
+import { DecisionFooter } from "../../ui/Popup";
 
 const CONTEXT_TITLE: Record<string, string> = {
   tacticalAction: "Pay for the units you produced",
@@ -42,7 +44,7 @@ export function PaymentRenderer({ decision, state, answer, pendingOptionId }: Ar
   const worth = done?.tgValue ?? 1;
 
   const suggested = useMemo<PaymentPayload>(() => planPayment(decision, state, me?.userId ?? "")?.payload ?? { planets: [], sarween: sarweenOffered }, [decision, state, me?.userId, sarweenOffered]);
-  const [manual, setManual] = useState<PaymentPayload | null>(null);
+  const [manual, setManual] = useDecisionState<PaymentPayload | null>(decision.id, "manual", null);
   const pick = manual ?? suggested;
   const chosen = new Set(pick.planets);
   const edit = (patch: Partial<PaymentPayload>) => setManual({ ...pick, ...patch });
@@ -130,9 +132,11 @@ export function PaymentRenderer({ decision, state, answer, pendingOptionId }: Ar
         </UnstyledButton>
       </div>
       <ExtraOptions options={extras} answer={answer} busy={busy} />
-      <UnstyledButton className={classes.commit} onClick={pay} disabled={busy || !doneOpt || short}>
-        {short ? `${cost - total} ${unit} short` : spending > 0 ? `Pay ${spending} ${unit}` : "Done — pay nothing more"}
-      </UnstyledButton>
+      <DecisionFooter>
+        <UnstyledButton className={classes.commit} onClick={pay} disabled={busy || !doneOpt || short}>
+          {short ? `${cost - total} ${unit} short` : spending > 0 ? `Pay ${spending} ${unit}` : "Done — pay nothing more"}
+        </UnstyledButton>
+      </DecisionFooter>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { actionCards } from "@/entities/data/actionCards";
 import type { Decision, GameState, Option, PlayerState } from "../../../../../shim/src/engine/types";
 import type { PlayerStatus } from "../../../../../shim/src/engine/kinds/status";
 import classes from "./Status.module.css";
+import { factionName } from "../../names";
 
 /** A typed answer: an option id, or an option id with a payload (e.g. final command token pools). */
 export type Answer = string | { optionId: string; payload: Record<string, unknown> };
@@ -26,7 +27,7 @@ export function myStatus(state: GameState | null): PlayerStatus | undefined {
 
 export function playerName(state: GameState | null, userId: string) {
   const p = state?.players.find((x) => x.userId === userId);
-  return p?.userName ?? p?.faction ?? "a player";
+  return p?.userName || factionName(p?.faction) || "a player";
 }
 
 export const objectiveName = (id: string | null | undefined) =>

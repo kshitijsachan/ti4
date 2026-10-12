@@ -15,10 +15,12 @@ import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
 import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
-import { chooseCombat } from "./combatPolicy.js";
-import { planPayment } from "./policy/production.js";
+import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
+import { chooseComponents, isComponentsKind } from "./policy/components.js";
+import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
 import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
+import { chooseManualBuild, chooseUnitsModify } from "./policy/units.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -73,7 +75,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   const status = chooseStatus(d, state, me, all.filter((x) => x.target?.userId === me));
   if (status !== undefined) return status;
   if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, all) : null;
-  const cards = chooseCards(d, state, me, all);
+  const cards = chooseCards(d, state, me, all, ctx.history);
   if (cards !== undefined) return cards;
   // Faction leaders / abilities (shared kinds leader.use, faction.ability; phase C faction areas).
   const groupC = chooseFactionGroupC(d, state, me); // Jol-Nar, Winnu, Xxcha, Yin, Yssaril, Keleres overrides
@@ -84,10 +86,12 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   if (pok !== undefined) return pok;
   const faction = chooseFaction(d, state, me);
   if (faction !== undefined) return faction;
+  // Components (C6): component menu, relic uses, agent exhaust step, generic choose.* steps. Only our own prompts.
+  if (isComponentsKind(d)) return d.target?.userId === me ? chooseComponents(d, state, me) : null;
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
   // (command_tokens.adjust belongs to the status area; only its Leadership panel is answered here.)
   const kind: string = d.kind;
-  const leadershipPanel = kind === "command_tokens.adjust" && (d.options as Option<any>[]).some((o) => o.handler === "deleteButtons_leadership");
+  const leadershipPanel = kind === "command_tokens.adjust" && (d.options as Option<any>[]).some((o) => o.handler.replace(/~\w+$/, "") === "deleteButtons_leadership");
   if (STRATEGY_POLICY_KINDS.has(kind) && (kind !== "command_tokens.adjust" || leadershipPanel)) {
     if (d.scope === "player" && d.target?.userId !== me) return null;
     return chooseStrategy(d, state, me, ctx);
@@ -161,9 +165,18 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
       const plan = planPayment(d, state, me);
       return plan ? { payload: plan.payload as unknown as Record<string, unknown>, why: plan.why } : null;
     }
+    case "production.place":
+      return choosePlacement(d, state, me);
+    case "commodities.gain":
+      return chooseCommodities(d, state, me, ctx.history);
+    case "units.remove":
+      return chooseUnitsRemove(d, me, ctx.history, ctx.open);
+    case "units.modify":
+      return chooseUnitsModify(d, me);
     case "production.produce":
-      // What to build is the planner's call (botplay BuildJob sends it as one production payload).
-      return null;
+      // What to build is the planner's call (botplay BuildJob sends it as one production payload); a build opened
+      // from the Modify Units menu builds nothing.
+      return chooseManualBuild(d, me);
     default:
       return null;
   }

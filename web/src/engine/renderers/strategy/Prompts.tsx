@@ -1,6 +1,6 @@
-import { useState } from "react";
 import type { StrategyCardPick } from "../../../../../shim/src/engine/types";
 import type {
+  ConstructionBuild,
   ConstructionPlace,
   DiplomacySystem,
   PlanetReady,
@@ -11,6 +11,7 @@ import type {
 } from "../../../../../shim/src/engine/kinds/strategy";
 import { Choice, live, Meta, playerName, Title, type RendererProps } from "./shared";
 import classes from "./strategy.module.css";
+import { useDecisionState } from "../../draftState";
 
 /** Strategy phase: pick a card (trade goods on it shown). */
 export function PickCard({ decision, answer }: RendererProps<StrategyCardPick>) {
@@ -94,7 +95,7 @@ export function DiplomacySystemView({ decision, answer }: RendererProps<Diplomac
 
 /** Ready exhausted planets; Diplomacy allows 2, then Done. */
 export function PlanetReadyView({ decision, answer }: RendererProps<PlanetReady>) {
-  const [readied, setReadied] = useState<string[]>([]);
+  const [readied, setReadied] = useDecisionState<string[]>(decision.id, "readied", []);
   const opts = live(decision.options);
   const done = opts.find((o) => o.value?.done);
   const limit = done?.value?.done ? done.value.limit : Infinity;
@@ -184,6 +185,28 @@ export function ConstructionPlaceView({ decision, answer }: RendererProps<Constr
               {o.value!.resources}/{o.value!.influence}
               {o.value!.home ? " · home" : ""}
               {o.value!.pds ? ` · ${o.value!.pds} PDS` : ""}
+            </Meta>
+          </Choice>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Construction (Thunder's Edge) "produce": the system whose space dock uses its PRODUCTION. */
+export function ConstructionBuildView({ decision, answer }: RendererProps<ConstructionBuild>) {
+  const opts = live(decision.options).filter((o) => o.value);
+  return (
+    <div className={classes.panel}>
+      <Title sub="Then choose the units to produce there.">Construction: produce at a space dock</Title>
+      <div className={classes.choices}>
+        {opts.map((o) => (
+          <Choice key={o.id} option={o} onPick={answer}>
+            {o.value!.tile}
+            <Meta>
+              {o.value!.productionLimit != null ? `PRODUCTION ${o.value!.productionLimit}` : "PRODUCTION ?"}
+              {o.value!.spaceDocks > 1 ? ` · ${o.value!.spaceDocks} docks (one counts)` : ""}
+              {o.value!.home ? " · home" : ""}
             </Meta>
           </Choice>
         ))}

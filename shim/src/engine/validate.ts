@@ -75,9 +75,12 @@ const ALLOWED = new Set(["none", "any", "pending"]);
 
 /**
  * Fields that hold another vocabulary in some kinds (strategy_card.resolve unit: "spacedock" / "facility", holder:
- * the holder's faction; strategy_card.construction_place unit: "pds"). Keyed by decision-kind prefix.
+ * the holder's faction; strategy_card.construction_place unit: "pds"; action_card.step unit: long names). Keyed by decision-kind prefix.
  */
-const KIND_SKIPS: [prefix: string, keys: string[]][] = [["strategy_card.", ["unit", "holder"]]];
+const KIND_SKIPS: [prefix: string, keys: string[]][] = [
+  ["strategy_card.", ["unit", "holder"]],
+  ["action_card.step", ["unit"]], // the option id's own unit token (gf or infantry)
+];
 
 const check: Record<Family, (x: unknown) => boolean> = {
   ...is,

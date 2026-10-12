@@ -97,7 +97,10 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "action_card.resolve": "blocking",
   "action_card.target": "blocking",
   "action_card.preassign": "optional",
+  "action_card.step": "blocking", // C7: follow-up steps of a card already played (like action_card.target)
+  "action_card.when_after": "optional", // C7: non-queued agenda whens / afters (offers, like agenda.when / after)
   "promissory_note.play": "optional",
+  "promissory_note.resolve": "blocking", // C7: a played note's follow-up step (Acquiescence offer is declined)
   // G9 exploration
   "explore.planet": "blocking",
   "explore.card_pick": "blocking",
@@ -128,6 +131,27 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "ui.optional": "optional",
   "ui.info_menu": "optional",
   "choose.select": "planner",
+  // C6 components: generic single-choice steps (the components policy answers our own at once); menus / relic offers
+  "choose.planet": "blocking",
+  "choose.system": "blocking",
+  "choose.player": "blocking",
+  "choose.unit": "blocking",
+  "choose.card": "blocking",
+  "choose.confirm": "blocking",
+  "component.action": "optional",
+  "relic.use": "optional",
+  // C8 core tails
+  "combat.bombard": "planner",
+  "units.remove": "blocking",
+  "production.place": "blocking",
+  "commodities.gain": "blocking",
+  // C6b tech follow-ups (the components policy answers our own: free gains taken, the rest declined)
+  "tech.step": "blocking",
+  // C8b
+  "units.modify": "optional", // Modify Units menu: opened by the player
+  "combat.automate": "blocking", // automate-ground-combat vote / confirm
+  "combat.modifier": "optional",
+  "strategy_card.construction_build": "blocking",
 };
 
 const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);
