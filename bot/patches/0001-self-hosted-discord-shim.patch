@@ -14237,22 +14237,24 @@ index 0000000..4aebd9d
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatEngageKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatEngageKind.java
 new file mode 100644
-index 0000000..b38e176
+index 0000000..2cbacd7
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatEngageKind.java
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,60 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
 +import java.util.List;
 +import java.util.Map;
++import ti4.selfhost.engine.EngineModels.Target;
 +import ti4.selfhost.engine.KindSpec;
 +
 +/**
 + * "The game is unsure if a combat should occur on &lt;planet&gt;": Engage in Combat (startCombatOn_&lt;planet&gt;) or
 + * They Are Coexisting (deleteButtons); after a won combat with coexisters left, Claim Planet (claimPlanet_) or Fight
 + * Coexisters (startCombatOn_). Coexistence ability buttons on the same message stay untyped (value null).
-+ * pbd203: untyped, a bot waited 122 s on it. Target: the player the message names (or the FFCC_ owner).
++ * pbd203: untyped, a bot waited 122 s on it. Target: the FFCC_ owner; the unprefixed "unsure" prompt is anyone's to answer
++ * in the original code (either side may decide), so it has no target.
 + */
 +public class CombatEngageKind implements KindSpec {
 +
@@ -14291,6 +14293,12 @@ index 0000000..b38e176
 +            v.put("planet", null);
 +        }
 +        return v;
++    }
++
++    @Override
++    public Target target(CaptureContext ctx, Target resolved) {
++        if (resolved != null && "owner_prefix".equals(resolved.resolvedBy())) return resolved;
++        return new Target(null, null, null, "none");
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
