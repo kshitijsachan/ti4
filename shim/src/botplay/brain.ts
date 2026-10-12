@@ -16,8 +16,14 @@ import { passOption } from "../engine/policy/turn.js";
  */
 export class Brain {
   private tactical: TacticalExecutor;
-  /** The same tactical action driven by typed engine decisions (preferred when the engine is up). */
-  private engineTactical: EngineTactical | null;
+  /** The same tactical action driven by typed engine decisions (preferred when the engine is up); made on first use. */
+  private engineTacticalFor: EngineTactical | null = null;
+  private get engineTactical(): EngineTactical | null {
+    const engine = this.seat.engine;
+    if (!engine) return null;
+    this.engineTacticalFor ??= new EngineTactical(this.seat, engine);
+    return this.engineTacticalFor;
+  }
   private cards: CardPlanner;
   private violations: ViolationDesk;
   /** Per game, the newest prompt when our last tactical action ended. */
@@ -27,7 +33,6 @@ export class Brain {
 
   constructor(private seat: Seat) {
     this.tactical = new TacticalExecutor(seat);
-    this.engineTactical = seat.engine ? new EngineTactical(seat, seat.engine) : null;
     this.cards = new CardPlanner(seat);
     this.violations = new ViolationDesk(seat);
   }
@@ -73,6 +78,10 @@ export class Brain {
       const menu = EngineTactical.turnMenu(decisions);
       if (menu) return this.engineTurn(game, menu);
     }
+    // The engine is reachable: turn menus and tactical steps are typed (turn.action, tactical.*) and run above
+    // (engineTurn / engineRecover / the turn policy). The button path below is the engine-off fallback only (live
+    // pbd158: after the turn policy passed, the button path started a Tactical Action on the old turn message).
+    if (decisions && this.engineTactical) return false;
     const prompts = this.seat.prompts(game);
     // A tactical action under way that we do not have a plan for (e.g. after a restart): finish it.
     const retired = this.retired.get(game);

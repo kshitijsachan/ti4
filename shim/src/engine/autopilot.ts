@@ -184,11 +184,17 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
 export const ENGINE_GRACE_MS = 90_000;
 /**
  * A message the engine has not (yet) captured as a decision: the bot posts it to the shim before the engine stream
- * carries its decision, and the autopilot looks at the table every ~1 s. Legacy paths leave such a message alone for
- * this long, so they never win the race against the typed decision (live: "Not Following", "Pass", the status
+ * carries its decision, and the autopilot looks at the table every ~1 s; a menu edited in place keeps its first
+ * snowflake. Legacy paths leave such a message alone for this long, so they never win the race against the typed decision (live: "Not Following", "Pass", the status
  * homework and scoring prompts were pressed by the rule table / planner moments before the engine answered them).
  */
-export const ENGINE_SETTLE_MS = 15_000;
+export const ENGINE_SETTLE_MS = 45_000;
+/**
+ * Kinds that ask the table through a window: once the window is gone (everyone answered, the step moved on) a
+ * decision still listed is a leftover the game does not wait on (live pbd184 03:20: the status homework's window
+ * closed and six bots pressed "Ready For Strategy Phase" / "Redistribute…" again through the rule table / planner).
+ */
+const WINDOW_KINDS = new Set(["status.score", "status.homework", "strategy_card.resolve", "action_card.sabotage"]);
 
 export type EngineOwnership = { owned: boolean; why: string };
 
@@ -223,13 +229,19 @@ export function engineOwnership(
   if (d.kind === "legacy") return { owned: false, why: "untyped" };
   if (d.window?.responded.includes(me)) return { owned: true, why: "answered already" };
   if (d.scope === "player" && !d.window && d.target?.userId !== me) return { owned: false, why: "another player's prompt" };
+  if (d.scope === "table" && !d.window && WINDOW_KINDS.has(d.kind)) return { owned: true, why: "its window is closed" };
   const age = now - d.createdAt;
   if (age >= ENGINE_GRACE_MS) return { owned: false, why: `typed, but still open after ${Math.round(age / 1000)}s` };
-  if (d.window && !awaits(d, me) && !answersOutsideWindow(d, me, state)) return { owned: true, why: "not asked in this window" };
+  const outside = !!d.window && !awaits(d, me);
+  if (outside && !answersOutsideWindow(d, me, state)) return { owned: true, why: "not asked in this window" };
   if (staleForBot(d, state, me)) return { owned: true, why: "stale for this seat" };
   const mine = open.filter((x) => x.id !== d.id && x.target?.userId === me);
   const pick = chooseTyped(d, state, me, { history: [], open: mine, all: open, waitedMs: age, force: true });
-  return pick ? { owned: true, why: pick.why } : { owned: false, why: "no engine answer" };
+  if (pick) return { owned: true, why: pick.why };
+  // The holder of a played strategy card with nothing left to resolve (live pbd158: the engine researched the
+  // Technology primary, then the planner pressed "Get a Technology" on the same card again).
+  if (outside) return { owned: true, why: "answered outside the window; nothing left" };
+  return { owned: false, why: "no engine answer" };
 }
 
 const DISCORD_EPOCH = 1420070400000;
