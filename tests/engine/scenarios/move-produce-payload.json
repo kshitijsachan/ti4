@@ -62,10 +62,11 @@
   ],
   "expect": {
     "invariants": true,
-    "decision": {
-      "kind": "payment.spend",
-      "as": "ralnel",
-      "open": true
-    }
+    "save": [
+      {
+        "key": "player[ralnel].produced_units",
+        "match": "dd_307_space,1"
+      }
+    ]
   }
 }
