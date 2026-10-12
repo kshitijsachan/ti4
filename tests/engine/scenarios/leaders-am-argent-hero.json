@@ -1,0 +1,14 @@
+{
+  "name": "leaders-am-argent-hero",
+  "description": "Rules audit leaders A-M: Mirik Aun Sissiri (Argent hero) moves ships only to systems with an Argent command token and no other players' ships. 205 has an Argent token and a Creuss cruiser: refused (original: offered every system with an Argent token).",
+  "base": { "recording": "pbd118", "index": 140, "repost": false },
+  "setup": [
+    "/leaders unlock leader:argenthero faction_or_color:argent",
+    "/add_cc tile_name:205 faction_or_color:argent",
+    "/add_units tile_name:205 unit_names:cruiser faction_or_color:ghost"
+  ],
+  "steps": [
+    { "press": "argentHeroStep2_205", "as": "argent", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}

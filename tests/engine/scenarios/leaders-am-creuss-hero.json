@@ -1,0 +1,11 @@
+{
+  "name": "leaders-am-creuss-hero",
+  "description": "Rules audit leaders A-M: Riftwalker Meian (Creuss hero) cannot swap the Creuss system (51 at bl) or the Wormhole Nexus (82a at tl); the original swap handler accepted any two positions.",
+  "base": { "recording": "pbd118", "index": 140, "repost": false },
+  "setup": [ "/leaders unlock leader:ghosthero faction_or_color:ghost" ],
+  "steps": [
+    { "press": "creussHeroStep1_bl", "as": "ghost", "refused": true, "legacy": [] },
+    { "press": "creussHeroStep2_tl_316", "as": "ghost", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}
