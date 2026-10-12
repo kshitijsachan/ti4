@@ -1,11 +1,17 @@
 {
   "name": "ac-combat-suite",
-  "description": "All ac-combat scenarios chained on one base (pbd60 save 122, space combat at 308 mentak vs muaat) so one live run covers them: ac-combat-sabotage-cancel, ac-combat-repairs-upgrade, ac-combat-parley-salvage, ac-combat-lucky-scuttle, ac-combat-crash-landing, ac-combat-bunker, ac-combat-dice-cards, ac-combat-skilled-retreat. Dice cards (EBS, Courageous, Blitz) may show dice diffs.",
+  "description": "All ac-combat scenarios chained on one base (pbd60 save 122, space combat at 308 mentak vs muaat) so one live run covers them: ac-combat-sabotage-cancel, ac-combat-repairs-upgrade, ac-combat-parley-salvage, ac-combat-lucky-scuttle, ac-combat-crash-landing, ac-combat-bunker, ac-combat-dice-cards, ac-combat-skilled-retreat. Cards are drawn right before each card is played (ActionCardHelper.resolveActionCard refuses a play while the hand is over the limit). Dice cards (EBS, Courageous, Blitz) may show dice diffs.",
   "base": {
     "recording": "pbd60",
     "index": 122
   },
   "setup": [
+    "/add_units tile_name:308 unit_names:\"1 cruiser\" faction_or_color:mentak",
+    "/add_units tile_name:308 unit_names:\"2 infantry andeara\" faction_or_color:mentak coexist:true",
+    "/player stats commodities:3 faction_or_color:mentak",
+    "/add_units tile_name:308 unit_names:\"2 infantry\" faction_or_color:muaat"
+  ],
+  "steps": [
     {
       "command": "ac draw_specific_ac",
       "options": {
@@ -20,117 +26,6 @@
         "faction_or_color": "muaat"
       }
     },
-    "/add_units tile_name:308 unit_names:\"1 cruiser\" faction_or_color:mentak",
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "upgrade",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "emergency",
-        "faction_or_color": "mentak"
-      }
-    },
-    "/add_units tile_name:308 unit_names:\"2 infantry andeara\" faction_or_color:mentak coexist:true",
-    "/player stats commodities:3 faction_or_color:mentak",
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "parley",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "salvage",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "lucky",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "scuttle",
-        "faction_or_color": "mentak"
-      }
-    },
-    "/add_units tile_name:308 unit_names:\"2 infantry\" faction_or_color:muaat",
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "crashlanding",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "bunker",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sh1",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "dh1",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "fire_team",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "experimental",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "courageous",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "blitz",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "s_retreat1",
-        "faction_or_color": "muaat"
-      }
-    }
-  ],
-  "steps": [
     {
       "answer": {
         "kind": "action_card.play",
@@ -149,6 +44,20 @@
     },
     {
       "wait": 1500
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "upgrade",
+        "faction_or_color": "mentak"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "emergency",
+        "faction_or_color": "mentak"
+      }
     },
     {
       "answer": {
@@ -181,6 +90,20 @@
         "option": "resolveEmergencyRepairs_308"
       },
       "as": "mentak"
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "parley",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "salvage",
+        "faction_or_color": "muaat"
+      }
     },
     {
       "answer": {
@@ -227,6 +150,20 @@
         "option": "salvageStep2_mentak"
       },
       "as": "muaat"
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "lucky",
+        "faction_or_color": "mentak"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "scuttle",
+        "faction_or_color": "mentak"
+      }
     },
     {
       "answer": {
@@ -296,6 +233,13 @@
       "as": "mentak"
     },
     {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "crashlanding",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -317,6 +261,27 @@
         "option": "crashLandOn_andeara_infantry"
       },
       "as": "muaat"
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "bunker",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "sh1",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "dh1",
+        "faction_or_color": "mentak"
+      }
     },
     {
       "answer": {
@@ -358,6 +323,34 @@
         "option": "^no_sabotage$"
       },
       "as": "muaat"
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "fire_team",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "experimental",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "courageous",
+        "faction_or_color": "mentak"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "blitz",
+        "faction_or_color": "mentak"
+      }
     },
     {
       "answer": {
@@ -429,6 +422,13 @@
         "option": "resolveBlitz_308"
       },
       "as": "mentak"
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "s_retreat1",
+        "faction_or_color": "muaat"
+      }
     },
     {
       "answer": {
