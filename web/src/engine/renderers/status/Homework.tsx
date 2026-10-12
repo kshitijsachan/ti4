@@ -3,6 +3,7 @@ import type { Option } from "../../../../../shim/src/engine/types";
 import type {
   CommandTokenPools,
   CommandTokensAdjust,
+  CommandTokensGainCap,
   StatusAdvance,
   StatusHomework,
   StatusImperial,
@@ -11,6 +12,17 @@ import { OptionButtons, Waiting, me, myStatus, type StatusRendererProps } from "
 import classes from "./Status.module.css";
 import { DecisionFooter } from "../../ui/Popup";
 import { useDecisionState } from "../../draftState";
+
+/** required.gainCap of a command_tokens.adjust panel (mirrors shim kinds/status.ts commandTokensGainCap). */
+function commandTokensGainCap(d: { progress?: { required?: unknown } | null }): CommandTokensGainCap | null {
+  const c = (d.progress?.required as { gainCap?: CommandTokensGainCap } | undefined)?.gainCap;
+  return c && typeof c.limit === "number" ? c : null;
+}
+
+function commandTokensReinforcements(d: { progress?: { required?: unknown } | null }): number | null {
+  const r = (d.progress?.required as { reinforcements?: number } | undefined)?.reinforcements;
+  return typeof r === "number" ? r : null;
+}
 
 const POOLS: (keyof CommandTokenPools)[] = ["tactic", "fleet", "strategy"];
 const total = (p: CommandTokenPools) => p.tactic + p.fleet + p.strategy;
@@ -150,14 +162,35 @@ export function CommandTokensAdjustRenderer({ decision, state, answer }: StatusR
     );
   }
   const acc = decision.progress?.accumulated as Partial<CommandTokenPools> | undefined;
+  // The effect that opened the panel grants a fixed number (Acamar 1, Leadership 3 + influence / 3, …): the engine
+  // refuses more, so the "gain" buttons are greyed out with the reason once it is reached (or reinforcements run out).
+  const cap = commandTokensGainCap(decision);
+  const reinforcements = commandTokensReinforcements(decision);
+  const capReached = !!cap && cap.gained >= cap.limit;
+  const noneLeft = reinforcements !== null && reinforcements <= 0;
+  const blockReason = capReached
+    ? `${cap!.label ?? "This effect"} grants ${cap!.limit}`
+    : noneLeft
+      ? "No command tokens left in your reinforcements"
+      : null;
+  const options = (decision.options as Option<unknown>[]).map((o) => {
+    const v = o.value as { action?: string; delta?: number } | null | undefined;
+    return blockReason && v?.action === "adjust" && (v.delta ?? 0) > 0 ? { ...o, disabled: true } : o;
+  });
   return (
     <div className={classes.stack}>
+      {cap && (
+        <p className={classes.hint}>
+          {cap.label ?? "Gain"}: gain {Math.max(0, cap.gained)} of {cap.limit}
+        </p>
+      )}
       {acc && (
         <p className={classes.done}>
           Now {acc.tactic}/{acc.fleet}/{acc.strategy} (tactic/fleet/strategy).
         </p>
       )}
-      <OptionButtons options={decision.options as Option<unknown>[]} answer={answer} />
+      {blockReason && <p className={classes.hint}>{blockReason}: no more tokens can be gained here.</p>}
+      <OptionButtons options={options} answer={answer} />
     </div>
   );
 }

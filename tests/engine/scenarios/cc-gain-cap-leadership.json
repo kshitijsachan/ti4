@@ -1,0 +1,15 @@
+{
+  "name": "cc-gain-cap-leadership",
+  "description": "CcGainCap on Leadership (pbd28 r1, Mahact holder): the holder's panel grants 3 (+1 per 3 influence; none spent): 3 increases accepted, the 4th refused. A follower (Yssaril, secondary) who spent no influence may gain none: the increase is refused.",
+  "base": { "recording": "pbd28", "index": 47 },
+  "steps": [
+    { "answer": { "kind": "strategy_card.resolve", "option": "leadershipGenerateCCButtons$" }, "as": "yssaril" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc$" }, "as": "yssaril", "refused": true, "legacy": [] },
+    { "answer": { "kind": "strategy_card.resolve", "option": "leadershipGenerateCCButtons$" }, "as": "mahact" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc$" }, "as": "mahact" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc$" }, "as": "mahact" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_strategy_cc$" }, "as": "mahact" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc$" }, "as": "mahact", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}
