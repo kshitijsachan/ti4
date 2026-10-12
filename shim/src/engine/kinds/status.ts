@@ -113,9 +113,28 @@ export type StatusImperial = DecisionBaseOf<
 
 /**
  * Step-by-step token prompt (progress flow "command_tokens": accumulated = current pools, required = {status, base?,
- * gain?, maxTotal?}). In the status phase an "adjust" option also takes a payload (final pools), like
- * status.homework.
+ * gain?, maxTotal?, original?, reinforcements?, gainCap?}). In the status phase an "adjust" option also takes a
+ * payload (final pools), like status.homework.
  */
+
+/**
+ * required.gainCap: the grant of the effect that opened the panel (bot CcGainCap: Acamar 1, Leadership 3 + 1 per 3
+ * influence, …). The engine refuses an increase once `gained` reaches `limit`.
+ */
+export type CommandTokensGainCap = { limit: number; gained: number; source: string | null; label: string | null };
+
+/** The panel's gain cap, from a command_tokens.adjust decision's progress (null when uncapped). */
+export function commandTokensGainCap(d: { progress?: { required?: unknown } | null }): CommandTokensGainCap | null {
+  const req = d.progress?.required as { gainCap?: CommandTokensGainCap } | undefined;
+  const c = req?.gainCap;
+  return c && typeof c.limit === "number" ? c : null;
+}
+
+/** Tokens left in reinforcements, from the same progress (null when the game has no plastic limit). */
+export function commandTokensReinforcements(d: { progress?: { required?: unknown } | null }): number | null {
+  const req = d.progress?.required as { reinforcements?: number } | undefined;
+  return typeof req?.reinforcements === "number" ? req.reinforcements : null;
+}
 export type CommandTokensAdjust = DecisionBaseOf<
   "command_tokens.adjust",
   { action: "adjust"; pool: "tactic" | "fleet" | "strategy"; delta: 1 | -1; payload: boolean } | { action: "reset" }

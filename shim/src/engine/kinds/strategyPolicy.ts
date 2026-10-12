@@ -254,7 +254,9 @@ function commandTokens(d: Decision, state: GameState | null, self: PlayerState |
   // Tokens left to gain (the engine refuses a gain at 16 in play): progress.required.reinforcements on newer bots.
   const reinforcements = Number(d.progress?.required?.reinforcements ?? opts.find((o) => typeof o.value?.reinforcements === "number")?.value?.reinforcements ?? Infinity);
   const leadership = state?.strategyCards.find((c) => c.card === "pok1leadership" && c.played && c.holder === me);
-  const allowance = leadership ? 3 : 0;
+  // The bot records the panel's grant (progress.required.gainCap, CcGainCap): never press past it.
+  const capLimit = (d.progress?.required as { gainCap?: { limit?: number } } | undefined)?.gainCap?.limit;
+  const allowance = Math.min(leadership ? 3 : 0, typeof capLimit === "number" ? capLimit : Infinity);
   if (gained < allowance && reinforcements > 0) {
     const pool: keyof Pools = current.fleet < 3 && gained === 2 ? "fleet" : current.strategy < 2 && gained === 1 ? "strategy" : "tactic";
     const o = opts.find((x) => isGain(x) && x.value.pool === pool) ?? opts.find((x) => isGain(x) && x.value.pool === "tactic");
