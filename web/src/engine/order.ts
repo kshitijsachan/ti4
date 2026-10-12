@@ -250,8 +250,9 @@ export function orderDecisions(
     if (owesFollow(d, selfId, myFaction)) return 0.8;
     /* A step of a strategy card's primary (place a structure, choose a system…): before the card's own panel. */
     if (d.kind.startsWith("strategy_card.") && !d.window && !IN_ADVANCE_KINDS.has(d.kind) && d.kind !== "strategy_card.pick") return 1.4;
-    /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */
-    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryStarted(d) ? 4.6 : 1.5;
+    /* The strategy card I played: a part of its primary not done yet is what I do now (before the turn menu that
+       offers "End turn"); with only an optional repeat left it waits behind the turn menu. */
+    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryPartMissing(d) ? 1.5 : 4.6;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
     /* (Not the turn menu: it reopens after everything, and waits behind what the action just started.) */
     if (nextStep(d) && d.kind !== "turn.action" && d.kind !== "trade.offer") return 1;
@@ -274,33 +275,56 @@ export function orderDecisions(
   return { queue, offers };
 }
 
-/**
- * Whether I already did part of my card's primary (the engine's primaryDone, or a part pressed on this page): then the
- * card's panel waits behind my turn menu instead of heading the queue for the rest of the round.
- */
-function primaryStarted(d: Decision): boolean {
-  const done = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
-  if (Array.isArray(done) && done.length > 0) return true;
-  return (readDecisionState<string[]>(d.id, "pressed") ?? []).length > 0;
-}
-
 type ResolveValue = { who?: string; action?: string; part?: string | null; primaryParts?: string[] } | null;
 
+/** My card's primary checklist (empty: a card with nothing to resolve by hand). */
+function checklist(d: Decision): string[] {
+  for (const o of d.options) {
+    const p = (o.value as ResolveValue)?.primaryParts;
+    if (Array.isArray(p) && p.length > 0) return p;
+  }
+  return [];
+}
+
+/** How often each part is done: the engine's primaryDone, or what I pressed on this page (whichever says more). */
+function doneCounts(d: Decision): Map<string, number> {
+  const count = (list: string[]) => list.reduce((m, p) => m.set(p, (m.get(p) ?? 0) + 1), new Map<string, number>());
+  const engine = count(((d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone as string[] | undefined) ?? []);
+  const pressedParts = (readDecisionState<string[]>(d.id, "pressed") ?? [])
+    .map((id) => (d.options.find((o) => o.id === id)?.value as ResolveValue)?.part)
+    .filter((p): p is string => typeof p === "string");
+  const page = count(pressedParts);
+  for (const [p, n] of page) engine.set(p, Math.max(engine.get(p) ?? 0, n));
+  return engine;
+}
+
 /**
- * Whether my card's primary still has something to press: a checklist part the engine has not recorded done, or (a
- * card without a checklist) any primary option besides "request all resolve now".
+ * Whether my card's primary still has something to press: a checklist part not done as often as listed, or (a card
+ * without a checklist) any primary option besides "request all resolve now".
  */
 export function primaryOpen(d: Decision): boolean {
-  const mine = d.options.filter((o) => !o.disabled && (o.value as ResolveValue)?.who !== "others");
-  const parts = mine.map((o) => (o.value as ResolveValue)?.primaryParts).find((p) => Array.isArray(p) && p.length > 0);
-  if (!parts) return mine.some((o) => (o.value as ResolveValue)?.action !== "request_all");
-  const done = [...((d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone as string[] | undefined ?? [])];
-  return parts.some((p) => {
-    const i = done.indexOf(p);
-    if (i < 0) return true;
-    done.splice(i, 1);
-    return false;
-  });
+  const parts = checklist(d);
+  if (!parts.length) {
+    /* Typed primary options only: untyped utilities on the card's message (Transaction, Send 1 Trade Good) are not. */
+    return d.options.some((o) => {
+      const v = o.value as ResolveValue;
+      return !o.disabled && !!v && v.who !== "others" && v.action !== "request_all";
+    });
+  }
+  const done = doneCounts(d);
+  return [...new Set(parts)].some((p) => (done.get(p) ?? 0) < parts.filter((x) => x === p).length);
+}
+
+/**
+ * Whether a part of my card's primary has not been done at all (Politics' "draw 2 action cards" after the agendas):
+ * then the card leads, ahead of my turn menu, until it is pressed. A repeat that is left (Construction's optional
+ * second structure) does not: the card then waits behind my turn menu.
+ */
+export function primaryPartMissing(d: Decision): boolean {
+  const parts = checklist(d);
+  if (!parts.length) return primaryOpen(d) && doneCounts(d).size === 0 && !(readDecisionState<string[]>(d.id, "pressed") ?? []).length;
+  const done = doneCounts(d);
+  return parts.some((p) => !done.get(p));
 }
 
 /** A Politics "place this agenda" option (top / bottom / discard), as opposed to "draw 2 agendas". */
