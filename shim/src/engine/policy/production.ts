@@ -7,6 +7,7 @@ import type { GameState, HolderName, Option, PlanetId } from "../types.js";
 import {
   isPaymentDone,
   isPlacement,
+  type PaymentDoneValue,
   type PaymentPayload,
   type PaymentSpend,
   type PaymentValue,
@@ -34,12 +35,12 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
   const done = opts.map((o) => o.value).find(isPaymentDone);
   if (!done) return null;
   const req = (d.progress?.required ?? {}) as { cost?: number | null; remaining?: number | null };
-  const cost = req.cost ?? done.cost;
+  const cost = req.cost ?? done.cost ?? contextCost(done, state, me);
   const currency = done.currency;
   if (cost == null || (currency !== "res" && currency !== "inf")) return null;
   const counted = typeof req.remaining === "number" ? cost - req.remaining : currency === "inf" ? done.spentInfluence : done.spentResources;
   let due = cost - counted;
-  if (due <= 0) return { payload: { planets: [] }, why: `bill of ${cost} already covered` };
+  if (due <= 0) return { payload: { planets: [] }, why: cost === 0 ? `${done.context}: nothing to pay; done` : `bill of ${cost} already covered` };
 
   const self = state?.players.find((p) => p.userId === me);
   const exhausted = new Set(self?.exhaustedPlanets ?? []);
@@ -89,6 +90,25 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
   if (sarween) payload.sarween = true;
   const parts = [best.set.join("+") || null, best.tg ? `${best.tg} tg` : null, best.comm ? `${best.comm} commodities` : null, sarween ? "Sarween" : null].filter(Boolean);
   return { payload, why: `pay ${cost} ${currency === "inf" ? "influence" : "resources"} with ${parts.join(", ") || "nothing more"}` };
+}
+
+/**
+ * What a bill the engine does not price (cost null) costs a bot, by what Done finishes (live: every Leadership
+ * and Technology payment waited out the 60 s fallback, and stalled the seat behind it):
+ * - leadership: the influence spent buys extra command tokens; the bot's Leadership policy gains only the card's 3
+ *   (engine/kinds/strategyPolicy.ts commandTokens), so it buys none: 0.
+ * - technology: the Technology primary's first research is free (the only one the strategy policy researches): 0
+ *   for the card's holder; a follower's research costs 4 resources.
+ * null otherwise (left to the planner / fallback).
+ */
+export function contextCost(done: PaymentDoneValue, state: GameState | null, me: string): number | null {
+  if (done.context === "leadership" && done.currency === "inf") return 0;
+  if (done.context === "technology" && done.currency === "res" && done.tech) {
+    const card = state?.strategyCards.find((c) => c.card === "pok7technology" && c.played);
+    if (!card) return null;
+    return card.holder === me ? 0 : 4;
+  }
+  return null;
 }
 
 /**

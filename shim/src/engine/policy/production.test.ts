@@ -70,3 +70,30 @@ test("production payload groups units, ground forces on a planet", () => {
   assert.deepEqual(productionPayload(d, ["cv", "gf", "gf", "ws"]).units, [{ unit: "cv", count: 1 }, { unit: "gf", count: 2, holder: "lodor" }]);
   assert.deepEqual(productionPayload(d, []).units, []);
 });
+
+// Live (pbd36 / pbd60 / pbd88 / pbd90 / pbd92 / pbd105): unpriced Leadership / Technology bills waited out the 60 s
+// fallback ("Done Exhausting Planets") and stalled the seat.
+const withCards = (cards: { card: string; holder: string; played: boolean }[]) =>
+  ({ ...state(0), strategyCards: cards.map((c, i) => ({ number: i + 1, tradeGoods: 0, name: c.card, holderFaction: null, reactions: [], ...c })) }) as unknown as GameState;
+
+test("leadership bill (cost null): buys no extra tokens, finishes at once", () => {
+  const d = payment([planet("a", 1, 4)], null, null, { context: "leadership", for: "inf", currency: "inf" } as Partial<PaymentValue>);
+  const p = planPayment(d, withCards([]), "u");
+  assert.deepEqual(p?.payload, { planets: [] });
+  assert.match(p!.why, /leadership: nothing to pay/);
+});
+
+test("technology bill (cost null): free for the Technology holder's research", () => {
+  const d = payment([planet("a", 4)], null, null, { context: "technology", for: "restech", tech: true } as Partial<PaymentValue>);
+  assert.deepEqual(planPayment(d, withCards([{ card: "pok7technology", holder: "u", played: true }]), "u")?.payload, { planets: [] });
+});
+
+test("technology bill (cost null): a follower pays 4 resources", () => {
+  const d = payment([planet("a", 4), planet("b", 1)], null, null, { context: "technology", for: "restech", tech: true } as Partial<PaymentValue>);
+  assert.deepEqual(planPayment(d, withCards([{ card: "pok7technology", holder: "x", played: true }]), "u")?.payload, { planets: ["a"] });
+});
+
+test("technology bill (cost null) with no Technology card played: left to the caller", () => {
+  const d = payment([planet("a", 4)], null, null, { context: "technology", for: "restech", tech: true } as Partial<PaymentValue>);
+  assert.equal(planPayment(d, withCards([]), "u"), null);
+});

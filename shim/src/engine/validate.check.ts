@@ -125,6 +125,30 @@ expect("never throws", (() => {
   return out.length;
 })(), 1);
 
+// Live (pbd83/pbd97): trade.me.actionCards / promissoryNotes are CardRef arrays, not id-keyed maps.
+const tradeState = {
+  phase: "action",
+  trade: {
+    me: {
+      faction: "sol",
+      color: "blue",
+      actionCards: [{ id: "sabo1", name: "Sabotage", text: "x", ownerFaction: null, ownerColor: null }],
+      promissoryNotes: [{ id: "ra", name: "Ceasefire", ownerFaction: "sol", ownerColor: "blue" }],
+      relics: [],
+    },
+  },
+  players: [{ faction: "sol", hand: { actionCards: { sabo1: 3 }, promissoryNotes: {}, secretObjectives: {} } }],
+};
+expect("trade card refs: no key drift", run((v) => v.state(tradeState, "s")), []);
+const badRef = JSON.parse(JSON.stringify(tradeState));
+badRef.trade.me.actionCards[0].id = "zzcard";
+badRef.trade.me.promissoryNotes[0].ownerFaction = "zzfaction";
+expect("trade card refs: bad id / owner flagged", run((v) => v.state(badRef, "s")).map((m) => m.split(" at ")[0]).sort(), ['actionCard "zzcard"', 'faction "zzfaction"']);
+
+// Map-template placeholders (pbd11 / pbd112 during the draft): a colour + 1-6 / blank.
+const placeholders = { phase: "action", tiles: [{ position: "101", tileId: "yellow3", holders: [] }, { position: "102", tileId: "petrolblank", holders: [] }, { position: "103", tileId: "zz9", holders: [] }] };
+expect("placeholder tiles are not drift", run((v) => v.state(placeholders, "s")).map((m) => m.split(" at ")[0]), ['tile "zz9"']);
+
 if (failed) {
   console.log(`${failed} failed`);
   process.exit(1);

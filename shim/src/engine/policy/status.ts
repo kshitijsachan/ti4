@@ -31,6 +31,10 @@ export function chooseStatus(d: Decision, state: GameState | null, me: string, m
   // The command-token panel outside the status homework (Leadership, Technology, other gains) is not ours: the
   // strategy policy answers Leadership; a payload there is refused ("only in the status phase").
   if (d.kind === "command_tokens.adjust" && state?.status?.step !== "homework") return undefined;
+  // Leadership's panel (Done = deleteButtons_leadership) is the strategy policy's even during the homework (live
+  // pbd105: Leadership resolved while the table did its homework; the status policy held it with "tokens confirmed"
+  // and the fallback pressed "Done Gaining Command Tokens" after 60 s).
+  if (d.kind === "command_tokens.adjust" && (d.options as Option<any>[]).some((o) => o.handler === "deleteButtons_leadership")) return undefined;
   const sd = d as StatusDecision;
   const live = (sd.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   const find = (pred: (v: any) => boolean) => live.find((o) => pred(o.value));

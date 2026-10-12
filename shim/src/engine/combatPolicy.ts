@@ -25,7 +25,7 @@ export function chooseCombat(d: Decision, state: GameState | null, me: string, o
     case "combat.hits":
       return autoAssign(d, me);
     case "combat.assign_units":
-      return finishMenu(d, me) ?? pickUnit(d, me);
+      return finishMenu(d, me) ?? closeRemovalList(d, state, me) ?? pickUnit(d, me);
     case "combat.bombard":
       return bombardDone(d, me);
     case "combat.retreat":
@@ -105,6 +105,37 @@ function finishMenu(d: CombatAssignUnits, me: string): CombatChoice | null {
   if (d.target?.userId !== me || !d.progress?.canCommit) return null;
   const done = d.options.find((o) => !o.disabled && o.value?.action === "done");
   return done ? { option: done, why: "combat: hits assigned; close the menu" } : null;
+}
+
+/** Lower bounds of a ship's capacity (unupgraded; flagships vary by faction, so none counted). */
+const MIN_CAPACITY: Record<string, number> = { cv: 4, dn: 1, ws: 6 };
+
+/**
+ * A unit-removal list ("Remove Units in X" after a fleet pool / capacity reminder: assignType "remove", no hits
+ * owed) addressed to us. When the board shows nothing over the limits in that system (non-fighter ships within the
+ * fleet pool, fighters / ground forces in space within the least capacity the ships have, 3 fighters per dock), there
+ * is nothing to remove: close it. Otherwise null: the unit-limit desk (botplay/violations.ts) removes the cheapest
+ * units, and only the watchdog's last resort closes it. Live pbd60 / pbd114: such lists waited 60–75 s each.
+ */
+function closeRemovalList(d: CombatAssignUnits, state: GameState | null, me: string): CombatChoice | null {
+  if (d.scope !== "player" || d.target?.userId !== me || d.progress) return null;
+  const opts = d.options.filter((o) => !o.disabled && !forDummy(o));
+  const done = opts.find((o) => o.value?.action === "done");
+  if (!done || done.value?.assignType !== "remove") return null;
+  if (opts.some((o) => o.value && "assignType" in o.value && o.value.assignType !== "remove")) return null;
+  const self = state?.players.find((p) => p.userId === me);
+  const tile = opts.map((o) => (o.value && "tile" in o.value ? o.value.tile : null)).find((t) => !!t);
+  const sys = tile ? state?.tiles.find((t) => t.position === tile) : undefined;
+  if (!self?.faction || !sys) return null;
+  const mine = (u: { owner: string | null; color: string }) => u.owner === self.faction || u.color === self.color;
+  const space = sys.holders.find((h) => h.name === "space")?.units.filter(mine) ?? [];
+  const count = (unit: string) => space.filter((u) => u.unit === unit).reduce((n, u) => n + u.count, 0);
+  const ships = space.filter((u) => !["ff", "gf", "mf"].includes(u.unit)).reduce((n, u) => n + u.count, 0);
+  const capacity = space.reduce((n, u) => n + (MIN_CAPACITY[u.unit] ?? 0) * u.count, 0);
+  const docks = sys.holders.filter((h) => h.name !== "space").flatMap((h) => h.units.filter(mine)).filter((u) => u.unit === "sd").reduce((n, u) => n + u.count, 0);
+  const cargo = Math.max(0, count("ff") - 3 * docks) + count("gf") + count("mf");
+  if (ships > self.commandTokens.fleet || cargo > capacity) return null;
+  return { option: done, why: `unit limits in ${tile}: ${ships} ships / ${self.commandTokens.fleet} fleet, ${cargo} cargo / ${capacity}+ capacity: nothing to remove` };
 }
 
 function roll(d: CombatRound, state: GameState | null, me: string, open: Decision[]): CombatChoice | null {
