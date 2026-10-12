@@ -25,8 +25,8 @@ export function chooseCombat(d: Decision, state: GameState | null, me: string, o
     case "combat.hits":
       return autoAssign(d, me);
     case "combat.assign_units":
-      // pickUnit only where hits are owed (engine progress): an over-limit removal list is the unit-limit desk's
-      // (botplay/violations.ts); pressing its Done first brought back the pbd114 Remove/Done loop.
+      // pickUnit only where hits are owed (progress): a removal list without progress that is over the limits is the
+      // unit-limit desk's; pickUnit's "nothing owed: Done" there closed it before any removal (pbd114 loop).
       return finishMenu(d, me) ?? closeRemovalList(d, state, me) ?? (d.progress ? pickUnit(d, me) : null);
     case "combat.bombard":
       return bombardDone(d, me);
@@ -80,9 +80,9 @@ function pickUnit(d: CombatAssignUnits, me: string): CombatChoice | null {
 /**
  * Stand-alone removal opener (units.remove): hits from bombardment / barrage / space cannon are owed, so open the
  * menu once (its per-unit policy is pickUnit) and close the opener afterwards; a "remove" prompt (fleet pool /
- * capacity / rift) is optional for a bot: close it.
+ * capacity) is closed only when the board shows we are within the limits (else the unit-limit desk's).
  */
-export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[], open: Decision[]): CombatChoice | null {
+export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[], open: Decision[], state: GameState | null = null): CombatChoice | null {
   if (d.target?.userId !== me) return null;
   if (open.some((x) => x.kind === "combat.assign_units" && x.target?.userId === me)) return null;
   const live = d.options.filter((o) => !o.disabled && !forDummy(o) && o.value);
@@ -90,9 +90,14 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
   const opener = live.find((o) => o.value!.action === "open" && o.value!.assignType !== "remove");
   if (opener && !history.includes(opener.id)) return { option: opener, why: `units: assign ${opener.value!.assignType} hits` };
   const anyOpen = live.find((o) => o.value!.action === "open");
-  // A fleet pool / capacity reminder ("remove"): the unit-limit desk removes what is over; dismissing it first left a
-  // bot over its fleet pool.
-  if (live.some((o) => o.value!.action === "open" && o.value!.assignType === "remove")) return null;
+  // A fleet pool / capacity reminder ("remove"): dismiss it only when the board shows nothing over the limits; over
+  // them (or unknown), the unit-limit desk (botplay/violations.ts) opens the list and removes the cheapest units.
+  const reminder = live.find((o) => o.value!.action === "open" && o.value!.assignType === "remove");
+  if (reminder && reminder.value!.action === "open") {
+    const lim = unitLimits(reminder.value!.tile, state, me);
+    if (!lim || lim.over) return null;
+    return done ? { option: done, why: `units: within limits in ${reminder.value!.tile} (${lim.summary}); dismiss` } : null;
+  }
   if (done) return { option: done, why: "units: nothing left to remove" };
   if (anyOpen && !history.includes(anyOpen.id)) return { option: anyOpen, why: "units: open the removal menu" };
   return null;
@@ -128,9 +133,19 @@ function closeRemovalList(d: CombatAssignUnits, state: GameState | null, me: str
   const done = opts.find((o) => o.value?.action === "done");
   if (!done || done.value?.assignType !== "remove") return null;
   if (opts.some((o) => o.value && "assignType" in o.value && o.value.assignType !== "remove")) return null;
+  const tile = opts.map((o) => (o.value && "tile" in o.value ? o.value.tile : null)).find((t): t is string => !!t);
+  const lim = tile ? unitLimits(tile, state, me) : null;
+  if (!lim || lim.over) return null;
+  return { option: done, why: `unit limits in ${tile}: ${lim.summary}: nothing to remove` };
+}
+
+/**
+ * Our units in `tile` against the fleet pool / the least capacity our ships have (3 fighters per dock of ours there).
+ * null when the board or our seat is unknown.
+ */
+export function unitLimits(tile: string, state: GameState | null, me: string): { over: boolean; summary: string } | null {
   const self = state?.players.find((p) => p.userId === me);
-  const tile = opts.map((o) => (o.value && "tile" in o.value ? o.value.tile : null)).find((t) => !!t);
-  const sys = tile ? state?.tiles.find((t) => t.position === tile) : undefined;
+  const sys = state?.tiles.find((t) => t.position === tile);
   if (!self?.faction || !sys) return null;
   const mine = (u: { owner: string | null; color: string }) => u.owner === self.faction || u.color === self.color;
   const space = sys.holders.find((h) => h.name === "space")?.units.filter(mine) ?? [];
@@ -139,8 +154,10 @@ function closeRemovalList(d: CombatAssignUnits, state: GameState | null, me: str
   const capacity = space.reduce((n, u) => n + (MIN_CAPACITY[u.unit] ?? 0) * u.count, 0);
   const docks = sys.holders.filter((h) => h.name !== "space").flatMap((h) => h.units.filter(mine)).filter((u) => u.unit === "sd").reduce((n, u) => n + u.count, 0);
   const cargo = Math.max(0, count("ff") - 3 * docks) + count("gf") + count("mf");
-  if (ships > self.commandTokens.fleet || cargo > capacity) return null;
-  return { option: done, why: `unit limits in ${tile}: ${ships} ships / ${self.commandTokens.fleet} fleet, ${cargo} cargo / ${capacity}+ capacity: nothing to remove` };
+  return {
+    over: ships > self.commandTokens.fleet || cargo > capacity,
+    summary: `${ships} ships / ${self.commandTokens.fleet} fleet, ${cargo} cargo / ${capacity}+ capacity`,
+  };
 }
 
 function roll(d: CombatRound, state: GameState | null, me: string, open: Decision[]): CombatChoice | null {

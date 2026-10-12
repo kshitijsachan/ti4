@@ -142,7 +142,7 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "relic.use": "optional",
   // C8 core tails
   "combat.bombard": "planner",
-  "units.remove": "blocking",
+  "units.remove": "planner", // an over-limit reminder is the unit-limit desk's (pbd114): the fallback only when forced
   "production.place": "blocking",
   "commodities.gain": "blocking",
   // C6b tech follow-ups (the components policy answers our own: free gains taken, the rest declined)
@@ -253,7 +253,21 @@ export function waitsOn(d: Decision, me: string): boolean {
 /** Is the decision one the game may wait on (not an optional offer)? */
 export function isBlocking(d: Decision): boolean {
   if (d.window) return true;
+  if (isBackgroundPanel(d)) return false;
   return (KIND_CLASS[d.kind] ?? "blocking") !== "optional";
+}
+
+/**
+ * A bookkeeping panel nobody waits on although its kind is otherwise blocking: the Firmament / Obsidian plot panel on
+ * the cards-info thread (te.plot, every typed option panel=true). It stays open for good (the cards-info message is
+ * edited in place), so the watchdog forced the fallback on it every FALLBACK_FORCE_MS (live pbd161: "Seethe" pressed
+ * 4x after 582 s, each press adding a puppet through the faction picker that followed). Neither the fallback nor the
+ * watchdog acts on it.
+ */
+export function isBackgroundPanel(d: Decision): boolean {
+  if (d.kind !== "te.plot") return false;
+  const typed = (d.options as Option<any>[]).filter((o) => o.value);
+  return typed.length > 0 && typed.every((o) => o.value.panel === true);
 }
 
 /**

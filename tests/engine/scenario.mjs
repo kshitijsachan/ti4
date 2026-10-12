@@ -216,7 +216,8 @@ class Runner {
   async step(st) {
     const since = latestUndo(this.fork.game);
     if (flag("--buttons")) this.seenSeq = Math.max(0, ...(await openDecisions(this.fork.game).catch(() => [])).map((d) => d.seq ?? 0));
-    const r = await this.perform(this.via === "press" && st.legacy ? st.legacy : [st]);
+    // legacy presses act as the step's seat unless they name their own
+    const r = await this.perform(this.via === "press" && st.legacy ? st.legacy.map((l) => ({ as: st.as, ...l })) : [st]);
     const s = await this.settle(since);
     return { ...r, saves: s.saves };
   }

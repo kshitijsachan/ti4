@@ -128,10 +128,18 @@ async function capturing<T>(client: ShimClient, fn: () => Promise<T>): Promise<{
   }
 }
 
+/** Stored values written only by engine display hooks (kinds/ExploreLog.java), absent from older recordings. */
+const ENGINE_DISPLAY_STORED = ["stored.engineExploreLog"];
+
 function compare(expected: string, actual: string, fork: Fork, map: ForkMap, ignore: string[]): SaveDiff[] {
   const reverse = new Map([...map.users].map(([o, f]) => [f, o]));
   const e = normalizeSave(expected, { extraVolatile: ignore });
-  const a = normalizeSave(actual, { reverseUsers: reverse, forkGame: fork.game, origGame: map.game[0], extraVolatile: ignore });
+  let a = normalizeSave(actual, { reverseUsers: reverse, forkGame: fork.game, origGame: map.game[0], extraVolatile: ignore });
+  // Display-only stored values the engine hooks added after a recording was made (ExploreLog): a recording without
+  // them cannot show them, so they are only compared when the recorded save has them.
+  for (const k of ENGINE_DISPLAY_STORED) {
+    if (!e.some((l) => l.startsWith(`${k} `))) a = a.filter((l) => !l.startsWith(`${k} `));
+  }
   return diffNormalized(e, a);
 }
 
