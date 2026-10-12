@@ -206,6 +206,24 @@ while (Date.now() < end2 && !done) {
     const confirm = dialog.getByRole("button", { name: /^(Take|Keep|Start with|Research|Discard|Pick)\b/ }).first();
     say(`my decision: ${title} -> ${(await confirm.textContent())?.trim()}`);
     await confirm.click();
+  } else if (await dialog.locator('button[class*="choice"]:not([disabled])').count()) {
+    // Engine UI (the default since the TI4_ENGINE_WEB=1 flip): choice cards, then a "go" card to confirm when the
+    // renderer asks for one (secret objective keep, ...). A repeated prompt takes a different card than last time.
+    const cards = dialog.locator('button[class*="choice"]:not([disabled]):not([class*="go"])');
+    const n = await cards.count();
+    if (n) {
+      const repeats = seen.filter((t) => t === title).length - 1;
+      const card = cards.nth(repeats % n);
+      const label = ((await card.textContent()) ?? "").trim().slice(0, 60);
+      const clicked = await card.click({ timeout: 10000 }).then(() => true, () => false);
+      if (!clicked) { seen.pop(); await page.waitForTimeout(1500); continue; }
+      await page.waitForTimeout(700);
+      const go = dialog.locator('button[class*="go"]:not([disabled])').first();
+      if (await go.count()) {
+        say(`my decision: ${title} -> ${((await go.textContent()) ?? "").trim().slice(0, 60)}`);
+        await go.click({ timeout: 10000 }).catch(() => {});
+      } else say(`my decision: ${title} -> ${label}`);
+    }
   } else if (await dialog.getByRole("button", { name: "Roll For The Fracture" }).count()) {
     // Crimson Rebellion starts with its breakthrough, which asks for a Fracture roll during setup.
     say(`my decision: ${title} -> Roll For The Fracture`);
