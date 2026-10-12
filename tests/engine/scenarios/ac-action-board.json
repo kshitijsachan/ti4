@@ -1,0 +1,163 @@
+{
+  "name": "ac-action-board",
+  "description": "pbd72 r4 action phase, Winnu active: War Effort (cruiser at home), Frontline Deployment (3 infantry), Signal Jamming (Arborec token next to Winnu's home), Reactor Meltdown (a space dock added on Arborec's Atlas; home docks are not offered), Ghost Ship (first offered system). Five starting cards are discarded first (playAC refuses while over the hand limit).",
+  "base": {
+    "recording": "pbd72",
+    "index": 815,
+    "repost": false
+  },
+  "setup": [
+    "/ac discard action_card_id:49 faction_or_color:winnu",
+    "/ac discard action_card_id:805 faction_or_color:winnu",
+    "/ac discard action_card_id:810 faction_or_color:winnu",
+    "/ac discard action_card_id:368 faction_or_color:winnu",
+    "/ac discard action_card_id:431 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:war_effort faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:f_deployment faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:jamming faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:meltdown faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:ghost_ship faction_or_color:winnu",
+    "/add_units tile_name:211 unit_names:\"sd atlas\" faction_or_color:arborec"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "war_effort"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveWarEffort"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "placeOneNDone_skipbuild_cruiser_313"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "f_deployment"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveFrontline"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "placeOneNDone_skipbuild_3gf_winnu$"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "jamming"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveSignalJammingStep1"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "signalJammingStep2_arborec"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "signalJammingStep3_arborec_313"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "signalJammingStep4_arborec_312"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "meltdown"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveReactorMeltdownStep1"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "reactorMeltdownStep2_arborec"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "reactorMeltdownStep3_arborec_211_atlas"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "ghost_ship"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveGhostShipStep1"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "ghostShipStep2_"
+      },
+      "as": "winnu"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
