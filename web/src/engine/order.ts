@@ -125,6 +125,7 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
       return mine ? `${card.name}: your primary` : `Follow ${card.name}?`;
     }
   }
+  if (d.kind === "strategy_card.politics_agenda" && d.options.some((o) => politicsPlacement(o.value))) return "Politics: place an agenda";
   if (d.kind === "strategy_card.pre_decline") {
     const sc = d.options.map((o) => (o.value as { strategyCard?: number } | null)?.strategyCard).find((n) => typeof n === "number");
     const card = sc !== undefined ? state?.strategyCards.find((c) => c.number === sc) : undefined;
@@ -190,6 +191,8 @@ export function orderDecisions(
   /* The status-phase secret list once I declared my secret (scored one, or none): the game leaves it open. */
   const selfId = state?.players.find((p) => p.self)?.userId;
   const secretDeclared = !!selfId && !!state?.status?.players[selfId]?.secretScored;
+  /* Politics: once the agendas are drawn (a placement prompt is open), the "draw 2 agendas" prompt is done. */
+  const agendasDrawn = mine.some((d) => d.kind === "strategy_card.politics_agenda" && d.options.some((o) => politicsPlacement(o.value)));
   const shown = dedupe(
     mine.filter(
       (d) =>
@@ -197,7 +200,8 @@ export function orderDecisions(
         !(d.kind === "legacy" && underWay && setupOnly(d.options)) &&
         !(d.kind === "strategy_card.resolve" && !actionPhase) &&
         !(d.kind === "setup.game_settings" && (underWay || !!state?.draft)) &&
-        !(d.kind === "status.score_secret" && secretDeclared) &&
+        !(d.kind === "status.score_secret" && (secretDeclared || (!!state && !state.status && !secretScorable(d, state)))) &&
+        !(d.kind === "strategy_card.politics_agenda" && agendasDrawn && !d.options.some((o) => politicsPlacement(o.value))) &&
         /* Agenda prompts outside the agenda phase, and when / after windows the agenda already moved past: moot. */
         !(AGENDA_LIVE.has(d.kind) && !agendaPhase) &&
         !(d.kind === "agenda.when" && !!state?.agenda?.whensResolved) &&
@@ -215,8 +219,11 @@ export function orderDecisions(
   const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
   /* A step of a tactical action is only live while it is my turn (else a leftover of an earlier one). */
   const staleStep = (d: Decision) => TACTICAL_STEP.test(d.kind) && !!state?.activePlayer && !myTurn;
+  /* The secret list left open past the status phase: on offer (it never takes the head), until nothing on it scores. */
+  const lateSecretList = (d: Decision) => d.kind === "status.score_secret" && !!state && !state.status;
   const background = (d: Decision) =>
-    openToAll(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+    openToAll(d) ||
+    lateSecretList(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options));
   /* Background prompts pile up (a new copy per round / per thread): one entry per title, the newest. Someone else's
      payment or production left open at the table is not on offer to me. */
   const newestByTitle = new Map<string, Decision>();
@@ -240,7 +247,9 @@ export function orderDecisions(
     /* A step of a strategy card's primary (place a structure, choose a system…): before the card's own panel. */
     if (d.kind.startsWith("strategy_card.") && !d.window && !IN_ADVANCE_KINDS.has(d.kind) && d.kind !== "strategy_card.pick") return 1.4;
     /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */
-    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryStarted(d) ? 4.6 : 1.5;
+    /* …unless it has nothing left for me to press (Trade's primary resolves when played; every part done). */
+    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction)
+      return primaryStarted(d) || !primaryOpen(d) ? 4.6 : 1.5;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
     /* (Not the turn menu: it reopens after everything, and waits behind what the action just started.) */
     if (nextStep(d) && d.kind !== "turn.action" && d.kind !== "trade.offer") return 1;
@@ -271,6 +280,46 @@ function primaryStarted(d: Decision): boolean {
   const done = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
   if (Array.isArray(done) && done.length > 0) return true;
   return (readDecisionState<string[]>(d.id, "pressed") ?? []).length > 0;
+}
+
+type ResolveValue = { who?: string; action?: string; part?: string | null; primaryParts?: string[] } | null;
+
+/**
+ * Whether my card's primary still has something to press: a checklist part the engine has not recorded done, or (a
+ * card without a checklist) any primary option besides "request all resolve now".
+ */
+export function primaryOpen(d: Decision): boolean {
+  const mine = d.options.filter((o) => !o.disabled && (o.value as ResolveValue)?.who !== "others");
+  const parts = mine.map((o) => (o.value as ResolveValue)?.primaryParts).find((p) => Array.isArray(p) && p.length > 0);
+  if (!parts) return mine.some((o) => (o.value as ResolveValue)?.action !== "request_all");
+  const done = [...((d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone as string[] | undefined ?? [])];
+  return parts.some((p) => {
+    const i = done.indexOf(p);
+    if (i < 0) return true;
+    done.splice(i, 1);
+    return false;
+  });
+}
+
+/** A Politics "place this agenda" option (top / bottom / discard), as opposed to "draw 2 agendas". */
+function politicsPlacement(value: unknown): boolean {
+  const a = (value as { action?: string } | null)?.action;
+  return a === "top" || a === "bottom" || a === "discard";
+}
+
+type SecretValue = { met?: boolean | null; phase?: string } | null;
+
+/**
+ * Whether the status-phase secret list has a secret I could score now: not disabled, not known unmet, and (in the
+ * status phase) a status-phase secret. The list stays open after I scored or declined; with nothing to score it is moot.
+ */
+export function secretScorable(d: Decision, state?: GameState | null): boolean {
+  const inStatus = !!state?.status;
+  return d.options.some((o) => {
+    const v = o.value as SecretValue;
+    if (!v || o.disabled || v.met === false) return false;
+    return !inStatus || !v.phase || v.phase === "status";
+  });
 }
 
 /** One prompt per played strategy card (its message and its thread can both carry it): the newest. */

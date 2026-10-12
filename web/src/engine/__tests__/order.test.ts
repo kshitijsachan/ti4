@@ -72,6 +72,48 @@ void test("in-advance prompts never head the queue", () => {
   assert.equal(r.offers.length, 2);
 });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const opt = (id: string, value: unknown, disabled = false): any => ({ id, label: id, style: "primary", emoji: null, disabled, needsInput: false, handler: id, value });
+
+void test("a secret list left open past the status phase never takes focus, and drops out when nothing scores", () => {
+  const unmet = dec("status.score_secret", { options: [opt("a", { secretObjective: "x", met: false, phase: "status" })] });
+  const r = orderDecisions([unmet, dec("strategy_card.pick")], 0, undefined, state({ phase: "strategy" as GameState["phase"], activePlayer: ME }));
+  assert.deepEqual(kinds(r), ["strategy_card.pick"]);
+  assert.ok(!r.offers.some((d) => d.kind === "status.score_secret"));
+  const scorable = dec("status.score_secret", { options: [opt("b", { secretObjective: "y", met: true, phase: "action" })] });
+  const r2 = orderDecisions([scorable, dec("turn.action")], 0, undefined, state());
+  assert.deepEqual(kinds(r2), ["turn.action"]);
+  assert.ok(r2.offers.some((d) => d.kind === "status.score_secret"), "still on offer while one can be scored");
+});
+
+void test("my played card with nothing left to press waits behind my turn menu", () => {
+  const card = { strategyCard: 5, name: "Trade", holder: "arborec", primaryDone: [] };
+  const trade = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: card } as unknown as Decision["window"],
+    options: [opt("ra", { who: "holder", action: "request_all", part: null, primaryParts: [] }), opt("f", { who: "others", action: "follow", part: null, primaryParts: [] })],
+  });
+  const r = orderDecisions([trade, dec("turn.action")], 0, undefined, state());
+  assert.deepEqual(kinds(r), ["turn.action", "strategy_card.resolve"]);
+
+  const pol = { strategyCard: 3, name: "Politics", holder: "arborec", primaryDone: [] };
+  const parts = ["speaker", "action_cards", "agendas"];
+  const politics = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: pol } as unknown as Decision["window"],
+    options: [opt("ac", { who: "anyone", action: "draw_action_cards", part: "action_cards", primaryParts: parts })],
+  });
+  assert.equal(orderDecisions([politics, dec("turn.action")], 0, undefined, state()).queue[0].kind, "strategy_card.resolve");
+});
+
+void test("politics: the draw prompt drops once the agendas are drawn; placements are titled apart", () => {
+  const draw = dec("strategy_card.politics_agenda", { options: [opt("d", { action: "draw", count: 2 })] });
+  const top = dec("strategy_card.politics_agenda", { options: [opt("t", { action: "top", handle: 1, agenda: "mutiny", placedThisRound: 0 })] });
+  const r = orderDecisions([draw, top], 0, undefined, state());
+  assert.equal(r.queue.filter((d) => d.kind === "strategy_card.politics_agenda").length, 1);
+  assert.equal(r.queue[0].id, top.id);
+});
+
 void test("a strategy card I owe a follow on heads the queue, before my turn menu and trade offers", () => {
   const followWin = { kind: "strategy_card", eligible: [ME], responded: [], responses: { [ME]: "pending" }, subject: { strategyCard: 1, holder: "sol" } } as unknown as Decision["window"];
   const follow = dec("strategy_card.resolve", { scope: "table", window: followWin });

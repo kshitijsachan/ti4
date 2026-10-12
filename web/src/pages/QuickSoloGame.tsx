@@ -13,6 +13,26 @@ type SoloStatus = {
 
 const MIN_BOTS = 2;
 const MAX_BOTS = 7;
+const DEFAULT_BOTS = 5;
+/** The opponent count last chosen in this browser, so "play again" starts from it. */
+const BOTS_KEY = "ti4online.solo.bots";
+
+function readBots(): number {
+  try {
+    const n = Number(window.localStorage.getItem(BOTS_KEY));
+    return Number.isInteger(n) && n >= MIN_BOTS && n <= MAX_BOTS ? n : DEFAULT_BOTS;
+  } catch {
+    return DEFAULT_BOTS;
+  }
+}
+
+function writeBots(n: number) {
+  try {
+    window.localStorage.setItem(BOTS_KEY, String(n));
+  } catch {
+    /* storage unavailable: the stepper starts from the default next time */
+  }
+}
 
 async function errorText(res: Response) {
   try {
@@ -42,7 +62,7 @@ export function QuickSoloGame({
   children?: ReactNode;
 }) {
   const openGame = useOpenGame();
-  const [bots, setBots] = useState(5);
+  const [bots, setBots] = useState(readBots);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<SoloStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,8 +128,11 @@ export function QuickSoloGame({
     }
   };
 
-  const step = (d: number) =>
-    setBots((n) => Math.min(MAX_BOTS, Math.max(MIN_BOTS, n + d)));
+  const step = (d: number) => {
+    const next = Math.min(MAX_BOTS, Math.max(MIN_BOTS, bots + d));
+    writeBots(next);
+    setBots(next);
+  };
 
   return (
     <section className={cx(classes.panel, className)}>

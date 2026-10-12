@@ -46,6 +46,30 @@ function useTurnStalled(state: GameState | null, empty: boolean): boolean {
   return stalled;
 }
 
+/** How long the popup may stay empty while the engine stream connects before it says so. */
+const CONNECTING_NOTE_MS = 1500;
+
+/**
+ * The popup's place while the engine stream connects (reload, server restart): after a moment, a one-line status
+ * where the prompts will appear, instead of an empty corner (or the legacy popup flashing in).
+ */
+export function EngineConnecting({ rightInset = 0 }: { rightInset?: number }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setShow(true), CONNECTING_NOTE_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+  if (!show) return null;
+  return (
+    <PopupLayer contained rightInset={rightInset}>
+      <div className={classes.stalled} role="status" data-engine-connecting>
+        <IconLoader2 size={14} className={classes.spin} />
+        Loading your prompts…
+      </div>
+    </PopupLayer>
+  );
+}
+
 /** The system a decision is about, for the map highlight. */
 function decisionPosition(d: Decision | undefined, state: GameState | null): string | null {
   if (!d) return null;

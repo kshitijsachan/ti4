@@ -334,3 +334,44 @@
 .endAll:disabled {
   cursor: default;
 }
+
+.endedToggle {
+  padding: 2px 8px;
+  border: 1px solid var(--panel-hairline);
+  border-radius: 2px;
+  background: none;
+  font-family: var(--font-display);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  color: var(--mantine-color-gray-5);
+  cursor: pointer;
+}
+
+.endedToggle:hover {
+  color: var(--mantine-color-gray-2);
+}
+
+.endedList {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.endedRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--panel-hairline);
+}
+
+.endedName {
+  font-family: var(--font-data);
+  color: var(--mantine-color-gray-2);
+  text-decoration: none;
+}
+
+.endedName:hover {
+  text-decoration: underline;
+}

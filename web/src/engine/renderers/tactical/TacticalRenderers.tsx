@@ -14,7 +14,7 @@ import { planetName, strategyCardName, systemName, unitName } from "./names";
 import classes from "./Tactical.module.css";
 import { optionRole } from "../../optionKinds";
 import type { FollowWait } from "../../../../../shim/src/engine/kinds/tactical";
-import { followsOwed, owesFollow } from "../../follows";
+import { followHolds, followsOwed, owesFollow } from "../../follows";
 import { useMyDecisions } from "../../store";
 import { useEngineAnswer } from "../../link";
 import { factionName } from "../../names";
@@ -124,7 +124,17 @@ function turnLabel(o: TurnOpt, tactic: number | undefined): string {
 }
 
 /** The follow windows that hold this turn (the engine refuses end turn / pass until they close). */
-function followWaits(options: TurnOpt[]): FollowWait[] {
+function followWaits(options: TurnOpt[], state: GameState | null | undefined): FollowWait[] {
+  /* Live from the game state when the engine reports blocksTurn (it re-enables by itself as players answer); the
+     option values only say who was pending when the turn menu was posted. */
+  if (state?.strategyCards.some((c) => c.blocksTurn !== undefined)) {
+    return followHolds(state).map((h) => ({
+      strategyCard: h.strategyCard as FollowWait["strategyCard"],
+      name: h.name,
+      factions: h.pending.map((p) => p.faction) as FollowWait["factions"],
+      userIds: h.pending.map((p) => p.userId),
+    }));
+  }
   for (const o of options) {
     const v = o.value;
     if (v && (v.action === "end_turn" || v.action === "pass") && v.waitingFor?.length) return v.waitingFor;
@@ -148,7 +158,7 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   const owed = followsOwed(state, me?.userId).filter((f) =>
     mine.some((d) => owesFollow(d, me?.userId, me?.faction) && d.window?.subject?.strategyCard === f.strategyCard),
   );
-  const waits = followWaits(opts);
+  const waits = followWaits(opts, state);
   const defer = opts.find((o) => o.value!.action === "end_turn_when_followed");
   const ends = (o: TurnOpt) => o.value!.action === "end_turn" || o.value!.action === "pass";
   const disabled = (o: TurnOpt) => owed.length > 0 || (waits.length > 0 && ends(o));
@@ -161,7 +171,8 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     })
     .filter((x) => x !== null);
   const label = (o: TurnOpt) => {
-    if (waits.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow`;
+    if (waits.length && ends(o))
+      return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow ${waits.map((w) => w.name).join(" and ")}`;
     return turnLabel(o, me?.commandTokens.tactic);
   };
   const variant = (o: TurnOpt) =>

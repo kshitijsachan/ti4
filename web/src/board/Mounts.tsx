@@ -1,6 +1,6 @@
 import { DecisionHost } from "@/decisions";
 import { CombatOutcome } from "@/decisions/renderers/combat/Outcome";
-import { EngineDecisionHost, useEngineMode } from "@/engine";
+import { EngineConnecting, EngineDecisionHost, useEngineMode } from "@/engine";
 import { GameLog, type GameLogProps } from "@/gamelog";
 import { HandTray } from "@/hand";
 
@@ -21,7 +21,7 @@ export function DecisionSlot({ gameName, className, rightInset }: { gameName: st
       </>
     );
   }
-  if (mode === "waiting") return null;
+  if (mode === "waiting") return <EngineConnecting rightInset={rightInset} />;
   return <DecisionHost gameName={gameName} placement="contained" className={className} rightInset={rightInset} />;
 }
 
