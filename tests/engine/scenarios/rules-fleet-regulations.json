@@ -1,20 +1,72 @@
 {
   "name": "rules-fleet-regulations",
-  "description": "Rules audit (deliberate improvement over the original): Fleet Regulations (For) - 'each player cannot have more than 4 tokens in their fleet pool'. The original only posted a reminder after the 5th token was gained. With the law in play and Mahact's fleet pool at 3, the redistribute panel's first 'Gain 1 Fleet Token' is accepted and the second is refused (engine: CommandTokensAdjustKind.validate; bot: CommandCounterButtonHandler.increaseFleetCC; status homework: StatusTokensButtonHandler.check).",
-  "base": { "recording": "pbd28", "index": 78 },
+  "description": "Rules audit (deliberate improvement over the original): Fleet Regulations (For) - 'each player cannot have more than 4 tokens in their fleet pool'. The original only posted a reminder after the 5th token was gained. With the law in play and Mahact's fleet pool at 3, the redistribute panel's first 'Gain 1 Fleet Token' is accepted and the second is refused (engine: CommandTokensAdjustKind.validate; bot: CommandCounterButtonHandler.increaseFleetCC; status homework: StatusTokensButtonHandler.check). The redistribute panel grants 0 tokens (cc-cap-all), so 2 tactic tokens are moved out first: fleet 3->4 is then a redistribution, and 4->5 is refused by Fleet Regulations.",
+  "base": {
+    "recording": "pbd28",
+    "index": 78
+  },
   "setup": [
     "/agenda reveal_specific agenda_id:regulations force:true"
   ],
   "steps": [
-    { "press": "agendaResolution_for", "as": "seat1" },
-    { "command": "/player stats fleet_cc:3 faction_or_color:mahact" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^primaryOfTeWarfare$" }, "as": "mahact" },
-    { "answer": { "kind": "/^(choose\\.confirm|legacy)$/", "option": "redistributeCCButtons" }, "as": "mahact" },
-    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc" }, "as": "mahact" },
-    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc" }, "as": "mahact", "refused": true }
+    {
+      "press": "agendaResolution_for",
+      "as": "seat1"
+    },
+    {
+      "command": "/player stats fleet_cc:3 tactical_cc:3 faction_or_color:mahact"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^primaryOfTeWarfare$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "/^(choose\\.confirm|legacy)$/",
+        "option": "redistributeCCButtons"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "decrease_tactic_cc"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "decrease_tactic_cc"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc"
+      },
+      "as": "mahact",
+      "refused": true
+    }
   ],
   "expect": {
     "invariants": true,
-    "save": [ { "key": "player[mahact].fleet_cc", "eq": "4" } ]
+    "save": [
+      {
+        "key": "player[mahact].fleet_cc",
+        "eq": "4"
+      }
+    ]
   }
 }
