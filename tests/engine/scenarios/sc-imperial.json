@@ -1,16 +1,63 @@
 {
-  "name": "sc-imperial",
-  "description": "Imperial played by Yssaril (pbd28 r1): holder scores the Imperial point or draws a secret (whichever the code allows), scores a public, Naaz follows via draw secret, Mahact follows then draws, Deepwrought declines then tries to draw a secret.",
-  "base": { "recording": "pbd28", "index": 90 },
-  "steps": [
-    { "answer": { "kind": "strategy_card.resolve", "option": "^score_imperial$" }, "as": "yssaril" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_draw_so$" }, "as": "yssaril" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^scoreAnObjective$" }, "as": "yssaril" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_draw_so$" }, "as": "naaz" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_follow_8$" }, "as": "mahact" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_draw_so$" }, "as": "mahact" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_no_follow_8$" }, "as": "deepwrought" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_draw_so$" }, "as": "deepwrought" }
-  ],
-  "expect": { "invariants": true }
+ "name": "sc-imperial",
+ "description": "Imperial played by Yssaril (pbd28 r1, holder without Mecatol Rex): the Imperial point is refused (legacy: message only), the holder draws a secret and scores a public; Naaz follows via Draw Secret, Mahact spends a token then draws (follow-then-secondary), Deepwrought declines.",
+ "base": {
+  "recording": "pbd28",
+  "index": 90
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^score_imperial$"
+   },
+   "as": "yssaril",
+   "refused": true
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^scoreAnObjective$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_follow_8$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_8$"
+   },
+   "as": "deepwrought"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
 }

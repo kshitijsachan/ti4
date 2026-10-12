@@ -46,7 +46,8 @@
     "kind": "strategy_card.resolve",
     "option": "^diploRefresh2$"
    },
-   "as": "arborec"
+   "as": "arborec",
+   "refused": true
   }
  ],
  "expect": {

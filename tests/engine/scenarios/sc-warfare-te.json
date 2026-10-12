@@ -1,14 +1,48 @@
 {
-  "name": "sc-warfare-te",
-  "description": "Thunder's Edge Warfare played by Mahact (pbd28 r1): Yssaril follows + builds at home, Naaz builds at home without pressing follow, Deepwrought declines, holder starts the Warfare tactical action.",
-  "base": { "recording": "pbd28", "index": 78 },
-  "steps": [
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_follow_6$" }, "as": "yssaril" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^warfareTeBuild$" }, "as": "yssaril" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^warfareTeBuild$" }, "as": "naaz" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_no_follow_6$" }, "as": "deepwrought" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^warfareTeBuild$" }, "as": "deepwrought" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^primaryOfTeWarfare$" }, "as": "mahact" }
-  ],
-  "expect": { "invariants": true }
+ "name": "sc-warfare-te",
+ "description": "Thunder's Edge Warfare played by Mahact (pbd28 r1): Yssaril follows + builds at home, Naaz builds at home without pressing follow, Deepwrought declines, the holder starts the Warfare tactical action.",
+ "base": {
+  "recording": "pbd28",
+  "index": 78
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_follow_6$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^warfareTeBuild$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^warfareTeBuild$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_6$"
+   },
+   "as": "deepwrought"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^primaryOfTeWarfare$"
+   },
+   "as": "mahact"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
 }

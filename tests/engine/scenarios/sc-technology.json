@@ -1,13 +1,48 @@
 {
-  "name": "sc-technology",
-  "description": "Technology played by Naaz (pbd28 r1): holder opens research, Mahact follows (research), Yssaril researches without pressing follow, Deepwrought declines then tries to research.",
-  "base": { "recording": "pbd28", "index": 95 },
-  "steps": [
-    { "answer": { "kind": "strategy_card.resolve", "option": "^acquireATechWithSC_first$" }, "as": "naaz" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_follow_7$" }, "as": "mahact" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^acquireATechWithSC_first$" }, "as": "yssaril" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_no_follow_7$" }, "as": "deepwrought" },
-    { "answer": { "kind": "strategy_card.resolve", "option": "^acquireATechWithSC_first$" }, "as": "deepwrought" }
-  ],
-  "expect": { "invariants": true }
+ "name": "sc-technology",
+ "description": "Technology played by Naaz (pbd28 r1): the holder opens research, Mahact spends a token then researches (follow-then-secondary), Yssaril researches without pressing follow, Deepwrought declines.",
+ "base": {
+  "recording": "pbd28",
+  "index": 95
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^acquireATechWithSC_first$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_follow_7$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^acquireATechWithSC_first$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^acquireATechWithSC_first$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_7$"
+   },
+   "as": "deepwrought"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
 }
