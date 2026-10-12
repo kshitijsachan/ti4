@@ -17,21 +17,21 @@
     },
     {
       "answer": {
-        "kind": "faction.ability",
+        "kind": "/faction.ability|legacy/",
         "option": "^getOtherFactionsEmelpar$"
       },
       "as": "crimson"
     },
     {
       "answer": {
-        "kind": "faction.ability",
+        "kind": "/faction.ability|legacy/",
         "option": "^getEmelparButtons_ralnel$"
       },
       "as": "crimson"
     },
     {
       "answer": {
-        "kind": "faction.ability",
+        "kind": "/faction.ability|legacy/",
         "option": "^emelparReady_planet_ralnel_mez$"
       },
       "as": "crimson"
