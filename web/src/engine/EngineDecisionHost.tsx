@@ -3,6 +3,7 @@ import { Tooltip, UnstyledButton } from "@mantine/core";
 import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEye, IconEyeOff, IconLoader2, IconMap, IconX } from "@tabler/icons-react";
 import cx from "clsx";
 import { useDecisionFocus, useWaitingOnMe } from "@/decisions/model/focus";
+import { useMovementUI } from "@/mapactions/store";
 import { useReserveRect } from "@/state/reservedArea";
 import type { Decision, GameState } from "./contract";
 import { forgetClosedDrafts } from "./draftState";
@@ -75,7 +76,13 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const ordered = useMemo(() => orderDecisions(decisions, answeredAtSeq, hidden, state), [decisions, answeredAtSeq, hidden, state]);
   /* While the draft runs, the draft board (the table's takeover) is where picks are made: no popup on top of it. */
   const drafting = state?.draft?.status === "drafting";
-  const queue = useMemo(() => (drafting ? ordered.queue.filter((d) => !BOARD_KINDS.has(d.kind)) : ordered.queue), [drafting, ordered.queue]);
+  /* While the map answers the move / land step (its own panel on the board), that step is the map's, not the popup's. */
+  const movement = useMovementUI();
+  const mapKind = movement.step === "move" ? "tactical.move" : movement.step === "land" ? "tactical.land" : null;
+  const queue = useMemo(
+    () => ordered.queue.filter((d) => !(drafting && BOARD_KINDS.has(d.kind)) && d.kind !== mapKind),
+    [drafting, ordered.queue, mapKind],
+  );
   const offers = ordered.offers;
 
   const [jumpId, setJumpId] = useState<string | null>(null);
