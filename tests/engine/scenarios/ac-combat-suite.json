@@ -1,6 +1,6 @@
 {
   "name": "ac-combat-suite",
-  "description": "All ac-combat scenarios chained on one base (pbd60 save 122, space combat at 308 mentak vs muaat) so one live run covers them: ac-combat-sabotage-cancel, ac-combat-repairs-upgrade, ac-combat-parley-salvage, ac-combat-lucky-scuttle, ac-combat-crash-landing, ac-combat-bunker, ac-combat-dice-cards, ac-combat-skilled-retreat. Cards are drawn right before each card is played (ActionCardHelper.resolveActionCard refuses a play while the hand is over the limit). Dice cards (EBS, Courageous, Blitz) may show dice diffs.",
+  "description": "All ac-combat scenarios chained on one base (pbd60 save 122, space combat at 308 mentak vs muaat) so one live run covers them: ac-combat-sabotage-cancel, ac-combat-repairs-upgrade, ac-combat-parley-salvage, ac-combat-lucky-scuttle, ac-combat-crash-landing, ac-combat-bunker, ac-combat-dice-cards, ac-combat-skilled-retreat. Cards are drawn right before each card is played (ActionCardHelper.resolveActionCard refuses a play while the hand is over the limit). Dice cards (EBS, Courageous, Blitz) may show dice diffs. Lucky Shot has no target here; the Blitz bombardment roll (dice) lives only in ac-combat-dice-cards.",
   "base": {
     "recording": "pbd60",
     "index": 122
@@ -183,20 +183,6 @@
     },
     {
       "answer": {
-        "kind": "/./",
-        "option": "luckyShotIn_308"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "luckyShotOn_308_"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
         "kind": "action_card.play",
         "value": {
           "actionCard": "scuttle"
@@ -318,13 +304,6 @@
       "as": "mentak"
     },
     {
-      "answer": {
-        "kind": "action_card.sabotage",
-        "option": "^no_sabotage$"
-      },
-      "as": "muaat"
-    },
-    {
       "command": "ac draw_specific_ac",
       "options": {
         "ac_id": "fire_team",
@@ -342,13 +321,6 @@
       "command": "ac draw_specific_ac",
       "options": {
         "ac_id": "courageous",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "blitz",
         "faction_or_color": "mentak"
       }
     },
@@ -404,22 +376,6 @@
       "answer": {
         "kind": "/./",
         "option": "courageousFire_destroyer"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "blitz"
-        }
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.target",
-        "option": "resolveBlitz_308"
       },
       "as": "mentak"
     },
