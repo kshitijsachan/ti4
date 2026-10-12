@@ -61,16 +61,6 @@
       "as": "ralnel"
     },
     {
-      "command": "/explore use explore_card_id:aw1 planet:velnor faction_or_color:ralnel"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "convert_2_comms$"
-      },
-      "as": "ralnel"
-    },
-    {
       "command": "/explore use explore_card_id:ms1 faction_or_color:ralnel"
     },
     {
@@ -79,6 +69,13 @@
         "option": "resolveHarness"
       },
       "as": "ralnel"
+    },
+    {
+      "command": "/explore use explore_card_id:aw1 planet:velnor faction_or_color:ralnel"
+    },
+    {
+      "as": "ralnel",
+      "press": "convert_2_comms"
     },
     {
       "command": "/explore use explore_card_id:cm2 planet:velnor faction_or_color:ralnel"
