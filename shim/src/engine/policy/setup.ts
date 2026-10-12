@@ -5,6 +5,7 @@
  *
  * Returns undefined for kinds it does not own, null for "do not answer" (a person's choice, or not ready yet).
  */
+import { is } from "../ids.js";
 import type { Decision, GameState, Option, SetupPlayer } from "../types.js";
 
 export type SetupChoice = { option: Option<any>; why: string };
@@ -22,7 +23,6 @@ const SETUP_KINDS = new Set<string>([
   "tech.choose_type",
   "setup.deal_secrets",
   "setup.reveal_objectives",
-  "setup.preference",
   "setup.game_settings",
 ]);
 
@@ -35,7 +35,7 @@ export function isTableSetupStep(d: Decision) {
   return d.kind === "setup.deal_secrets" || d.kind === "setup.reveal_objectives";
 }
 
-export function chooseSetup(d: Decision, state: GameState | null, me: string): SetupChoice | null | undefined {
+export function chooseSetup(d: Decision, state: GameState | null, me: string, history: string[] = []): SetupChoice | null | undefined {
   if (!SETUP_KINDS.has(d.kind)) return undefined;
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && o.value);
   if (!live.length || !state) return null;
@@ -60,10 +60,49 @@ export function chooseSetup(d: Decision, state: GameState | null, me: string): S
       if (!state.setup || !live.every((o) => o.value.free)) return null;
       return { option: live[0], why: live[0].value.techType ? "setup: first technology type" : "setup: get a starting technology" };
     }
-    case "setup.preference":
-      return preference(live);
+    case "setup.player":
+      return playerSetup(state, me, live, history);
     default:
-      // draft.milty.queue / draft.milty.info / setup.player / setup.game_settings: people's or the steward's.
+      // draft.milty.queue / draft.milty.info / setup.game_settings: people's or the steward's.
+      return null;
+  }
+}
+
+/**
+ * Manual player setup addressed to us (startPlayerSetup → user → faction → colour → home → speaker): set ourselves
+ * up with official content. Live pbd147: three bots were set up only by the fallback (first option at each step,
+ * "Setup a Player" pressed again on every watchdog pass).
+ */
+function playerSetup(state: GameState, me: string, live: Option<any>[], history: string[]): SetupChoice | null {
+  const step = live[0]?.value?.step as string | undefined;
+  const mine = state.players.find((p) => p.userId === me);
+  const taken = new Set(state.players.filter((p) => p.userId !== me).flatMap((p) => [p.faction, p.color]).filter(Boolean) as string[]);
+  const choices = live.filter((o) => o.value.step === step && !o.value.page);
+  switch (step) {
+    case "start":
+      // Once per prompt (the message stays after it is pressed), and never once we are seated.
+      if (mine?.faction || history.length) return null;
+      return choices[0] ? { option: choices[0], why: "setup: set ourselves up" } : null;
+    case "user": {
+      const o = choices.find((x) => x.value.userId === me);
+      return o ? { option: o, why: "setup: the player to set up is us" } : null;
+    }
+    case "faction": {
+      if (choices.some((x) => x.value.userId && x.value.userId !== me)) return null;
+      const o = choices.find((x) => is.faction(x.value.faction) && !taken.has(x.value.faction));
+      return o ? { option: o, why: `setup: faction ${o.value.faction} (official, free)` } : null;
+    }
+    case "color": {
+      const o = choices.find((x) => x.value.color && !taken.has(x.value.color)) ?? choices[0];
+      return o ? { option: o, why: `setup: colour ${o.value.color ?? "default"}` } : null;
+    }
+    case "home":
+      return choices[0] ? { option: choices[0], why: `setup: home position ${choices[0].value.position}` } : null;
+    case "speaker": {
+      const o = choices.find((x) => x.value.speaker === false) ?? choices[0];
+      return o ? { option: o, why: `setup: ${o.value.speaker ? "take" : "do not take"} the speaker token` } : null;
+    }
+    default:
       return null;
   }
 }
@@ -103,9 +142,3 @@ export function othersStillSettingUp(state: GameState, me: string): SetupPlayer[
   );
 }
 
-/** Same answers as the legacy rule table: let the bot auto-pass secret scoring and Sabotage; auto-react on agendas. */
-function preference(live: Option<any>[]): SetupChoice | null {
-  const by = (pref: string, choice: string) => live.find((o) => o.value.preference === pref && o.value.choice === choice);
-  const pick = by("sandbag", "bot") ?? by("auto_pass_sabotage", "1") ?? by("agenda", "true");
-  return pick ? { option: pick, why: `preferences: ${pick.value.preference} = ${pick.value.choice}` } : null;
-}

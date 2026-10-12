@@ -1,6 +1,7 @@
 import type { DecisionOf, GameState } from "../../contract";
 import type { EngineRendererProps } from "../../registry";
 import { AnswerButton, ExtraOptions, Head } from "../cards/parts";
+import { getTechData } from "@/entities/lookup/tech";
 import { planetName, playerLabel } from "../cards/labels";
 import classes from "../cards/Cards.module.css";
 
@@ -36,11 +37,22 @@ function componentName(v: Value): string {
 function optionLabel(state: GameState | null, v: Value): string {
   const parts: string[] = [];
   if (v.action === "skip") parts.push("Finish");
+  if (v.reset) return "Start over";
+  if (v.hits) parts.push(`${v.hits} hit${v.hits > 1 ? "s" : ""}`);
   if (v.unit) parts.push(`${v.count && v.count > 1 ? `${v.count} ` : ""}${v.damaged ? "damaged " : ""}${UNIT[v.unit] ?? v.unit}`);
+  if (v.techOut) parts.push(`swap out ${getTechData(v.techOut)?.name ?? v.techOut}`);
+  if (v.tech) parts.push(`${v.techOut ? "for " : ""}${getTechData(v.tech)?.name ?? v.tech}`);
+  if (v.what) parts.push({ ac: "look at action cards", pn: "look at promissory notes", so: "look at secret objectives", tg: "take 1 trade good", commodity: "take 1 commodity" }[v.what]);
+  if (v.who) parts.push(v.who === "self" ? "look and choose yourself" : "Yssaril chooses for you");
+  if (v.cardName ?? v.actionCard) parts.push(String(v.cardName ?? v.actionCard));
   if (v.target) parts.push(playerLabel(state, v.target));
   if (v.planet) parts.push(planetName(v.planet));
   else if (v.holder === "space") parts.push("space");
   if (v.tile) parts.push(`System ${v.tile}`);
+  const extra = v as Value & { wormhole?: string; pn?: string };
+  if (extra.wormhole) parts.push(`${words(extra.wormhole)} wormhole`);
+  if (extra.pn) parts.push(`note ${extra.pn}`);
+  if (v.from) parts.push(`from ${planetName(v.from)}`);
   if (v.strategyCard != null) parts.push(`take strategy card ${v.strategyCard}`);
   if (v.amount) parts.push(`+${v.amount}`);
   if (v.cost) parts.push(`costs ${v.cost}`);

@@ -6,7 +6,8 @@
 
 import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
-import type { CombatDecision, CombatState } from "./kinds/combat.js";
+import type { CombatDecision, CombatState, UnitsModify, UnitsRemove } from "./kinds/combat.js";
+import type { ComponentsDecision } from "./kinds/components.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { FactionDecision } from "./kinds/faction.js";
 import type { InputFormDecision } from "./kinds/input.js";
@@ -17,9 +18,11 @@ import type { StrategyDecision } from "./kinds/strategy.js";
 import type { TacticalDecision } from "./kinds/tactical.js";
 import type { ThundersEdgeDecision, ThundersEdgeState } from "./kinds/te.js";
 import type { TradeForceReplenish, TradeOffer, TradeOfferSent, TradeState } from "./kinds/trade.js";
+import type { UiDecision } from "./kinds/ui.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
+export type * from "./kinds/components.js";
 export type * from "./kinds/explore.js";
 export type * from "./kinds/faction.js";
 export type * from "./kinds/input.js";
@@ -426,9 +429,13 @@ export type Decision =
   | TradeOfferSent
   | TradeForceReplenish
   | CombatDecision
+  | UnitsRemove
+  | UnitsModify
   | ProductionDecision
   | InputFormDecision
   | FactionDecision
+  | UiDecision
+  | ComponentsDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -503,8 +510,18 @@ export interface DecisionsSnapshot {
   decisions: Decision[];
 }
 
+/** A non-decision affordance (ui.undo_affordance, ui.optional, ui.info_menu): never pending, bots ignore it. */
+export function isAffordance(d: Pick<Decision, "kind">): boolean {
+  return AFFORDANCE_KINDS.has(d.kind);
+}
+
+/** Kinds that are affordances, not questions (Java UiAffordanceKind, UiOptionalKind, InfoMenuSplit). */
+export const AFFORDANCE_KINDS: ReadonlySet<string> = new Set(["ui.undo_affordance", "ui.optional", "ui.info_menu"]);
+
 /** Is this decision waiting on `userId`? (player scope: target; table scope: eligible and not yet responded.) */
 export function awaits(d: Decision, userId: UserId): boolean {
+  // Undo / optional / info-menu affordances (ui.*): nobody is asked anything; answerable on click, never awaited.
+  if (isAffordance(d)) return false;
   if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
   if (d.scope === "player") return d.target?.userId === userId;
   // Mixed-owner menu: only the options owned by this user (or by nobody) are theirs.
@@ -514,13 +531,40 @@ export function awaits(d: Decision, userId: UserId): boolean {
 
 /**
  * The player may answer although the window does not await them (KindSpec.answersOutsideWindow): the holder of a
- * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only).
+ * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only);
+ * the player who played an action card may press "Pause Timer" on its sabotage window.
  */
 export function answersOutsideWindow(d: Decision, userId: UserId, state: GameState | null): boolean {
-  if (d.kind !== "strategy_card.resolve" || !d.window) return false;
-  const holder = d.window.subject?.holder;
+  // Status scoring / homework: a player who declared or is ready may still press again, like the buttons.
+  if ((d.kind === "status.score" || d.kind === "status.homework") && d.window) return d.window.eligible.includes(userId);
+  if (!d.window) return false;
   const me = state?.players.find((p) => p.userId === userId);
+  if (d.kind === "action_card.sabotage") return !!me?.faction && d.window.subject?.faction === me.faction;
+  if (d.kind !== "strategy_card.resolve") return false;
+  const holder = d.window.subject?.holder;
   return !!holder && !!me?.faction && me.faction === holder;
+}
+
+/**
+ * A player-scoped decision another seat may still answer (KindSpec.othersMayAnswer): status.reveal_objective, agenda.resolve / agenda.next
+ * wait on the speaker, but the original button is pressable by anyone at the table.
+ */
+export function othersMayAnswer(d: Decision): boolean {
+  if (d.kind === "status.reveal_objective") return true;
+  return (d.kind === "agenda.resolve" || d.kind === "agenda.next") && d.target?.resolvedBy !== "owner_prefix";
+}
+
+/**
+ * The player already followed this played strategy card (spent the token): the window counts them as responded, yet
+ * they may still press the card's secondary (the original code allows "Spend A Strategy Token", then "Draw 2 Action
+ * Cards" / "Ready Planets" / "Research"; the engine's KindSpec.answersOutsideWindow agrees). Not "waiting on me".
+ */
+export function followedPlayedCard(d: Decision, userId: UserId, state: GameState | null): boolean {
+  if (d.kind !== "strategy_card.resolve" || !d.window) return false;
+  const sc = d.window.subject?.strategyCard;
+  const me = state?.players.find((p) => p.userId === userId);
+  const card = state?.strategyCards?.find((c) => c.number === sc);
+  return !!me?.faction && !!card?.reactions?.some((r) => r.faction === me.faction && r.status === "followed");
 }
 
 /** The options of `d` this user may press (per-option owner on mixed-owner menus; all options otherwise). */

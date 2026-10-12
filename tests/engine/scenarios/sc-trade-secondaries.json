@@ -1,0 +1,48 @@
+{
+ "name": "sc-trade-secondaries",
+ "description": "Trade played by Argent (pbd118 r1, TE): Firmament replenishes + washes, Ghost spends a token (sc_trade_follow), Empyrean replenishes then presses Not Following (legacy no-op; engine refuses: already responded). (Holder pressing Replenish: see pbd118 step 150 replay \u2014 engine refuses, legacy only re-logs the holder in followedSC5_1.)",
+ "base": {
+  "recording": "pbd118",
+  "index": 147
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_refresh_and_wash$"
+   },
+   "as": "firmament"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_trade_follow$"
+   },
+   "as": "ghost"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_refresh$"
+   },
+   "as": "empyrean"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_5$"
+   },
+   "as": "empyrean",
+   "refused": true
+  }
+ ],
+ "expect": {
+  "invariants": true,
+  "state": [
+   {
+    "path": "players[faction=ghost].commandTokens.strategy",
+    "eq": 0
+   }
+  ]
+ }
+}

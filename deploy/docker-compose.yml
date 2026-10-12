@@ -86,7 +86,7 @@ services:
       TI4_ENGINE: ${TI4_ENGINE:-on}
       # Engine answers run as engine-native interactions where proven safe; off = always the simulated click.
       TI4_ENGINE_NATIVE: ${TI4_ENGINE_NATIVE:-on}
-      # Bot token / user id / guild id are read from the shim's state.json by the entrypoint.
+      # Bot token / user id / guild id are read from the shim's store/global.json (state.json before it) by the entrypoint.
       SHIM_STATE_FILE: /shim-data/state.json
       DB_PATH: /opt/STORAGE
       RESOURCE_PATH: /opt/resources

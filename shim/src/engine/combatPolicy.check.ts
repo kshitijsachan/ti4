@@ -2,7 +2,8 @@
  * Self-check of the combat autopilot policy on synthetic decisions (run: npx tsx src/engine/combatPolicy.check.ts).
  * Exits non-zero on a failed expectation.
  */
-import { chooseCombat } from "./combatPolicy.js";
+import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
+import type { UnitsRemove } from "./kinds/combat.js";
 import type { CombatSide, CombatState } from "./kinds/combat.js";
 import type { Decision, FactionId, GameState } from "./types.js";
 
@@ -100,5 +101,56 @@ const afbDone = state({
   rolls: [{ at: 2000, faction: "letnev", opponent: "sol", tile: "201", holder: "space", rollType: "afb", round: null, hits: 0, dice: [] }],
 });
 expect("afb not twice", pick(afb, afbDone), null);
+
+// Unit-removal list after a fleet pool / capacity reminder (live pbd114, Keleres in 307: 2 cv + ca + fs, 2 ff, 2 gf).
+const removal = {
+  id: "d9",
+  kind: "combat.assign_units",
+  scope: "player",
+  target: { userId: ME, faction: "letnev", color: "red", resolvedBy: "owner_prefix" },
+  window: null,
+  progress: null,
+  createdAt: 0,
+  options: [
+    opt("FFCC_letnev_assignHits_307_1_ca_red", { action: "destroy", tile: "307", count: 1, unit: "ca", holder: "space", damaged: false, state: "none", assignType: "remove" }),
+    opt("deleteButtons", { action: "done", tile: null, assignType: "remove" }),
+  ],
+} as unknown as Decision;
+const board = (fleet: number, space: [string, number][]) =>
+  ({
+    players: [{ userId: ME, faction: "letnev", color: "red", self: true, commandTokens: { tactic: 3, fleet, strategy: 2 } }],
+    tiles: [
+      { position: "307", tileId: "x", holders: [{ name: "space", units: space.map(([unit, count]) => ({ owner: "letnev", color: "red", unit, count })), tokens: [], control: [] }, { name: "valkk", units: [{ owner: "letnev", color: "red", unit: "sd", count: 1 }], tokens: [], control: [] }] },
+    ],
+  }) as unknown as GameState;
+const pbd114: [string, number][] = [["cv", 2], ["ca", 1], ["fs", 1], ["ff", 2], ["gf", 2]];
+expect("removal list, over the fleet pool: left to the unit-limit desk", pick(removal, board(3, pbd114)), null);
+expect("removal list, within limits: done", pick(removal, board(4, pbd114)), "deleteButtons");
+expect("removal list, cargo over the least capacity: left to the desk", pick(removal, board(4, [["ca", 1], ["gf", 3]])), null);
+expect("removal list of another player: never", chooseCombat({ ...removal, target: { userId: OPP } } as unknown as Decision, board(4, pbd114), ME), null);
+
+// pbd114 loop (00:55 merge): pickUnit's "nothing owed: Done" closed the over-limit list before the desk removed a unit,
+// and units.remove dismissed the reminder itself. Neither may happen while the board shows us over the limits.
+const reminder = {
+  id: "d10",
+  kind: "units.remove",
+  scope: "player",
+  target: { userId: ME, faction: "letnev", color: "red", resolvedBy: "owner_prefix" },
+  window: null,
+  progress: null,
+  createdAt: 0,
+  options: [
+    opt("getDamageButtons_307_remove", { action: "open", tile: "307", assignType: "remove" }),
+    opt("deleteButtons", { action: "done", tile: null, assignType: null }),
+  ],
+} as unknown as UnitsRemove;
+const remind = (s: GameState, history: string[] = []) => chooseUnitsRemove(reminder, ME, history, [], s)?.option.id ?? null;
+expect("pbd114: over-limit list is never closed by pickUnit (no hits owed)", chooseCombat(removal, board(3, pbd114), ME), null);
+expect("pbd114: over-limit reminder is not dismissed (the desk removes)", remind(board(3, pbd114)), null);
+expect("pbd114: nor opened again after a press", remind(board(3, pbd114), ["getDamageButtons_307_remove"]), null);
+expect("reminder within limits: dismissed", remind(board(4, pbd114)), "deleteButtons");
+expect("reminder without a board: left alone", chooseUnitsRemove(reminder, ME, [], [], null), null);
+const hitsMenu = { ...removal, progress: { flow: "assign", step: "assign", accumulated: {}, required: { hits: 1 }, canCommit: false } } as unknown as Decision;
+expect("hits owed: pickUnit still assigns", pick(hitsMenu, board(3, pbd114)), "FFCC_letnev_assignHits_307_1_ca_red");
 
 process.exit(failed ? 1 : 0);

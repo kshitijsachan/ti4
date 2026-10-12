@@ -8,8 +8,8 @@
  *
  * Env: SHIM (default http://127.0.0.1:8090), BOT_API (default http://127.0.0.1:8081), SHIM_DATA for the admin key.
  */
-import { readFileSync } from "node:fs";
 import WebSocket from "ws";
+import { readShimState } from "./read-state.mjs";
 import { Autopilot } from "../src/autopilot.js";
 import type { Json, StoredMessage } from "../src/store.js";
 
@@ -18,7 +18,7 @@ const args = Object.fromEntries(
 );
 const SHIM = process.env.SHIM ?? "http://127.0.0.1:8090";
 const BOT_API = process.env.BOT_API ?? "http://127.0.0.1:8081";
-const key = JSON.parse(readFileSync(`${process.env.SHIM_DATA ?? "/home/user/run/shim-data"}/state.json`, "utf8")).admin_token as string;
+const key = readShimState(process.env.SHIM_DATA ?? "/home/user/run/shim-data").admin_token as string;
 
 class RemoteStore {
   state: Json = { channels: {}, users: {}, seats: {}, thread_members: {}, messages: {} };

@@ -288,18 +288,34 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 
 | Area | Kinds | GameState section |
 |---|---|---|
-| G1 setup / draft | `draft.milty.{pick,queue,info}`, `setup.{player,keleres_flavor,keleres_tech,deal_secrets,reveal_objectives,preference,game_settings}`, `tech.choose_type`, `tech.gain`, `secret_objective.discard` | `draft`, `setup` |
-| G2 strategy cards | `strategy_card.{pick,queue_pick,resolve (window),strategic_action,diplomacy_system,politics_speaker,politics_agenda,construction_place}`, `planet.ready` | `strategyCards[].reactions` |
+| G1 setup / draft | `draft.milty.{pick,queue,info}`, `setup.{player,keleres_flavor,keleres_tech,deal_secrets,reveal_objectives,game_settings}`, `tech.choose_type`, `tech.gain`, `secret_objective.discard` | `draft`, `setup` |
+| G2 strategy cards | `strategy_card.{pick,queue_pick,resolve (window),strategic_action,diplomacy_system,politics_speaker,politics_agenda,construction_place,construction_build}`, `planet.ready` | `strategyCards[].reactions` |
 | G3 tactical | `turn.action`, `tactical.{activate,move,land,rift,conclude}`; direct actions `move`, `land` | — |
-| G4 combat | `combat.round` (window `combat_roll`), `combat.hits`, `combat.assign_units` (progress), `combat.retreat`; direct action `combat-plan` {plan: [{holder, unit, damaged, action: sustain/destroy, count}]} | `combat` |
-| G5 production / payment | `payment.spend` (payload {planets, tg, commodities, sarween}), `production.produce` (payload {units}) | — |
+| G4 combat | `combat.round` (window `combat_roll`), `combat.hits`, `combat.assign_units` (progress), `combat.retreat`, `combat.bombard` (progress: assigned bombardment dice), `units.remove` (stand-alone getDamageButtons_ openers), `units.modify` (Modify Units menu: genericModify*/modifyUnitsAllTiles/genericBuild_), `combat.automate` (automateGroundCombat_ vote / confirm), `combat.modifier` (applytempcombatmod__ on its own message; on the controls it is a combat.round `temp_mod` option); direct action `combat-plan` {plan: [{holder, unit, damaged, action: sustain/destroy, count}]} | `combat` |
+| G5 production / payment | `payment.spend` (payload {planets, tg, commodities, sarween}), `production.produce` (payload {units}), `production.place` (placeOneNDone_ free placements; the Mitosis choice is c1 `faction.ability`), `commodities.gain` (gain/convert commodities) | — |
 | G6 agenda | `agenda.{when,after,preassign,shenanigans,vote,vote_step,tiebreak,resolve,rider,next}` (vote: payload) | `agenda` |
 | G7 status | `status.{score,score_secret,reveal_objective,homework,advance,imperial}`, `command_tokens.adjust` (payload pools) | `status` |
-| G8 cards | `action_card.{play,sabotage (window),discard,draw,resolve,target}`, `promissory_note.play` | — |
+| G8 + C7 cards | `action_card.{play,sabotage (window; card player may Pause Timer via answersOutsideWindow),discard,draw,resolve (names the card),target,step (every other follow-up step, typed id tokens + card),when_after (window: non-queued agenda when/after)}`, `promissory_note.{play,resolve}` | — |
 | G9 exploration | `explore.{planet,card_pick,frontier,outcome}`, `relic.{draw,fragments}` | `exploration` |
 | G10 Thunder's Edge | `te.{fracture.roll,fracture.ingress,galvanize,expedition,thunders_edge.place,visionaria.respond}` | `thundersEdge` |
 | G11 trade | `trade.{offer,offer_sent,force_replenish}`; game action `trade.propose` | `trade` (viewer only) |
 | INFRA-3 | `input.form` (forms opened by `needsInput` buttons) | — |
+| c12 perpetual | `ui.{undo_affordance,optional,info_menu}` (affordances: **not** decisions — `awaits()` false, never "mine", bots ignore; still answerable on click), `player.preference` (bots answer defaults; web background), `choose.select` (select-only fallback, answer via `inputs`) | — |
+
+**Affordances and obsolete prompts (c12).** A message made only of undo buttons (`drawSpecificSO_`, `removePreset_`,
+`retrieveAgenda_`, `eraseMyVote`, …), optional actions (round summary, objective pre-score queue, agenda help menu,
+dismiss-only) or an info menu carrying action shortcuts is typed `ui.*` with value `{action, undoes, ref, shortcut?}`:
+it is open (clickable, answerable through the engine) but no one is awaited (`isAffordance`, `AFFORDANCE_KINDS`).
+A prompt whose kind is `obsolete()` at capture is closed (reason `obsolete`, metric `capture.obsolete`) instead of
+reopening as legacy, the same as dynamic kinds that go obsolete later.
+| C6 components | `component.action` (component action menu), `relic.use`, generic single-choice `choose.{planet,system,player,unit,card,confirm}` (agent exhaust steps are c1's `leader.use`; commodity gain/convert is c8's `commodities.gain`) (rule tables in bot `Choose*Kind.RULES`: add a regex with named groups to type a one-step prompt; policy `policy/components.ts` + renderer `renderers/components` handle it), `tech.step` (generic technologies' follow-up steps: exhaust offers, Bio-Stims, Transit Diodes, Sling Relay, Self-Assembly Routines, Integrated Economy, Magen / Dacxive offers + ground hit target, Psychoarchaeology, "Get a Technology", Entropic Scar; rule table in bot `TechStepKind.RULES`) | — |
+
+**Official-only web games.** The self-hosted bot refuses homebrew / alternate-mode controls (Supported Homebrew,
+Galactic Events / Dane modes, Twilight's Fall, Franken, TK Nova / Twilight DS / O++ setups, the new draft system (startDraftSystem_*: Nucleus, TF presets; jwds_ drafts never start), homebrew sources and Alliance in
+the Milty settings): `ti4.selfhost.engine.WebContent`, switch `TI4_OFFICIAL_ONLY` (default on when self-hosted; `off` disables).
+`WebContent.officialOnly(game)` / `violations(game)` is the invariant (checked on every state change: error log + metric
+`invariant.homebrew`; tests/engine `content.no-homebrew` on save files). Homebrew / DS / TF / Monuments / FoW handlers are
+out of scope for typing and for the legacy deletion.
 
 All GameState area sections are optional in TS (`?:`) so an older engine without them still type-checks.
 

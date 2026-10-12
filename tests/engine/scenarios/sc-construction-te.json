@@ -1,0 +1,48 @@
+{
+ "name": "sc-construction-te",
+ "description": "Thunder's Edge Construction played by Naalu (pbd105 r1): the holder uses Production (part 1 variant) then places a PDS; L1Z1X spends a token then places a space dock (follow-then-secondary); Ghost declines.",
+ "base": {
+  "recording": "pbd105",
+  "index": 152
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^constructionPrimary_produce$"
+   },
+   "as": "naalu"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^construction_pds$"
+   },
+   "as": "naalu"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_follow_4$"
+   },
+   "as": "l1z1x"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^construction_spacedock$"
+   },
+   "as": "l1z1x"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_4$"
+   },
+   "as": "ghost"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

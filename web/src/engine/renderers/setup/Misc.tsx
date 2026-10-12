@@ -66,25 +66,7 @@ export const PlayerSetupRenderer: Renderer<"setup.player"> = ({ decision, answer
   );
 };
 
-const PREFERENCE_TITLE: Record<string, string> = {
-  survey: "Table survey",
-  sandbag: "Secret objective scoring",
-  auto_pass_sabotage: "Auto-pass on Sabotage (hours)",
-  agenda: "Auto-react when you have no whens or afters",
-  distance: "Order systems by",
-  pillage_own_transactions: "Pillage on your own transactions",
-};
-
-/** Preference questions; one title per preference, the engine's own answer labels. */
-export const PreferenceRenderer: Renderer<"setup.preference"> = ({ decision, answer }) => {
-  const pref = decision.options.find((o) => o.value)?.value?.preference ?? "";
-  return (
-    <div className={classes.stack}>
-      <p className={classes.title}>{PREFERENCE_TITLE[pref] ?? "Preference"}</p>
-      <Options options={decision.options} answer={answer} />
-    </div>
-  );
-};
+// Preference questions: player.preference (renderers/ui).
 
 const SETTING_TITLE: Record<string, string> = {
   expansion: "Which expansion is this game using?",
@@ -97,10 +79,13 @@ const SETTING_TITLE: Record<string, string> = {
 /** Game creation prompts (expansion, modes, draft settings): the engine's controls, grouped under one title. */
 export const GameSettingsRenderer: Renderer<"setup.game_settings"> = ({ decision, answer }) => {
   const setting = decision.options.find((o) => o.value)?.value?.setting ?? "";
+  // Official-only server: the engine leaves homebrew / alternate-mode controls untyped (value null) and refuses
+  // them, so only typed options (plus "Done") are offered.
+  const options = decision.options.filter((o) => o.value || (o.handler ?? "").startsWith("deleteButtons"));
   return (
     <div className={classes.stack}>
       <p className={classes.title}>{SETTING_TITLE[setting] ?? "Game settings"}</p>
-      <Options options={decision.options} answer={answer} />
+      <Options options={options} answer={answer} />
     </div>
   );
 };

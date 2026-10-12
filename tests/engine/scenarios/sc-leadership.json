@@ -1,0 +1,49 @@
+{
+ "name": "sc-leadership",
+ "description": "Leadership played by Mahact (pbd28 r1, TE): Yssaril and the holder open the influence-for-tokens step, Naaz declines, Deepwrought declines then presses Not Following again (legacy no-op; engine refuses: already responded).",
+ "base": {
+  "recording": "pbd28",
+  "index": 47
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "leadershipGenerateCCButtons$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "leadershipGenerateCCButtons$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_1$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_1$"
+   },
+   "as": "deepwrought"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_1$"
+   },
+   "as": "deepwrought",
+   "refused": true
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

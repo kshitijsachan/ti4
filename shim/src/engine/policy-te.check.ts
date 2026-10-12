@@ -1,6 +1,7 @@
 /** Sanity checks for the Thunder's Edge policy: `npx tsx src/engine/policy-te.check.ts` (exits 1 on failure). */
 import assert from "node:assert/strict";
 import { chooseTyped } from "./autopilot.js";
+import { fallbackDue, isBlocking } from "./policy/fallback.js";
 import type { Decision, GameState, Option } from "./types.js";
 
 const ME = "u1";
@@ -98,5 +99,54 @@ const swap = base("secret_objective.discard", [opt("discardSecret_12redraw", { h
   target: { userId: ME, faction: "crimson", color: "red", resolvedBy: "cards_thread" },
 });
 assert.equal(chooseTyped(swap, { ...state, round: 3 } as GameState, ME)?.option.id, "discardSecret_40redraw");
+
+// c5 table kinds. Deorbit Barrage: hit the points leader, then the most dice.
+const vpState = {
+  ...state,
+  players: [
+    { userId: ME, faction: "crimson", tg: 4, planets: [], techs: [], victoryPoints: 3 },
+    { userId: "u2", faction: "hacan", tg: 0, planets: [], techs: [], victoryPoints: 5 },
+    { userId: "u3", faction: "sol", tg: 0, planets: [], techs: [], victoryPoints: 2 },
+  ],
+} as unknown as GameState;
+const bt = (step: string, fields: Record<string, unknown>) => ({ breakthrough: "saarbt", faction: "saar", step, action: "target", optional: false, ...fields });
+const deorbit = base("te.breakthrough", [opt("deorbitBarrageTarget_sol", bt("deorbitBarrageTarget", { target: "sol" })), opt("deorbitBarrageTarget_hacan", bt("deorbitBarrageTarget", { target: "hacan" }))], {
+  target: { userId: ME, faction: "crimson", color: "red", resolvedBy: "faction_component" },
+});
+assert.equal(chooseTyped(deorbit, vpState, ME)?.option.id, "deorbitBarrageTarget_hacan");
+const dice = base("te.breakthrough", [opt("deorbitBarrageResource_mr_1", bt("deorbitBarrageResource", { planet: "mr", amount: 1 })), opt("deorbitBarrageResource_mr_3", bt("deorbitBarrageResource", { planet: "mr", amount: 3 }))]);
+assert.equal(chooseTyped(dice, vpState, ME)?.option.id, "deorbitBarrageResource_mr_3");
+// Optional breakthrough offer with a Decline: declined. Another faction's locked button: never.
+const offer = base("te.breakthrough", [opt("FFCC_crimson_useTheIcon", { breakthrough: "bastionbt", faction: "bastion", step: "useTheIcon", action: "use", optional: true }), opt("FFCC_crimson_deleteButtons", null)]);
+assert.equal(chooseTyped(offer, vpState, ME)?.option.id, "FFCC_crimson_deleteButtons");
+// Breach: Crimson keeps its breach; the others remove it.
+const breach = (faction: string) =>
+  base("te.breach", [opt(`FFCC_${faction}_removeBreach_305`, { source: "incursion", faction: "crimson", step: "removeBreach", action: "target", optional: true, tile: "305" }), opt(`FFCC_${faction}_deleteButtons`, null)], {
+    target: { userId: ME, faction, color: "red", resolvedBy: "owner_prefix" },
+  });
+assert.equal(chooseTyped(breach("crimson"), vpState, ME)?.option.id, "FFCC_crimson_deleteButtons");
+const hacanState = { ...vpState, players: [{ ...vpState.players[0], faction: "hacan" }] } as unknown as GameState;
+assert.equal(chooseTyped(breach("hacan"), hacanState, ME)?.option.id, "FFCC_hacan_removeBreach_305");
+// Plot panel: background, never pressed; the faction picker: the points leader.
+const plotStep = (step: string, extra: Record<string, unknown>) => ({ ability: "plotsplots", faction: "firmament", step, action: "use", optional: true, ...extra });
+const panel = base("te.plot", [opt("addFactionTokenToPlot_assail", plotStep("addFactionTokenToPlot", { plot: "assail", panel: true })), opt("scoreOtherPlayersSecrets", plotStep("scoreOtherPlayersSecrets", { panel: true }))], {
+  target: { userId: ME, faction: "crimson", color: "red", resolvedBy: "cards_thread" },
+});
+assert.equal(chooseTyped(panel, vpState, ME), null);
+const picker = base("te.plot", [opt("addFactionTokenToPlot_assail_sol", plotStep("addFactionTokenToPlot", { plot: "assail", target: "sol", panel: false })), opt("addFactionTokenToPlot_assail_hacan", plotStep("addFactionTokenToPlot", { plot: "assail", target: "hacan", panel: false }))], {
+  target: { userId: ME, faction: "crimson", color: "red", resolvedBy: "cards_thread" },
+});
+assert.equal(chooseTyped(picker, vpState, ME)?.option.id, "addFactionTokenToPlot_assail_hacan");
+// pbd161: the shim watchdog forced the fallback on the background panel every minute ("Seethe" pressed 4x, a puppet
+// added each time). The panel is not blocking: no watchdog clock, no forced fallback.
+assert.equal(isBlocking(panel), false);
+assert.equal(fallbackDue(panel, ME, { force: true, waitedMs: 600_000 }), false);
+assert.equal(chooseTyped(panel, vpState, ME, { history: [], open: [], all: [], force: true, waitedMs: 600_000 }), null);
+assert.equal(isBlocking(picker), true);
+// Only ourselves left on the picker: decline, never puppet ourselves.
+const selfOnly = base("te.plot", [opt("addFactionTokenToPlot_seethe_crimson", plotStep("addFactionTokenToPlot", { plot: "seethe", target: "crimson", panel: false })), opt("deleteButtons", null)], {
+  target: { userId: ME, faction: "crimson", color: "red", resolvedBy: "cards_thread" },
+});
+assert.equal(chooseTyped(selfOnly, vpState, ME)?.option.id, "deleteButtons");
 
 console.log("policy-te: all checks passed");

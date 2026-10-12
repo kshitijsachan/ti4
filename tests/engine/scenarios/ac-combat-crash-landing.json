@@ -1,0 +1,15 @@
+{
+  "name": "ac-combat-crash-landing",
+  "description": "Thunder's Edge Crash Landing at 308 (pbd60 save 122): muaat infantry in space; muaat plays crashlanding (FFCC_muaat_crashLandingStart) and crashes an infantry onto Andeara (crashLandOn_andeara_infantry).",
+  "base": { "recording": "pbd60", "index": 122 },
+  "setup": [
+    "/add_units tile_name:308 unit_names:\"2 infantry\" faction_or_color:muaat",
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "crashlanding", "faction_or_color": "muaat" } }
+  ],
+  "steps": [
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "crashlanding" } }, "as": "muaat" },
+    { "answer": { "kind": "/./", "option": "crashLandingStart" }, "as": "muaat" },
+    { "answer": { "kind": "/./", "option": "crashLandOn_andeara_infantry" }, "as": "muaat" }
+  ],
+  "expect": { "invariants": true }
+}

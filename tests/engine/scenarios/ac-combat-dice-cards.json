@@ -1,0 +1,23 @@
+{
+  "name": "ac-combat-dice-cards",
+  "description": "pbd60 save 122 (combat at 308): Fire Team (resolveFireTeam, no stored rolls -> message only), Experimental Battlestation (resolveEBSStep1_308 -> space cannon roll), Courageous to the End (courageousStarter -> courageousFire_destroyer_*), Blitz (resolveBlitz_308). EBS/Courageous/Blitz roll dice: a dice diff there is expected; the point is that each step is typed/accepted and the non-dice state matches.",
+  "base": { "recording": "pbd60", "index": 122 },
+  "setup": [
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "fire_team", "faction_or_color": "muaat" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "experimental", "faction_or_color": "muaat" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "courageous", "faction_or_color": "mentak" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "blitz", "faction_or_color": "mentak" } }
+  ],
+  "steps": [
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "fire_team" } }, "as": "muaat" },
+    { "answer": { "kind": "action_card.resolve", "option": "resolveFireTeam" }, "as": "muaat" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "experimental" } }, "as": "muaat" },
+    { "answer": { "kind": "action_card.target", "option": "resolveEBSStep1_308" }, "as": "muaat" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "courageous" } }, "as": "mentak" },
+    { "answer": { "kind": "action_card.resolve", "option": "courageousStarter" }, "as": "mentak" },
+    { "answer": { "kind": "/./", "option": "courageousFire_destroyer" }, "as": "mentak" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "blitz" } }, "as": "mentak" },
+    { "answer": { "kind": "action_card.target", "option": "resolveBlitz_308" }, "as": "mentak" }
+  ],
+  "expect": { "invariants": true }
+}
