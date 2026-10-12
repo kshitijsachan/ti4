@@ -266,7 +266,7 @@ function EndedGames({ meId, finished }: { meId: string; finished: GameChannels[]
         <ul className={classes.endedList}>
           {rows.map(({ g, data }) => {
             const winner = data?.gameState?.winner;
-            const winnerName = winner ? (data?.playerData.find((p) => p.discordId === winner || p.faction === winner)?.userName ?? winner) : null;
+            const winnerName = winner ? (data?.playerData.find((p) => p.discordId === winner || p.faction === winner || p.color === winner)?.userName ?? winner) : null;
             return (
               <li key={g.name} className={classes.endedRow}>
                 <Link to={`/game/${g.name}`} className={classes.endedName}>
