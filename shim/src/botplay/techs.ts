@@ -3,6 +3,7 @@
  * data/technologies/pok.json. The bot does not check prerequisites when a player picks a technology, so the planner
  * only researches what this table says is legal. Faction technologies are left alone (their colours are unknown here).
  */
+import type { TechId } from "../engine/ids.js";
 
 export type TechInfo = { alias: string; color: "B" | "G" | "Y" | "R" | "U"; reqs: string; name: string };
 
@@ -46,7 +47,8 @@ const LIST: TechInfo[] = [
 export const TECHS = new Map(LIST.map((t) => [t.alias, t]));
 
 /** Research order of preference for a simple expanding player (economy and movement first). */
-export const TECH_PREFERENCE = ["gd", "st", "nm", "amd", "sdn", "ps", "aida", "dxa", "cv2", "pa", "sar", "fl", "hm", "dd2", "gls", "pi", "ff2", "inf2", "md_base", "md", "bs", "det", "sr", "da", "cr2", "dn2", "td", "lwd", "x89_base", "asc", "ie", "sd2", "pds2", "ws"];
+// `satisfies TechId[]`: every entry must be a real technology id (ids.ts).
+export const TECH_PREFERENCE: readonly string[] = ["gd", "st", "nm", "amd", "sdn", "ps", "aida", "dxa", "cv2", "pa", "sar", "fl", "hm", "dd2", "gls", "pi", "ff2", "inf2", "md_base", "md", "bs", "det", "sr", "da", "cr2", "dn2", "td", "lwd", "x89_base", "asc", "ie", "sd2", "pds2", "ws"] satisfies TechId[];
 
 /** Whether `alias` has its prerequisites met by `owned` (technology skips on planets are not counted). */
 export function researchable(alias: string, owned: string[]): boolean {

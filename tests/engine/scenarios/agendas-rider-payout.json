@@ -31,6 +31,12 @@
     }
   ],
   "expect": {
-    "invariants": true
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.law",
+        "match": "minister_war"
+      }
+    ]
   }
 }

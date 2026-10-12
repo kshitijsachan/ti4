@@ -9,8 +9,9 @@
 // messages with live components that have no decision ("missed"). Server-side counters/latency come from
 // GET /api/public/selfhost/engine/metrics when the bot has it.
 // Env: BOT_URL (default http://127.0.0.1:8081), BOT_TOKEN (default: DISCORD_BOT_TOKEN in /home/user/run/bot.env),
-// SHIM_STATE (default /home/user/run/shim-data/state.json).
+// SHIM_STATE (shim data dir or its state.json; default /home/user/run/shim-data/state.json).
 import fs from "node:fs";
+import { readShimState } from "../shim/tools/read-state.mjs";
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -38,7 +39,7 @@ const top = (m, n = 15) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n);
 
 const shim = flag("--no-shim") ? null : loadShim();
 function loadShim() {
-  try { return JSON.parse(fs.readFileSync(SHIM_STATE, "utf8")); } catch { return null; }
+  try { return readShimState(SHIM_STATE); } catch { return null; }
 }
 
 // Games: --games, else every "<game>-actions" channel in the shim store whose game the bot knows.

@@ -19,6 +19,12 @@
     }
   ],
   "expect": {
-    "invariants": true
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.law",
+        "match": "crown_of_emphidia"
+      }
+    ]
   }
 }

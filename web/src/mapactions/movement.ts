@@ -1,4 +1,5 @@
 import type { PlayConnection } from "@/discord";
+import type { HolderName, MoveRequest, UnitId } from "../../../shim/src/engine/types";
 import type {
   EntityData,
   PlayerData,
@@ -169,13 +170,14 @@ export function displacementOf(
 
 /** The plan as the engine's move order: per origin and holder, how many of which unit (damaged ones last). */
 function unitsOf(plan: MovePlan, groups: Record<string, UnitGroup[]>) {
-  const out: { from: string; holder: string; unit: string; count: number; damaged: number }[] = [];
+  // Legacy map data spells units / holders with the engine's async ids: typed here, where they enter a MoveRequest.
+  const out: MoveRequest["units"] = [];
   for (const [origin, picks] of Object.entries(plan)) {
     for (const g of groups[origin] ?? []) {
       const n = picks[groupKey(g)] ?? 0;
       if (!n) continue;
       const s = splitStates(g.states, n);
-      out.push({ from: origin, holder: g.holder, unit: g.unit, count: n, damaged: s[1] + s[3] });
+      out.push({ from: origin, holder: g.holder as HolderName, unit: g.unit as UnitId, count: n, damaged: s[1] + s[3] });
     }
   }
   return out;

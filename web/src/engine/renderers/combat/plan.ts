@@ -1,11 +1,12 @@
 import type { CombatPlanEntry, HittableUnit } from "../../../../../shim/src/engine/kinds/combat";
+import type { UnitId } from "../../../../../shim/src/engine/types";
 
 /** Per unit stack: how many undamaged to sustain, undamaged to destroy, damaged to destroy. */
 export type PlanRow = { unit: HittableUnit; sustain: number; destroy: number; destroyDamaged: number };
 
 export const rowKey = (u: HittableUnit) => `${u.holder}/${u.unit}`;
 
-const COST: Record<string, number> = { ff: 0, inf: 0, gf: 0, dd: 1, mf: 2, ca: 2, cv: 3, dn: 4, fs: 8, ws: 12 };
+const COST: Partial<Record<UnitId, number>> = { ff: 0, gf: 0, dd: 1, mf: 2, ca: 2, cv: 3, dn: 4, fs: 8, ws: 12 };
 
 /**
  * The engine's usual choice, as a starting point: sustain whatever can, then lose the cheapest units first.

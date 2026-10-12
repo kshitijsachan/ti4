@@ -15,7 +15,7 @@
  */
 import { log } from "../log.js";
 import type { EngineClient } from "./client.js";
-import { answersForTarget, answersOutsideWindow, awaits, type AnswerResult, type Decision, type EngineEvent, type GameState } from "./types.js";
+import { answersOutsideWindow, awaits, othersMayAnswer, type AnswerResult, type Decision, type EngineEvent, type GameState } from "./types.js";
 
 export type EngineSeat = { userId: string; send(frame: Record<string, unknown>): void };
 
@@ -48,7 +48,7 @@ export function answerRefusal(d: Decision, userId: string, state: GameState | nu
   if (!visibleTo(d, userId)) return "not_found";
   const seated = !!state?.players.some((p) => p.userId === userId);
   if (state && !seated) return "forbidden";
-  if (d.scope === "player" && d.target?.userId !== userId && !answersForTarget(d)) return "forbidden";
+  if (d.scope === "player" && d.target?.userId !== userId && !othersMayAnswer(d)) return "forbidden";
   if (d.window && !awaits(d, userId) && !answersOutsideWindow(d, userId, state)) return d.window.responded.includes(userId) ? "answered" : "forbidden";
   return null;
 }

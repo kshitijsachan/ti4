@@ -1,6 +1,8 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { snowflake, isoFromSnowflake, token } from "./ids.js";
+import { ShardStore, type SaveStats } from "./shards.js";
+import { log } from "./log.js";
 
 /** Raw Discord-shaped JSON objects. We keep them close to the wire format. */
 export type Json = Record<string, any>;
@@ -85,26 +87,60 @@ export type State = {
 export const PERMS_ALL = "2251799813685247";
 export const PERMS_EVERYONE = "1071698660929";
 
+/** How long a canView answer is reused (see Store.canView). */
+const VIEW_TTL_MS = 3000;
+
+/** How often the verifier re-checks a slice of the files for unmarked changes (see ShardStore.verifySome). */
+const VERIFY_EVERY_MS = 5000;
+
 export class Store {
   state: State;
   private dir: string;
   private saveTimer: NodeJS.Timeout | null = null;
   private lastSaveMs = 0;
+  /** The files on disk: store/global.json, store/shards/*.json, store/segments/*.json (see shards.ts). */
+  readonly disk: ShardStore;
+  lastSave: SaveStats | null = null;
   interactions = new Map<string, Interaction>();
   interactionsByToken = new Map<string, Interaction>();
 
-  constructor(dir: string) {
+  constructor(dir: string, opts: { verifier?: boolean } = {}) {
     this.dir = dir;
     mkdirSync(join(dir, "files"), { recursive: true });
     mkdirSync(join(dir, "emojis"), { recursive: true });
-    const file = join(dir, "state.json");
-    if (existsSync(file)) {
-      this.state = JSON.parse(readFileSync(file, "utf8"));
+    this.disk = new ShardStore(dir);
+    const legacy = join(dir, "state.json");
+    if (this.disk.exists()) {
+      const t0 = Date.now();
+      this.state = this.disk.load();
+      log.info(`state loaded from ${this.disk.root} in ${Date.now() - t0}ms`);
       this.repairOverwrites();
+    } else if (existsSync(legacy)) {
+      // One-time migration from the single state.json (format 1): write every shard, then the global file (whose
+      // presence marks the migration done), then keep the old file as a backup. A crash before the global file is
+      // written just migrates again on the next start.
+      const t0 = Date.now();
+      this.state = JSON.parse(readFileSync(legacy, "utf8"));
+      this.repairOverwrites();
+      this.disk.markAll();
+      const stats = this.disk.save(this.state);
+      let backup = legacy + ".pre-shards";
+      if (existsSync(backup)) backup += `-${Date.now()}`;
+      renameSync(legacy, backup);
+      log.info(`migrated ${legacy} to ${this.disk.root} (${stats.written.length} files, ${Date.now() - t0}ms); backup: ${backup}`);
     } else {
       this.state = this.freshState();
       this.saveNow();
     }
+    if (opts.verifier !== false) setInterval(() => this.verifyTick(), VERIFY_EVERY_MS).unref();
+  }
+
+  /** Safety net for changes made without scheduleSave(channelId): see ShardStore.verifySome. */
+  private verifyTick() {
+    if (this.saveTimer || this.disk.pending) return;
+    this.disk.verifySome(this.state);
+    if (this.disk.unmarked.length) log.warn(`store: unmarked changes saved by the verifier: ${this.disk.unmarked.join(", ")}`);
+    this.disk.unmarked.length = 0;
   }
 
   /**
@@ -138,7 +174,10 @@ export class Store {
       if (!deny || ch.permission_overwrites.some((o: Json) => o.id === everyone)) continue;
       ch.permission_overwrites.push({ ...deny });
     }
-    if (fixed) this.scheduleSave();
+    if (fixed) {
+      this.disk.markAll();
+      this.scheduleSave();
+    }
   }
 
   get dataDir() {
@@ -182,25 +221,40 @@ export class Store {
     return state;
   }
 
-  scheduleSave() {
+  /**
+   * Marks state changed and schedules a save. Pass the channel whose channel object or thread members changed, plus
+   * the message id when a message was added / edited / is being deleted; no channel means global state (users,
+   * members, roles, commands, emojis, seats, webhooks, gateway session). See ShardStore for what each mark rewrites.
+   */
+  scheduleSave(channelId?: string | null, messageId?: string) {
+    if (channelId && messageId) this.disk.markMessage(channelId, messageId);
+    else {
+      this.disk.markChannel(channelId);
+      // A thread started from a message is embedded in that message (`thread`).
+      const parent = channelId ? this.state.channels[channelId]?.parent_id : undefined;
+      if (parent) this.disk.markIfChunked(parent, channelId!);
+    }
     if (this.saveTimer) return;
-    // A save serializes the whole state: with many long games that takes hundreds of milliseconds, so space saves out
-    // to keep them under ~20% of the event loop.
+    // A save writes only the shards that changed (normally tens of milliseconds); still space saves out so a slow one
+    // stays under ~10% of the event loop.
     this.saveTimer = setTimeout(
       () => {
         this.saveTimer = null;
         this.saveNow();
       },
-      Math.min(15000, Math.max(1000, 4 * this.lastSaveMs)),
+      Math.min(30000, Math.max(1000, 10 * this.lastSaveMs)),
     );
   }
 
-  saveNow() {
-    const started = Date.now();
-    const file = join(this.dir, "state.json");
-    writeFileSync(file + ".tmp", JSON.stringify(this.state));
-    renameSync(file + ".tmp", file);
-    this.lastSaveMs = Date.now() - started;
+  /** Writes what changed now. `all` also re-checks every file (used at exit). */
+  saveNow(all = false) {
+    const stats = this.disk.save(this.state, { all });
+    this.lastSave = stats;
+    this.lastSaveMs = stats.ms;
+    if (stats.ms > 500 && !all) log.info(`store: slow save ${stats.ms}ms (${stats.written.length} files, ${stats.bytes} bytes)`);
+    if (this.disk.unmarked.length) log.warn(`store: unmarked changes saved: ${this.disk.unmarked.join(", ")}`);
+    this.disk.unmarked.length = 0;
+    return stats;
   }
 
   // ---- users / members ----
@@ -294,8 +348,9 @@ export class Store {
       delete ch.topic;
     }
     this.state.channels[id] = ch;
+    this.invalidateViews();
     this.state.messages[id] ??= [];
-    this.scheduleSave();
+    this.scheduleSave(id);
     return ch;
   }
 
@@ -329,7 +384,7 @@ export class Store {
         ch.total_message_sent = (ch.total_message_sent ?? 0) + 1;
       }
     }
-    this.scheduleSave();
+    this.scheduleSave(msg.channel_id, msg.id);
   }
 
   deleteMessage(channelId: string, messageId: string): boolean {
@@ -337,22 +392,52 @@ export class Store {
     if (!list) return false;
     const i = list.findIndex((m) => m.id === messageId);
     if (i < 0) return false;
+    this.scheduleSave(channelId, messageId);
     list.splice(i, 1);
-    this.scheduleSave();
     return true;
+  }
+
+  /** Keeps only the newest `keep` messages of a channel (log channels cap their history). */
+  trimMessages(channelId: string, keep: number) {
+    const list = this.state.messages[channelId];
+    if (!list || list.length <= keep) return;
+    for (const m of list.slice(0, list.length - keep)) this.scheduleSave(channelId, m.id);
+    list.splice(0, list.length - keep);
   }
 
   // ---- visibility ----
 
   /** Mirrors Discord's VIEW_CHANNEL resolution closely enough for our use. */
+  /**
+   * canView answers, cached for VIEW_TTL_MS: the autopilot asks for every seat x channel on every pass (live profile:
+   * ~20% of the shim's CPU). Permission changes (roles, overwrites, thread members) show within the TTL.
+   */
+  private viewCache = new Map<string, { at: number; ok: boolean }>();
+
   canView(userId: string, channelId: string): boolean {
+    const key = `${userId}|${channelId}`;
+    const now = Date.now();
+    const hit = this.viewCache.get(key);
+    if (hit && now - hit.at < VIEW_TTL_MS) return hit.ok;
+    const ok = this.computeCanView(userId, channelId);
+    if (this.viewCache.size > 200_000) this.viewCache.clear();
+    this.viewCache.set(key, { at: now, ok });
+    return ok;
+  }
+
+  /** Forget cached canView answers (channel / thread / member / role / overwrite changed). */
+  invalidateViews() {
+    this.viewCache.clear();
+  }
+
+  private computeCanView(userId: string, channelId: string): boolean {
     const ch = this.state.channels[channelId];
     if (!ch) return false;
     if (ch.type === 1) return (ch.recipients ?? []).some((r: Json) => r.id === userId);
     if (ch.type === 12) {
       return (this.state.thread_members[channelId] ?? []).includes(userId) || ch.owner_id === userId;
     }
-    if (ch.type === 10 || ch.type === 11) return ch.parent_id ? this.canView(userId, ch.parent_id) : true;
+    if (ch.type === 10 || ch.type === 11) return ch.parent_id ? this.computeCanView(userId, ch.parent_id) : true;
     const member = this.state.members[userId];
     if (!member) return false;
     if (this.memberHasPerm(member, 8n)) return true;

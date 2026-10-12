@@ -1,6 +1,6 @@
 {
   "name": "agendas-core-mining-planet",
-  "description": "Core Mining (elect planet) elects Naaz's Rokha.",
+  "description": "Core Mining (elect planet) elects Naaz's Rokha. (Legacy adds no law for an Elect Planet law in handleLaw: only diffed.)",
   "base": {
     "recording": "pbd33",
     "index": 158,

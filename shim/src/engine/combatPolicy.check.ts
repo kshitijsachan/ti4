@@ -4,7 +4,7 @@
  */
 import { chooseCombat } from "./combatPolicy.js";
 import type { CombatSide, CombatState } from "./kinds/combat.js";
-import type { Decision, GameState } from "./types.js";
+import type { Decision, FactionId, GameState } from "./types.js";
 
 const ME = "u1";
 const OPP = "u2";
@@ -25,11 +25,11 @@ function state(combat: Partial<CombatState>): GameState {
   } as unknown as GameState;
 }
 
-const side = (userId: string, faction: string, roundsRolled: number, units = 1, abilities: CombatSide["abilities"] = []) => ({
+const side = (userId: string, faction: FactionId, roundsRolled: number, units = 1, abilities: CombatSide["abilities"] = []) => ({
   faction,
   userId,
   roundsRolled,
-  units: units ? [{ holder: "space", unit: "dd", count: units, damaged: 0, sustain: false }] : [],
+  units: units ? [{ holder: "space" as const, unit: "dd" as const, count: units, damaged: 0, sustain: false }] : [],
   abilities,
 });
 
