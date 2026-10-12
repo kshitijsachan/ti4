@@ -108,6 +108,19 @@ test("capped production (Umbat): payload clipped, capped build for the bot", () 
   assert.equal(chooseCappedBuild(d, state(3), "someone else"), null);
 });
 
+// Fuzz pbd297: a 2nd flagship was produced (component limit 1). The engine now refuses a unit with none left in
+// reinforcements (value.remaining); the bot's payload never asks for more than is left.
+test("component limit: payload clipped to the units left in reinforcements", () => {
+  const places: ProductionValue[] = [
+    { unit: "fs", count: 1, holder: "space", tile: "316", cost: 8, remaining: 0 },
+    { unit: "dn", count: 1, holder: "space", tile: "316", cost: 4, remaining: 1 },
+    { unit: "ff", count: 2, holder: "space", tile: "316", cost: 0.5, remaining: null },
+    { action: "done", context: "warfare", tile: "316", produced: {}, unitCount: 0, cost: 0, productionLimit: null, limit: null },
+  ];
+  const d = { kind: "production.produce", target: { userId: "u" }, options: places.map((v, i) => opt(`p${i}`, v)) } as unknown as ProductionProduce;
+  assert.deepEqual(productionPayload(d, ["fs", "dn", "dn", "ff", "ff", "ff"]).units, [{ unit: "dn", count: 1 }, { unit: "ff", count: 3 }]);
+});
+
 // Live (pbd36 / pbd60 / pbd88 / pbd90 / pbd92 / pbd105): unpriced Leadership / Technology bills waited out the 60 s
 // fallback ("Done Exhausting Planets") and stalled the seat.
 const withCards = (cards: { card: string; holder: string; played: boolean }[]) =>

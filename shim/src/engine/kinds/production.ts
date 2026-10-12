@@ -74,6 +74,11 @@ export type ProductionPlaceValue = {
   tile: TilePosition | null;
   /** Resource cost of one unit (0.5 for fighters/infantry); null if unknown. */
   cost: number | null;
+  /**
+   * Units of this type left in the player's reinforcements (component limit; ships and mechs). null / absent = not
+   * limited (fighters, infantry, structures) or an older bot. The engine refuses producing more than this.
+   */
+  remaining?: number | null;
 };
 export type ProductionResetValue = { action: "reset" };
 export type ProductionDoneValue = {

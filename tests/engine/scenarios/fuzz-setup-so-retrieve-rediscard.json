@@ -1,0 +1,37 @@
+{
+  "name": "fuzz-setup-so-retrieve-rediscard",
+  "description": "Fuzz pbd289 / pbd297 (stall:waiting-on-me-long in playerSetup, secretObjectivesToDiscard 1, 6 min): a player discarded a dealt secret objective, then pressed 'Retrieve <secret>' (drawSpecificSO_, ui.undo_affordance). The secret came back, so setup waits on a discard again, but the discard prompt they answered was gone and nothing new was offered. Fix (bot fuzz-triage-1): SecretObjectiveButtonHandler.drawSpecificSO re-offers the discard buttons while setup still needs a discard.",
+  "base": {
+    "recording": "pbd75",
+    "index": 34
+  },
+  "steps": [
+    {
+      "press": "discardSecret_117",
+      "as": "argent"
+    },
+    {
+      "answer": {
+        "kind": "ui.undo_affordance",
+        "option": "^drawSpecificSO_"
+      },
+      "as": "argent",
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": {
+      "kind": "secret_objective.discard",
+      "as": "argent",
+      "open": true
+    }
+  }
+}

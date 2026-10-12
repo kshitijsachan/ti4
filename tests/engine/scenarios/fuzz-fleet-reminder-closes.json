@@ -1,0 +1,38 @@
+{
+  "name": "fuzz-fleet-reminder-closes",
+  "description": "Fuzz pbd299 (bot 3541163, ui:my-move-not-shown): End Turn posted the fleet-pool reminder ('you are violating fleet pool limits in Arcturus - Nomad', Remove Units + Dismiss = units.remove). The Nomad removed the extra flagship through its menu, but the reminder stayed open and waited on the player for good. Fix (bot fuzz-triage-1): UnitsRemoveKind.obsolete closes a fleet-pool / capacity reminder once ButtonHelper.fleetOrCapacityViolated says its system is back within the rules. Base: pinned copies of pbd299 saves 147 (+148 for the reminder's buttons).",
+  "base": {
+    "save": "saves/fuzz-pbd299-147.txt",
+    "next": "saves/fuzz-pbd299-148.txt"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "units.remove",
+        "option": "^getDamageButtons_316_remove$"
+      },
+      "as": "nomad",
+      "legacy": [
+        {
+          "press": "getDamageButtons_316_remove",
+          "as": "nomad"
+        }
+      ]
+    },
+    {
+      "press": "FFCC_nomad_assignHits_316_1_fs_azure",
+      "as": "nomad"
+    },
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": {
+      "kind": "units.remove",
+      "as": "nomad",
+      "open": false
+    }
+  }
+}
