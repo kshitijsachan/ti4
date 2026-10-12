@@ -142,7 +142,7 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "relic.use": "optional",
   // C8 core tails
   "combat.bombard": "planner",
-  "units.remove": "blocking",
+  "units.remove": "planner", // an over-limit reminder is the unit-limit desk's (pbd114): the fallback only when forced
   "production.place": "blocking",
   "commodities.gain": "blocking",
   // C6b tech follow-ups (the components policy answers our own: free gains taken, the rest declined)

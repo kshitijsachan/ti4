@@ -170,7 +170,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "commodities.gain":
       return chooseCommodities(d, state, me, ctx.history);
     case "units.remove":
-      return chooseUnitsRemove(d, me, ctx.history, ctx.open);
+      return chooseUnitsRemove(d, me, ctx.history, ctx.open, state);
     case "units.modify":
       return chooseUnitsModify(d, me);
     case "production.produce":
