@@ -8,10 +8,13 @@ type MapActionsState = {
   /** The map's own UI is driving the current tactical step (the decision popup should step aside). */
   active: boolean;
   step: MapActionStep;
-  /** The bot prompt the map UI is answering. */
+  /** The engine decision the map UI is answering. */
   promptId: string | null;
-  /** Prompts the player chose to answer with the popup's buttons instead. */
+  /** Decisions the player chose to answer in the popup instead. */
   handedBack: Record<string, true>;
+  /** Landing decisions whose gravity rift roll was pressed from the map. */
+  riftRolled: Record<string, true>;
+  noteRiftRolled: (decisionId: string) => void;
   /** A system someone asked the map to activate (`activateSystem`), confirmed on the board. */
   requested: string | null;
   plan: MovePlan;
@@ -37,6 +40,8 @@ export const useMapActions = create<MapActionsState>((set) => ({
   step: null,
   promptId: null,
   handedBack: {},
+  riftRolled: {},
+  noteRiftRolled: (id) => set((s) => ({ riftRolled: { ...s.riftRolled, [id]: true } })),
   requested: null,
   plan: {},
   landing: {},
@@ -65,7 +70,7 @@ export const useMapActions = create<MapActionsState>((set) => ({
 
 /**
  * For the decision popup: whether the map's movement / landing UI owns the current tactical step. While `active`,
- * the popup should not show the bot's move or land buttons for `promptId` (the map answers that prompt).
+ * the popup should not show the tactical.move / tactical.land decision `promptId` (the map answers it).
  */
 export function useMovementUI() {
   const active = useMapActions(

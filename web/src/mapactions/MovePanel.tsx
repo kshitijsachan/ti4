@@ -10,7 +10,7 @@ import {
   TILE_WIDTH,
 } from "@/entities/geometry/tilePositioning";
 import { getPlanetData } from "@/entities/lookup/planets";
-import type { Scope } from "./driver";
+import type { TacticalMove } from "../../../shim/src/engine/kinds/tactical";
 import {
   commitMove,
   groupKey,
@@ -348,14 +348,11 @@ export function UnitPicker({
 }
 
 type PanelProps = {
-  gameName: string;
   target: string;
   targetName?: string;
   groups: Record<string, UnitGroup[]>;
-  color: string;
   conn: PlayConnection;
-  scope: Scope;
-  prompt: { channelId: string; messageId: string };
+  decision: TacticalMove;
   busy: string | null;
   error: string | null;
   run: (work: () => Promise<void>) => Promise<void>;
@@ -369,14 +366,11 @@ type PanelProps = {
 
 /** The movement step's bar: what moves in, the capacity it needs, and one Move. */
 export function MovePanel({
-  gameName,
   target,
   targetName,
   groups,
-  color,
   conn,
-  scope,
-  prompt,
+  decision,
   busy,
   error,
   run,
@@ -401,13 +395,7 @@ export function MovePanel({
   const move = () =>
     run(async () => {
       await moveBonus.runChosen(setBusy);
-      await commitMove(target, plan, groups, color, {
-        gameName,
-        conn,
-        scope,
-        prompt,
-        onProgress: setBusy,
-      });
+      await commitMove(conn, decision, plan, groups, setBusy);
       resetPlans();
     });
 

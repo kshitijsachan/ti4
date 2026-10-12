@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { usePlay, type Message, type PlayConnection } from "@/discord";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import type { Tile } from "@/entities/game/types";
-import { baseId } from "@/prompts/controls";
+import type { TacticalMove } from "../../../shim/src/engine/kinds/tactical";
 import { useHand } from "@/hand/useHand";
 import { actionsFor, useRunCardAction } from "@/hand/useHandActions";
-import { buttonsOf, pressButton } from "./driver";
+import { pressOption } from "./engine";
 import type { UnitGroup } from "./movement";
 import { distancesTo, passiveBonuses, type MoveBonus } from "./range";
 
-/** Something I may use before my ships move: an action card from my hand or one of the bot's ability buttons. */
+/** Something I may use before my ships move: an action card from my hand or one of the movement step's ability options. */
 export type BonusOffer = {
   id: string;
   /** "Play Flank Speed (+1 to all ships)". */
@@ -21,7 +21,7 @@ export type BonusOffer = {
   run: () => Promise<void>;
 };
 
-/** The bot's own movement-step buttons that raise move values, with what they add. */
+/** The movement step's own options (by engine handler) that raise move values, with what they add. */
 const PROMPT_BONUS: { id: RegExp; bonus?: Omit<MoveBonus, "name"> }[] = [
   { id: /^declareUse_Aetherstream$/, bonus: { amount: 1, ships: Infinity } },
   { id: /^planetAbilityExhaust_tempesta$/, bonus: { amount: 1, ships: 1 } },
@@ -48,28 +48,27 @@ function playedThisAction(messages: Message[], name: string) {
 
 /**
  * Move bonuses for the map's movement step: what counts on its own (Gravity Drive on one ship, gravity rifts on the
- * way, a Flank Speed already played), what I may choose to use first (Flank Speed from my hand, the bot's ability
- * buttons on the movement prompt), and the presses that make a choice real in the game before the ships move.
+ * way, a Flank Speed already played), what I may choose to use first (Flank Speed from my hand, the ability
+ * options on the movement step), and the presses that make a choice real in the game before the ships move.
  */
 export function useMoveBonuses(args: {
   gameName: string;
   me?: PlayerData;
   web?: PlayerDataResponse;
   conn: PlayConnection;
-  prompt: { channelId: string; messageId: string } | null;
-  promptMessage?: Message;
+  decision: TacticalMove | null;
   tiles: Record<string, Tile>;
   target: string | null;
   groups: Record<string, UnitGroup[]>;
   distances: Map<string, number>;
   moving: boolean;
 }) {
-  const { gameName, me, web, conn, prompt, promptMessage, tiles, target, groups, distances, moving } = args;
+  const { gameName, me, web, conn, decision, tiles, target, groups, distances, moving } = args;
   const hand = useHand(gameName);
   const runCard = useRunCardAction(hand.threadId, hand.actionsId);
   const actions = usePlay((s) => (hand.actionsId ? s.messages[hand.actionsId] : undefined));
   const [chosen, setChosen] = useState<string[]>([]);
-  const promptId = prompt?.messageId;
+  const promptId = decision?.id;
   useEffect(() => setChosen([]), [promptId]);
 
   const flankPlayed = useMemo(
@@ -78,7 +77,7 @@ export function useMoveBonuses(args: {
   );
 
   const offers = useMemo<BonusOffer[]>(() => {
-    if (!moving || !prompt) return [];
+    if (!moving || !decision) return [];
     const out: BonusOffer[] = [];
     if (!flankPlayed) {
       const card = hand.groups.flatMap((g) => g.cards).find((c) => c.kind === "ac" && c.name === FLANK);
@@ -95,24 +94,25 @@ export function useMoveBonuses(args: {
           },
         });
     }
-    for (const c of buttonsOf(promptMessage, me?.faction)) {
-      const id = baseId(c.customId);
-      const known = PROMPT_BONUS.find((k) => k.id.test(id));
-      if (!known || !c.customId) continue;
-      const customId = c.customId;
+    for (const c of decision.options) {
+      const known = PROMPT_BONUS.find((k) => k.id.test(c.handler));
+      if (!known || c.disabled) continue;
+      const optionId = c.id;
       const name = c.label.replace(/^(Exhaust|Declare|Use|Purge)\s+/i, "");
       const bonus = known.bonus ? { name, ...known.bonus } : undefined;
       const what = bonus ? ` (+${bonus.amount} to ${bonus.ships === Infinity ? "all ships" : "one ship"})` : "";
       out.push({
-        id: customId,
+        id: optionId,
         label: `${c.label}${what}`,
         note: bonus ? "uses it in the game before the ships move" : "uses it in the game before the ships move; the map does not count its effect",
         bonus,
-        run: () => pressButton(conn, { ...prompt, customId }),
+        run: async () => {
+          await pressOption(conn, decision, optionId);
+        },
       });
     }
     return out;
-  }, [moving, prompt, flankPlayed, hand, promptMessage, me?.faction, runCard, conn]);
+  }, [moving, decision, flankPlayed, hand, runCard, conn]);
 
   /* Gravity rifts on the way count +1 by themselves: say so when that is what brings a system in range. */
   const riftHelps = useMemo(() => {

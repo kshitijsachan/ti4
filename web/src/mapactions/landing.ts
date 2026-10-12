@@ -1,17 +1,9 @@
 import type { PlayConnection } from "@/discord";
 import type { PlanetId, UnitId } from "../../../shim/src/engine/types";
-import { controlSignature } from "@/discord/client/store";
-import { baseId } from "@/prompts/controls";
-import {
-  buttonsOf,
-  messageOf,
-  pressButton,
-  waitFor,
-  type Scope,
-} from "./driver";
+import type { TacticalLand } from "../../../shim/src/engine/kinds/tactical";
 import { landViaEngine } from "./engine";
 
-/** What the bot's landing prompt offers: per planet, which of my ground units can land (and how many at most). */
+/** What the engine's landing step offers: per planet, which of my ground units can land. */
 export type LandingOffer = {
   target: string;
   planets: string[];
@@ -19,117 +11,43 @@ export type LandingOffer = {
   units: Record<string, string[]>;
 };
 
-/** `landUnits_<pos>_<n><unit>_<planet>_<color>` */
-const LAND = /^landUnits_([^_]+)_(\d)([a-z]{2})(?:damaged)?_(.+)_([a-z]+)$/;
-
-export function landingOffer(
-  conn: PlayConnection,
-  scope: Scope,
-  prompt: { channelId: string; messageId: string },
-): LandingOffer | null {
-  const m = messageOf(
-    conn.store.getState(),
-    prompt.channelId,
-    prompt.messageId,
-  );
+/** The landing offer from the tactical.land decision's "land" options. */
+export function landingOffer(d: TacticalLand): LandingOffer | null {
   let target = "";
   const planets: string[] = [];
   const units: Record<string, string[]> = {};
-  for (const c of buttonsOf(m, scope.faction)) {
-    const hit = baseId(c.customId).match(LAND);
-    if (!hit) continue;
-    const [, pos, , unit, planet] = hit;
-    target = pos;
-    if (!planets.includes(planet)) planets.push(planet);
-    const list = (units[unit] ??= []);
-    if (!list.includes(planet)) list.push(planet);
+  for (const o of d.options) {
+    const v = o.value;
+    if (o.disabled || !v || v.op !== "land") continue;
+    target = v.position;
+    if (!planets.includes(v.planet)) planets.push(v.planet);
+    const list = (units[v.unit] ??= []);
+    if (!list.includes(v.planet)) list.push(v.planet);
   }
   return target ? { target, planets, units } : null;
+}
+
+/** The landing step's gravity rift roll, when it offers one (an untyped option of the land decision). */
+export function riftOption(d: TacticalLand) {
+  return d.options.find((o) => !o.disabled && /^getRiftButtons_/.test(o.handler));
 }
 
 /** planet → unit → how many to land. */
 export type LandingPlan = Record<string, Record<string, number>>;
 
-export type LandDeps = {
-  conn: PlayConnection;
-  /** With the game name the engine's land action is used first (buttons are the fallback). */
-  gameName?: string;
-  scope: Scope;
-  prompt: { channelId: string; messageId: string };
-  onProgress?: (text: string) => void;
-};
-
-/**
- * Lands the planned ground forces by pressing the bot's own "Land 1/2 Infantry on X" buttons on its landing prompt
- * (each press edits the prompt, so each next press waits for the edit), then "Done Landing Troops".
- */
+/** Lands the planned ground forces and finishes landing, as one engine action. */
 export async function commitLanding(
+  conn: PlayConnection,
+  decision: TacticalLand,
   plan: LandingPlan,
-  { conn, scope, prompt, onProgress, gameName }: LandDeps,
+  onProgress?: (text: string) => void,
 ) {
-  if (gameName) {
-    onProgress?.("Landing…");
-    const landings = Object.entries(plan).flatMap(([planet, units]) =>
-      Object.entries(units)
-        .filter(([, n]) => n > 0)
-        // Legacy plan keys are the engine's planet / async unit ids.
-        .map(([unit, count]) => ({ planet: planet as PlanetId, unit: unit as UnitId, count })),
-    );
-    if (await landViaEngine(landings, { conn, gameName })) {
-      conn.actions.noteInteraction(prompt.channelId, prompt.messageId);
-      return;
-    }
-  }
-  const current = () =>
-    messageOf(conn.store.getState(), prompt.channelId, prompt.messageId);
-  for (const [planet, units] of Object.entries(plan)) {
-    for (const [unit, total] of Object.entries(units)) {
-      let left = total;
-      while (left > 0) {
-        const want = Math.min(2, left);
-        const buttons = buttonsOf(current(), scope.faction);
-        const pick =
-          buttons.find((c) => matches(c.customId, unit, planet, want)) ??
-          buttons.find((c) => matches(c.customId, unit, planet, 1));
-        if (!pick?.customId)
-          throw new Error(
-            `The game no longer offers landing ${unit === "mf" ? "mechs" : "infantry"} on ${planet}.`,
-          );
-        const n = Number(baseId(pick.customId).match(LAND)?.[2] ?? 1);
-        onProgress?.(`Landing ${n} on ${planet}…`);
-        const before = controlSignature(current()?.components);
-        await pressButton(conn, { ...prompt, customId: pick.customId });
-        await waitFor(
-          conn,
-          (s) =>
-            controlSignature(
-              s.messages[prompt.channelId]?.byId[prompt.messageId]?.components,
-            ) !== before
-              ? true
-              : null,
-          6000,
-        );
-        left -= n;
-      }
-    }
-  }
-  const done = buttonsOf(current(), scope.faction).find((c) =>
-    /^doneLanding/.test(baseId(c.customId)),
+  onProgress?.("Landing…");
+  const landings = Object.entries(plan).flatMap(([planet, units]) =>
+    Object.entries(units)
+      .filter(([, n]) => n > 0)
+      // Plan keys are the engine's planet / async unit ids.
+      .map(([unit, count]) => ({ planet: planet as PlanetId, unit: unit as UnitId, count })),
   );
-  if (!done?.customId)
-    throw new Error(
-      "The game's Done Landing Troops button is gone — finish in the popup.",
-    );
-  onProgress?.("Done landing…");
-  await pressButton(conn, { ...prompt, customId: done.customId });
-}
-
-function matches(
-  customId: string | undefined,
-  unit: string,
-  planet: string,
-  n: number,
-) {
-  const hit = baseId(customId).match(LAND);
-  return !!hit && hit[3] === unit && hit[4] === planet && Number(hit[2]) === n;
+  await landViaEngine(conn, decision, landings);
 }

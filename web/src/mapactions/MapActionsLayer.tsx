@@ -16,12 +16,10 @@ import {
   TILE_HEIGHT,
   TILE_WIDTH,
 } from "@/entities/geometry/tilePositioning";
-import { baseId } from "@/prompts/controls";
 import { useMapActionContext } from "./context";
 import { activationOf, type Activation } from "./eligibility";
-import { activateSystem as driveActivation } from "./activate";
-import { buttonsOf, pressButton } from "./driver";
-import { promptHasMoves, unitsAt, type UnitGroup } from "./movement";
+import { activateViaEngine, pressOption } from "./engine";
+import { hasStagedMoves, moveOrigins, unitsAt, type UnitGroup } from "./movement";
 import { distancesTo, maxBoost } from "./range";
 import { useMoveBonuses } from "./bonuses";
 import { landingOffer } from "./landing";
@@ -105,7 +103,7 @@ function useTileClasses(byPosition: Record<string, string>) {
 
 /**
  * The map's actions: on my action-phase turn a click on a system activates it (after a one-tap confirm) by
- * driving the bot's own Tactical Action → ring → system buttons; then ships are picked on the map and moved in
+ * answering the engine's turn menu and tactical.activate steps; then ships are picked on the map and moved in
  * one go, and ground forces landed per planet with one confirm. Other prompts whose answers are systems can be
  * answered by clicking the system too.
  */
@@ -127,7 +125,7 @@ export function MapActionsLayer({
     [tiles],
   );
   const ctx = useMapActionContext(gameName, names);
-  const { step, me, web, conn, scope, pick } = ctx;
+  const { step, me, web, conn, pick } = ctx;
   const frameRef = useRef<HTMLDivElement>(null);
   const [chip, setChip] = useState<Chip | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -146,22 +144,16 @@ export function MapActionsLayer({
   const resetPlans = useMapActions((s) => s.resetPlans);
   const openDossier = useAppStore((s) => s.openSystemDossier);
 
-  const promptId = step.kind === "none" ? null : step.prompt.message.id;
-  const prompt =
-    step.kind === "none"
-      ? null
-      : { channelId: step.prompt.channelId, messageId: step.prompt.message.id };
+  const promptId = step.kind === "none" ? null : step.decision.id;
   const ownsPrompt = !!promptId && !handedBack[promptId];
   const activating = step.kind === "turn" || step.kind === "choose";
   const target =
     step.kind === "move" || step.kind === "land" ? step.target : null;
+  const moveDecision = step.kind === "move" ? step.decision : null;
+  const landDecision = step.kind === "land" ? step.decision : null;
   const moving =
-    step.kind === "move" &&
-    ownsPrompt &&
-    !!prompt &&
-    (!promptHasMoves(conn, prompt) || !!busy);
-  const offer =
-    step.kind === "land" && prompt ? landingOffer(conn, scope, prompt) : null;
+    !!moveDecision && ownsPrompt && (!hasStagedMoves(moveDecision) || !!busy);
+  const offer = landDecision ? landingOffer(landDecision) : null;
   const landing = step.kind === "land" && ownsPrompt && !!offer;
 
   /* What a click on each system would do now. */
@@ -175,15 +167,10 @@ export function MapActionsLayer({
     );
   }, [activating, tiles, me, web, step]);
 
-  const origins = useMemo(() => {
-    if (step.kind !== "move" || !me) return [];
-    const ids = buttonsOf(step.prompt.message, me.faction).map(
-      (c) => baseId(c.customId).match(/^tacticalMoveFrom_(\w+)/)?.[1],
-    );
-    return [...new Set(ids)].filter(
-      (p): p is string => !!p && p !== step.target,
-    );
-  }, [step, me]);
+  const origins = useMemo(
+    () => (step.kind === "move" && me ? moveOrigins(step.decision, step.target) : []),
+    [step, me],
+  );
   const groups = useMemo(() => {
     const out: Record<string, UnitGroup[]> = {};
     if (!me) return out;
@@ -205,8 +192,7 @@ export function MapActionsLayer({
     me,
     web,
     conn,
-    prompt: moving ? prompt : null,
-    promptMessage: step.kind === "move" ? step.prompt.message : undefined,
+    decision: moving ? moveDecision : null,
     tiles,
     target,
     groups,
@@ -399,26 +385,14 @@ export function MapActionsLayer({
     const { position, kind } = chip;
     setChip(null);
     if (kind === "activate") {
-      void run(() =>
-        driveActivation(position, {
-          conn,
-          scope,
-          step,
-          gameName,
-          onProgress: setBusy,
-        }),
-      );
+      void run(() => activateViaEngine(position, conn, setBusy));
       return;
     }
     const choice = pick?.byPosition[position];
-    if (!choice?.customId || !pick) return;
-    void run(() =>
-      pressButton(conn, {
-        channelId: pick.prompt.channelId,
-        messageId: pick.prompt.message.id,
-        customId: choice.customId!,
-      }),
-    );
+    if (!choice || !pick) return;
+    void run(async () => {
+      await pressOption(conn, pick.decision, choice.id);
+    });
   };
 
   const tooltip = (() => {
@@ -642,16 +616,13 @@ export function MapActionsLayer({
               docked && classes.barDocked,
             )}
           >
-            {moving && target && prompt && me ? (
+            {moving && target && moveDecision && me ? (
               <MovePanel
-                gameName={gameName}
                 target={target}
                 targetName={names[target]}
                 groups={groups}
-                color={me.color}
                 conn={conn}
-                scope={scope}
-                prompt={prompt}
+                decision={moveDecision}
                 busy={busy}
                 error={error}
                 run={run}
@@ -664,17 +635,15 @@ export function MapActionsLayer({
                 bonuses={bonuses}
                 moveBonus={moveBonus}
               />
-            ) : landing && target && prompt && offer && me ? (
+            ) : landing && target && landDecision && offer && me ? (
               <LandingPanel
-                gameName={gameName}
                 target={target}
                 targetName={names[target]}
                 offer={offer}
                 me={me}
                 web={web}
                 conn={conn}
-                scope={scope}
-                prompt={prompt}
+                decision={landDecision}
                 busy={busy}
                 error={error}
                 run={run}

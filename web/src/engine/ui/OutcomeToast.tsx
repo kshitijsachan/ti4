@@ -5,7 +5,7 @@ import { IconX } from "@tabler/icons-react";
 import { useGameEvents } from "@/gamelog";
 import type { GameEvent } from "@/gamelog/types";
 import { segText } from "@/gamelog/parse/markup";
-import { buttonOutcome } from "@/prompts/phrasing";
+import { buttonOutcome } from "@/botText/phrasing";
 import { useBoardCover } from "@/state/boardCover";
 import { useReservedArea } from "@/state/reservedArea";
 import type { GameState } from "../contract";

@@ -1,29 +1,27 @@
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
-import { usePlay, type PlayConnection } from "@/discord";
-import { baseId } from "@/prompts/controls";
-import { riftRolled } from "@/prompts/rift";
+import type { PlayConnection } from "@/discord";
+import { useMyDecisions } from "@/engine/store";
+import type { TacticalLand } from "../../../shim/src/engine/kinds/tactical";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { cdnImage } from "@/entities/data/cdnImage";
 import { getColorAlias, getPrimaryColorCSS } from "@/entities/lookup/colors";
 import { getPlanetData } from "@/entities/lookup/planets";
-import { buttonsOf, pressButton, type Scope } from "./driver";
-import { commitLanding, type LandingOffer } from "./landing";
+import { pressOption } from "./engine";
+import { commitLanding, riftOption, type LandingOffer } from "./landing";
 import { useMapActions } from "./store";
 import classes from "./MapActions.module.css";
 
 const UNIT_NAMES: Record<string, string> = { gf: "Infantry", mf: "Mech" };
 
 type Props = {
-  gameName: string;
   target: string;
   targetName?: string;
   offer: LandingOffer;
   me: PlayerData;
   web?: PlayerDataResponse;
   conn: PlayConnection;
-  scope: Scope;
-  prompt: { channelId: string; messageId: string };
+  decision: TacticalLand;
   busy: string | null;
   error: string | null;
   run: (work: () => Promise<void>) => Promise<void>;
@@ -70,31 +68,29 @@ function planetState(
 
 /** The landing step: each planet of the activated system with a stepper per ground unit, and one Land. */
 export function LandingPanel({
-  gameName,
   target,
   targetName,
   offer,
   me,
   web,
   conn,
-  scope,
-  prompt,
+  decision,
   busy,
   error,
   run,
   setBusy,
   onHandBack,
 }: Props) {
-  const channel = usePlay((s) => s.messages[prompt.channelId]);
-  const riftButton = buttonsOf(channel?.byId[prompt.messageId], scope.faction).find((c) =>
-    /^getRiftButtons_/.test(baseId(c.customId)),
-  );
-  const rolled = !!channel && riftRolled({ messages: { [prompt.channelId]: channel } }, prompt.channelId);
+  const riftButton = riftOption(decision);
+  const riftPressed = useMapActions((s) => !!s.riftRolled[decision.id]);
+  const rifting = useMyDecisions().some((d) => d.kind === "tactical.rift");
+  const rolled = riftPressed || rifting;
   const rollRift = () =>
     run(async () => {
-      if (!riftButton?.customId) return;
+      if (!riftButton) return;
       setBusy("Rolling for the gravity rift…");
-      await pressButton(conn, { ...prompt, customId: riftButton.customId });
+      await pressOption(conn, decision, riftButton.id);
+      useMapActions.getState().noteRiftRolled(decision.id);
     });
   const plan = useMapActions((s) => s.landing);
   const setLanding = useMapActions((s) => s.setLanding);
@@ -113,6 +109,8 @@ export function LandingPanel({
   const land = () =>
     run(() =>
       commitLanding(
+        conn,
+        decision,
         Object.fromEntries(
           Object.entries(plan).map(([planet, u]) => [
             planet,
@@ -123,7 +121,7 @@ export function LandingPanel({
             ),
           ]),
         ),
-        { conn, scope, prompt, gameName, onProgress: setBusy },
+        setBusy,
       ).then(() => setLanding(() => ({}))),
     );
 

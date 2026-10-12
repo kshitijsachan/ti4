@@ -260,9 +260,11 @@ autopilot players, 2 games to the end, plus one human/web game through setup, co
 **Step 2: web legacy UI (after c10 makes engine UI the default).** *Prepared on branch `delete-legacy-web`* (merge
 after a clean day with `TI4_ENGINE_WEB=1`): `web/src/decisions/`, `play/attention.ts`, engine-off branches and the
 trade drawer's legacy endpoints are gone; reused pieces moved to `web/src/engine/{focus.ts,ui/CombatOutcome.tsx,
-ui/FactionIcon.tsx}` and `web/src/prompts/` (Discord-prompt reading still used by map actions, setup waiting,
-rewind phrasing, combat reports — next to port onto `GameState` / `mapactions/engine.ts`). Still open below:
-mapactions on `prompts/`, select `#value` / `needsInput` presses.
+ui/FactionIcon.tsx}`. *Branch `mapactions-engine`* (on top of it): `web/src/prompts/` is gone too — the map's
+tactical steps read `tactical.activate/move/land` decisions and answer them over `op:"answer"` (`mapactions/step.ts`,
+`engine.ts`), the setup screen reads `GameState.setup`, pure bot-text helpers (rewind phrasing, combat reports) moved
+to `web/src/botText/`; select `#value` / `needsInput` options go to the engine too (pressed the Discord way only when
+the engine answers `needs_input`/`unsupported`: handlers without native coverage, ephemeral prompts).
 
 * Delete `web/src/decisions/` (12.6k lines): `detect/{games,pending,waiting}.ts`, `model/{classify,controls,queue,
   focus,frontier,expedition,scoring,stored,text,usePress}.ts`, `renderers/*` (legacy renderers), `ui/DecisionHost.tsx`

@@ -6,8 +6,8 @@ import { usePlay } from "@/discord";
 import { usePlayerData } from "@/api/usePlayerData";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { getPlanetData } from "@/entities/lookup/planets";
-import { readCombatLog, type CombatLog } from "@/prompts/combatLog";
-import { EMOJI_UNIT, countName } from "@/prompts/units";
+import { readCombatLog, type CombatLog } from "@/botText/combatLog";
+import { EMOJI_UNIT, countName } from "@/botText/units";
 import { FactionIcon } from "./FactionIcon";
 import classes from "./CombatOutcome.module.css";
 

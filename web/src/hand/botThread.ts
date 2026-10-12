@@ -1,5 +1,6 @@
 import type { ChannelMessages } from "@/discord/client/store";
 import type { Component, Message } from "@/discord";
+import type { Decision } from "@/engine/contract";
 import type { HandCard } from "./model";
 
 /** A live bot button somewhere in the player's cards-info thread. */
@@ -315,22 +316,14 @@ export function messageButtons(message: Message): Component[] {
 }
 
 /**
- * Whether the active player has already taken this turn's action: the bot's newest turn prompt in the
- * actions channel offers "End Turn" but no longer a fresh "Tactical Action".
+ * Whether the active player has already taken this turn's action: the engine's newest turn menu offers ending the
+ * turn but no longer a tactical action.
  */
-export function actionTakenThisTurn(actions: ChannelMessages | undefined): boolean {
-  if (!actions) return false;
-  const stop = Math.max(0, actions.ids.length - 60);
-  for (let i = actions.ids.length - 1; i >= stop; i--) {
-    const message = actions.byId[actions.ids[i]];
-    if (!message?.author?.bot) continue;
-    const ids = buttonsOf(message).map((b) => (b.custom_id ?? "").replace(/^FFCC_[^_]+_/, ""));
-    const fresh = ids.some((id) => /^tacticalAction(?!Build)/.test(id));
-    const end = ids.some((id) => /^(turnEnd|endOfTurnAbilities)/.test(id));
-    if (fresh) return false;
-    if (end) return true;
-  }
-  return false;
+export function actionTakenThisTurn(decisions: Decision[]): boolean {
+  const menu = decisions.filter((d) => d.kind === "turn.action").sort((x, y) => y.seq - x.seq)[0];
+  if (!menu || menu.kind !== "turn.action") return false;
+  const offers = (action: string) => menu.options.some((o) => !o.disabled && o.value?.action === action);
+  return offers("end_turn") && !offers("tactical");
 }
 
 /**

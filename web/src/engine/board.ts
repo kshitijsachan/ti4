@@ -123,6 +123,32 @@ const SETUP_STEP: Record<string, string> = {
   reveal_objectives: "the objectives to be revealed",
 };
 
+const SETUP_TASK: Record<string, string> = {
+  settings: "choose the game's settings",
+  player_setup: "finish setting up",
+  keep_secrets: "choose which secret objective to keep",
+};
+
+/** What a setup waits on, in plain words, and whether I am among those waited on (the setup screen's note). */
+export function engineSetupWaiting(state: GameState, myId: string | undefined): { text: string; me: boolean } | undefined {
+  const setup = state.setup;
+  if (!setup || setup.stage === "draft") return undefined;
+  const name = (id: string) => (id === myId ? "you" : (state.players.find((p) => p.userId === id)?.userName ?? "a player"));
+  if (!setup.waitingOn.length) return SETUP_STEP[setup.stage] ? { text: `Waiting for ${SETUP_STEP[setup.stage]}…`, me: false } : undefined;
+  const task = setup.stage === "player_setup" ? playerSetupTask(setup, setup.waitingOn) : SETUP_TASK[setup.stage];
+  return {
+    text: `Waiting for ${listed(setup.waitingOn.map(name))}${task ? ` to ${task}` : ""}…`,
+    me: !!myId && setup.waitingOn.includes(myId),
+  };
+}
+
+function playerSetupTask(setup: NonNullable<GameState["setup"]>, waiting: string[]) {
+  const players = setup.players.filter((p) => waiting.includes(p.userId));
+  if (players.length && players.every((p) => p.startingTechsNeeded > 0)) return "choose a starting technology";
+  if (players.length && players.every((p) => p.keleresFlavorPending)) return "choose a Keleres flavour";
+  return SETUP_TASK.player_setup;
+}
+
 /** Who the table waits on when it is nobody's turn (setup, an agenda vote), for the header note. */
 export function engineWaitingNote(state: GameState, myId: string | undefined): string | null {
   const name = (id: string) => state.players.find((p) => p.userId === id)?.userName ?? "a player";

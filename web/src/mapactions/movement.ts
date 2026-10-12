@@ -1,4 +1,5 @@
 import type { PlayConnection } from "@/discord";
+import type { TacticalMove } from "../../../shim/src/engine/kinds/tactical";
 import type { HolderName, MoveRequest, UnitId } from "../../../shim/src/engine/types";
 import type {
   EntityData,
@@ -7,17 +8,6 @@ import type {
   StateCounts,
 } from "@/entities/data/types";
 import { lookupUnit } from "@/entities/lookup/units";
-import { getToken } from "@/play/session";
-import { baseId } from "@/prompts/controls";
-import {
-  buttonsOf,
-  newestId,
-  pressButton,
-  waitForButton,
-  messageOf,
-  sleep,
-  type Scope,
-} from "./driver";
 import { moveViaEngine } from "./engine";
 
 /** Units that never leave their planet. */
@@ -144,30 +134,6 @@ export function summarize(
   return { ships, capacity, cargo, text, empty: names.size === 0 };
 }
 
-type UnitCount = { unitType: string; colorID: string; counts: number[] };
-
-/** The bot's movement payload: `"<pos>-space"` / `"<pos>-<planet>"` → unit counts per state. */
-export function displacementOf(
-  plan: MovePlan,
-  groups: Record<string, UnitGroup[]>,
-  color: string,
-) {
-  const out: Record<string, UnitCount[]> = {};
-  for (const [origin, picks] of Object.entries(plan)) {
-    for (const g of groups[origin] ?? []) {
-      const n = picks[groupKey(g)] ?? 0;
-      if (!n) continue;
-      const key = `${origin}-${g.holder}`;
-      (out[key] ??= []).push({
-        unitType: g.unit,
-        colorID: color,
-        counts: [...splitStates(g.states, n)],
-      });
-    }
-  }
-  return out;
-}
-
 /** The plan as the engine's move order: per origin and holder, how many of which unit (damaged ones last). */
 function unitsOf(plan: MovePlan, groups: Record<string, UnitGroup[]>) {
   // Legacy map data spells units / holders with the engine's async ids: typed here, where they enter a MoveRequest.
@@ -183,194 +149,34 @@ function unitsOf(plan: MovePlan, groups: Record<string, UnitGroup[]>) {
   return out;
 }
 
-async function postMovement(
-  gameName: string,
-  target: string,
-  displacement: Record<string, UnitCount[]>,
-) {
-  const token = getToken();
-  const res = await fetch(
-    `/bot/api/game/${encodeURIComponent(gameName)}/movement`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ targetPosition: target, displacement }),
-    },
-  );
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      text.slice(0, 200) || `The game refused the move (${res.status}).`,
-    );
+/** Whether units were already staged on the engine's movement step (with its own buttons): the popup finishes it. */
+export function hasStagedMoves(d: TacticalMove) {
+  return (d.progress?.accumulated.staged?.length ?? 0) > 0;
+}
+
+/** Origins the engine's movement step offers ("move from" options; else its movement picture's origins with units). */
+export function moveOrigins(d: TacticalMove, target: string): string[] {
+  const from = new Set<string>();
+  const pictured = new Set<string>();
+  for (const o of d.options) {
+    const v = o.value;
+    if (o.disabled || !v) continue;
+    if (v.action === "from") from.add(v.position);
+    if (v.action === "done") for (const origin of v.origins ?? []) if (origin.units.length) pictured.add(origin.position);
   }
+  const out = from.size ? from : pictured;
+  out.delete(target);
+  return [...out];
 }
 
-export type CommitDeps = {
-  gameName: string;
-  conn: PlayConnection;
-  scope: Scope;
-  /** The bot's "Tactical Action in system …" prompt (with Done moving). */
-  prompt: { channelId: string; messageId: string };
-  onProgress?: (text: string) => void;
-};
-
-/** Whether the bot's movement prompt already records units moved by its own buttons. */
-export function promptHasMoves(
-  conn: PlayConnection,
-  prompt: { channelId: string; messageId: string },
-) {
-  const m = messageOf(
-    conn.store.getState(),
-    prompt.channelId,
-    prompt.messageId,
-  );
-  return /\bmoved\b/i.test(m?.content ?? "");
-}
-
-const CONCLUDE = (target: string) => (id: string) =>
-  id === `concludeMove_${target}`;
-
-/**
- * Moves the planned units into `target` through the bot's movement API (the one built for its website), then
- * presses the bot's own "Done moving" so the action continues (space cannon, combat, landing) as usual. Falls
- * back to pressing the bot's per-unit move buttons when the API path fails.
- */
+/** Moves the planned units into the active system and finishes movement, as one engine action. */
 export async function commitMove(
-  target: string,
+  conn: PlayConnection,
+  decision: TacticalMove,
   plan: MovePlan,
   groups: Record<string, UnitGroup[]>,
-  color: string,
-  deps: CommitDeps,
+  onProgress?: (text: string) => void,
 ) {
-  const { conn, scope, prompt, onProgress } = deps;
-  const conclude = CONCLUDE(target);
-  const empty = summarize(plan, groups).empty;
-  let donePrompt: { channelId: string; messageId: string } | null = prompt;
-
-  onProgress?.(empty ? "Done moving…" : "Moving your fleet…");
-  const viaEngine = await moveViaEngine(unitsOf(plan, groups), target, {
-    conn,
-    gameName: deps.gameName,
-  });
-  if (viaEngine) {
-    conn.actions.noteInteraction(prompt.channelId, prompt.messageId);
-    return;
-  }
-
-  if (!empty) {
-    const baseline = newestId(conn.store.getState(), scope);
-    onProgress?.("Moving your fleet…");
-    try {
-      await postMovement(
-        deps.gameName,
-        target,
-        displacementOf(plan, groups, color),
-      );
-      const posted = await waitForButton(conn, scope, conclude, {
-        after: baseline,
-        timeoutMs: 15000,
-      });
-      donePrompt = posted ?? prompt;
-      /* The bot answered with a fresh prompt; its first one is settled too (as if pressed). */
-      if (posted)
-        conn.actions.noteInteraction(prompt.channelId, prompt.messageId);
-    } catch (apiError) {
-      onProgress?.("Moving with the game's buttons…");
-      await moveWithButtons(target, plan, groups, deps).catch((e: Error) => {
-        throw new Error(`${(apiError as Error).message} — ${e.message}`);
-      });
-    }
-  }
-  const m = messageOf(
-    conn.store.getState(),
-    donePrompt.channelId,
-    donePrompt.messageId,
-  );
-  const done = buttonsOf(m, scope.faction).find((c) =>
-    conclude(baseId(c.customId)),
-  );
-  if (!done?.customId)
-    throw new Error(
-      "The game's Done moving button is gone — finish in the popup.",
-    );
-  onProgress?.("Done moving…");
-  await pressButton(conn, { ...donePrompt, customId: done.customId });
-}
-
-/** `unitTacticalMove_<pos>_<n>_<unit>[_<state>][_<planet>]_<color>` → how many of which unit from where. */
-function parseUnitMove(id: string): { n: number; key: string } | null {
-  const parts = id.split("_");
-  if (
-    parts[0] !== "unitTacticalMove" ||
-    parts.at(-1) === "reverse" ||
-    parts.length < 5
-  )
-    return null;
-  const n = Number(parts[2]);
-  if (!n) return null;
-  const rest = parts.slice(4, -1);
-  while (rest[0] === "dmg" || rest[0] === "glv") rest.shift();
-  return { n, key: `${parts[3]}:${rest.length ? rest.join("_") : "space"}` };
-}
-
-/**
- * The bot's button chain: open each origin system (`tacticalMoveFrom_<pos>`), press its "Move N <unit>" buttons
- * until the planned number is reached, then "Done with this system".
- */
-async function moveWithButtons(
-  target: string,
-  plan: MovePlan,
-  groups: Record<string, UnitGroup[]>,
-  deps: CommitDeps,
-) {
-  const { conn, scope, prompt } = deps;
-  for (const [origin, picks] of Object.entries(plan)) {
-    const want = new Map<string, number>();
-    for (const g of groups[origin] ?? []) {
-      const n = picks[groupKey(g)] ?? 0;
-      if (n) want.set(`${g.unit}:${g.holder}`, n);
-    }
-    if (!want.size) continue;
-    const open = buttonsOf(
-      messageOf(conn.store.getState(), prompt.channelId, prompt.messageId),
-      scope.faction,
-    ).find((c) => baseId(c.customId) === `tacticalMoveFrom_${origin}`);
-    if (!open?.customId)
-      throw new Error(`The game doesn't offer moving from ${origin}.`);
-    await pressButton(conn, { ...prompt, customId: open.customId });
-    await sleep(600);
-    for (
-      let guard = 0;
-      guard < 40 && [...want.values()].some((n) => n > 0);
-      guard++
-    ) {
-      const buttons = buttonsOf(
-        messageOf(conn.store.getState(), prompt.channelId, prompt.messageId),
-        scope.faction,
-      );
-      const pick = buttons
-        .map((c) => ({ c, parsed: parseUnitMove(baseId(c.customId)) }))
-        .filter(
-          ({ parsed }) => parsed && (want.get(parsed.key) ?? 0) >= parsed.n,
-        )
-        .map(({ c, parsed }) => ({ c, ...parsed! }))
-        .sort((a, b) => b.n - a.n)[0];
-      if (!pick?.c.customId) break;
-      await pressButton(conn, { ...prompt, customId: pick.c.customId });
-      want.set(pick.key, (want.get(pick.key) ?? 0) - pick.n);
-      await sleep(500);
-    }
-    const back = buttonsOf(
-      messageOf(conn.store.getState(), prompt.channelId, prompt.messageId),
-      scope.faction,
-    ).find((c) => /^doneWithOneSystem/.test(baseId(c.customId)));
-    if (back?.customId) {
-      await pressButton(conn, { ...prompt, customId: back.customId });
-      await sleep(600);
-    }
-  }
-  void target;
+  onProgress?.(summarize(plan, groups).empty ? "Done moving…" : "Moving your fleet…");
+  await moveViaEngine(conn, decision, unitsOf(plan, groups));
 }

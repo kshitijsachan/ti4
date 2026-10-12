@@ -1,5 +1,7 @@
 import type { PlayConnection } from "@/discord";
-import { getToken } from "@/play/session";
+import { engineStore } from "@/engine/store";
+import { myDecisions } from "@/engine/reducer";
+import type { AnswerPayload } from "@/engine/link";
 import type { AnswerResult, Decision } from "../../../shim/src/engine/types";
 import type {
   LandRequest,
@@ -7,89 +9,101 @@ import type {
   TacticalActivate,
   TacticalLand,
   TacticalMove,
-  TurnAction,
 } from "../../../shim/src/engine/kinds/tactical";
+import { isStartMenu } from "./step";
 
 /*
  * The map's tactical actions over the engine's typed decisions (docs/ENGINE.md): activation answers
  * turn.action → tactical.activate by the systems each menu step lists, movement and landing are one direct action
- * each (`move` / `land`). Every function resolves `null` when the engine API is unavailable (or the decision is not
- * there), so the callers fall back to driving the bot's buttons.
+ * each (`move` / `land`). Decisions are read from the page's engine stream (engineStore); answers go over the play
+ * socket's `op:"answer"` and resolve with the engine's AnswerResult (rejecting with its error).
  */
 
-const POLL_MS = 400;
+const ANSWER_TIMEOUT_MS = 60000;
 const WAIT_MS = 15000;
 
-type Mine = { conn: PlayConnection; gameName: string };
-
-const base = (gameName: string) => `/bot/api/game/${encodeURIComponent(gameName)}/engine`;
-
-function headers(): Record<string, string> {
-  const token = getToken();
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+/** My open decisions in the game on screen (the engine stream's view). */
+export function currentDecisions(conn: PlayConnection): Decision[] {
+  return myDecisions(engineStore.getState().view, conn.store.getState().me?.id);
 }
 
-/** My open decisions in the game (target = me), or null when the engine API does not answer. */
-export async function myDecisions({ conn, gameName }: Mine): Promise<Decision[] | null> {
-  const me = conn.store.getState().me?.id;
-  if (!me) return null;
-  try {
-    const res = await fetch(`${base(gameName)}/decisions`, { headers: headers() });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { decisions?: Decision[] };
-    return (body.decisions ?? []).filter((d) => d.target?.userId === me);
-  } catch {
-    return null;
-  }
+/** The current copy of a decision (it is edited in place: answers need its latest seq), if still open. */
+export function latest<D extends Decision>(d: D): D | undefined {
+  return engineStore.getState().view.decisions[d.id] as D | undefined;
 }
 
-async function post(path: string, body: unknown): Promise<AnswerResult> {
-  const res = await fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
-  const json = (await res.json().catch(() => null)) as AnswerResult | null;
-  if (!json) throw new Error(`The game refused (${res.status}).`);
-  if (!json.ok) throw new Error(json.error ?? `The game refused (${json.status}).`);
-  return json;
+/** The current copy of a decision, else my newest open decision of its kind (a step re-posted as a new prompt). */
+function currentOf<D extends Decision>(conn: PlayConnection, d: D): D | undefined {
+  return latest(d) ?? (currentDecisions(conn).filter((x) => x.kind === d.kind).sort((a, b) => b.seq - a.seq)[0] as D | undefined);
 }
 
-function answer(gameName: string, d: Decision, optionId: string) {
-  return post(`${base(gameName)}/decisions/${encodeURIComponent(d.id)}/answer`, { optionId, expectedSeq: d.seq });
+/** Answers a decision over the play socket and waits for the engine's result. Rejects with the engine's error. */
+export function answerEngine(conn: PlayConnection, decision: Decision, a: AnswerPayload): Promise<AnswerResult> {
+  const d = latest(decision) ?? decision;
+  return new Promise<AnswerResult>((resolve, reject) => {
+    let nonce: string | null = null;
+    const finish = (fn: () => void) => {
+      off();
+      window.clearTimeout(timer);
+      fn();
+    };
+    const off = conn.onEngineFrame((frame) => {
+      if (frame.type !== "answer" || !nonce || frame.nonce !== nonce) return;
+      const r = frame.result;
+      if (r.ok) finish(() => resolve(r as AnswerResult));
+      else finish(() => reject(new Error(r.error ?? `The game refused (${r.status}).`)));
+    });
+    const timer = window.setTimeout(() => finish(() => reject(new Error("No response from the game server."))), ANSWER_TIMEOUT_MS);
+    const key = a.action ?? a.optionId ?? "payload";
+    nonce = conn.send({
+      op: "answer",
+      game: d.game,
+      decisionId: d.id,
+      ...a,
+      expectedSeq: d.seq,
+      requestId: `${d.id}:${d.revision ?? d.seq}:${key}:map:${Date.now().toString(36)}`,
+    });
+    if (!nonce) finish(() => reject(new Error("Not connected to the game server — reconnecting.")));
+  });
 }
 
-/** Polls my decisions until `pick` finds one (≤15 s). */
-async function waitForDecision<T>(mine: Mine, pick: (ds: Decision[]) => T | undefined): Promise<T | null> {
-  const until = Date.now() + WAIT_MS;
-  while (Date.now() < until) {
-    const ds = await myDecisions(mine);
-    const hit = ds ? pick(ds) : undefined;
-    if (hit) return hit;
-    await new Promise((r) => setTimeout(r, POLL_MS));
-  }
-  return null;
+/** Resolves with the first value `pick` finds in my decisions (now or as the stream changes); null after 15 s. */
+export function waitForDecision<T>(conn: PlayConnection, pick: (ds: Decision[]) => T | undefined, timeoutMs = WAIT_MS): Promise<T | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: T | null) => {
+      if (done) return;
+      done = true;
+      off();
+      window.clearTimeout(timer);
+      resolve(v);
+    };
+    const check = () => {
+      const hit = pick(currentDecisions(conn));
+      if (hit !== undefined && hit !== null) finish(hit);
+    };
+    const off = engineStore.subscribe(check);
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    check();
+  });
 }
 
-const isStartMenu = (d: Decision): d is TurnAction =>
-  d.kind === "turn.action" &&
-  d.options.some((o) => !o.disabled && o.value?.action === "tactical") &&
-  !d.options.some((o) => !o.disabled && o.value?.action === "end_turn");
+const isActivate = (d: Decision): d is TacticalActivate => d.kind === "tactical.activate";
 
 /**
  * Activates `position`: starts a tactical action from the turn menu if needed, then follows the menu step whose
- * `positions` list it, then picks it. Resolves false when the engine is not available (fall back to buttons).
+ * `positions` list it, then picks it, and waits for the movement step.
  */
-export async function activateViaEngine(position: string, mine: Mine, onProgress?: (text: string) => void): Promise<boolean> {
-  const ds = await myDecisions(mine);
-  if (!ds) return false;
-  let act = ds.find((d): d is TacticalActivate => d.kind === "tactical.activate");
+export async function activateViaEngine(position: string, conn: PlayConnection, onProgress?: (text: string) => void): Promise<void> {
+  const ds = currentDecisions(conn);
+  let act: TacticalActivate | undefined = ds.filter(isActivate).sort((a, b) => b.seq - a.seq)[0];
   if (!act) {
     const menu = ds.find(isStartMenu);
     const opt = menu?.options.find((o) => !o.disabled && o.value?.action === "tactical");
-    if (!menu || !opt) return false;
+    if (!menu || !opt) throw new Error("The game isn't asking for a tactical action right now.");
     onProgress?.("Starting a tactical action…");
-    await answer(mine.gameName, menu, opt.id);
-    act = (await waitForDecision(mine, (all) => all.find((d): d is TacticalActivate => d.kind === "tactical.activate"))) ?? undefined;
+    await answerEngine(conn, menu, { optionId: opt.id });
+    act = (await waitForDecision(conn, (all) => all.find(isActivate))) ?? undefined;
     if (!act) throw new Error("The game didn't offer systems to activate (no tactic token left?).");
   }
   const tried = new Set<string>();
@@ -98,8 +112,11 @@ export async function activateViaEngine(position: string, mine: Mine, onProgress
     const system = opts.find((o) => o.value!.step === "system" && o.value!.position === position);
     if (system) {
       onProgress?.(`Activating ${position}…`);
-      await answer(mine.gameName, act, system.id);
-      return true;
+      const before = engineStore.getState().view.seq;
+      await answerEngine(conn, act, { optionId: system.id });
+      /* Settle once the next step (movement, or anything after it) is up, so the map does not flash the old one. */
+      await waitForDecision(conn, (all) => all.find((d) => d.seq > before && d.kind !== "tactical.activate"), 15000);
+      return;
     }
     const menu = opts.find((o) => {
       const v = o.value!;
@@ -108,43 +125,33 @@ export async function activateViaEngine(position: string, mine: Mine, onProgress
     if (!menu) throw new Error(`The game doesn't offer ${position} for activation.`);
     tried.add(menu.id);
     onProgress?.(`Opening ${menu.label}…`);
-    const prev = act;
-    await answer(mine.gameName, act, menu.id);
+    const prev = latest(act) ?? act;
+    await answerEngine(conn, prev, { optionId: menu.id });
     act =
-      (await waitForDecision(mine, (all) =>
-        all.find((d): d is TacticalActivate => d.kind === "tactical.activate" && (d.id !== prev.id || d.revision !== prev.revision)),
+      (await waitForDecision(conn, (all) =>
+        all.find((d): d is TacticalActivate => isActivate(d) && (d.id !== prev.id || d.revision !== prev.revision)),
       )) ?? undefined;
   }
   throw new Error(`Couldn't find ${position} in the game's system menu.`);
 }
 
-/** Moves exactly these units into the active system and finishes movement. Null: no engine (use buttons). */
-export async function moveViaEngine(
-  units: MoveRequest["units"],
-  target: string,
-  mine: Mine,
-): Promise<AnswerResult | null> {
-  const ds = await myDecisions(mine);
-  const d = ds?.find(
-    (x): x is TacticalMove =>
-      x.kind === "tactical.move" && x.options.some((o) => !o.disabled && o.value?.action === "done" && o.value.position === target),
-  );
-  if (!d) return null;
-  return post(`${base(mine.gameName)}/decisions/${encodeURIComponent(d.id)}/move`, {
-    units,
-    conclude: true,
-    expectedSeq: d.seq,
-  } satisfies Omit<MoveRequest, "userId">);
+/** Moves exactly these units into the active system and finishes movement (the tactical.move decision's `move`). */
+export async function moveViaEngine(conn: PlayConnection, decision: TacticalMove, units: MoveRequest["units"]): Promise<AnswerResult> {
+  const d = currentOf(conn, decision);
+  if (!d) throw new Error("The game is no longer asking for movement.");
+  return answerEngine(conn, d, { action: "move", body: { units, conclude: true } satisfies Omit<MoveRequest, "userId"> });
 }
 
-/** Lands these ground forces and finishes landing. Null: no engine (use buttons). */
-export async function landViaEngine(landings: LandRequest["landings"], mine: Mine): Promise<AnswerResult | null> {
-  const ds = await myDecisions(mine);
-  const d = ds?.find((x): x is TacticalLand => x.kind === "tactical.land");
-  if (!d) return null;
-  return post(`${base(mine.gameName)}/decisions/${encodeURIComponent(d.id)}/land`, {
-    landings,
-    done: true,
-    expectedSeq: d.seq,
-  } satisfies Omit<LandRequest, "userId">);
+/** Lands these ground forces and finishes landing (the tactical.land decision's `land`). */
+export async function landViaEngine(conn: PlayConnection, decision: TacticalLand, landings: LandRequest["landings"]): Promise<AnswerResult> {
+  const d = currentOf(conn, decision);
+  if (!d) throw new Error("The game is no longer asking where to land.");
+  return answerEngine(conn, d, { action: "land", body: { landings, done: true } satisfies Omit<LandRequest, "userId"> });
+}
+
+/** Presses one option of a decision (an ability on the movement step, the rift roll on the landing step). */
+export async function pressOption(conn: PlayConnection, decision: Decision, optionId: string): Promise<AnswerResult> {
+  const d = latest(decision);
+  if (!d) throw new Error("That step is over.");
+  return answerEngine(conn, d, { optionId });
 }

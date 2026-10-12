@@ -10,6 +10,7 @@ import type { PlayerDataResponse } from "@/entities/data/types";
 import { buildHand, type CardGroup, type HandResponse } from "./model";
 import { actionTakenThisTurn, assignNumbers, indexThread, sabotageWindow, type BotButton, type ThreadIndex } from "./botThread";
 import { useCardData } from "./cardData";
+import { useEngine } from "@/engine/store";
 
 const POLL_MS = 45_000;
 
@@ -127,7 +128,8 @@ export function useHand(gameName: string, token?: string): HandState {
     .filter((c) => c.kind === "ac" || (c.kind === "so" && !c.scored))
     .filter((c) => !numbers.has(c.key)).length;
 
-  const actionTaken = useMemo(() => actionTakenThisTurn(actionsChannel), [actionsChannel]);
+  const decisions = useEngine((s) => s.view.decisions);
+  const actionTaken = useMemo(() => actionTakenThisTurn(Object.values(decisions)), [decisions]);
   const sabotage = useMemo(() => sabotageWindow(actionsChannel, me?.faction), [actionsChannel, me?.faction]);
   const acHeld = groups.find((g) => g.id === "ac")?.cards.length ?? 0;
 

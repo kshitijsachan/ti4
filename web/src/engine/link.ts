@@ -40,6 +40,11 @@ export function useEngineLink(gameName: string) {
       /* A reaction window's decision is re-issued whenever someone else answers it: an answer sent against the
          previous revision comes back "stale". Re-send it once against the current one if the option is still there. */
       if (frame.type === "answer" && !frame.result.ok && frame.result.status === "stale" && frame.nonce && retryStale(conn, frame.nonce)) return;
+      /* A select or form-opening button the engine can't run natively (no native coverage for its handler, an
+         ephemeral prompt): press it the Discord way instead, so its modal still opens. */
+      if (frame.type === "answer" && !frame.result.ok && frame.nonce && pressInstead(conn, frame.nonce, frame.result.status)) {
+        frame = { ...frame, result: { ...frame.result, ok: true, error: null } };
+      }
       if (frame.type === "answer" && frame.nonce) sent.delete(frame.nonce);
       engineStore.getState().apply(frame);
     });
@@ -76,9 +81,10 @@ export type AnswerPayload = {
 };
 
 /**
- * Answers a decision as me. Plain options go to the engine (`op:"answer"`, checked against the decision's seq so a
- * changed prompt is never answered blind). Options the engine can't run yet — select values (`customId#value`) and
- * buttons that open a form (`needsInput`) — take the legacy press path, so their modal still opens.
+ * Answers a decision as me: everything goes to the engine (`op:"answer"`, checked against the decision's seq so a
+ * changed prompt is never answered blind), select values (`customId#value`) and form-opening buttons (`needsInput`:
+ * the engine answers "needs_input" and opens an input.form decision) included. Only when the engine refuses one of
+ * those two as beyond it ("needs_input" / "unsupported") is it pressed the Discord way (pressInstead).
  */
 export function useEngineAnswer() {
   const conn = usePlayConnection();
@@ -92,8 +98,12 @@ export function useEngineAnswer() {
     const { channelId, messageId } = decision.source;
     engineStore.getState().noteAnswer({ at: Date.now(), seq: engineStore.getState().view.seq, decision, optionId: a.optionId ?? null, values: a.values });
     const hash = option?.id.indexOf("#") ?? -1;
-    if (plain && hash > 0) return void conn.select(channelId, messageId, option.id.slice(0, hash), [option.id.slice(hash + 1)], 3);
-    if (plain && option.needsInput) return void conn.click(channelId, messageId, option.id);
+    const press: Sent["press"] =
+      plain && hash > 0
+        ? { channelId, messageId, customId: option.id.slice(0, hash), values: [option.id.slice(hash + 1)] }
+        : plain && option.needsInput
+          ? { channelId, messageId, customId: option.id }
+          : undefined;
     const store = engineStore.getState();
     if (store.view.pending[decision.id]) return;
     const key = a.action ?? a.optionId ?? "payload";
@@ -107,12 +117,28 @@ export function useEngineAnswer() {
     });
     if (!nonce) return store.answerFailed(decision.id, "", "Not connected to the game server — reconnecting.");
     store.answerStarted(decision.id, nonce, key);
-    sent.set(nonce, { decisionId: decision.id, answer: a, retried: false });
+    sent.set(nonce, { decisionId: decision.id, answer: a, retried: false, press });
     window.setTimeout(() => engineStore.getState().answerFailed(decision.id, nonce, "No response from the game server."), ANSWER_TIMEOUT_MS);
   };
 }
 
-type Sent = { decisionId: string; answer: AnswerPayload; retried: boolean };
+type Sent = {
+  decisionId: string;
+  answer: AnswerPayload;
+  retried: boolean;
+  /** A select value / form-opening button: how to press it the Discord way if the engine can't. */
+  press?: { channelId: string; messageId: string; customId: string; values?: string[] };
+};
+
+/** The engine can't run this select / form-opening button: press it over the play socket. True when pressed. */
+function pressInstead(conn: ReturnType<typeof usePlayConnection>, nonce: string, status: string): boolean {
+  const p = sent.get(nonce)?.press;
+  if (!p || (status !== "needs_input" && status !== "unsupported")) return false;
+  sent.delete(nonce);
+  if (p.values) conn.select(p.channelId, p.messageId, p.customId, p.values, 3);
+  else conn.click(p.channelId, p.messageId, p.customId);
+  return true;
+}
 /** Answers in flight from this page, by nonce (for the one stale retry). */
 const sent = new Map<string, Sent>();
 
