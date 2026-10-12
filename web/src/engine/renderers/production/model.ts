@@ -26,13 +26,21 @@ export function isPlacement(v: ProductionValue | null | undefined): v is Product
 
 export type PaymentPlan = { payload: PaymentPayload; why: string };
 
-/** Trade goods / commodities are worth more than an exhausted planet: weight them when choosing what to spend. */
-const TG_WEIGHT = 1.25;
-const COMM_WEIGHT = 1.1;
+/**
+ * Trade goods / commodities are spent last: one only replaces planets that would overpay by more than this.
+ * Planets with a technology specialty (a skip a later research may want) or a legendary ability cost a little more
+ * than plain ones, so an equally exact plain set wins.
+ */
+const TG_WEIGHT = 3;
+const COMM_WEIGHT = 2.5;
+const SKIP_WEIGHT = 0.3;
+const LEGENDARY_WEIGHT = 0.2;
 
 /**
- * Cover the bill with the least waste. null when the engine does not know the cost (leave it to the caller) or the
- * bill cannot be covered (the engine refuses underpaying; the legacy path decides what to do).
+ * Cover the bill exactly, cheapest first (plain planets, then planets with a tech skip, trade goods last; Sarween
+ * Tools whenever offered). A bill that cannot be covered spends everything offered (the engine accepts that: Done
+ * finishes an underpaid payment). Unknown cost: nothing offered to spend → just Done; otherwise null (the planner
+ * pays, e.g. Leadership's influence).
  */
 export function planPayment(d: PaymentSpend, state: GameState | null, me: string): PaymentPlan | null {
   const opts = d.options.filter((o) => !o.disabled && o.value);
@@ -41,18 +49,28 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
   const req = (d.progress?.required ?? {}) as { cost?: number | null; remaining?: number | null };
   const cost = req.cost ?? done.cost;
   const currency = done.currency;
-  if (cost == null || (currency !== "res" && currency !== "inf")) return null;
+  if (currency !== "res" && currency !== "inf") return null;
+  const self = state?.players.find((p) => p.userId === me);
+  const exhausted = new Set(self?.exhaustedPlanets ?? []);
+  if (cost == null) {
+    const spendable = opts.some((o) => {
+      const v = o.value;
+      if (!v || !("source" in v)) return false;
+      if (v.source === "planet") return !exhausted.has(v.planet);
+      if (v.source === "tg") return (self?.tg ?? 0) > 0;
+      return v.source === "commodities" && done.keleresAgent && (self?.commodities ?? 0) > 0;
+    });
+    return spendable ? null : { payload: { planets: [] }, why: "nothing left to spend: done" };
+  }
   const counted = typeof req.remaining === "number" ? cost - req.remaining : currency === "inf" ? done.spentInfluence : done.spentResources;
   let due = cost - counted;
   if (due <= 0) return { payload: { planets: [] }, why: `bill of ${cost} already covered` };
 
-  const self = state?.players.find((p) => p.userId === me);
-  const exhausted = new Set(self?.exhaustedPlanets ?? []);
   const sarween = opts.some((o) => o.value && "source" in o.value && o.value.source === "discount");
   if (sarween) due -= 1;
   const planets = opts
     .map((o) => o.value)
-    .flatMap((v) => (v && "source" in v && v.source === "planet" && !exhausted.has(v.planet) ? [{ id: v.planet, v: currency === "inf" ? v.influence : v.resources }] : []))
+    .flatMap((v) => (v && "source" in v && v.source === "planet" && !exhausted.has(v.planet) ? [{ id: v.planet, v: currency === "inf" ? v.influence : v.resources, w: (v.techSpecialties?.length ? SKIP_WEIGHT : 0) + (v.legendary ? LEGENDARY_WEIGHT : 0) }] : []))
     .filter((p) => p.v > 0)
     .sort((a, b) => b.v - a.v)
     .slice(0, 12);
@@ -75,19 +93,28 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
       }
       for (let mask = 1; mask < 1 << planets.length; mask++) {
         let t = 0;
+        let w = 0;
         const set: PlanetId[] = [];
         for (let i = 0; i < planets.length; i++)
           if (mask & (1 << i)) {
             t += planets[i].v;
+            w += planets[i].w;
             set.push(planets[i].id);
           }
         if (t < need) continue;
-        const score = t - need + extra + set.length * 0.01;
+        const score = t - need + extra + w + set.length * 0.01;
         if (!best || score < best.score) best = { set, tg, comm, score };
       }
     }
   }
-  if (!best) return null;
+  if (!best) {
+    // Cannot cover the bill: spend everything offered (the engine then lets Done finish the underpaid payment).
+    const all: PaymentPayload = { planets: planets.map((p) => p.id) };
+    if (tgHeld) all.tg = tgHeld;
+    if (commHeld) all.commodities = commHeld;
+    if (sarween) all.sarween = true;
+    return { payload: all, why: `cannot cover ${cost}: spend everything offered` };
+  }
   const payload: PaymentPayload = { planets: best.set };
   if (best.tg) payload.tg = best.tg;
   if (best.comm) payload.commodities = best.comm;
