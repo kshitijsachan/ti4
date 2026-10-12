@@ -732,6 +732,8 @@ class SeatPilot {
 
   /** When the current think() began: one hung far longer than any step should is abandoned (never a silent seat). */
   private busySince = 0;
+  /** Round-robin start for liveGames(): advanced once per think(), so a game with endless planner work cannot starve the seat's other games. */
+  private rotation = 0;
 
   /** What the current think() is doing (named in the "hung" warning and the event-loop lag monitor). */
   private stage = "";
@@ -745,6 +747,7 @@ class SeatPilot {
     this.busySince = Date.now();
     if (Date.now() < this.restUntil) return;
     this.busy = true;
+    this.rotation++;
     const done = activity(`autopilot ${this.name}: think`);
     try {
       this.stage = "live games";
@@ -1960,7 +1963,10 @@ class SeatPilot {
       if (this.mgr.isSettling(game)) continue;
       out.push(game);
     }
-    return out;
+    // Start at a different game each think(): the loops act on the first game with work, and a seat in many games
+    // (an autopiloted human, pbd328/pbd331) otherwise only ever played its first few games.
+    const k = out.length ? this.rotation % out.length : 0;
+    return [...out.slice(k), ...out.slice(0, k)];
   }
 
   private boards = new Map<string, { at: number; board: Board | null }>();

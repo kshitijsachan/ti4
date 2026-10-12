@@ -1101,10 +1101,31 @@ index a54a239..1731da8 100644
          if (lastGameName == null) return false;
  
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/objective/SecretObjectiveButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/objective/SecretObjectiveButtonHandler.java
-index a513e12..da1e360 100644
+index a513e12..e048331 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/objective/SecretObjectiveButtonHandler.java
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/objective/SecretObjectiveButtonHandler.java
-@@ -147,6 +147,11 @@ class SecretObjectiveButtonHandler {
+@@ -116,6 +116,20 @@ class SecretObjectiveButtonHandler {
+         MessageHelper.sendMessageToChannel(game.getActionsChannel(), publicMsg);
+         ButtonHelper.deleteMessage(event);
+         SecretObjectiveInfoService.sendSecretObjectiveInfo(game, player);
++        offerSetupDiscardAgain(game, player);
++    }
++
++    /**
++     * Retrieving a secret discarded during setup puts the player back to owing a discard, but the discard prompt they
++     * answered is gone: offer it again, or setup waits on them with nothing to press (fuzz pbd289 / pbd297: 6 min).
++     */
++    private static void offerSetupDiscardAgain(Game game, Player player) {
++        if (ti4.selfhost.engine.SetupStateBuilder.pastSetup(game)) return;
++        if (ti4.selfhost.engine.SetupStateBuilder.secretsToDiscard(game, player) <= 0) return;
++        List<Button> soButtons = SecretObjectiveHelper.getUnscoredSecretObjectiveDiscardButtons(player);
++        if (soButtons.isEmpty()) return;
++        MessageHelper.sendMessageToChannelWithButtons(
++                player.getCardsInfoThread(), "Click a button below to discard your secret objective.", soButtons);
+     }
+ 
+     @ButtonHandler(value = "get_so_discard_buttons", save = false)
+@@ -147,6 +161,11 @@ class SecretObjectiveButtonHandler {
                  return;
              }
          }
@@ -2290,10 +2311,22 @@ index c8dcdf7..eec5076 100644
          // Ugly fix to update seen tiles data for fog since doing it in
          // MapGenerator/TileGenerator won't save changes anymore
 diff --git a/src/main/java/ti4/game/persistence/GameUndoService.java b/src/main/java/ti4/game/persistence/GameUndoService.java
-index d91d9d5..f776d7a 100644
+index d91d9d5..da15b1a 100644
 --- a/src/main/java/ti4/game/persistence/GameUndoService.java
 +++ b/src/main/java/ti4/game/persistence/GameUndoService.java
-@@ -108,13 +108,25 @@ class GameUndoService {
+@@ -54,7 +54,10 @@ class GameUndoService {
+ 
+             int maxUndoNumber = undoNumbers.getLast();
+             ManagedGame managedGame = GameManager.getManagedGame(gameName);
+-            int maxUndoFilesPerGame = managedGame != null && managedGame.isHasEnded() ? 10 : 100;
++            // Self-host: an ended game keeps its full history, so an accidental End Game stays fully rewindable (the
++            // first save after the end, e.g. a rewind's own undo copy, used to trim it to the last 10).
++            boolean trimEnded = managedGame != null && managedGame.isHasEnded() && !ti4.selfhost.SelfHosted.isEnabled();
++            int maxUndoFilesPerGame = trimEnded ? 10 : 100;
+             int oldestUndoNumberThatShouldExist = maxUndoNumber - maxUndoFilesPerGame;
+ 
+             undoNumbers.stream()
+@@ -108,13 +111,30 @@ class GameUndoService {
                  replaceGameFileWithUndo(gameName, latestUndoIndex, currentGameFile.toPath());
                  return null;
              }
@@ -2307,6 +2340,11 @@ index d91d9d5..f776d7a 100644
 +            // were archived when it ended: getMainGameChannel() is null).
 +            List<String> undoCommands = deleteUndoneSaves(gameToUndo, undoIndex, latestUndoIndex);
              GameWebStatePipeline.queue(loadedGame);
++            // A rewind past End Game: the game's channels come back from the archive first, so everything below
++            // (and every later answer) finds its actions channel again and the game can be ended again.
++            if (UnendedGameChannels.needsRestore(gameToUndo, loadedGame))
++                notifySafely(gameToUndo, "restore the channels of the un-ended game",
++                        () -> UnendedGameChannels.restore(loadedGame));
  
 -            generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
 -            sendAnyChangedCardsInfo(gameToUndo, loadedGame);
@@ -2324,7 +2362,7 @@ index d91d9d5..f776d7a 100644
              return loadedGame;
          } catch (Exception e) {
              BotLogger.error(new LogOrigin(gameToUndo), "Error trying to undo: " + gameName, e);
-@@ -155,12 +167,22 @@ class GameUndoService {
+@@ -155,12 +175,22 @@ class GameUndoService {
          return gameName + "_" + undoIndex + Constants.TXT;
      }
  
@@ -2351,7 +2389,7 @@ index d91d9d5..f776d7a 100644
          List<String> undoCommands = new ArrayList<>();
          for (int i = latestUndoIndex; i > undoIndex; i--) {
              String fileName = getUndoFileName(gameToUndo.getName(), i);
-@@ -170,8 +192,15 @@ class GameUndoService {
+@@ -170,8 +200,15 @@ class GameUndoService {
                  BotLogger.error(new LogOrigin(gameToUndo), "Failed to delete undo file: " + currentUndo);
              }
          }
@@ -2368,6 +2406,153 @@ index d91d9d5..f776d7a 100644
      }
  
      private static void sendUndoConfirmationMessage(
+diff --git a/src/main/java/ti4/game/persistence/UnendedGameChannels.java b/src/main/java/ti4/game/persistence/UnendedGameChannels.java
+new file mode 100644
+index 0000000..bf2e8c0
+--- /dev/null
++++ b/src/main/java/ti4/game/persistence/UnendedGameChannels.java
+@@ -0,0 +1,141 @@
++package ti4.game.persistence;
++
++import java.util.ArrayList;
++import java.util.EnumSet;
++import java.util.List;
++import java.util.Objects;
++import java.util.Set;
++import net.dv8tion.jda.api.Permission;
++import net.dv8tion.jda.api.entities.Guild;
++import net.dv8tion.jda.api.entities.Member;
++import net.dv8tion.jda.api.entities.Role;
++import net.dv8tion.jda.api.entities.channel.concrete.Category;
++import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
++import net.dv8tion.jda.api.requests.Route;
++import net.dv8tion.jda.api.utils.data.DataObject;
++import net.dv8tion.jda.internal.requests.RestActionImpl;
++import org.apache.commons.lang3.StringUtils;
++import ti4.discord.JdaService;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.logging.BotLogger;
++import ti4.logging.LogOrigin;
++import ti4.service.game.CreateGameService;
++
++/**
++ * An accidental End Game stays rewindable: `/game end archive_channels` moved the game's channels into "The in-limbo
++ * PBD Archive" (on the self-hosted shim that also hides them from the bot, so every answer failed with no actions
++ * channel and the game could not be ended again) and deleted the game role. When a rewind brings the game back to
++ * not-ended, its channels go back to the game's PBD category and the role is recreated for its players.
++ */
++final class UnendedGameChannels {
++
++    static final String LIMBO = "The in-limbo PBD Archive";
++
++    private UnendedGameChannels() {}
++
++    /** Whether the rewound game needs its channels back: it was ended before, or its channels are still archived. */
++    static boolean needsRestore(Game before, Game after) {
++        if (after == null || after.isHasEnded() || after.isFowMode()) return false;
++        if (before != null && before.isHasEnded()) return true;
++        // Self-host repair: a game rewound before this fix still has its channels archived (pbd303, pbd346).
++        if (!ti4.selfhost.SelfHosted.isEnabled()) return false;
++        for (String id : channelIds(after)) {
++            TextChannel ch = JdaService.jda == null ? null : JdaService.jda.getTextChannelById(id);
++            if (ch == null || inLimbo(ch)) return true;
++        }
++        return false;
++    }
++
++    static void restore(Game game) {
++        Guild guild = guild(game);
++        if (guild == null) return;
++        Category category = gameCategory(game, guild);
++        if (category == null) {
++            BotLogger.warning(new LogOrigin(game), "Rewind un-ended " + game.getName() + " but found no category for it");
++            return;
++        }
++        List<TextChannel> channels = new ArrayList<>();
++        for (String id : channelIds(game)) {
++            TextChannel cached = guild.getTextChannelById(id);
++            if (cached != null && !inLimbo(cached)) {
++                channels.add(cached);
++                continue;
++            }
++            // Raw PATCH: an archived channel is not in the bot's cache on the self-hosted shim (it is on Discord).
++            try {
++                new RestActionImpl<Void>(
++                                guild.getJDA(),
++                                Route.Channels.MODIFY_CHANNEL.compile(id),
++                                DataObject.empty().put("parent_id", category.getId()))
++                        .complete();
++            } catch (Exception e) {
++                BotLogger.error(new LogOrigin(game), "Could not move " + id + " of " + game.getName() + " back", e);
++                continue;
++            }
++            TextChannel back = awaitChannel(guild, id);
++            if (back != null) channels.add(back);
++        }
++        restoreRole(game, guild, channels);
++        BotLogger.info("Rewind un-ended " + game.getName() + ": restored " + channels.size() + " channel(s) to "
++                + category.getName());
++    }
++
++    private static void restoreRole(Game game, Guild guild, List<TextChannel> channels) {
++        boolean exists = guild.getRoles().stream().anyMatch(r -> game.getName().equalsIgnoreCase(r.getName()));
++        if (exists || channels.isEmpty()) return;
++        Role role = guild.createRole().setName(game.getName()).setMentionable(true).complete();
++        for (Player player : game.getRealPlayers()) {
++            Member member = guild.getMemberById(player.getUserID());
++            if (member != null) guild.addRoleToMember(member, role).complete();
++        }
++        Set<Permission> allow = EnumSet.of(Permission.PIN_MESSAGES, Permission.VIEW_CHANNEL);
++        for (TextChannel ch : channels) {
++            ch.getManager().putRolePermissionOverride(role.getIdLong(), allow, null).complete();
++        }
++    }
++
++    /** The gateway's CHANNEL_CREATE follows the PATCH reply: wait (briefly) for the channel to be cached again. */
++    private static TextChannel awaitChannel(Guild guild, String id) {
++        for (int i = 0; i < 50; i++) {
++            TextChannel ch = guild.getTextChannelById(id);
++            if (ch != null && !inLimbo(ch)) return ch;
++            try {
++                Thread.sleep(100);
++            } catch (InterruptedException e) {
++                Thread.currentThread().interrupt();
++                break;
++            }
++        }
++        return guild.getTextChannelById(id);
++    }
++
++    private static Category gameCategory(Game game, Guild guild) {
++        String name = CreateGameService.getCategoryNameForGame(game.getName());
++        if (name == null) return null;
++        List<Category> found = guild.getCategoriesByName(name, true);
++        if (!found.isEmpty()) return found.getFirst();
++        return guild.createCategory(name).complete();
++    }
++
++    private static Guild guild(Game game) {
++        if (JdaService.jda == null) return null;
++        if (StringUtils.isNumeric(game.getGuildID())) {
++            Guild g = JdaService.jda.getGuildById(game.getGuildID());
++            if (g != null) return g;
++        }
++        return JdaService.guildPrimary;
++    }
++
++    private static List<String> channelIds(Game game) {
++        return java.util.stream.Stream.of(game.getMainChannelID(), game.getTableTalkChannelID())
++                .filter(Objects::nonNull)
++                .filter(StringUtils::isNumeric)
++                .toList();
++    }
++
++    private static boolean inLimbo(TextChannel ch) {
++        Category parent = ch.getParentCategory();
++        return parent != null && LIMBO.equalsIgnoreCase(parent.getName());
++    }
++}
 diff --git a/src/main/java/ti4/helpers/ActionCardHelper.java b/src/main/java/ti4/helpers/ActionCardHelper.java
 index 88c72d8..7eb851f 100644
 --- a/src/main/java/ti4/helpers/ActionCardHelper.java
@@ -2462,7 +2647,7 @@ index 9b27bd5..cb00433 100644
                      + ", you would research a technology, but because of **Propagation**, you instead gain 3 command tokens."
                      + " Your current command tokens are " + player.getCCRepresentation()
 diff --git a/src/main/java/ti4/helpers/ButtonHelper.java b/src/main/java/ti4/helpers/ButtonHelper.java
-index d4c34fb..4600dcf 100644
+index d4c34fb..766f5c5 100644
 --- a/src/main/java/ti4/helpers/ButtonHelper.java
 +++ b/src/main/java/ti4/helpers/ButtonHelper.java
 @@ -131,6 +131,7 @@ import ti4.model.TechnologyModel.TechnologyType;
@@ -2704,7 +2889,58 @@ index d4c34fb..4600dcf 100644
          // Use existing thread, if it exists
          for (ThreadChannel threadChannel_ : channel.getThreadChannels()) {
              if (threadChannel_.getName().equals(threadName)) {
-@@ -4817,7 +4841,7 @@ public class ButtonHelper {
+@@ -4317,6 +4341,27 @@ public class ButtonHelper {
+ 
+     public static int[] checkFleetAndCapacity(
+             Player player, Game game, Tile tile, boolean ignoreFighters, boolean issuePing) {
++        return checkFleetAndCapacity(player, game, tile, ignoreFighters, issuePing, null);
++    }
++
++    /**
++     * Whether the player still breaks a rule checkFleetAndCapacity reports in this system (fleet pool, capacity, a
++     * floating structure, too many space docks / PDS). A dry run: no pings, no commander unlocks. The self-host engine
++     * closes a "Remove Units" reminder once its system is back within the rules.
++     */
++    public static boolean fleetOrCapacityViolated(Player player, Game game, Tile tile) {
++        boolean[] violated = {false};
++        checkFleetAndCapacity(player, game, tile, false, false, violated);
++        return violated[0];
++    }
++
++    private static int[] checkFleetAndCapacity(
++            Player player,
++            Game game,
++            Tile tile,
++            boolean ignoreFighters,
++            boolean issuePing,
++            @Nullable boolean[] violatedOut) {
+         String tileRepresentation = tile.getRepresentation();
+         int[] values = {0, 0, 0, 0};
+         if (tileRepresentation == null || "null".equalsIgnoreCase(tileRepresentation)) {
+@@ -4634,7 +4679,7 @@ public class ButtonHelper {
+                 }
+             }
+         }
+-        if (numOfCapitalShips > 8 && !fleetSupplyViolated) {
++        if (numOfCapitalShips > 8 && !fleetSupplyViolated && violatedOut == null) {
+             CommanderUnlockCheckService.checkPlayer(player, "letnev");
+         }
+         if (player.hasAbility("flotilla")) {
+@@ -4713,6 +4758,13 @@ public class ButtonHelper {
+         if (!tooManyPDS.isEmpty()) {
+             message += player.getRepresentationUnfogged() + ", you have too many PDS on " + tooManyPDS + ".\n";
+         }
++        if (violatedOut != null) {
++            violatedOut[0] = capacityViolated
++                    || fleetSupplyViolated
++                    || structuresViolated
++                    || !tooManyDocks.isEmpty()
++                    || !tooManyPDS.isEmpty();
++        }
+ 
+         if (issuePing) {
+             if (!game.getStoredValue("violatedSystems").contains(tile.getPosition())) {
+@@ -4817,7 +4869,7 @@ public class ButtonHelper {
          return buttons;
      }
  
@@ -2713,7 +2949,7 @@ index d4c34fb..4600dcf 100644
      public static void resolveSpecialRex(Player player, Game game, String buttonID, ButtonInteractionEvent event) {
          String planet = buttonID.split("_")[1];
          String faction = buttonID.split("_")[2];
-@@ -5010,6 +5034,22 @@ public class ButtonHelper {
+@@ -5010,6 +5062,22 @@ public class ButtonHelper {
          return Buttons.red(player.factionButtonChecker() + "endOfTurnAbilities", "End Turn");
      }
  
@@ -2736,7 +2972,7 @@ index d4c34fb..4600dcf 100644
      public static List<Button> getEndOfTurnAbilities(Player player, Game game) {
          List<Button> endButtons = new ArrayList<>();
  
-@@ -5052,7 +5092,11 @@ public class ButtonHelper {
+@@ -5052,7 +5120,11 @@ public class ButtonHelper {
          // Expeditions
          String expeditionText = game.getExpeditions().getTopLevelExpeditionButtonText();
          boolean thundersEdgeOnBoard = game.getTileFromPlanet("thundersedge") != null;
@@ -2749,7 +2985,7 @@ index d4c34fb..4600dcf 100644
              endButtons.add(Buttons.gray(player.factionButtonChecker() + "expeditionInfoAndButtons", expeditionText));
          }
  
-@@ -5563,7 +5607,7 @@ public class ButtonHelper {
+@@ -5563,7 +5635,7 @@ public class ButtonHelper {
          String message2 = player.getRepresentationUnfogged()
                  + ", please choose the planets you wish to exhaust to spend " + MiscEmojis.Resources_6 + ".";
          List<Button> buttons = getExhaustButtonsWithTG(game, player, "res");
@@ -2758,7 +2994,7 @@ index d4c34fb..4600dcf 100644
          buttons.add(doneExhausting);
  
          Tile tile = getTileWithCoatl(game);
-@@ -5804,7 +5848,7 @@ public class ButtonHelper {
+@@ -5804,7 +5876,7 @@ public class ButtonHelper {
                  }
              }
          }
@@ -2767,7 +3003,7 @@ index d4c34fb..4600dcf 100644
          ringButtons.add(Buttons.red("resetTacticalMovement", "Reset all unit movement"));
          return ringButtons;
      }
-@@ -6694,6 +6738,29 @@ public class ButtonHelper {
+@@ -6694,6 +6766,29 @@ public class ButtonHelper {
      @ButtonHandler("combatRoll_")
      public static void resolveCombatRoll(
              Player player, Game game, GenericInteractionCreateEvent event, String buttonID) {
@@ -2797,7 +3033,7 @@ index d4c34fb..4600dcf 100644
          resolveCombatRoll(player, game, event, buttonID, true);
      }
  
-@@ -7888,7 +7955,8 @@ public class ButtonHelper {
+@@ -7888,7 +7983,8 @@ public class ButtonHelper {
      public static List<Button> getGainAndLoseCCButtons(Player player) {
          List<Button> buttons = getGainCCButtons(player);
          buttons.removeIf(b -> !b.getCustomId().startsWith("increase_")); // remove the wiring buttons
@@ -2807,7 +3043,7 @@ index d4c34fb..4600dcf 100644
          return buttons;
      }
  
-@@ -7897,17 +7965,27 @@ public class ButtonHelper {
+@@ -7897,17 +7993,27 @@ public class ButtonHelper {
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_tactic_cc", "Gain 1 Tactic Token"));
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_fleet_cc", "Gain 1 Fleet Token"));
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_strategy_cc", "Gain 1 Strategy Token"));
@@ -2838,7 +3074,7 @@ index d4c34fb..4600dcf 100644
          List<Button> buttons = new ArrayList<>();
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_tactic_cc", "Lose 1 Tactic Token"));
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_fleet_cc", "Lose 1 Fleet Token"));
-@@ -7915,7 +7993,7 @@ public class ButtonHelper {
+@@ -7915,7 +8021,7 @@ public class ButtonHelper {
              buttons.addAll(MahactTokenService.removeFleetTokenOptions(player.getGame(), player, false, true));
          }
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_strategy_cc", "Lose 1 Strategy Token"));
@@ -2847,7 +3083,7 @@ index d4c34fb..4600dcf 100644
          buttons.add(Buttons.gray(player.factionButtonChecker() + "resetCCs", "Reset Tokens"));
          player.getGame().setStoredValue("originalCCsFor" + player.getFaction(), player.getCCRepresentation());
          return buttons;
-@@ -7925,7 +8003,8 @@ public class ButtonHelper {
+@@ -7925,7 +8031,8 @@ public class ButtonHelper {
          List<Button> buttons = new ArrayList<>();
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_fleet_cc", "Lose 1 Fleet Token"));
          buttons.addAll(MahactTokenService.removeFleetTokenOptions(player.getGame(), player, false, true));
@@ -2857,7 +3093,7 @@ index d4c34fb..4600dcf 100644
          return buttons;
      }
  
-@@ -8673,7 +8752,7 @@ public class ButtonHelper {
+@@ -8673,7 +8780,7 @@ public class ButtonHelper {
              int page = Integer.parseInt(buttonID.substring("narrowWayDestination_page".length()));
              List<Button> destinationButtons = getNarrowWayDestinationButtons(game, player);
              List<Button> buttons = getNarrowWayDestinationPage(player, destinationButtons, page);
@@ -2866,7 +3102,7 @@ index d4c34fb..4600dcf 100644
              return;
          }
          String destination = buttonID.substring("narrowWayDestination_".length());
-@@ -8862,7 +8941,7 @@ public class ButtonHelper {
+@@ -8862,7 +8969,7 @@ public class ButtonHelper {
          MessageHelper.sendMessageToChannelWithButtons(
                  player.getCorrectChannel(),
                  "Use buttons to resolve a secondary.",
@@ -2875,7 +3111,7 @@ index d4c34fb..4600dcf 100644
      }
  
      @ButtonHandler("startPath")
-@@ -8890,6 +8969,22 @@ public class ButtonHelper {
+@@ -8890,6 +8997,22 @@ public class ButtonHelper {
  
      @ButtonHandler("resolveMaw")
      public static void resolveMaw(Game game, Player player, ButtonInteractionEvent event) {
@@ -2898,7 +3134,7 @@ index d4c34fb..4600dcf 100644
          player.removeRelic("mawofworlds");
          player.removeExhaustedRelic("mawofworlds");
          for (String planet : player.getPlanets()) {
-@@ -8925,6 +9020,7 @@ public class ButtonHelper {
+@@ -8925,6 +9048,7 @@ public class ButtonHelper {
          }
          game.setStoredValue("endTurnWhenSCFinished", "");
          Player p2 = game.getActivePlayer();
@@ -2906,7 +3142,7 @@ index d4c34fb..4600dcf 100644
          EndTurnService.endTurnAndUpdateMap(event, game, p2);
      }
  
-@@ -8995,6 +9091,20 @@ public class ButtonHelper {
+@@ -8995,6 +9119,20 @@ public class ButtonHelper {
  
      @ButtonHandler("resolveCrownOfE")
      public static void resolveCrownOfE(Game game, Player player, ButtonInteractionEvent event) {
@@ -2927,7 +3163,7 @@ index d4c34fb..4600dcf 100644
          if (player.hasRelic("absol_emphidia")) {
              player.removeRelic("absol_emphidia");
              player.removeExhaustedRelic("absol_emphidia");
-@@ -9011,6 +9121,16 @@ public class ButtonHelper {
+@@ -9011,6 +9149,16 @@ public class ButtonHelper {
          Helper.checkEndGame(game, player);
      }
  
@@ -3563,7 +3799,7 @@ index b485701..fcd83a8 100644
                          "creussHeroStep1_" + tile.getPosition(), tile.getRepresentationForButtons(game, player)));
              }
 diff --git a/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java b/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
-index 9f3070e..df8ed37 100644
+index 9f3070e..9c1f10d 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
 @@ -69,6 +69,7 @@ import ti4.service.fow.FOWCombatThreadMirroring;
@@ -3733,7 +3969,7 @@ index 9f3070e..df8ed37 100644
          String unitNPlanet = buttonID.replace("place_", "");
          boolean placingParturitionMonument = unitNPlanet.startsWith("parturitionMonument_");
          String unitLong = placingParturitionMonument ? "monument" : unitNPlanet.substring(0, unitNPlanet.indexOf('_'));
-@@ -2047,9 +2107,35 @@ public final class ButtonHelperModifyUnits {
+@@ -2047,9 +2107,40 @@ public final class ButtonHelperModifyUnits {
                  : unitNPlanet.replace(unitLong + "_", "");
          String unitID = AliasHandler.resolveUnit(unitLong.replace("2", ""));
          UnitKey unitKey = Mapper.getUnitKey(unitID, player.getColorID());
@@ -3752,6 +3988,11 @@ index 9f3070e..df8ed37 100644
 +                    unitID,
 +                    Character.isDigit(unitLong.charAt(0)) ? unitLong.charAt(0) - '0' : 1);
 +        }
++        if (capRefusal == null) {
++            // No unit of that type left in reinforcements (a 2nd flagship: fuzz pbd297).
++            capRefusal = UnitComponentLimit.refusal(
++                    game, player, unitID, Character.isDigit(unitLong.charAt(0)) ? unitLong.charAt(0) - '0' : 1);
++        }
 +        if (capRefusal != null) {
 +            MessageHelper.sendEphemeralMessageToEventChannel(event, capRefusal);
 +            return;
@@ -3769,7 +4010,7 @@ index 9f3070e..df8ed37 100644
          String spaceOrPlanet;
  
          String successMessage;
-@@ -2325,7 +2411,7 @@ public final class ButtonHelperModifyUnits {
+@@ -2325,7 +2416,7 @@ public final class ButtonHelperModifyUnits {
              }
          }
          if (("sd".equalsIgnoreCase(unitID) || "pds".equalsIgnoreCase(unitLong) || "monument".equalsIgnoreCase(unitLong))
@@ -3778,7 +4019,7 @@ index 9f3070e..df8ed37 100644
              if (game.isFowMode()
                      || (!"action".equalsIgnoreCase(game.getPhaseOfGame())
                              && !"statusScoring".equalsIgnoreCase(game.getPhaseOfGame()))) {
-@@ -2429,31 +2515,19 @@ public final class ButtonHelperModifyUnits {
+@@ -2429,31 +2520,19 @@ public final class ButtonHelperModifyUnits {
                  String producedInput = unitID + "_" + tile.getPosition() + "_" + planetName;
                  player.produceUnit(producedInput);
              }
@@ -3823,7 +4064,7 @@ index 9f3070e..df8ed37 100644
          }
          if ("sd".equalsIgnoreCase(unitID)) {
              tile = game.getTileFromPlanet(planetName);
-@@ -2558,6 +2632,19 @@ public final class ButtonHelperModifyUnits {
+@@ -2558,6 +2637,19 @@ public final class ButtonHelperModifyUnits {
          String producedOrPlaced = "produced";
  
          boolean willSkipBuild = skipbuild.contains("skipbuild");
@@ -3843,7 +4084,7 @@ index 9f3070e..df8ed37 100644
          boolean xxchaTEhero = skipbuild.contains("xxcha");
          boolean orbitalDrop = skipbuild.contains("orbital");
          if (willSkipBuild) {
-@@ -2714,9 +2801,9 @@ public final class ButtonHelperModifyUnits {
+@@ -2714,9 +2806,9 @@ public final class ButtonHelperModifyUnits {
          }
          Button DoneExhausting;
          if (!buttonID.contains("deleteButtons")) {
@@ -3855,7 +4096,7 @@ index 9f3070e..df8ed37 100644
          }
          buttons.add(DoneExhausting);
          if (!willSkipBuild) {
-@@ -3051,6 +3138,7 @@ public final class ButtonHelperModifyUnits {
+@@ -3051,6 +3143,7 @@ public final class ButtonHelperModifyUnits {
          List<Button> systemButtons = TacticalActionService.getLandingTroopsButtons(game, player, tile);
          String msg = player.getFactionEmojiOrColor() + " turned " + numff + " infantry into "
                  + StringHelper.pluralize(numff, "fighter") + " using Assault Machina, the Mirveda commander.";
@@ -3863,7 +4104,7 @@ index 9f3070e..df8ed37 100644
          event.getMessage()
                  .editMessage(msg)
                  .setComponents(ButtonHelper.turnButtonListIntoActionRowList(systemButtons))
-@@ -3068,6 +3156,7 @@ public final class ButtonHelperModifyUnits {
+@@ -3068,6 +3161,7 @@ public final class ButtonHelperModifyUnits {
          List<Button> systemButtons = TacticalActionService.getLandingTroopsButtons(game, player, tile);
          String msg = player.getFactionEmojiOrColor() + " turned " + StringHelper.pluralize(numff, "fighter") + " into "
                  + numff + " infantry using their **Combat Drones** ability.";
@@ -4287,10 +4528,10 @@ index 12c7b89..c2125d5 100644
              ButtonInteractionEvent event, Game game, Player player, int amt, boolean deleteMsg) {
          convertComms(event, game, player, amt, deleteMsg, null);
 diff --git a/src/main/java/ti4/helpers/ButtonHelperTacticalAction.java b/src/main/java/ti4/helpers/ButtonHelperTacticalAction.java
-index 9642a5d..a8092a0 100644
+index 9642a5d..9e5c571 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperTacticalAction.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperTacticalAction.java
-@@ -344,6 +344,44 @@ public final class ButtonHelperTacticalAction {
+@@ -344,6 +344,47 @@ public final class ButtonHelperTacticalAction {
          SarcosaHeroHandler.completeNeutralTacticalAction(game, player);
      }
  
@@ -4301,6 +4542,9 @@ index 9642a5d..a8092a0 100644
 +     */
 +    public static boolean canConcludeAndEndTurn(Player player, Game game) {
 +        if (game.isNaaluAgent() || !player.isActivePlayer()) return false;
++        // Strategy-card follows hold the turn (ScFollowGate): concluding must not end it; the regular menu's End Turn
++        // is refused until they are in. A stale press concludes and posts that menu (concludeForEndTurn).
++        if (ti4.selfhost.engine.ScFollowGate.waitingMessage(game, player) != null) return false;
 +        if (!ButtonHelper.getEndOfTurnAbilities(player, game).isEmpty()) return false;
 +        if (!ti4.selfhost.SecondActionGate.sources(player, game).isEmpty()) return false;
 +        if (player.hasAbility("the_starlit_path") || player.hasAbility("matters_of_state")) return false;
@@ -4335,7 +4579,7 @@ index 9642a5d..a8092a0 100644
      @ButtonHandler("doneWithTacticalAction")
      public static void concludeTacticalAction(Player player, Game game, ButtonInteractionEvent event) {
          endOfTacticalActionThings(player, game, event);
-@@ -474,7 +512,7 @@ public final class ButtonHelperTacticalAction {
+@@ -474,7 +515,7 @@ public final class ButtonHelperTacticalAction {
              String msg = player.getRepresentation()
                      + " you should gain 1 command token due to moving in The Fracture while the _Call of the Void_ galactic event is in play.";
              MessageHelper.sendMessageToChannel(player.getCorrectChannel(), msg);
@@ -4344,7 +4588,7 @@ index 9642a5d..a8092a0 100644
              String trueIdentity = player.getRepresentationUnfogged();
              String message2 = trueIdentity + ", your current command tokens are " + player.getCCRepresentation()
                      + ". Use these buttons to gain 1 command tokens.";
-@@ -1229,8 +1267,9 @@ public final class ButtonHelperTacticalAction {
+@@ -1229,8 +1270,9 @@ public final class ButtonHelperTacticalAction {
              for (Player flaah : game.getRealPlayers()) {
                  if (ButtonHelper.doesPlayerHaveUnitHere("tk-flaahhyphae", flaah, activeSystem)) {
                      List<Button> buttons = new ArrayList<>();
@@ -5567,6 +5811,68 @@ index 22ecac6..6d15e7d 100644
          }
      }
  
+diff --git a/src/main/java/ti4/helpers/UnitComponentLimit.java b/src/main/java/ti4/helpers/UnitComponentLimit.java
+new file mode 100644
+index 0000000..0f0ae3d
+--- /dev/null
++++ b/src/main/java/ti4/helpers/UnitComponentLimit.java
+@@ -0,0 +1,56 @@
++package ti4.helpers;
++
++import javax.annotation.Nullable;
++import lombok.experimental.UtilityClass;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.helpers.Units.UnitKey;
++import ti4.image.Mapper;
++
++/**
++ * Component limits of ships and mechs (rules: Producing Units / Reinforcements): a player cannot produce or place a
++ * unit with none left in their reinforcements. The production buttons always showed what is left ("Produce Flagship
++ * (0)") but never refused it, so a second flagship could be placed (fuzz pbd297: the Nomad starts with its
++ * flagship and produced another through Warfare's build). Fighters and infantry are not limited; structures keep
++ * their own checks.
++ */
++@UtilityClass
++public class UnitComponentLimit {
++
++    /** Units left in the player's reinforcements, or null when the unit type has no component limit checked here. */
++    @Nullable
++    public static Integer remaining(Game game, Player player, String asyncId) {
++        if (game == null || player == null || asyncId == null) return null;
++        UnitKey key;
++        try {
++            key = Mapper.getUnitKey(asyncId, player.getColorID());
++        } catch (Exception e) {
++            return null;
++        }
++        if (key == null || key.unitType() == null) return null;
++        switch (key.unitType()) {
++            case Flagship, Warsun, Dreadnought, Carrier, Cruiser, Destroyer, Mech -> {}
++            default -> {
++                return null;
++            }
++        }
++        return Math.max(0, ButtonHelperFactionSpecific.remainingUnitsOfType(game, key));
++    }
++
++    /** Why placing `count` more of the unit is refused (none left in reinforcements), or null when it fits. */
++    @Nullable
++    public static String refusal(Game game, Player player, String asyncId, int count) {
++        Integer left = remaining(game, player, asyncId);
++        if (left == null || left >= count) return null;
++        String name = asyncId;
++        try {
++            name = player.getUnitsByAsyncID(asyncId).getFirst().getName();
++        } catch (Exception ignored) {
++            // keep the id
++        }
++        return left == 0
++                ? "You have no " + name
++                        + " left in your reinforcements (component limit): remove one from the board first."
++                : "You have only " + left + " " + name + " left in your reinforcements (component limit).";
++    }
++}
 diff --git a/src/main/java/ti4/helpers/thundersedge/BreakthroughCommandHelper.java b/src/main/java/ti4/helpers/thundersedge/BreakthroughCommandHelper.java
 index 6d9bcab..9dc0abb 100644
 --- a/src/main/java/ti4/helpers/thundersedge/BreakthroughCommandHelper.java
@@ -10323,10 +10629,10 @@ index 0000000..f641b0f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ScFollowGate.java b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
 new file mode 100644
-index 0000000..68deecd
+index 0000000..0293a03
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,270 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -10368,9 +10674,13 @@ index 0000000..68deecd
 +    static final String KEY = "scFollowGate";
 +    static final String GAME_SWITCH = "scFollowBlock";
 +
-+    /** Handler ids that end the active player's turn (or pass, which ends it too). */
++    /**
++     * Handler ids that end the active player's turn (or pass, which ends it too). Not concludeAndEndTurn: it checks the
++     * gate itself (ButtonHelperTacticalAction.canConcludeAndEndTurn) and, while follows hold the turn, only concludes
++     * the tactical action and posts the regular end-of-turn menu, whose End Turn is refused here.
++     */
 +    private static final Pattern ENDS_TURN =
-+            Pattern.compile("turnEnd|endOfTurnAbilities|passForRound|passingAbilities|concludeAndEndTurn");
++            Pattern.compile("turnEnd|endOfTurnAbilities|passForRound|passingAbilities");
 +
 +    public static boolean enabled(@Nullable Game game) {
 +        if (game == null) return false;
@@ -23184,10 +23494,10 @@ index 0000000..d931638
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java b/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java
 new file mode 100644
-index 0000000..9face0b
+index 0000000..cb3ff89
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,136 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -23295,7 +23605,18 @@ index 0000000..9face0b
 +    @Override
 +    public ti4.selfhost.engine.EngineModels.Target target(
 +            CaptureContext ctx, ti4.selfhost.engine.EngineModels.Target resolved) {
-+        return SetupKindSupport.refresh(ctx, resolved);
++        if (resolved != null && resolved.userId() != null) return SetupKindSupport.refresh(ctx, resolved);
++        // setupStep5_<user id>_keleres…: the id names the player it sets up.
++        java.util.List<String> ids = SetupKindSupport.handlerIds(ctx);
++        if (ids != null && ctx.game() != null) {
++            for (String h : ids) {
++                Matcher s = h == null ? null : SETUP.matcher(h);
++                if (s == null || !s.matches()) continue;
++                Player p = ctx.game().getPlayer(s.group(1));
++                if (p != null) return ti4.selfhost.engine.DecisionCapture.target(p, "handler_id");
++            }
++        }
++        return resolved;
 +    }
 +
 +    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
@@ -23304,14 +23625,7 @@ index 0000000..9face0b
 +        if (ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game())) return true;
 +        // The draft-time preset once a Keleres seat plays its flavour: nothing left to pre-select (live pbd175: the
 +        // preset stayed open after the draft and the seat's watchdog reported it as a stall).
-+        java.util.List<String> ids = ctx.handlerIds();
-+        if (ids == null && ctx.messageId() != null) {
-+            String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
-+            Decision d = id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
-+            if (d != null) ids = d.options().stream()
-+                    .map(o -> ti4.discord.interactions.routing.ComponentIdEnvelope.decode(o.id().split("#")[0]).handlerId())
-+                    .toList();
-+        }
++        java.util.List<String> ids = SetupKindSupport.handlerIds(ctx);
 +        if (ids == null || ctx.game() == null || ids.stream().noneMatch(h -> h != null && PRESET.matcher(h).matches())) return false;
 +        for (Player p : ctx.game().getRealPlayers()) {
 +            String f = p.getFaction();
@@ -23322,10 +23636,10 @@ index 0000000..9face0b
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java b/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java
 new file mode 100644
-index 0000000..9a130f4
+index 0000000..614c24c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,73 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -23386,7 +23700,11 @@ index 0000000..9a130f4
 +    @Override
 +    public ti4.selfhost.engine.EngineModels.Target target(
 +            CaptureContext ctx, ti4.selfhost.engine.EngineModels.Target resolved) {
-+        return SetupKindSupport.refresh(ctx, resolved);
++        if (resolved != null && resolved.userId() != null) return SetupKindSupport.refresh(ctx, resolved);
++        // FFCC_keleresx_getKeleresTechOptions is posted while the seat's faction is being set up: the owner prefix
++        // named no player yet at capture (target null, so nobody was asked). It is always the Keleres seat's.
++        Player p = SetupKindSupport.keleresSeat(ctx.game());
++        return p == null ? resolved : ti4.selfhost.engine.DecisionCapture.target(p, "owner_prefix");
 +    }
 +
 +    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
@@ -24454,13 +24772,15 @@ index 0000000..8f0220c
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java b/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java
 new file mode 100644
-index 0000000..87b41d2
+index 0000000..41a6723
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/PlayerSetupKind.java
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,150 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
++import ti4.game.Player;
++import ti4.selfhost.engine.EngineModels.Decision;
 +import ti4.selfhost.engine.KindSpec;
 +
 +/**
@@ -24557,7 +24877,53 @@ index 0000000..87b41d2
 +        // While a milty draft runs, the draft seats the players: manual player setup is a leftover menu (live pbd108:
 +        // the web showed it before the draft pick and it was pressed over and over).
 +        ti4.selfhost.engine.EngineModels.SetupState s = ti4.selfhost.engine.SetupStateBuilder.build(ctx.game());
-+        return s != null && "draft".equals(s.stage());
++        if (s != null && "draft".equals(s.stage())) return true;
++        // The seat(s) this prompt sets up are already set up (faction + colour chosen): a leftover (live pbd257: two
++        // "Setup a Player" prompts stayed at the front of a seated player's queue, ahead of "Keep a secret objective").
++        // "Setup a Player" (startPlayerSetup, posted to every seat's cards-info thread) targets the thread's owner;
++        // setupStepN_<uid>_… target <uid> (step 1 lists every seat still to set up: obsolete once all of them are).
++        java.util.Set<String> seats = seatsOf(ctx);
++        if (seats.isEmpty()) return false;
++        for (String uid : seats) {
++            Player p = ctx.game().getPlayer(uid);
++            if (p == null || !seated(p)) return false;
++        }
++        return true;
++    }
++
++    private static boolean seated(Player p) {
++        return p.isRealPlayer() && !"null".equals(p.getFaction());
++    }
++
++    /** User ids of the seats the prompt's options set up (empty when unknown). */
++    private static java.util.Set<String> seatsOf(CaptureContext ctx) {
++        java.util.List<String> ids = ctx.handlerIds();
++        if (ids == null && ctx.messageId() != null) {
++            String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
++            Decision d = id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
++            if (d != null) ids = d.options().stream()
++                    .map(o -> o.handler() != null
++                            ? o.handler()
++                            : ti4.discord.interactions.routing.ComponentIdEnvelope.decode(o.id().split("#")[0])
++                                    .handlerId())
++                    .toList();
++        }
++        java.util.Set<String> seats = new java.util.LinkedHashSet<>();
++        if (ids == null) return seats;
++        for (String h : ids) {
++            if (h == null) continue;
++            if ("startPlayerSetup".equals(h)) {
++                Player owner = ctx.player();
++                if (owner == null && ctx.target() != null && ctx.target().userId() != null)
++                    owner = ctx.game().getPlayer(ctx.target().userId());
++                if (owner == null) return new java.util.LinkedHashSet<>(); // whose thread unknown: keep it
++                seats.add(owner.getUserID());
++            } else if (h.matches("setupStep[1-5]_.*")) {
++                String uid = part(h.split("_"), 1);
++                if (uid != null && !uid.isEmpty()) seats.add(uid);
++            }
++        }
++        return seats;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PoliticsAgendaKind.java b/src/main/java/ti4/selfhost/engine/kinds/PoliticsAgendaKind.java
@@ -24806,10 +25172,10 @@ index 0000000..7c0ec8a
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ProductionProduceKind.java b/src/main/java/ti4/selfhost/engine/kinds/ProductionProduceKind.java
 new file mode 100644
-index 0000000..eb40354
+index 0000000..2d07744
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ProductionProduceKind.java
-@@ -0,0 +1,375 @@
+@@ -0,0 +1,385 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -24924,6 +25290,8 @@ index 0000000..eb40354
 +        v.put("tile", p.tile);
 +        Float cost = unitCost(player, p.unit);
 +        v.put("cost", cost);
++        // Units of this type left in reinforcements (component limit; null = not limited): none left is refused.
++        v.put("remaining", ti4.helpers.UnitComponentLimit.remaining(game, player, p.unit));
 +        return v;
 +    }
 +
@@ -24973,6 +25341,9 @@ index 0000000..eb40354
 +                    String.valueOf(v.get("unit")),
 +                    PaymentSupport.intOf(v.get("count"), 1));
 +            if (mitosis != null) return mitosis;
++            String limit = ti4.helpers.UnitComponentLimit.refusal(
++                    game, answering, String.valueOf(v.get("unit")), PaymentSupport.intOf(v.get("count"), 1));
++            if (limit != null) return limit;
 +            if (cap == null) return null;
 +            return ProductionCapHelper.refusal(
 +                    game,
@@ -25115,6 +25486,7 @@ index 0000000..eb40354
 +        float capCost = cap == null ? 0 : ProductionCapHelper.producedCost(player);
 +        String mitosisTile = ti4.helpers.MitosisProductionRule.limitedTile(game, player);
 +        int mitosisInf = mitosisTile == null ? 0 : ti4.helpers.MitosisProductionRule.infantryProduced(player, mitosisTile);
++        Map<String, Integer> perUnit = new LinkedHashMap<>();
 +        for (Object o : PaymentSupport.listOf(payload.get("units"))) {
 +            if (!(o instanceof Map<?, ?> req)) return "Bad unit entry.";
 +            String unit = AliasHandler.resolveUnit(String.valueOf(req.get("unit")));
@@ -25122,6 +25494,10 @@ index 0000000..eb40354
 +            Object tile = req.get("tile");
 +            int count = PaymentSupport.intOf(req.get("count"), 1);
 +            if (count < 1 || count > 20) return "Bad count for " + unit + ".";
++            // Component limit over the whole payload (2 dreadnoughts with 1 left is refused before anything is placed).
++            int wanted = perUnit.merge(unit, count, Integer::sum);
++            String limit = ti4.helpers.UnitComponentLimit.refusal(game, player, unit, wanted);
++            if (limit != null) return limit;
 +            if (mitosisTile != null && "gf".equals(unit)) {
 +                String where = tile != null
 +                        ? String.valueOf(tile)
@@ -25952,10 +26328,10 @@ index 0000000..f77065f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/SetupKindSupport.java b/src/main/java/ti4/selfhost/engine/kinds/SetupKindSupport.java
 new file mode 100644
-index 0000000..f89d2c3
+index 0000000..6bf1d31
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/SetupKindSupport.java
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,78 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -26001,6 +26377,37 @@ index 0000000..f89d2c3
 +        if (p == null) return null;
 +        String f = p.getFaction();
 +        return new Target(p.getUserID(), f == null || "null".equals(f) ? null : f, p.getColor(), how);
++    }
++
++    /**
++     * Handler ids of the decision's options: ctx.handlerIds() at capture, else (dynamic recompute) the open decision's
++     * options. Null when neither is known.
++     */
++    @Nullable
++    static java.util.List<String> handlerIds(ti4.selfhost.engine.KindSpec.CaptureContext ctx) {
++        if (ctx.handlerIds() != null) return ctx.handlerIds();
++        if (ctx.messageId() == null) return null;
++        String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
++        Decision d = id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
++        if (d == null) return null;
++        return d.options().stream()
++                .map(o -> ti4.discord.interactions.routing.ComponentIdEnvelope.decode(o.id().split("#")[0])
++                        .handlerId())
++                .toList();
++    }
++
++    /** The seat playing Keleres (one per game): faction keleres / keleresa / keleresm / keleresx. */
++    @Nullable
++    static Player keleresSeat(Game game) {
++        if (game == null) return null;
++        Player any = null;
++        for (Player p : game.getRealPlayers()) {
++            String f = p.getFaction();
++            if (f == null || !f.startsWith("keleres")) continue;
++            if (!"keleres".equals(f)) return p;
++            any = p;
++        }
++        return any;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusAdvanceKind.java b/src/main/java/ti4/selfhost/engine/kinds/StatusAdvanceKind.java
@@ -30703,10 +31110,10 @@ index 0000000..8a56d90
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/UnitsRemoveKind.java b/src/main/java/ti4/selfhost/engine/kinds/UnitsRemoveKind.java
 new file mode 100644
-index 0000000..50aa159
+index 0000000..5cd5776
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/UnitsRemoveKind.java
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,137 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -30758,7 +31165,8 @@ index 0000000..50aa159
 +     * Hits taken before a fight (bombardment before ground combat, anti-fighter barrage before space combat) are past
 +     * once that fight has rolled a round in the opener's system: the opener can no longer be answered meaningfully
 +     * (live pbd60: a bombardment opener from a ground combat fought 6 rounds was re-pressed by a bot every minute,
-+     * each press opening an empty hit menu). Round hits ("combat") and fleet-pool removals stay.
++     * each press opening an empty hit menu). A fleet-pool / capacity reminder closes once its system is back within the
++     * rules. Round hits ("combat") and other removals stay.
 +     */
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
@@ -30778,11 +31186,43 @@ index 0000000..50aa159
 +            Matcher m = OPEN.matcher(h);
 +            if (!m.matches()) continue;
 +            String type = m.group(2);
++            if ("remove".equals(type) && violationReminder(ctx.content()))
++                return !stillViolated(ctx.game(), ctx.player(), m.group(1));
 +            if (!"bombardment".equals(type) && !"afb".equals(type)) return false;
 +            if (!fightRolled(ctx.game(), m.group(1), "afb".equals(type))) return false;
 +            any = true;
 +        }
 +        return any;
++    }
++
++    /**
++     * The reminder ButtonHelper.checkFleetAndCapacity posts ("you are violating fleet pool limits / carrying capacity
++     * in ...", a floating structure, too many space docks / PDS) with "Remove Units in ..." + Dismiss. Not the gravity
++     * rift / ability removals that share the opener.
++     */
++    static boolean violationReminder(String content) {
++        if (content == null) return false;
++        return content.contains("you are violating fleet pool limits")
++                || content.contains("you are violating carrying capacity")
++                || content.contains("you have a floating structure")
++                || content.contains("you have too many space docks")
++                || content.contains("you have too many PDS");
++    }
++
++    /**
++     * Whether the reminder's system still breaks those rules for its player. Once it does not (the player removed
++     * the extra units: fuzz pbd299, the 2nd Nomad flagship removed through the opener's own menu), the reminder is
++     * moot and closes instead of waiting on the player forever.
++     */
++    static boolean stillViolated(ti4.game.Game game, ti4.game.Player player, String pos) {
++        if (game == null || player == null) return true;
++        ti4.game.Tile tile = game.getTileByPosition(pos);
++        if (tile == null) return false;
++        try {
++            return ti4.helpers.ButtonHelper.fleetOrCapacityViolated(player, game, tile);
++        } catch (Exception e) {
++            return true;
++        }
 +    }
 +
 +    /** Whether a combat round was rolled in `pos`: in space, or (ground) on any planet of the system. */

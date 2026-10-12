@@ -1,0 +1,21 @@
+{
+  "name": "game-end-rewind-unarchive",
+  "description": "An accidental End Game stays rewindable (live pbd346, pbd303: rewound past /game end archive_channels, the channels stayed in 'The in-limbo PBD Archive', hidden from the bot: every answer 500 and the game could not be ended again). pbd229@370 (status homework): end the game with archive_channels, rewind (web) to before the end: the tabletalk/actions channels must be back out of the archive, a normal answer must work (start the strategy phase, pick a card) and the game must end (and archive) again. Fix: bot GameUndoService restores the channels of an un-ended game (UnendedGameChannels), shim un-archives a channel moved out of the archive category and its sweep never re-archives a game that is not finished.",
+  "base": { "game": "pbd229", "index": 370 },
+  "steps": [
+    { "mark": "beforeEnd" },
+    { "command": "/game end confirm:YES publish:false archive_channels:true", "as": "letnev" },
+    { "wait": 20000, "expect": { "state": [ { "path": "ended", "eq": true } ], "channels": { "archived": true } } },
+    { "rewind": "beforeEnd", "as": "letnev" },
+    { "wait": 3000, "expect": { "state": [ { "path": "ended", "eq": false } ], "channels": { "archived": false } } },
+    { "press": "startStrategyPhase", "as": "letnev" },
+    { "answer": { "kind": "strategy_card.pick", "option": "scPick" }, "as": "letnev",
+      "expect": { "decision": { "kind": "strategy_card.pick", "as": "letnev", "open": false } } },
+    { "command": "/game end confirm:YES publish:false archive_channels:true", "as": "letnev" },
+    { "wait": 20000 }
+  ],
+  "expect": {
+    "state": [ { "path": "ended", "eq": true } ],
+    "channels": { "archived": true }
+  }
+}

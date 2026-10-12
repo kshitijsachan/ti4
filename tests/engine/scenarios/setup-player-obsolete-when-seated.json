@@ -1,0 +1,17 @@
+{
+  "name": "setup-player-obsolete-when-seated",
+  "description": "Live pbd257: after the milty draft every seat had a faction and colour, yet two 'Setup a Player' (setup.player, startPlayerSetup) prompts stayed open at the front of a seated player's queue, ahead of 'Keep a secret objective'. Base: pbd257 save 25 (phase playerSetup, all seats set up). Re-posting the player-setup menu to every seat's cards-info thread must not leave any setup.player decision open: each targets a seat that is already set up (PlayerSetupKind.obsolete).",
+  "base": { "game": "pbd257", "index": 25, "repost": false },
+  "setup": [],
+  "steps": [
+    { "command": "/game start_phase specific_phase:playerSetup" },
+    { "wait": 4000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "game.phase_of_game", "eq": "playerSetup" } ],
+    "decision": [
+      { "kind": "setup.player", "open": false }
+    ]
+  }
+}

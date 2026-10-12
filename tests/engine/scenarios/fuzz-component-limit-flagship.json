@@ -1,0 +1,51 @@
+{
+  "name": "fuzz-component-limit-flagship",
+  "description": "Fuzz pbd297 (bot 3541163): the Nomad (flagship on the board from the start) pressed 'Produce Flagship (0)' in Warfare's build and placed a 2nd flagship (invariant units.within-component-limit). The original showed what is left in reinforcements but never refused it. Fix (bot fuzz-triage-1): UnitComponentLimit — the place_ handler, production.produce validate and its payload refuse a ship / mech with none left in reinforcements; options carry value.remaining. Here: Ral Nel's flagship is placed at 307, then producing another one there is refused (engine and press) and the board keeps one.",
+  "base": {
+    "recording": "pbd19",
+    "index": 319
+  },
+  "setup": [
+    "/add_units tile_name:307 unit_names:flagship faction_or_color:ralnel"
+  ],
+  "steps": [
+    {
+      "press": "FFCC_ralnel_place_flagship_307",
+      "as": "ralnel",
+      "refused": true,
+      "legacy": [
+        {
+          "press": "FFCC_ralnel_place_flagship_307",
+          "as": "ralnel"
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "production.produce",
+        "payload": {
+          "units": [
+            {
+              "unit": "fs",
+              "tile": "307",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "as": "ralnel",
+      "refused": true,
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "wait": 1000
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

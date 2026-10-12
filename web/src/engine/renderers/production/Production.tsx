@@ -22,7 +22,8 @@ const UNIT_NAME: Record<string, string> = {
   pd: "PDS",
 } satisfies Partial<Record<UnitId, string>>;
 
-type Line = { key: string; unit: UnitId; holder: HolderName; tile: TilePosition | null; cost: number | null; step: number };
+/** remaining: units of this type left in reinforcements (component limit), null = not limited. */
+type Line = { key: string; unit: UnitId; holder: HolderName; tile: TilePosition | null; cost: number | null; step: number; remaining: number | null };
 
 /** One line per unit + place; the engine's "2 at once" buttons only change the step, not the line. */
 function linesOf(options: Option<ProductionValue>[]): Line[] {
@@ -33,7 +34,7 @@ function linesOf(options: Option<ProductionValue>[]): Line[] {
     const key = `${v.unit}@${v.holder}@${v.tile ?? ""}`;
     const prev = byKey.get(key);
     const perUnit = v.cost === null ? null : v.cost;
-    if (!prev) byKey.set(key, { key, unit: v.unit, holder: v.holder, tile: v.tile, cost: perUnit, step: 1 });
+    if (!prev) byKey.set(key, { key, unit: v.unit, holder: v.holder, tile: v.tile, cost: perUnit, step: 1, remaining: v.remaining ?? null });
     else if (prev.cost === null) prev.cost = perUnit;
   }
   /* Ground forces: onto a planet first, into space after (both are legal; the planet is the usual choice). */
@@ -102,7 +103,11 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
         {lines.map((l) => {
           const n = counts[l.key] ?? 0;
           const excluded = capExcludes(cap, l.unit, l.cost);
-          const fits = excluded ? 0 : Math.min(room, capRoom(cap, l.cost, capUnits, capSpent));
+          // Component limit: the same unit picked on other lines (ground forces on two planets) shares what is left.
+          const elsewhere = lines.reduce((t, o) => t + (o.key !== l.key && o.unit === l.unit ? (counts[o.key] ?? 0) : 0), 0);
+          const left = l.remaining === null ? Infinity : Math.max(0, l.remaining - elsewhere - n);
+          const fits = excluded ? 0 : Math.min(room, capRoom(cap, l.cost, capUnits, capSpent), left);
+          const noneLeft = !excluded && l.remaining !== null && l.remaining - elsewhere <= 0;
           const each = l.cost === null ? undefined : `${l.cost} each`;
           return (
             <Stepper
@@ -111,8 +116,8 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
               value={n}
               max={excluded ? n : n + fits}
               onChange={(v) => setCounts((c) => ({ ...c, [l.key]: v }))}
-              hint={excluded && cap ? `${cap.label.split(":")[0]}: ${excluded}` : each}
-              disabled={busy || (!!excluded && n === 0)}
+              hint={excluded && cap ? `${cap.label.split(":")[0]}: ${excluded}` : noneLeft ? "none left in reinforcements" : each}
+              disabled={busy || ((!!excluded || noneLeft) && n === 0)}
             />
           );
         })}

@@ -79,6 +79,27 @@ assert.equal(owns(turn()).owned, true, "held on purpose is still the engine's (i
 assert.equal(owns(turn(), state({ activePlayer: OTHER } as Partial<GameState>)).owned, true, "a stale menu: nobody presses it");
 assert.equal(owns(turn(NOW - ENGINE_GRACE_MS - 1)).owned, false, "outlived the grace: the legacy rules may help");
 
+// ---- "End Turn" on the end-of-turn menu (turnEnd, typed turn.action end_turn): the turn policy holds it on purpose
+const wait = [{ strategyCard: 4, name: "Construction", factions: ["sol"], userIds: [OTHER] }];
+const endMenu = (createdAt = NOW - 2_000, waitingFor: unknown[] = []) =>
+  dec("turn.action", [
+    opt("FFCC_hacan_turnEnd", { action: "end_turn", abilities: false, waitingFor }, "End Turn"),
+    opt("FFCC_hacan_endTurnWhenAllReactedTo_4", { action: "end_turn_when_followed", strategyCard: 4, waitingFor }, "End Turn When All Have Reacted"),
+  ], { createdAt });
+assert.equal(chooseTyped(endMenu(), state(), ME)?.option?.id, "FFCC_hacan_turnEnd", "End Turn is answerable as a typed decision");
+assert.equal(owns(endMenu()).owned, true);
+// follows pending (ScFollowGate): live pbd266 20:08, legacy "End Turn" pressed 3x past the grace, refused each time
+assert.equal(owns(endMenu(NOW - 2_000, wait)).owned, true, "follows pending: the engine refuses the end; nobody presses");
+assert.equal(owns(endMenu(NOW - ENGINE_GRACE_MS - 1, wait)).owned, true, "follows pending past the grace: still not the legacy rule's");
+// our action under way: live pbd41 20:17, legacy "End Turn" 3 s after Warfare's redistribute ended the turn mid-action
+const redistribute = dec("command_tokens.adjust", [opt("FFCC_hacan_deleteButtons~ccredist", { action: "done" }, "Done Redistributing Command Tokens")], { id: "d2", source: { channelId: "c", messageId: "m2", customIdPrefix: null, ephemeral: false } });
+assert.equal(owns(endMenu(), state(), "m1", [endMenu(), redistribute]).owned, true, "mid-action: the policy waits; not freed for the rule table");
+assert.equal(owns(endMenu(NOW - ENGINE_GRACE_MS - 1), state(), "m1", [endMenu(), redistribute]).owned, true, "mid-action past the grace");
+assert.equal(owns(turn(NOW - ENGINE_GRACE_MS - 1), state(), "m1", [turn(), redistribute]).owned, true, "no legacy Pass mid-action either");
+assert.equal(owns(endMenu(NOW - ENGINE_GRACE_MS - 1), state({ activePlayer: OTHER } as Partial<GameState>)).owned, true, "past the grace, not our turn");
+assert.equal(owns(endMenu(NOW - ENGINE_GRACE_MS - 1)).owned, false, "nothing holds it, the engine failed to end the turn: legacy may help");
+assert.equal(owns(endMenu(NOW - ENGINE_GRACE_MS - 1, wait), null).owned, false, "no state (engine unreadable): the usual grace");
+
 // ---- another player's prompt (e.g. the speaker's Reveal Stage 1): the engine's, until the grace runs out
 const theirs = (createdAt = NOW - 2_000) => dec("status.reveal_objective", [opt("reveal_stage_1", { action: "reveal", stage: 1 }, "Reveal Stage 1")], { createdAt, target: { userId: OTHER, faction: "sol", color: "red", resolvedBy: "speaker" } as any });
 assert.equal(owns(theirs()).owned, true);

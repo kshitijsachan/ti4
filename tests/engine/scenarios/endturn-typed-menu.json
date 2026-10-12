@@ -1,0 +1,13 @@
+{
+  "name": "endturn-typed-menu",
+  "description": "The folded end-of-turn menu (bot 2f09521: 'end turn or do another action' carries a plain End Turn, turnEnd, next to the usable end-of-turn abilities) is a typed turn.action decision: after Deepwrought (pbd28 r1) concludes a tactical action, the menu's End Turn is answered as turn.action {action: end_turn, abilities: false} and the turn passes on. Regression for the live 20:08-20:17 legacy 'End Turn' presses (shim engineOwnership freed the menu past the grace / mid-action).",
+  "base": { "recording": "pbd28", "index": 60 },
+  "trigger": { "press": "FFCC_deepwrought_doneWithTacticalAction", "as": "deepwrought" },
+  "steps": [
+    { "answer": { "kind": "turn.action", "option": "_turnEnd$", "value": { "action": "end_turn", "abilities": false } }, "as": "deepwrought" }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": [ { "kind": "turn.action", "as": "deepwrought", "open": false } ]
+  }
+}
