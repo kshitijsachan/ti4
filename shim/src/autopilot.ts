@@ -255,6 +255,8 @@ const MAX_RETRIES = 3;
 const STALL_MS = 60000;
 /** Our action-phase turn buttons. */
 const TURN_ID = /^FFCC_[^_]+_(tacticalAction|componentAction|turnEnd|endOfTurnAbilities|passForRound|strategicAction_\d+)$/;
+/** The same button on the same message: at most this many presses per seat (see pressCount). */
+const MAX_SAME_PRESS = 3;
 const BUSY_TEXT = /hasn't finished processing the last task/i;
 
 export class Autopilot {
@@ -454,6 +456,12 @@ class SeatPilot {
   private readonly started = Date.now();
   /** `${message id}:${custom id}` already pressed. */
   private pressed = new Set<string>();
+  /**
+   * `${message id}:${custom id}` → presses, never forgotten (forgetPrompt clears `pressed` for stalled re-checks):
+   * the same button on the same message is pressed at most MAX_SAME_PRESS times (live pbd114: a last-resort "Done
+   * Removing" pressed ~1,500 times).
+   */
+  private pressCount = new Map<string, number>();
   private fails = new Map<string, number>();
   private streak = 0;
   private restUntil = 0;
@@ -778,6 +786,7 @@ class SeatPilot {
     if ((this.fails.get(m.id) ?? 0) >= MAX_FAILS) return null;
     let controls = controlsOf(m.components);
     if (!controls.length) return null;
+    if (await this.mgr.ended(game)) return null; // web-data phase "finished" (cached 3 s)
     if (this.brain.owns(game, { ch, m, controls }) || (this.mgr.engine?.isLive ? this.trade.owns(game, { ch, m, controls }) : this.legacyTrade.owns(game, { ch, m, controls }))) return null;
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
     // When we answered this prompt (unchanged since): this run, a re-posted copy, or before a restart.
@@ -863,7 +872,7 @@ class SeatPilot {
       const decline = certainlyOurs && !tokenPanel
         ? ours.find((c) => /^deleteButtons/i.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && LAST_RESORT_LABEL.test(c.label.trim()) && !this.pressed.has(`${m.id}:${c.custom_id}`))
         : undefined;
-      if (decline && !(await this.mgr.engineOwns(game, m.id, me))) {
+      if (decline && (this.pressCount.get(`${m.id}:${decline.custom_id}`) ?? 0) < MAX_SAME_PRESS && !(await this.mgr.engineOwns(game, m.id, me))) {
         log.warn(`autopilot ${this.name}: last resort in #${ch.name}: nothing else we may press on "${content.slice(0, 60).replace(/\s+/g, " ")}"; pressing "${decline.label}"`);
         return { msg: m, control: decline, score: 20, why: "last resort: decline / done" };
       }
@@ -1307,6 +1316,14 @@ class SeatPilot {
     }
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
+    const n = (this.pressCount.get(key) ?? 0) + 1;
+    if (n > MAX_SAME_PRESS) {
+      if (n === MAX_SAME_PRESS + 1) log.error(`autopilot ${this.name}: giving up on "${control.label}" in #${this.store.channel(msg.channel_id)?.name ?? msg.channel_id}: pressed ${MAX_SAME_PRESS}x on the same message`);
+      this.pressCount.set(key, n);
+      return "pressed too often";
+    }
+    this.pressCount.set(key, n);
+    if (this.pressCount.size > 20000) this.pressCount.clear();
     if (this.siblings.has(msg.id)) {
       // Answering the second copy of a prompt starts its follow-ups afresh: they are not re-posts of the first's.
       for (const k of [...this.recent.keys()]) if (k.startsWith(`${msg.channel_id}:`) && !k.includes(":roll:") && !k.includes(":label:")) this.recent.delete(k);
