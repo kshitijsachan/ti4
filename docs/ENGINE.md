@@ -322,7 +322,7 @@ answers; humans are never auto-declined): `turn.action` validate ("Waiting for X
 a ButtonProcessor hook for button presses. `turn.action` end_turn / pass values carry `waitingFor`
 [{strategyCard, name, factions, userIds}]; the upstream "End Turn When All Have Reacted" button is typed as
 `{action: "end_turn_when_followed", strategyCard}` (the game ends the turn itself once the last player answered);
-`strategyCards[].blocksTurn` says which card holds the turn. Bots press end_turn_when_followed, then wait (turnStale);
+`strategyCards[].blocksTurn` says which card holds the turn. end_turn_when_followed is refused (and a deferred end is held, the holder told to end the turn) while the holder is mid-action (ScFollowGate.midAction, live pbd273). Bots never defer: they wait (turnStale) and end the turn once the window closes;
 the web puts an owed follow at the head of the queue, greys out the turn menu until it is answered, and names who is
 still pending (header + End turn label + "Remind them" = Request All Resolve Now). Scenarios: `sc-follow-blocks-turn`,
 `sc-follow-two-humans`.
