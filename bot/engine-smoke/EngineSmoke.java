@@ -87,11 +87,11 @@ public class EngineSmoke {
         EngineModels.GameState st = StateSnapshotBuilder.build(g, "111");
         check(st.players().size() == 2 && "hacan".equals(st.players().get(0).faction()) && st.players().get(0).hand() != null && st.players().get(1).hand() == null, "state players/hand");
 
-        // 6b. Obsolete prompts stay legacy: the round's objective is already revealed
+        // 6b. Obsolete prompts are not typed (c12 closes them at capture): the round's objective is already revealed
         g.setStoredValue("revealedPOInRound" + g.getRound(), "x");
         DataObject m6 = msg("5006", "800", 0, "reveal", "reveal_stage_1", "reveal_stage_2");
         Decision d6 = DecisionCapture.build(g, m6, DecisionCapture.controls(m6), null);
-        check(d6.kind().equals("legacy"), "stale reveal prompt stays legacy: " + d6.kind());
+        check(d6 == null || d6.kind().equals("legacy"), "stale reveal prompt is closed at capture (c12) or stays legacy: " + (d6 == null ? null : d6.kind()));
         g.setStoredValue("revealedPOInRound" + g.getRound(), "");
 
         // 6c. tech.gain without owner prefix or mention: the player the prompt text names

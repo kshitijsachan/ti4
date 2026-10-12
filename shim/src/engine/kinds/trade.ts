@@ -2,13 +2,28 @@
  * G11 trade / transactions. Mirrors bot ti4.selfhost.engine.TradeEngine (state + trade.propose action),
  * kinds/TradeOfferKind, TradeOfferSentKind, TradeForceReplenishKind and spring/api/selfhost/TradeModels.
  */
-import type { DecisionBase, FactionId, UserId } from "../types.js";
+import type {
+  ActionCardId,
+  ColorName,
+  DecisionBase,
+  FactionId,
+  Phase,
+  PromissoryNoteId,
+  RelicId,
+  UserId,
+} from "../types.js";
 import type { FragmentCounts } from "./explore.js";
 
 // ---------------------------------------------------------------- shared shapes (TradeModels.java)
 
 /** A promissory note (ownerFaction set), action card or relic. */
-export type CardRef = { id: string; name: string; text?: string | null; ownerFaction?: string | null; ownerColor?: string | null };
+export type CardRef = {
+  id: PromissoryNoteId | ActionCardId | RelicId;
+  name: string;
+  text?: string | null;
+  ownerFaction?: FactionId | null;
+  ownerColor?: ColorName | null;
+};
 
 export type FragmentTrait = "cultural" | "industrial" | "hazardous" | "frontier";
 
@@ -16,7 +31,7 @@ export type TradeSelf = {
   userId: UserId;
   userName: string;
   faction: FactionId;
-  color: string;
+  color: ColorName;
   tg: number;
   commodities: number;
   commoditiesTotal: number;
@@ -33,7 +48,7 @@ export type TradeCounterparty = {
   userId: UserId;
   userName: string;
   faction: FactionId;
-  color: string;
+  color: ColorName;
   /** The bot's own check (Censure, Policy - The People: Control; anyone outside the action phase). */
   canTrade: boolean;
   neighbor: boolean;
@@ -51,7 +66,7 @@ export type TradeCounterparty = {
   canTradeActionCards: boolean;
   debtIHold: number;
   debtTheyHold: number;
-  excludedGivePromissoryNotes: string[];
+  excludedGivePromissoryNotes: PromissoryNoteId[];
   icon?: string | null;
 };
 
@@ -73,7 +88,7 @@ export type OpenOffer = {
 
 /** The viewer's trade view. */
 export type TradeState = {
-  phase: string;
+  phase: Phase;
   /** Non-null: the viewer cannot propose anything now (fog of war, Hidden Agenda, …). */
   blockedReason: string | null;
   newTransactionModel: boolean;
@@ -123,13 +138,13 @@ export type TradeSide = {
   tg?: number;
   commodities?: number;
   /** PN ids (max 1). On the receive side "any" asks for a PN of their choice. */
-  promissoryNotes?: string[];
+  promissoryNotes?: (PromissoryNoteId | "any")[];
   /** Give side only. */
-  actionCards?: string[];
+  actionCards?: ActionCardId[];
   /** Receive side only: number of action cards they pick. */
   actionCardCount?: number;
   fragments?: Partial<FragmentCounts>;
-  relics?: string[];
+  relics?: RelicId[];
   sendDebt?: number;
   clearDebt?: number;
 };

@@ -3,7 +3,19 @@
  * and the direct actions in ti4.selfhost.engine.TacticalController. Ids only: positions ("305"), planet ids, async
  * unit ids (cv, dd, gf, mf, ff...), colours. Dependency-free (the web imports it).
  */
-import type { DecisionBase, Progress, UserId } from "../types.js";
+import type {
+  ColorName,
+  DecisionBase,
+  FactionId,
+  HolderName,
+  PlanetId,
+  Progress,
+  StrategyCardNumber,
+  TileId,
+  TilePosition,
+  UnitId,
+  UserId,
+} from "../types.js";
 
 // ---------------------------------------------------------------- turn.action
 
@@ -11,7 +23,7 @@ import type { DecisionBase, Progress, UserId } from "../types.js";
 export type TurnActionValue =
   | { action: "tactical"; tacticTokens: number | null }
   | { action: "component" }
-  | { action: "strategic"; strategyCard: number }
+  | { action: "strategic"; strategyCard: StrategyCardNumber }
   /** abilities: opens the "pass with abilities" menu instead of passing now. */
   | { action: "pass"; abilities: boolean }
   /** abilities: opens the end-of-turn abilities menu (it carries a final end_turn with abilities=false). */
@@ -25,18 +37,18 @@ export type TurnAction = DecisionBase<"turn.action", TurnActionValue>;
  * position X answers the menu option whose positions include X, then the system option for X.
  */
 export type TacticalActivateValue =
-  | { step: "system"; position: string; tileId: string | null }
-  | { step: "ring"; ring: string; positions: string[] }
-  | { step: "distance"; distance: number; positions: string[] };
+  | { step: "system"; position: TilePosition; tileId: TileId | null }
+  | { step: "ring"; ring: string; positions: TilePosition[] }
+  | { step: "distance"; distance: number; positions: TilePosition[] };
 export type TacticalActivate = DecisionBase<"tactical.activate", TacticalActivateValue>;
 
 // ---------------------------------------------------------------- tactical.move
 
 export type MovableUnit = {
   /** "space" or a planet id. */
-  holder: string;
-  unit: string;
-  color: string;
+  holder: HolderName;
+  unit: UnitId;
+  color: ColorName;
   count: number;
   damaged: number;
   /** Base move value (nebula origin: 1). Bonuses below are separate. */
@@ -46,8 +58,8 @@ export type MovableUnit = {
 };
 
 export type MoveOrigin = {
-  position: string;
-  tileId: string;
+  position: TilePosition;
+  tileId: TileId;
   /** Movement distance to the active system ignoring rift bonuses / with rifts (100 = not reachable). */
   distance: number;
   riftDistance: number;
@@ -56,20 +68,20 @@ export type MoveOrigin = {
 
 export type MoveBonus = { source: string; amount: number; appliesTo: "one_ship" | "all_ships" | "ships_not_transporting" | string };
 
-export type StagedMove = { from: string; holder: string; unit: string; color: string; count: number; damaged: number };
+export type StagedMove = { from: TilePosition; holder: HolderName; unit: UnitId; color: ColorName; count: number; damaged: number };
 
 export type TacticalMoveValue =
   /** Finish movement into `position`. Also carries the movement picture (origins, bonuses). */
-  | { action: "done"; position: string; tileId: string | null; origins?: MoveOrigin[]; bonuses?: MoveBonus[] }
-  | { action: "from"; position: string }
+  | { action: "done"; position: TilePosition; tileId: TileId | null; origins?: MoveOrigin[]; bonuses?: MoveBonus[] }
+  | { action: "from"; position: TilePosition }
   | { action: "back" }
   | { action: "page"; page: number }
-  | { action: "unit"; position: string; count: number; unit: string; reverse: boolean }
-  | { action: "all"; position: string; op: "moveAll" | "reverseAll" | "removeAllShips" | "removeAll" }
+  | { action: "unit"; position: TilePosition; count: number; unit: UnitId; reverse: boolean }
+  | { action: "all"; position: TilePosition; op: "moveAll" | "reverseAll" | "removeAllShips" | "removeAll" }
   | { action: "change_destination" }
   | { action: "reset" };
 /** progress.accumulated: what is staged to move so far. */
-export type TacticalMoveProgress = Progress<{ position: string; staged: StagedMove[] }>;
+export type TacticalMoveProgress = Progress<{ position: TilePosition; staged: StagedMove[] }>;
 export type TacticalMove = DecisionBase<"tactical.move", TacticalMoveValue> & { progress: TacticalMoveProgress | null };
 
 // ---------------------------------------------------------------- tactical.land
@@ -77,34 +89,35 @@ export type TacticalMove = DecisionBase<"tactical.move", TacticalMoveValue> & { 
 export type TacticalLandValue =
   | {
       op: "land" | "unland";
-      position: string;
-      planet: string;
-      unit: string;
+      position: TilePosition;
+      planet: PlanetId;
+      unit: UnitId;
       count: number;
       damaged: boolean;
-      color: string;
-      owner: string | null;
+      color: ColorName;
+      /** Faction owning the units. */
+      owner: FactionId | null;
     }
-  | { op: "done"; position: string };
+  | { op: "done"; position: TilePosition };
 export type TacticalLandProgress = Progress<{
-  position: string;
-  inSpace: { unit: string; count: number }[];
-  onPlanets: { planet: string; unit: string; count: number }[];
+  position: TilePosition;
+  inSpace: { unit: UnitId; count: number }[];
+  onPlanets: { planet: PlanetId; unit: UnitId; count: number }[];
 }>;
 export type TacticalLand = DecisionBase<"tactical.land", TacticalLandValue> & { progress: TacticalLandProgress | null };
 
 // ---------------------------------------------------------------- tactical.conclude / tactical.rift
 
 export type TacticalConcludeValue =
-  | { action: "produce"; position: string; production: number }
-  | { action: "rift"; position: string }
+  | { action: "produce"; position: TilePosition; production: number }
+  | { action: "rift"; position: TilePosition }
   /** frontierExplore: concluding explores the system's frontier token (Dark Energy Tap). */
-  | { action: "conclude"; position: string; frontierExplore: boolean };
+  | { action: "conclude"; position: TilePosition; frontierExplore: boolean };
 export type TacticalConclude = DecisionBase<"tactical.conclude", TacticalConcludeValue>;
 
 export type TacticalRiftValue =
-  | { op: "roll"; position: string; count: number; unit: string; damaged: boolean }
-  | { op: "roll_all"; position: string }
+  | { op: "roll"; position: TilePosition; count: number; unit: UnitId; damaged: boolean }
+  | { op: "roll_all"; position: TilePosition }
   | { op: "done" };
 export type TacticalRift = DecisionBase<"tactical.rift", TacticalRiftValue>;
 
@@ -119,7 +132,7 @@ export type TacticalDecision = TurnAction | TacticalActivate | TacticalMove | Ta
  * AnswerResult with every decision opened meanwhile (landing, combat, ...).
  */
 export interface MoveRequest {
-  units: { from: string; holder: string; unit: string; color?: string; count: number; damaged?: number }[];
+  units: { from: TilePosition; holder: HolderName; unit: UnitId; color?: ColorName; count: number; damaged?: number }[];
   conclude?: boolean;
   expectedSeq?: number;
   requestId?: string;
@@ -128,7 +141,7 @@ export interface MoveRequest {
 
 /** POST …/decisions/{id}/land on a tactical.land decision: lands each, then (unless done=false) Done Landing. */
 export interface LandRequest {
-  landings: { planet: string; unit: string; count: number; color?: string }[];
+  landings: { planet: PlanetId; unit: UnitId; count: number; color?: ColorName }[];
   done?: boolean;
   expectedSeq?: number;
   requestId?: string;
