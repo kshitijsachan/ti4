@@ -4,10 +4,11 @@ import { getLeaderById } from "@/entities/lookup/leaders";
 import { getPlanetData } from "@/entities/lookup/planets";
 import { getStrategyCardByInitiative } from "@/entities/lookup/strategyCards";
 import { SC_COLORS, SC_NAMES } from "@/entities/data/strategyCardColors";
-import { factionKeyDisplayName } from "@/entities/game/playerUtils";
 import { countTechs, type LeaderState, type PlayerSummary } from "@/board/playerSummary";
 import { phaseLabel, type TurnState } from "@/play/turn";
-import type { GameState, PlayerState } from "./contract";
+import type { Decision, GameState, PlayerState } from "./contract";
+import { decisionTitle } from "./queue";
+import { factionName } from "./names";
 
 /** The engine's raw phase ("statusScoring", "agendaVoting", "miltydraft") as the board labels it. */
 export function enginePhaseLabel(raw: string | null | undefined): string | undefined {
@@ -77,7 +78,7 @@ export function summarizeEnginePlayer(p: PlayerState, state: GameState): PlayerS
     key: p.color ?? p.userId,
     name: p.userName,
     faction,
-    factionName: factionKeyDisplayName(faction),
+    factionName: factionName(faction),
     factionImage: faction ? getFactionImage(faction) : undefined,
     color: getPrimaryColorCSS(p.color ?? ""),
     vp: p.victoryPoints,
@@ -107,4 +108,47 @@ export function summarizeEnginePlayer(p: PlayerState, state: GameState): PlayerS
     secrets: p.secretObjectiveCount,
     promissory: p.promissoryNoteCount,
   };
+}
+
+function listed(names: string[]) {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+const SETUP_STEP: Record<string, string> = {
+  settings: "the game's settings to be chosen",
+  player_setup: "players to finish setting up",
+  deal_secrets: "secret objectives to be dealt",
+  keep_secrets: "players to choose which secret objective to keep",
+  reveal_objectives: "the objectives to be revealed",
+};
+
+/** Who the table waits on when it is nobody's turn (setup, an agenda vote), for the header note. */
+export function engineWaitingNote(state: GameState, myId: string | undefined): string | null {
+  const name = (id: string) => state.players.find((p) => p.userId === id)?.userName ?? "a player";
+  const setup = state.setup;
+  if (setup && setup.stage !== "draft") {
+    const others = setup.waitingOn.filter((id) => id !== myId);
+    if (others.length) return `Waiting for ${listed(others.map(name))}…`;
+    if (!setup.waitingOn.length && SETUP_STEP[setup.stage]) return `Waiting for ${SETUP_STEP[setup.stage]}…`;
+  }
+  const voter = state.agenda?.currentVoter;
+  if (voter && voter !== myId) return `Waiting for ${name(voter)} to vote…`;
+  const status = state.status;
+  if (status) {
+    const seated = state.players.filter((p) => p.real && !p.eliminated).map((p) => p.userId);
+    const scoring = status.step === "scoring";
+    const owing = seated.filter((id) => {
+      const st = status.players[id];
+      if (!st || id === myId) return false;
+      return scoring ? st.publicScored === null || st.secretScored === null : !st.ready;
+    });
+    if (owing.length) return `Waiting for ${listed(owing.map(name))} to ${scoring ? "score" : "finish the status phase"}…`;
+  }
+  return null;
+}
+
+/** The header's "Your move" count and tooltip (the popup's queue), else what the table waits on. */
+export function engineWaiting(state: GameState, queue: Decision[], myId: string | undefined) {
+  return { count: queue.length, title: queue[0] ? decisionTitle(queue[0], state) : null, note: queue.length ? null : engineWaitingNote(state, myId) };
 }

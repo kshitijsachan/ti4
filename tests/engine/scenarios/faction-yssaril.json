@@ -1,0 +1,30 @@
+{
+  "name": "faction-yssaril",
+  "description": "Yssaril: commander So Ata (yssarilcommander_ac_<f>), Scheming (yssarilMinisterOfPolicy), agent as JR (yssarilAgentAsJr), Spy Net PN (spyNetPlayerChooses / takeAC_)",
+  "base": {
+    "recording": "pbd91",
+    "index": 35,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:yssarilcommander faction_or_color:yssaril",
+    "/pn send promissory_note_id:spynet target_faction_or_color:yin faction_or_color:yssaril"
+  ],
+  "trigger": {
+    "press": "FFCC_yssaril_yssarilcommander_ac_yin",
+    "as": "yssaril"
+  },
+  "steps": [
+    {
+      "press": "FFCC_yssaril_yssarilMinisterOfPolicy",
+      "as": "yssaril"
+    },
+    {
+      "press": "spyNetPlayerChooses",
+      "as": "yin"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

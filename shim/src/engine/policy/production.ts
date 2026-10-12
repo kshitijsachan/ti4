@@ -3,16 +3,21 @@
  * engine states (cost / already counted come from the decision, planet values include attachments). Production:
  * turns a planner's build list into one production.produce payload.
  */
-import type { GameState, Option, PlanetId } from "../types.js";
+import type { GameState, HolderName, Option, PlanetId } from "../types.js";
 import {
   isPaymentDone,
   isPlacement,
+  type PaymentDoneValue,
   type PaymentPayload,
   type PaymentSpend,
   type PaymentValue,
   type ProductionPayload,
   type ProductionProduce,
   type ProductionValue,
+  type ProductionPlace,
+  type FreePlacementValue,
+  type CommoditiesGain,
+  type CommoditiesValue,
 } from "../kinds/production.js";
 
 export type PaymentPlan = { payload: PaymentPayload; why: string };
@@ -30,12 +35,12 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
   const done = opts.map((o) => o.value).find(isPaymentDone);
   if (!done) return null;
   const req = (d.progress?.required ?? {}) as { cost?: number | null; remaining?: number | null };
-  const cost = req.cost ?? done.cost;
+  const cost = req.cost ?? done.cost ?? contextCost(done, state, me);
   const currency = done.currency;
   if (cost == null || (currency !== "res" && currency !== "inf")) return null;
   const counted = typeof req.remaining === "number" ? cost - req.remaining : currency === "inf" ? done.spentInfluence : done.spentResources;
   let due = cost - counted;
-  if (due <= 0) return { payload: { planets: [] }, why: `bill of ${cost} already covered` };
+  if (due <= 0) return { payload: { planets: [] }, why: cost === 0 ? `${done.context}: nothing to pay; done` : `bill of ${cost} already covered` };
 
   const self = state?.players.find((p) => p.userId === me);
   const exhausted = new Set(self?.exhaustedPlanets ?? []);
@@ -88,6 +93,25 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
 }
 
 /**
+ * What a bill the engine does not price (cost null) costs a bot, by what Done finishes (live: every Leadership
+ * and Technology payment waited out the 60 s fallback, and stalled the seat behind it):
+ * - leadership: the influence spent buys extra command tokens; the bot's Leadership policy gains only the card's 3
+ *   (engine/kinds/strategyPolicy.ts commandTokens), so it buys none: 0.
+ * - technology: the Technology primary's first research is free (the only one the strategy policy researches): 0
+ *   for the card's holder; a follower's research costs 4 resources.
+ * null otherwise (left to the planner / fallback).
+ */
+export function contextCost(done: PaymentDoneValue, state: GameState | null, me: string): number | null {
+  if (done.context === "leadership" && done.currency === "inf") return 0;
+  if (done.context === "technology" && done.currency === "res" && done.tech) {
+    const card = state?.strategyCards.find((c) => c.card === "pok7technology" && c.played);
+    if (!card) return null;
+    return card.holder === me ? 0 : 4;
+  }
+  return null;
+}
+
+/**
  * A planner's build list (unit ids, one entry per unit: ["cv", "gf", "gf"]) → the production payload for this
  * decision. Ground forces go on the first planet offered (never space unless that is all there is). Units the
  * decision does not offer are dropped.
@@ -105,4 +129,40 @@ export function productionPayload(d: ProductionProduce, build: string[]): Produc
     units.push(ground ? { unit: spot.unit, count, holder: spot.holder } : { unit: spot.unit, count });
   }
   return { units };
+}
+
+/**
+ * Free placements (production.place): always answered for the bot: the first
+ * placement on a planet we control (else the first offered); "Done" only when nothing can be placed.
+ */
+export function choosePlacement(d: ProductionPlace, state: GameState | null, me: string): { option: Option<FreePlacementValue>; why: string } | null {
+  const live = d.options.filter((o) => !o.disabled && o.value) as Option<FreePlacementValue>[];
+  const mine: ReadonlySet<HolderName> = new Set(state?.players.find((p) => p.userId === me)?.planets ?? []);
+  const places = live.filter((o) => o.value!.op === "place");
+  const pick = places.find((o) => mine.has((o.value as { holder: HolderName }).holder)) ?? places[0];
+  if (pick) {
+    const v = pick.value as Extract<FreePlacementValue, { op: "place" }>;
+    return { option: pick, why: `free placement: ${v.count} ${v.unit} on ${v.holder}${v.tile ? ` (${v.tile})` : ""}` };
+  }
+  const done = live.find((o) => o.value!.op === "done");
+  return done ? { option: done, why: "free placement: nowhere to place" } : null;
+}
+
+/**
+ * Gain / convert commodities: convert when we hold at least that many commodities (trade goods are spendable),
+ * else gain; "Done" when neither is offered. A prompt that stays ("_stay") is answered once (history).
+ */
+export function chooseCommodities(d: CommoditiesGain, state: GameState | null, me: string, history: string[]): { option: Option<CommoditiesValue>; why: string } | null {
+  const live = (d.options.filter((o) => !o.disabled && o.value) as Option<CommoditiesValue>[]).filter((o) => !history.includes(o.id));
+  const done = d.options.find((o) => !o.disabled && o.value?.op === "done") as Option<CommoditiesValue> | undefined;
+  if (history.length && done) return { option: done, why: "commodities: already taken" };
+  const held = state?.players.find((p) => p.userId === me)?.commodities ?? 0;
+  const amountOf = (o: Option<CommoditiesValue>) => (o.value!.op === "done" ? 0 : o.value!.amount);
+  const convert = live.find((o) => o.value!.op === "convert" && held >= amountOf(o));
+  if (convert) return { option: convert, why: `commodities: convert ${amountOf(convert)} into trade goods` };
+  const gain = live.find((o) => o.value!.op === "gain");
+  if (gain) return { option: gain, why: `commodities: gain ${amountOf(gain)}` };
+  const anyConvert = live.find((o) => o.value!.op === "convert");
+  if (anyConvert) return { option: anyConvert, why: "commodities: convert what we have" };
+  return done ? { option: done, why: "commodities: nothing to take" } : null;
 }

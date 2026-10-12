@@ -13,7 +13,7 @@ import { chooseTyped, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
-import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, waitsOn } from "./engine/policy/fallback.js";
+import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
 import type { Decision } from "./engine/types.js";
 
 /*
@@ -151,8 +151,10 @@ const RULES: Rule[] = [
   { id: /_strategicAction_\d+$/, score: 86, why: "play strategy card" },
   // Politics primary: someone must get the speaker token before the bot moves on.
   { id: /^sc_3_assign_speaker_to_/, score: 64, why: "Politics: assign the speaker token" },
-  { id: /_passForRound$/, score: 85, retry: true, why: "pass" },
-  { id: /_passingAbilities$/, score: 84, why: "pass" },
+  // Only in the action phase: a stale pass button pressed in the status phase passed again and, as the "last pass",
+  // re-started the status phase (scoring prompt re-posted on every press, pbd105).
+  { id: /_passForRound$/, score: 85, retry: true, phase: /^action/, why: "pass" },
+  { id: /_passingAbilities$/, score: 84, phase: /^action/, why: "pass" },
   // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
   { id: /^resolvePreassignment_Abstain On Agenda$/, score: 79, why: "agenda: pre-abstain" },
   { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, why: "agenda: pre-pass on shenanigans" },
@@ -1447,6 +1449,12 @@ class SeatPilot {
       if (!mine.length) continue;
       for (const d of mine) {
         if (this.engineDead.has(d.id)) continue;
+        // Still listed but no longer waiting on us (another player's turn, a finished combat's roll window): no
+        // answer, no watchdog clock (live: stale combat windows took every pass of Bot Beta's loop in pbd60).
+        if (staleForBot(d, state, this.userId)) {
+          this.engineWaiting.delete(`${game}|${d.id}`);
+          continue;
+        }
         const done = this.engineDone.get(d.id);
         const watch = this.watchdog(game, d, now);
         const ctx = {

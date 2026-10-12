@@ -1,0 +1,8 @@
+{
+  "name": "combat-hits-sco",
+  "description": "Space cannon offence hits auto-assigned: mentak takes 1 SCO hit in 306.",
+  "base": { "recording": "pbd60", "index": 165 },
+  "trigger": { "press": "FFCC_mentak_autoAssignSpaceCannonOffenceHits_306_1", "as": "mentak" },
+  "steps": [ { "wait": 1500 } ],
+  "expect": { "invariants": true }
+}

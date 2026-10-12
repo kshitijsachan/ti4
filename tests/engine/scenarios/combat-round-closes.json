@@ -1,0 +1,12 @@
+{
+  "name": "combat-round-closes",
+  "description": "A combat.round roll prompt closes (obsolete) once its fight is over: start space combat in 306 (mentak ca+dd vs muaat dn+ca), then remove mentak's ships. Regression for 20 stale roll windows in pbd60. Companion: combat-round-open (same, without the removal).",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [ "/combat start_combat tile_name:306" ],
+  "steps": [
+    { "wait": 3000 },
+    { "command": "/remove_units tile_name:306 unit_names:\"ca, dd\" faction_or_color:mentak" },
+    { "wait": 3000 }
+  ],
+  "expect": { "invariants": true, "decision": { "kind": "combat.round", "open": false } }
+}

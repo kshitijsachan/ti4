@@ -97,7 +97,10 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "action_card.resolve": "blocking",
   "action_card.target": "blocking",
   "action_card.preassign": "optional",
+  "action_card.step": "blocking", // C7: follow-up steps of a card already played (like action_card.target)
+  "action_card.when_after": "optional", // C7: non-queued agenda whens / afters (offers, like agenda.when / after)
   "promissory_note.play": "optional",
+  "promissory_note.resolve": "blocking", // C7: a played note's follow-up step (Acquiescence offer is declined)
   // G9 exploration
   "explore.planet": "blocking",
   "explore.card_pick": "blocking",
@@ -128,6 +131,27 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "ui.optional": "optional",
   "ui.info_menu": "optional",
   "choose.select": "planner",
+  // C6 components: generic single-choice steps (the components policy answers our own at once); menus / relic offers
+  "choose.planet": "blocking",
+  "choose.system": "blocking",
+  "choose.player": "blocking",
+  "choose.unit": "blocking",
+  "choose.card": "blocking",
+  "choose.confirm": "blocking",
+  "component.action": "optional",
+  "relic.use": "optional",
+  // C8 core tails
+  "combat.bombard": "planner",
+  "units.remove": "blocking",
+  "production.place": "blocking",
+  "commodities.gain": "blocking",
+  // C6b tech follow-ups (the components policy answers our own: free gains taken, the rest declined)
+  "tech.step": "blocking",
+  // C8b
+  "units.modify": "optional", // Modify Units menu: opened by the player
+  "combat.automate": "blocking", // automate-ground-combat vote / confirm
+  "combat.modifier": "optional",
+  "strategy_card.construction_build": "blocking",
 };
 
 const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);
@@ -245,9 +269,46 @@ export function fallbackDue(d: Decision, me: string, opts: { waitedMs?: number; 
   return KIND_CLASS[d.kind] === "planner" ? waited >= FALLBACK_FORCE_MS : waited >= FALLBACK_GRACE_MS;
 }
 
+/**
+ * A decision that still lists this seat but that the game no longer waits on (the engine has not closed it yet):
+ * - turn.action targeted at us while another player is active (pbd86: "Pass" refused, "It is not your turn");
+ * - "Setup a Player" once we are seated;
+ * - a combat roll window whose fight is over or is not the combat on the board (pbd60: rounds of a finished space
+ *   combat stayed open with us "eligible"; the fallback pressed "Check Combat Action Cards" / rolled them).
+ * Neither the fallback nor the watchdog acts on it. Needs the state; without one nothing is stale.
+ */
+export function staleForBot(d: Decision, state: GameState | null, me: string): boolean {
+  if (!state) return false;
+  if (d.kind === "turn.action") return state.phase === "action" && !!state.activePlayer && state.activePlayer !== me;
+  // "Setup a Player" stays up after it is pressed: once we are seated it asks nothing of us (pbd147).
+  if (d.kind === "setup.player" && d.options.every((o) => !o.value || (o.value as { step?: string }).step === "start")) {
+    return !!state.players.find((p) => p.userId === me)?.faction;
+  }
+  if (d.kind === "combat.round") {
+    const w = d.window;
+    if (!w || w.kind !== "combat_roll") return false;
+    const subject = w.subject as Record<string, unknown>;
+    const combat = state.combat;
+    if (!combat || String(subject.tile ?? "") !== combat.tile) return true;
+    if (subject.rollType !== "combat") return false;
+    const front = combat.fronts.find((f) => f.holder === String(subject.holder ?? ""));
+    if (!front) return true;
+    return front.sides.length < 2 || front.sides.some((side) => !side.units.length);
+  }
+  return false;
+}
+
 /** The last-resort answer: a passive option, else the first legal non-destructive one; null when there is none. */
 export function chooseFallback(d: Decision, state: GameState | null, me: string): { option: Option<any>; why: string } | null {
-  const pick = fallbackCandidates(d, state, me)[0];
+  if (staleForBot(d, state, me)) return null;
+  let candidates = fallbackCandidates(d, state, me);
+  // A combat round asks for dice: the fallback rolls the window's own roll or nothing (never "Check Combat Action
+  // Cards", "Repair Damage", "Declare Ready", another roll type).
+  if (d.kind === "combat.round" && d.window?.kind === "combat_roll") {
+    const rollType = String((d.window.subject as Record<string, unknown>).rollType ?? "");
+    candidates = candidates.filter((o) => o.value?.action === "roll" && o.value.rollType === rollType);
+  }
+  const pick = candidates[0];
   if (!pick) return null;
   return { option: pick, why: `fallback: no specific policy answered ${d.kind}; pressed "${pick.label || pick.id}"` };
 }

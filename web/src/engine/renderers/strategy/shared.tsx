@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Decision, GameState, Option, PlayerState } from "../../../../../shim/src/engine/types";
+import { playerLabel } from "../../names";
 import classes from "./strategy.module.css";
 
 /** Props every engine renderer gets (INFRA-2 contract). */
@@ -14,9 +15,7 @@ export function viewer(state: GameState | null): PlayerState | undefined {
 }
 
 export function playerName(state: GameState | null, faction: string | null | undefined) {
-  const p = state?.players.find((x) => x.faction === faction);
-  if (!p) return faction ?? "";
-  return p.userName && p.userName !== "null" ? `${p.userName} (${p.faction})` : p.faction;
+  return faction ? playerLabel(state, faction) : "";
 }
 
 export function live<V>(options: Option<V>[]) {

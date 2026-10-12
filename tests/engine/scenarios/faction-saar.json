@@ -1,0 +1,37 @@
+{
+  "name": "faction-saar",
+  "description": "Saar: mech (saarMechRes_: pay 1 TG to place a mech), Ragh's Call PN played by its holder (raghsCallStepOne_ -> raghsCallStepTwo_), hero Gurno Aggero (saarHeroResolution_)",
+  "base": {
+    "recording": "pbd117",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/player stats trade_goods:4 faction_or_color:saar",
+    "/leaders unlock leader:saarhero faction_or_color:saar",
+    "/add_units tile_name:304 unit_names:\"2 infantry ragh\" faction_or_color:saar",
+    "/add_units tile_name:304 unit_names:\"2 cruiser\" faction_or_color:saar",
+    "/pn send promissory_note_id:ragh target_faction_or_color:sol faction_or_color:saar"
+  ],
+  "trigger": {
+    "press": "FFCC_saar_saarMechRes_ragh",
+    "as": "saar"
+  },
+  "steps": [
+    {
+      "press": "raghsCallStepOne_ragh",
+      "as": "sol"
+    },
+    {
+      "press": "raghsCallStepTwo_ragh_lisisii",
+      "as": "sol"
+    },
+    {
+      "press": "saarHeroResolution_304",
+      "as": "saar"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
