@@ -1,0 +1,31 @@
+{
+  "name": "ac-action-econ",
+  "description": "pbd72 r4 action phase, Winnu active: plays Uprising (Arborec's Atlas), Mining Initiative, Industrial Initiative, Rise of a Messiah and Insubordination (Arborec) through action_card.play / .resolve / .target.",
+  "base": { "recording": "pbd72", "index": 815, "repost": false },
+  "setup": [
+    "/ac draw_specific_ac ac_id:uprising faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:mining_initiative faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:industrial_initiative faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:messiah faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:insub faction_or_color:winnu"
+  ],
+  "steps": [
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "uprising" } }, "as": "winnu" },
+    { "answer": { "kind": "action_card.resolve", "option": "resolveUprisingStep1" }, "as": "winnu" },
+    { "answer": { "kind": "/^action_card\\.(target|step)$/", "option": "uprisingStep2_arborec" }, "as": "winnu" },
+    { "answer": { "kind": "/^action_card\\.(target|step)$/", "option": "uprisingStep3_arborec_atlas" }, "as": "winnu" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "mining_initiative" } }, "as": "winnu" },
+    { "answer": { "kind": "action_card.resolve", "option": "miningInitiative" }, "as": "winnu" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "industrial_initiative" } }, "as": "winnu" },
+    { "answer": { "kind": "action_card.resolve", "option": "industrialInitiative" }, "as": "winnu" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "messiah" } }, "as": "winnu" },
+    { "answer": { "kind": "action_card.resolve", "option": "riseOfAMessiah" }, "as": "winnu" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "insub" } }, "as": "winnu" },
+    { "answer": { "kind": "action_card.resolve", "option": "resolveInsubStep1" }, "as": "winnu" },
+    { "answer": { "kind": "/^action_card\\.(target|step)$/", "option": "insubStep2_arborec" }, "as": "winnu" }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "player[arborec].tactical_cc", "eq": "0" } ]
+  }
+}
