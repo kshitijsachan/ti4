@@ -155,3 +155,27 @@ void test("follow helpers: what I owe, and who holds the turn", async () => {
   assert.deepEqual(followHeader(s, ME), { mine: "follow Leadership", others: null });
   assert.deepEqual(followHeader(s, "u2"), { mine: null, others: "Waiting for Me to follow Leadership" });
 });
+
+void test("my card's undone primary part (Politics' action-card draw after the agendas) leads, ahead of my turn menu", () => {
+  const parts = ["speaker", "action_cards", "agendas"];
+  const subject = (done: string[]) => ({ strategyCard: 3, name: "Politics", holder: "arborec", primaryDone: done });
+  const card = (done: string[]) =>
+    dec("strategy_card.resolve", {
+      scope: "table",
+      window: { ...win(["u2"]), subject: subject(done) } as unknown as Decision["window"],
+      options: [opt("ac", { who: "anyone", action: "draw_action_cards", part: "action_cards", primaryParts: parts }), opt("ra", { who: "holder", action: "request_all", part: null, primaryParts: parts })],
+    });
+  assert.deepEqual(kinds(orderDecisions([dec("turn.action"), card(["speaker", "agendas"])], 0, undefined, state())), ["strategy_card.resolve", "turn.action"]);
+  const done = orderDecisions([dec("turn.action"), card(["speaker", "agendas", "action_cards"])], 0, undefined, state());
+  assert.deepEqual(kinds(done), ["turn.action"]);
+});
+
+void test("Construction with only the optional second structure left waits behind my turn menu", () => {
+  const parts = ["structure", "structure"];
+  const c = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: { strategyCard: 4, name: "Construction", holder: "arborec", primaryDone: ["structure"] } } as unknown as Decision["window"],
+    options: [opt("pds", { who: "anyone", action: "construction_structure", part: "structure", primaryParts: parts })],
+  });
+  assert.deepEqual(kinds(orderDecisions([dec("turn.action"), c], 0, undefined, state())), ["turn.action", "strategy_card.resolve"]);
+});
