@@ -346,3 +346,17 @@ test("pbd175: the Keleres preset once we play a flavour is stale; during the dra
   assert.equal(staleForBot(preset([true, false, false]), drafting, ME), false);
   assert.equal(chooseTyped(preset([true, false, false]), drafting, ME, { history: [], open: [], all: [] })?.option?.id, "draftPresetKeleres_xxcha");
 });
+
+test("pbd181: a tactical action's prompts outside our action-phase turn are stale", () => {
+  const conclude = decision("tactical.conclude", [opt("FFCC_sol_doneWithTacticalAction", "Conclude Tactical Action", { action: "conclude" })]);
+  const move = decision("tactical.move", [opt("FFCC_sol_concludeMove_210", "Done moving", { op: "done" })]);
+  const status = { ...state, phase: "status" } as unknown as GameState;
+  const theirTurn = { ...state, activePlayer: OTHER } as unknown as GameState;
+  const passed = { ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, passed: true } : p)) } as unknown as GameState;
+  for (const [name, st] of [["status phase", status], ["another player's turn", theirTurn], ["we passed", passed]] as const) {
+    assert.equal(staleForBot(conclude, st, ME), true, `conclude: ${name}`);
+    assert.equal(chooseFallback(move, st, ME), null, `move: ${name}`);
+  }
+  assert.equal(staleForBot(conclude, state, ME), false, "our own turn");
+  assert.equal(chooseFallback(conclude, state, ME)?.option.id, "FFCC_sol_doneWithTacticalAction");
+});

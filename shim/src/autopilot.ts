@@ -110,6 +110,13 @@ const ENGINE_MAX_ANSWERS = 8;
  * that never records our answer was re-answered forever (live pbd161: two Sabotage windows, "No Sabotage" ~450x).
  */
 const ENGINE_LIFETIME_ANSWERS = 24;
+/**
+ * The same answer accepted this many times on one decision in the same state (revision — any, for reaction windows —
+ * and progress) while
+ * the decision stays open: the answer does nothing for the engine, so stop and report (live pbd31: the Winnu agent's
+ * "Hacan" was accepted 783 times, each press re-running the agent; the lifetime cap resets with every restart).
+ */
+const ENGINE_MAX_IDENTICAL_ACCEPTED = 3;
 /** Watchdog: a typed decision that has awaited a bot this long is logged as an error (with a dump) for the soak. */
 const ENGINE_STALL_ERROR_MS = 180_000;
 
@@ -1430,6 +1437,8 @@ class SeatPilot {
   private engineLifetime = new Map<string, number>();
   /** Per decision id: the options this seat answered successfully (in order) and the revision of the last one. */
   private engineDone = new Map<string, { options: string[]; revision: number }>();
+  /** `${decision}|${revision or "" for windows}|${progress}|${answer}` → times the engine accepted it (see ENGINE_MAX_IDENTICAL_ACCEPTED). */
+  private engineAccepted = new Map<string, number>();
   /** Decisions the engine says are no longer open (stale copies): never answered or watched again. */
   private engineDead = new Set<string>();
   /** Decisions on which an answer of ours was refused: a forced re-evaluation goes straight to the fallback. */
@@ -1584,6 +1593,16 @@ class SeatPilot {
         const rolled = pick.option?.value?.action === "roll" ? String(pick.option.value.rollType ?? "") : "";
         if (r.ok && rolled) this.recent.set(`${d.source.channelId}:roll:${rolled}`, Date.now());
         if (r.ok) {
+          // Same decision state (revision, progress) and same answer: multi-part answers that move the decision on
+          // (Leadership's three "Gain 1 Tactic Token" change progress.accumulated) never count as repeats.
+          const same = `${d.id}|${windowed ? "" : d.revision}|${JSON.stringify(d.progress?.accumulated ?? null)}|${what}`;
+          const accepted = (this.engineAccepted.get(same) ?? 0) + 1;
+          this.engineAccepted.set(same, accepted);
+          if (this.engineAccepted.size > 5000) this.engineAccepted.delete(this.engineAccepted.keys().next().value!);
+          if (accepted >= ENGINE_MAX_IDENTICAL_ACCEPTED) {
+            log.error(`autopilot ${this.name}: Error: engine ${d.kind} ${d.id} in ${game} accepted "${pick.option?.label ?? "payload"}" ${accepted}x and stays open; giving up on it (${pick.why})`);
+            this.engineDead.add(d.id);
+          }
           // What we answered on this decision (multi-part answers walk it; see engine/kinds/strategyPolicy.ts).
           this.engineDone.set(d.id, { options: [...(done?.options ?? []), ...(pick.option ? [pick.option.id] : [])], revision: d.revision });
           if (this.engineDone.size > 2000) this.engineDone.delete(this.engineDone.keys().next().value!);
