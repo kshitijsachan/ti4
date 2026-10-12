@@ -288,7 +288,7 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 
 | Area | Kinds | GameState section |
 |---|---|---|
-| G1 setup / draft | `draft.milty.{pick,queue,info}`, `setup.{player,keleres_flavor,keleres_tech,deal_secrets,reveal_objectives,preference,game_settings}`, `tech.choose_type`, `tech.gain`, `secret_objective.discard` | `draft`, `setup` |
+| G1 setup / draft | `draft.milty.{pick,queue,info}`, `setup.{player,keleres_flavor,keleres_tech,deal_secrets,reveal_objectives,game_settings}`, `tech.choose_type`, `tech.gain`, `secret_objective.discard` | `draft`, `setup` |
 | G2 strategy cards | `strategy_card.{pick,queue_pick,resolve (window),strategic_action,diplomacy_system,politics_speaker,politics_agenda,construction_place}`, `planet.ready` | `strategyCards[].reactions` |
 | G3 tactical | `turn.action`, `tactical.{activate,move,land,rift,conclude}`; direct actions `move`, `land` | — |
 | G4 combat | `combat.round` (window `combat_roll`), `combat.hits`, `combat.assign_units` (progress), `combat.retreat`; direct action `combat-plan` {plan: [{holder, unit, damaged, action: sustain/destroy, count}]} | `combat` |
@@ -300,6 +300,14 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 | G10 Thunder's Edge | `te.{fracture.roll,fracture.ingress,galvanize,expedition,thunders_edge.place,visionaria.respond}` | `thundersEdge` |
 | G11 trade | `trade.{offer,offer_sent,force_replenish}`; game action `trade.propose` | `trade` (viewer only) |
 | INFRA-3 | `input.form` (forms opened by `needsInput` buttons) | — |
+| c12 perpetual | `ui.{undo_affordance,optional,info_menu}` (affordances: **not** decisions — `awaits()` false, never "mine", bots ignore; still answerable on click), `player.preference` (bots answer defaults; web background), `choose.select` (select-only fallback, answer via `inputs`) | — |
+
+**Affordances and obsolete prompts (c12).** A message made only of undo buttons (`drawSpecificSO_`, `removePreset_`,
+`retrieveAgenda_`, `eraseMyVote`, …), optional actions (round summary, objective pre-score queue, agenda help menu,
+dismiss-only) or an info menu carrying action shortcuts is typed `ui.*` with value `{action, undoes, ref, shortcut?}`:
+it is open (clickable, answerable through the engine) but no one is awaited (`isAffordance`, `AFFORDANCE_KINDS`).
+A prompt whose kind is `obsolete()` at capture is closed (reason `obsolete`, metric `capture.obsolete`) instead of
+reopening as legacy, the same as dynamic kinds that go obsolete later.
 
 All GameState area sections are optional in TS (`?:`) so an older engine without them still type-checks.
 
@@ -310,6 +318,26 @@ hits); `combat.assign_units` carries the running assignment as `progress`; `comb
 `GameState.combat` (active system, sides, round, units with sustain/damage) comes from `CombatSupport`, which also
 records rolls through one upstream hook in `CombatRollService`. Bot policy: `shim/src/engine/combatPolicy.ts` (never
 rolls the same dice twice; no next roll while hits are owed).
+
+### 3.8 Ids (closed unions)
+
+Every id the contract carries is typed by a string-literal union from `shim/src/engine/ids.ts`, **generated** by
+`node tools/engine-ids/generate.mjs` (`--check` fails when stale) from the bot's own data files
+(`src/main/resources/data/**`, `planets/`, `systems/`) — official content only (`source` ∈ base, pok, codex1–4,
+thunders_edge): `FactionId`, `TechId`, `PlanetId`, `TileId`, `UnitId` (async unit ids: gf, ff, dd, …), `ActionCardId`,
+`AgendaId`, `PublicObjectiveId`, `SecretObjectiveId`, `RelicId`, `RelicFragmentId`, `ExploreCardId`,
+`PromissoryNoteId` (faction notes + `` `${ColorName}_${suffix}` ``), `LeaderId` / `LeaderStatus`, `StrategyCardId`,
+`StrategyCardNumber`, `BreakthroughId`, `ColorName`, `TechType`, … plus `Phase` (every literal the engine passes to
+`setPhaseOfGame`). Each comes with a const array, a name lookup (`FACTION_NAMES`, …) and a guard (`is.faction(x)`).
+Open sets stay `string` on purpose: display text (`prompt`, `label`, `name`), `Option.id` (opaque), board positions
+(`TilePosition`), custom objective names (`RevealedObjectiveKey`), tokens.
+
+Java has no generated mirror: `StateSnapshotBuilder` and the kinds emit the ids `Mapper` loaded from the same data
+files (`Player.getTechs()`, `Planet` names, `UnitKey.asyncID()`, …), so both sides agree by construction; regenerate
+`ids.ts` when the bot's data changes. Homebrew ids still arrive at runtime (the unions are deliberately official-only):
+`shim/src/engine/validate.ts` walks every GameState / Decision the shim's `EngineClient` receives and logs each id
+outside its union once (`engine contract drift: unknown faction "…" at …`). It never throws or drops data; on by
+default, off with `NODE_ENV=production` unless `ENGINE_VALIDATE=1` (`ENGINE_VALIDATE=0`: off everywhere).
 
 ## 4. Where things are
 

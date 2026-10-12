@@ -43,6 +43,8 @@ services:
       dockerfile: deploy/app.Dockerfile
     image: ${APP_IMAGE:-ti4-online/app:local}
     restart: unless-stopped
+    # The shim saves its message store on SIGTERM after draining the bot's writes; give it time (default is 10 s).
+    stop_grace_period: 40s
     environment:
       PORT: "8090"
       SHIM_DATA: /data
@@ -84,7 +86,7 @@ services:
       TI4_ENGINE: ${TI4_ENGINE:-on}
       # Engine answers run as engine-native interactions where proven safe; off = always the simulated click.
       TI4_ENGINE_NATIVE: ${TI4_ENGINE_NATIVE:-on}
-      # Bot token / user id / guild id are read from the shim's state.json by the entrypoint.
+      # Bot token / user id / guild id are read from the shim's store/global.json (state.json before it) by the entrypoint.
       SHIM_STATE_FILE: /shim-data/state.json
       DB_PATH: /opt/STORAGE
       RESOURCE_PATH: /opt/resources
