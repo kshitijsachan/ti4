@@ -1,0 +1,10 @@
+{
+  "name": "combat-bombard-shield",
+  "description": "Bombardment against a planet with PLANETARY SHIELD (muaat PDS on atlas): mentak's dreadnought cannot bombard, so no dice are rolled and the result is deterministic.",
+  "base": { "recording": "pbd60", "index": 165 },
+  "setup": [ "/add_units tile_name:306 unit_names:dn faction_or_color:mentak",
+             "/add_units tile_name:306 unit_names:\"pd atlas, 2 gf atlas\" faction_or_color:muaat" ],
+  "trigger": { "press": "combatRoll_306_space_bombardment", "as": "mentak" },
+  "steps": [ { "wait": 2000 } ],
+  "expect": { "invariants": true }
+}

@@ -23,7 +23,7 @@ function actionLine(text?: string) {
 /** Which kind of component a component-action button uses, and the one-line effect from its card. */
 function describe(c: Choice): { group: Group; effect?: string } {
   const id = baseId(c.customId).replace(/^componentActionRes_/, "");
-  const tech = id.match(/^exhaustTech_(.+)$/)?.[1];
+  const tech = id.match(/^exhaustTech_(.+?)(?:_discount)?$/)?.[1];
   if (tech) return { group: "Technologies", effect: actionLine(techs.find((t) => t.alias === tech)?.text) };
   const leader = id.match(/^leader_(.+)$/)?.[1];
   if (leader) return { group: "Leaders", effect: actionLine(leaders.find((l) => l.id === leader)?.abilityText) };

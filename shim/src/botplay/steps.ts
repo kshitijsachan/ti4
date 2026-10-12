@@ -1,4 +1,4 @@
-import { baseId, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
+import { baseId, lockIs, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 
 const sig = (p: Prompt) =>
@@ -11,8 +11,8 @@ const sig = (p: Prompt) =>
 export function promptForMe(seat: Seat, p: Prompt, faction: string) {
   const me = seat.userId;
   if (p.m._ephemeral_for) return p.m._ephemeral_for === me;
-  if (p.controls.some((c) => lockOf(c.custom_id) === faction)) return true;
-  if (p.controls.some((c) => lockOf(c.custom_id) && lockOf(c.custom_id) !== faction)) return false;
+  if (p.controls.some((c) => lockIs(c.custom_id, faction))) return true;
+  if (p.controls.some((c) => lockOf(c.custom_id) && !lockIs(c.custom_id, faction))) return false;
   // A ping names whose prompt it is; `_prompted_for` (who pressed last before the bot posted) can be someone else.
   const pings = [...String(p.m.content ?? "").matchAll(/<@!?(\d+)>/g)].map((x) => x[1]);
   if (pings.length) return pings.includes(me);
@@ -41,7 +41,7 @@ export class Steps {
       const p = prompts[i];
       if (!snowflakeAfter(p.m.id, after ?? this.since)) break;
       if (this.gone.has(p.m.id) || !promptForMe(this.seat, p, faction)) continue;
-      const c = p.controls.find((x) => (!lockOf(x.custom_id) || lockOf(x.custom_id) === faction) && match(baseId(x.custom_id), x));
+      const c = p.controls.find((x) => (!lockOf(x.custom_id) || lockIs(x.custom_id, faction)) && match(baseId(x.custom_id), x));
       if (c) return { p, c };
     }
     return null;

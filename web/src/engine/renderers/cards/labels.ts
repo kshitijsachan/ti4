@@ -1,6 +1,7 @@
 import { actionCardData, promissoryData } from "@/hand/cardData";
 import { getPlanetData } from "@/entities/lookup/planets";
 import type { GameState, PlayerState } from "../../contract";
+import { playerLabel as enginePlayerLabel } from "../../names";
 
 /** Display names from typed ids (never from option labels). */
 export function acName(id: string | null | undefined): string {
@@ -21,9 +22,7 @@ export function playerByFaction(state: GameState | null, faction: string | null 
 }
 
 export function playerLabel(state: GameState | null, faction: string | null | undefined): string {
-  const p = playerByFaction(state, faction);
-  if (!p) return faction ?? "someone";
-  return p.userName ? `${p.userName} (${p.faction})` : (p.faction ?? "someone");
+  return enginePlayerLabel(state, faction);
 }
 
 export function planetName(id: string): string {

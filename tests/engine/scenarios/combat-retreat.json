@@ -1,0 +1,11 @@
+{
+  "name": "combat-retreat",
+  "description": "Announce a retreat, then retreat (combat.round announce_retreat / retreat, combat.retreat retreat_to): mentak retreats from 306 to its home 307.",
+  "base": { "recording": "pbd60", "index": 165 },
+  "trigger": { "press": "announceARetreat", "as": "mentak" },
+  "steps": [
+    { "press": "retreat_306", "as": "mentak" },
+    { "answer": { "kind": "combat.retreat", "option": "/retreatUnitsFrom_306_307/" }, "as": "mentak" }
+  ],
+  "expect": { "invariants": true }
+}

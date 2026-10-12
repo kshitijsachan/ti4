@@ -5,6 +5,7 @@ import { cdnImage } from "@/entities/data/cdnImage";
 import { useFactionBundles } from "@/faction/data";
 import type { GameState } from "../../../../../shim/src/engine/types";
 import classes from "./Setup.module.css";
+import { factionName } from "../../names";
 
 export type AnswerFn = (optionIdOrPayload: string | Record<string, unknown>) => unknown;
 
@@ -70,7 +71,7 @@ export function useFactionName() {
     if (!alias) return "";
     const info = bundles?.official.factions[alias] ?? bundles?.extended?.factions[alias];
     if (info?.factionName) return info.factionName;
-    return alias.charAt(0).toUpperCase() + alias.slice(1);
+    return factionName(alias);
   };
 }
 
