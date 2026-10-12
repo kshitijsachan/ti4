@@ -215,7 +215,10 @@ answered `{optionId: <menu id>, values: [...]}` (or one flat option `"<menu>#<va
 Discord modal is `needsInput`; answering it runs the handler as an engine answer and returns `status:"needs_input"`
 with a new private `input.form` decision for that player (its schema in `inputs[0]`), answered
 `{optionId:"submit", inputs:{field: value}}` (validated against the schema → `bad_input`) or `"cancel"`; submit runs
-the modal's handler (`ModalListener.processNow`) as an engine answer. Selects and forms have no synthetic fallback.
+the modal's handler (`ModalListener.processNow`) as an engine answer. Selects and forms have no synthetic fallback. This
+holds on ephemeral prompts too: Discord (and the shim) never return an ephemeral message by id, so capture keeps the
+JSON of every ephemeral prompt (`interaction/EphemeralMessages`) and the engine path hands it to the handler; a
+prompt in a thread JDA does not cache (archived) is loaded by id. The web never presses the Discord way.
 
 **Structured (payload) answers.** Instead of `optionId` an answer may carry `payload` (a JSON object): body
 `{payload, optionId?, expectedSeq?, requestId?}`. Kinds opt in with `KindSpec.acceptsPayload()`; `ActionInvoker`

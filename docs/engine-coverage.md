@@ -263,8 +263,10 @@ trade drawer's legacy endpoints are gone; reused pieces moved to `web/src/engine
 ui/FactionIcon.tsx}`. *Branch `mapactions-engine`* (on top of it): `web/src/prompts/` is gone too — the map's
 tactical steps read `tactical.activate/move/land` decisions and answer them over `op:"answer"` (`mapactions/step.ts`,
 `engine.ts`), the setup screen reads `GameState.setup`, pure bot-text helpers (rewind phrasing, combat reports) moved
-to `web/src/botText/`; select `#value` / `needsInput` options go to the engine too (pressed the Discord way only when
-the engine answers `needs_input`/`unsupported`: handlers without native coverage, ephemeral prompts).
+to `web/src/botText/`; select `#value` / `needsInput` options go to the engine too. *Branch `engine-gaps`*: the
+web's last Discord press (on a `needs_input`/`unsupported` refusal) is gone — the bot answers ephemeral prompts
+natively (capture keeps their JSON, `EphemeralMessages`) and loads uncached threads, so form buttons open an
+`input.form` there too; the only non-native handlers left are 4 matchmaking/signup modals (no game prompts).
 
 * Delete `web/src/decisions/` (12.6k lines): `detect/{games,pending,waiting}.ts`, `model/{classify,controls,queue,
   focus,frontier,expedition,scoring,stored,text,usePress}.ts`, `renderers/*` (legacy renderers), `ui/DecisionHost.tsx`
