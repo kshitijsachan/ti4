@@ -346,3 +346,12 @@ test("pbd175: the Keleres preset once we play a flavour is stale; during the dra
   assert.equal(staleForBot(preset([true, false, false]), drafting, ME), false);
   assert.equal(chooseTyped(preset([true, false, false]), drafting, ME, { history: [], open: [], all: [] })?.option?.id, "draftPresetKeleres_xxcha");
 });
+
+test("pbd31: Winnu agent 'use on' buttons once our agent is exhausted are stale (no 783 presses)", () => {
+  const agent = (target: string) => opt(`exhaustAgent_winnuagent_${target}`, target, { leader: "winnuagent", leaderType: "agent", faction: "winnu", step: "exhaustAgent", action: "target", optional: true, target, args: [target] });
+  const d = decision("leader.use", [agent("hacan"), agent("yin"), agent("crimson")]);
+  const withLeader = (status: string) => ({ ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: "winnu", leaders: [status] } : p)) }) as unknown as GameState;
+  assert.equal(staleForBot(d, withLeader("winnuagent:exhausted"), ME), true);
+  assert.equal(chooseFallback(d, withLeader("winnuagent:exhausted"), ME), null);
+  assert.equal(staleForBot(d, withLeader("winnuagent"), ME), false);
+});
