@@ -219,7 +219,7 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
           fork,
           prev.text,
           map,
-          isButton ? { customId: mapIdsInCustomId(a.customId!, map), label: a.buttonLabel ?? a.customId!, faction, channelId: ch.channelId, thread: ch.thread, watcher: forkUser, message: carrierText(a, map) } : undefined,
+          isButton ? { customId: mapIdsInCustomId(a.customId!, map), label: a.buttonLabel ?? a.customId!, faction, channelId: ch.channelId, thread: ch.thread, watcher: forkUser, message: carrierText(a, map) ?? ephemeralText(a, byIndex) } : undefined,
           newNonce(),
         );
         chainLoaded = true;
@@ -341,6 +341,20 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
 }
 
 /** The carrier repeats the original message's text on one line (the save format keeps one line of saved_message). */
+/**
+ * The text of an ephemeral prompt whose content the recording lacks, when the handler reads it: place_pds_/
+ * place_spacedock_ resolve as Construction only if the prompt's text says "construction" (ButtonHelperModifyUnits
+ * .genericPlaceUnit); the prompt came from the same player's construction_* press just before.
+ */
+function ephemeralText(a: Action, byIndex: Map<number, Action>): string | undefined {
+  if (!/(^|_)place_(pds|spacedock)_/.test(a.customId ?? "")) return undefined;
+  for (let i = a.index - 1; i >= a.index - 6; i--) {
+    const p = byIndex.get(i);
+    if (p?.user?.id === a.user?.id && /(^|_)construction_/.test(p?.customId ?? "")) return "[replay] Please choose the planet for **Construction**.";
+  }
+  return undefined;
+}
+
 function carrierText(a: Action, map: ForkMap): string | undefined {
   if (!a.messageContent) return undefined;
   return mapIdsInCustomId(a.messageContent, map).replace(/\s*\n\s*/g, " ").slice(0, 1800);
