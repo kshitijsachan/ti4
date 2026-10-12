@@ -1005,4 +1005,15 @@ check(
   },
 );
 
+// Warfare primary follow-ups (offer, remove-a-token, token panel) keep the strategic action in flight.
+{
+  const now = Date.now();
+  const d = (kind: string, value: unknown) => ({ id: "w", kind, target: { userId: "u1" }, createdAt: now, options: [{ id: "o", value }] }) as unknown as Decision;
+  assert.equal(actionInFlight("u1", [d("choose.confirm", { source: "warfare", confirm: true, choice: "tactical" })], now), "choose.confirm open");
+  assert.equal(actionInFlight("u1", [d("choose.system", { source: "remove_cc", tile: "101" })], now), "choose.system open");
+  assert.equal(actionInFlight("u1", [d("command_tokens.adjust", { action: "adjust", pool: "tactic", delta: 1 })], now), "command_tokens.adjust open");
+  assert.equal(actionInFlight("u1", [d("choose.confirm", { source: "minister_peace", confirm: true })], now), null);
+  n++;
+}
+
 console.log(`turn.check: ${n} ok`);

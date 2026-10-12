@@ -87,6 +87,14 @@ export class EngineTactical {
     return true;
   }
 
+  /**
+   * Plans a tactical action whose activation is already asked for (started outside the turn menu: Thunder's Edge
+   * Warfare). No goal: activate a system with our space dock and produce (activate()'s fallback).
+   */
+  adopt(game: string, goal: ExpandGoal | ProduceGoal | null) {
+    this.plan = goal ? this.fresh(game, goal, goal.target) : this.fresh(game, { kind: "recover", why: "Warfare tactical action with no job" }, null);
+  }
+
   /** Takes over a tactical action already under way (e.g. after a restart): pushes it to its end, moving nothing. */
   recover(game: string) {
     this.plan = this.fresh(game, { kind: "recover", why: "finish a tactical action already under way" }, null);

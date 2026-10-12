@@ -8,7 +8,8 @@
  *    Prophet's Tears draws an action card; exhaust/use effects that help us are used; peeking at decks is declined.
  *  - choose.confirm: yes (Silver Flame: take the point; Minister of Peace; Ixthian Artifact roll as speaker), except
  *    Imperial Arbiter (keep our strategy card), the debt reminder (no payment: deals go through trades) and free
- *    follows (Mahact agent / Scepter of Emelpar: the strategy policy follows on the card); choose.planet: Stellar Converter on someone else's planet, Nano-Forge on one of ours, else first;
+ *    follows (Mahact agent / Scepter of Emelpar: the strategy policy follows on the card); Warfare: the Thunder's
+ *    Edge tactical action first, else open the redistribute panel; choose.planet: Stellar Converter on someone else's planet, Nano-Forge on one of ours, else first;
  *    choose.player: someone other than us; choose.card/system/unit: the first offered; JR-XS455-O: a PDS, else
  *    the trade good.
  *  - tech.step: free gains are taken (Graviton / Bio-Stims / Magen / Dacxive offers, Bio-Stims readies a planet
@@ -67,6 +68,15 @@ export function chooseComponents(d: ComponentsDecision, state: GameState | null,
         return pick(t.find((o) => o.value!.confirm === false), "Imperial Arbiter: keep our strategy card") ?? decline("Imperial Arbiter: keep our strategy card");
       }
       if (t[0]?.value!.source === "pay_debt") return decline("debt reminder: no payment now");
+      // Warfare: start Thunder's Edge Warfare's tactical action (the planner takes over tactical.activate); a lone
+      // redistribute offer opens the token panel, which the strategy policy finishes (it may press Done at once).
+      if (t[0]?.value!.source === "warfare") {
+        return (
+          pick(t.find((o) => o.value!.choice === "tactical"), "Warfare: perform the tactical action") ??
+          pick(t.find((o) => o.value!.choice === "redistribute"), "Warfare: redistribute command tokens") ??
+          decline("Warfare")
+        );
+      }
       // Following without a token (Mahact agent / Scepter of Emelpar / Cognitive Parallax Engine): the strategy policy
       // decides follows on the card itself; keep the agent / relic / technology.
       if (FREE_FOLLOW.has(t[0]?.value!.source ?? "")) return decline("keep it: the strategy policy follows on the card");

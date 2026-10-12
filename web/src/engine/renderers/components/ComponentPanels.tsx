@@ -59,6 +59,7 @@ const SOURCE_NAMES: Record<string, string> = {
   cognitive_parallax_engine: "Cognitive Parallax Engine: follow without a strategy token",
   cavalry: "The Cavalry: the ship that becomes the Cavalry",
   refit: "Refit Troops: replace an infantry with a mech",
+  warfare: "Warfare",
 };
 
 export const sourceName = (s: string | undefined | null) =>
@@ -145,6 +146,8 @@ function confirmText(a: Record<string, unknown>, state: GameState | null): strin
     case "scepter_of_emelpar":
     case "cognitive_parallax_engine":
       return `Follow ${sc(a.strategyCard)}`;
+    case "warfare":
+      return a.choice === "tactical" ? "Perform the tactical action" : "Redistribute command tokens";
     case "ixthian_artifact":
       return a.choice === "ignore_speaker" ? "Roll anyway" : "Roll";
     case "pay_debt": {

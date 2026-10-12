@@ -61,6 +61,8 @@ assert.equal(pick(base("choose.system", [opt("a", { source: "remove_cc", choice:
 assert.equal(pick(base("choose.confirm", [opt("m", { source: "mahactagent", confirm: true, strategyCard: 6 }), opt("deleteButtons", null)])), "deleteButtons");
 assert.equal(pick(base("choose.unit", [opt("c", { source: "cavalry", unit: "cruiser" }), opt("d", { source: "cavalry", unit: "carrier", damaged: "damaged" })])), "c");
 assert.equal(pick(base("choose.unit", [opt("r", { source: "refit", unit: "mech", tile: "313", holder: "jord", planet: "jord" })])), "r");
+assert.equal(pick(base("choose.confirm", [opt("redistributeCCButtons_", { source: "warfare", confirm: true, choice: "redistribute" }), opt("beginTacticalTeWarfare", { source: "warfare", confirm: true, choice: "tactical" })])), "beginTacticalTeWarfare");
+assert.equal(pick(base("choose.confirm", [opt("redistributeCCButtons_", { source: "warfare", confirm: true, choice: "redistribute" })])), "redistributeCCButtons_");
 // Always answers when only untyped options remain; never answers someone else's prompt.
 assert.equal(pick(base("choose.system", [opt("deleteButtons", null)])), "deleteButtons");
 assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card" })], { target: { userId: "u2", faction: "sol", color: "red", resolvedBy: "owner_prefix" } })), undefined);
