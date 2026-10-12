@@ -88,6 +88,7 @@ const homework = (responded: string[]) =>
     scope: "table", target: null, window: { kind: "status_homework", eligible: [ME, OTHER], responded, subject: {} } as any,
   });
 assert.equal(owns(homework([ME])).owned, true, "ready already: no second \"Ready For Strategy Phase\"");
+assert.equal(owns({ ...homework([]), window: null }).owned, true, "window closed (pbd184): a leftover, not the rule table's");
 
 // ---- "Done Removing": a removal menu the specific policy leaves (no progress); the watchdog's fallback closes it
 const removal = dec("combat.assign_units", [
