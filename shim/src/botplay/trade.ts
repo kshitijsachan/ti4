@@ -1,5 +1,5 @@
 import type { EngineClient } from "../engine/client.js";
-import { mayTransact, washDeal } from "../engine/tradePolicy.js";
+import { mayTransact, proposesTradesIn, washDeal } from "../engine/tradePolicy.js";
 import type { TradeCounterparty } from "../engine/types.js";
 import { baseId, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
@@ -9,9 +9,10 @@ import type { Seat } from "./seat.js";
  *
  * - Answering offers (trade.offer) and the Trade card's free replenish (trade.force_replenish) is pure policy in
  *   engine/tradePolicy.ts, run by chooseTyped like every typed decision.
- * - Here: N-1 washes. At most one proposal per partner per round, never stacked on an open offer either way, a few
- *   seconds apart per seat and once a minute per partner across all seats; only with partners we may transact with
- *   (GameState.trade.mayTransactWith: neighbours, or anyone in the agenda phase / with Guild Ships, Trade Convoys, …).
+ * - Here: N-1 washes, in the action phase only (no unsolicited offers during strategy/status/agenda). At most one
+ *   proposal per partner per round, never stacked on an open offer either way, a few seconds apart per seat and once
+ *   a minute per partner across all seats; only with partners we may transact with (GameState.trade.mayTransactWith:
+ *   neighbours, or anyone with Guild Ships, Trade Convoys, …).
  *   Partners we just replenished with Trade (their commodities went up) get their wash naturally: washDeal offers
  *   "their N commodities for N-1 of our TG" or a swap.
  */
@@ -52,7 +53,7 @@ export class TradeDesk {
     this.lastPropose.set(game, Date.now() - PROPOSE_GAP_MS + 8000 + Math.random() * 6000);
     const state = await engine.state(game, this.seat.userId, 2000);
     const trade = state?.trade;
-    if (!state || !trade || trade.blockedReason || !/^(action|strategy|status|agenda)/i.test(state.phase ?? "")) return false;
+    if (!state || !trade || trade.blockedReason || !proposesTradesIn(state.phase)) return false;
     const me = trade.me;
     if (me.commodities === 0 && me.tg === 0) return false;
     const busy = new Set([...trade.incoming.map((o) => o.from), ...trade.outgoing.map((o) => o.to)]);

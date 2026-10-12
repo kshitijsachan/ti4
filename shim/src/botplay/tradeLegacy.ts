@@ -1,4 +1,5 @@
 import type { Json } from "../store.js";
+import { proposesTradesIn } from "../engine/tradePolicy.js";
 import { playerOf, type Board, type PlayerView } from "./board.js";
 import { baseId, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
@@ -305,7 +306,7 @@ export class LegacyTradeDesk {
     if (Date.now() - (this.lastPropose.get(game) ?? 0) < PROPOSE_GAP_MS) return false;
     this.lastPropose.set(game, Date.now() - PROPOSE_GAP_MS + 8000 + Math.random() * 6000);
     const board = await this.seat.board(game);
-    if (!board || !/^(action|strategy|status|agenda)/.test(board.phase)) return false;
+    if (!board || !proposesTradesIn(board.phase)) return false;
     const opts = (await this.call(game, "GET", "options")) as Options | null;
     if (!opts || opts.blockedReason || !opts.me) return false;
     const me = opts.me;

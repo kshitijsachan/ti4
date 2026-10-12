@@ -74,6 +74,11 @@ export function washDeal(me: TradeSelf, cp: TradeCounterparty, state: GameState 
   return null;
 }
 
+/** Phases a bot proposes washes in: the action phase only (pbd161: offers during status/agenda were noise). */
+export function proposesTradesIn(phase: string | null | undefined): boolean {
+  return /^action/i.test(phase ?? "");
+}
+
 export function mayTransact(trade: TradeState | null | undefined, faction: FactionId): boolean {
   return !!trade && !trade.blockedReason && trade.mayTransactWith.includes(faction);
 }
