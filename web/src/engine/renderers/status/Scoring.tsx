@@ -13,15 +13,30 @@ function declared(id: string | null | undefined, what: string) {
   return <p className={classes.done}>Scored {objectiveName(id)}.</p>;
 }
 
-function PublicRow({ o, uid, answer }: { o: Option<ScoreValue>; uid: string; answer: StatusRendererProps["answer"] }) {
+/** Whether I already scored this public objective (scored ones stay listed, greyed, so the list reads the same every time). */
+function scoredBy(state: StatusRendererProps["state"], objective: string, uid: string) {
+  return !!state?.publicObjectives?.[objective]?.includes(uid);
+}
+
+function PublicRow({ o, uid, scored, answer }: { o: Option<ScoreValue>; uid: string; scored: boolean; answer: StatusRendererProps["answer"] }) {
   const v = o.value as PublicValue;
-  const meets = v.eligible.includes(uid);
+  const meets = !scored && v.eligible.includes(uid);
   const progress = v.progress[uid] ?? 0;
+  let note = null;
+  if (scored) note = <span className={classes.meta}>scored</span>;
+  else if (meets) note = <span className={classes.met}>met</span>;
+  else if (v.threshold > 0) note = <span className={classes.meta}>{Math.min(progress, v.threshold)}/{v.threshold}</span>;
   return (
-    <button type="button" className={`${classes.objective} ${v.stage === 2 ? classes.stage2 : classes.stage1}`} disabled={!meets || o.disabled} onClick={() => answer(o.id)}>
+    <button
+      type="button"
+      className={`${classes.objective} ${v.stage === 2 ? classes.stage2 : classes.stage1}`}
+      disabled={!meets || o.disabled}
+      title={scored ? "You already scored this objective." : undefined}
+      onClick={() => answer(o.id)}
+    >
       <span className={classes.name}>{objectiveName(v.objective)}</span>
       <span className={classes.meta}>{v.points} VP</span>
-      {meets ? <span className={classes.met}>met</span> : v.threshold > 0 && <span className={classes.meta}>{Math.min(progress, v.threshold)}/{v.threshold}</span>}
+      {note}
     </button>
   );
 }
@@ -35,7 +50,10 @@ export function StatusScoreRenderer({ decision, state, answer }: StatusRendererP
   if (!self) return null;
   const st = myStatus(state);
   const opts = decision.options.filter((o) => o.value) as Option<ScoreValue>[];
-  const publics = opts.filter((o) => o.value!.action === "score_public");
+  /* Unscored first: what I can still score leads, the ones I already hold sit greyed at the end. */
+  const publics = opts
+    .filter((o) => o.value!.action === "score_public")
+    .sort((a, b) => Number(scoredBy(state, (a.value as PublicValue).objective, self.userId)) - Number(scoredBy(state, (b.value as PublicValue).objective, self.userId)));
   const byAction = (a: string) => opts.find((o) => o.value!.action === a);
   const imperial = decision.scope === "player";
   const publicOpen = imperial || !st || st.publicScored === null;
@@ -51,9 +69,9 @@ export function StatusScoreRenderer({ decision, state, answer }: StatusRendererP
         {publicOpen ? (
           <>
             {publics.map((o) => (
-              <PublicRow key={o.id} o={o} uid={self.userId} answer={answer} />
+              <PublicRow key={o.id} o={o} uid={self.userId} scored={scoredBy(state, (o.value as PublicValue).objective, self.userId)} answer={answer} />
             ))}
-            {!publics.some((o) => (o.value as PublicValue).eligible.includes(self.userId)) && (
+            {!publics.some((o) => (o.value as PublicValue).eligible.includes(self.userId) && !scoredBy(state, (o.value as PublicValue).objective, self.userId)) && (
               <p className={classes.hint}>You meet none of the revealed public objectives.</p>
             )}
             {noPublic && (

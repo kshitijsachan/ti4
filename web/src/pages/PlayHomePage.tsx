@@ -224,6 +224,67 @@ function gameFate(
   return seated ? "active" : "gone";
 }
 
+/** How many ended games the home page looks up when the list is opened. */
+const ENDED_SHOWN = 12;
+
+/** Whether a game's document says it is over (ended, or someone won). */
+function isFinished(data: PlayerDataResponse | undefined) {
+  return !!data && (data.gameState?.phase === "finished" || !!data.gameState?.winner);
+}
+
+/**
+ * Games that ended (archived by the end-game flow, or reported finished), newest first: folded by default and only
+ * looked up when opened, so the home page never fetches every old game. Lists the ones I sat in, with the winner.
+ */
+function EndedGames({ meId, finished }: { meId: string; finished: GameChannels[] }) {
+  const channels = usePlay((s) => s.channels);
+  const [open, setOpen] = useState(false);
+  const archived = deriveGames(channels).filter((g) => isArchived(g, channels));
+  const candidates = [...finished, ...archived.filter((g) => !finished.some((f) => f.name === g.name))]
+    .sort((a, b) => b.actions.id.length - a.actions.id.length || b.actions.id.localeCompare(a.actions.id))
+    .slice(0, ENDED_SHOWN);
+  const queries = useQueries({
+    queries: candidates.map((g) => ({
+      queryKey: ["playerData", g.name],
+      queryFn: () => fetchPlayerData(g.name),
+      staleTime: 5 * 60_000,
+      retry: false,
+      enabled: open,
+    })),
+  });
+  if (candidates.length === 0) return null;
+  const rows = candidates
+    .map((g, i) => ({ g, data: queries[i]?.data }))
+    .filter(({ data }) => !data || data.playerData.some((p) => p.discordId === meId));
+  const loading = queries.some((q) => q.isLoading);
+  return (
+    <section className={classes.section}>
+      <button type="button" className={classes.endedToggle} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        {open ? "Hide ended games" : "Show ended games"}
+      </button>
+      {open && (
+        <ul className={classes.endedList}>
+          {rows.map(({ g, data }) => {
+            const winner = data?.gameState?.winner;
+            const winnerName = winner ? (data?.playerData.find((p) => p.discordId === winner || p.faction === winner)?.userName ?? winner) : null;
+            return (
+              <li key={g.name} className={classes.endedRow}>
+                <Link to={`/game/${g.name}`} className={classes.endedName}>
+                  {g.name}
+                </Link>
+                <span className={classes.meta}>
+                  {data ? (winnerName ? `Won by ${winnerName}` : "Ended") + ` · R${data.gameRound}` : loading ? "…" : "Ended"}
+                </span>
+              </li>
+            );
+          })}
+          {!loading && rows.length === 0 && <li className={classes.note}>None of the recent ended games had you at the table.</li>}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** My games that are still being played, newest first. */
 function useActiveGames(meId: string | undefined) {
   const channels = usePlay((s) => s.channels);
@@ -243,6 +304,7 @@ function useActiveGames(meId: string | undefined) {
     games: visible.filter(
       (g, i) => fates[i] === "active" && !ended.includes(g.name),
     ),
+    finished: visible.filter((_, i) => isFinished(queries[i]?.data)),
     onEnded: (name: string) => setEnded((e) => [...e, name]),
     loading: fates.includes("loading"),
   };
@@ -469,7 +531,7 @@ function Home() {
   const channels = usePlay((s) => s.channels);
   const ready = usePlay((s) => s.status === "open");
   useLandInNewGames(deriveGames(channels), ready && !!me);
-  const { games, loading, onEnded } = useActiveGames(me?.id);
+  const { games, finished, loading, onEnded } = useActiveGames(me?.id);
   useEffect(preloadGamePage, []);
 
   if (!me) {
@@ -502,6 +564,7 @@ function Home() {
           </div>
         )}
       </section>
+      <EndedGames meId={me.id} finished={finished} />
       <NewGame />
     </>
   );

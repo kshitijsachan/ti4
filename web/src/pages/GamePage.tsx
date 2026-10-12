@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import GameMapPage from "@/pages/GameMapPage";
 import { DraftView } from "@/draft";
 import { usePressButton } from "@/play/usePressButton";
-import { usePlayerData } from "@/api/usePlayerData";
+import { GameDataFetchError, usePlayerData } from "@/api/usePlayerData";
 import { usePlay } from "@/discord";
 import { findGame } from "@/play/games";
 import { useAttention } from "@/play/attention";
@@ -15,6 +15,9 @@ import { SetupScreen } from "@/board/SetupScreen";
 import classes from "./GamePage.module.css";
 
 type DraftStatus = "none" | "drafting" | "finished";
+
+/** While the game document fails to load (the bot restarting), ask again this often. */
+const BOARD_RETRY_MS = 3000;
 
 type DraftSummary = {
   status: DraftStatus;
@@ -109,7 +112,16 @@ export default function GamePage() {
     select: (data) => data.tilePositions.length > 0,
   });
   const hasBoard = board.data === true;
-  const boardKnown = board.isError || board.data !== undefined;
+  /* Only a 4xx says there is no board (yet); a 5xx or network failure (bot restarting or busy) keeps the map's
+     loader up and retries, instead of the "galaxy is being built" screen or a blank stage. */
+  const notFound = board.error instanceof GameDataFetchError && board.error.status < 500;
+  const boardKnown = notFound || board.data !== undefined;
+  const { refetch: refetchBoard } = board;
+  useEffect(() => {
+    if (!board.isError || notFound) return;
+    const timer = window.setInterval(() => void refetchBoard(), BOARD_RETRY_MS);
+    return () => window.clearInterval(timer);
+  }, [board.isError, notFound, refetchBoard]);
   const draftSummary = useDraftStatus(mapid, hasBoard);
   const draft = draftSummary.status;
   const me = usePlay((s) => s.me);
