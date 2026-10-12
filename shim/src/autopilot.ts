@@ -108,6 +108,8 @@ const ENGINE_MAX_ANSWERS = 8;
  * that never records our answer was re-answered forever (live pbd161: two Sabotage windows, "No Sabotage" ~450x).
  */
 const ENGINE_LIFETIME_ANSWERS = 24;
+/** The same answer refused this often on one decision is never sent again (one re-send after a refusal). */
+const ENGINE_MAX_REFUSALS = 2;
 /** Watchdog: a typed decision that has awaited a bot this long is logged as an error (with a dump) for the soak. */
 const ENGINE_STALL_ERROR_MS = 180_000;
 
@@ -1427,6 +1429,8 @@ class SeatPilot {
   private engineDead = new Set<string>();
   /** Decisions on which an answer of ours was refused: a forced re-evaluation goes straight to the fallback. */
   private engineRefused = new Set<string>();
+  /** Refusals per decision and answer ("<decision id>|<option id or payload>"); see ENGINE_MAX_REFUSALS. */
+  private engineRefusals = new Map<string, number>();
   /** Watchdog: per `${game}|${decision id}` awaiting us, since when, last forced re-evaluation, error logged. */
   private engineWaiting = new Map<string, { since: number; forcedAt: number; errorAt: number; reported: number }>();
 
@@ -1528,6 +1532,16 @@ class SeatPilot {
         // Forced, and the specific policy's answers were refused: go straight to the last resort.
         let pick: TypedChoice | null = watch?.force && this.engineRefused.has(d.id) ? chooseFallback(d, state, this.userId) : chooseTyped(d, state, this.userId, ctx);
         if (!pick && watch?.force) pick = chooseFallback(d, state, this.userId);
+        // An answer the engine refused on this decision is re-sent at most once (a refusal may be transient: "the game
+        // server is starting up"); refused again, the decision is given up (live pbd160: a declared secret objective
+        // was re-pressed every 90 s for 20 min, "You already declared your secret objective this round").
+        const refusalKey = pick ? `${d.id}|${pick.option ? pick.option.id : JSON.stringify(pick.payload)}` : "";
+        if (pick && (this.engineRefusals.get(refusalKey) ?? 0) >= ENGINE_MAX_REFUSALS) {
+          log.warn(`autopilot ${this.name}: giving up on engine ${d.kind} ${d.id} in ${game}: "${pick.option?.label ?? "payload"}" was refused ${ENGINE_MAX_REFUSALS}x`);
+          this.engineDead.add(d.id);
+          this.engineWaiting.delete(`${game}|${d.id}`);
+          continue;
+        }
         if (watch && (watch.force || watch.error)) this.watchdogReport(game, d, watch, pick);
         if (!pick) continue;
         // Reaction windows (table decisions) are re-revised by every save at the table, so their key leaves the revision
@@ -1564,7 +1578,11 @@ class SeatPilot {
         else log.info(line);
         // The decision is gone on the engine side (closed, or a stale copy the mirror still lists): stop answering it.
         if (r.status === "not_found" || (r.status === "stale" && /no longer open/i.test(r.error ?? ""))) this.engineDead.add(d.id);
-        if (!r.ok && ["refused", "bad_option", "forbidden", "error", "unsupported"].includes(r.status)) this.engineRefused.add(d.id);
+        if (!r.ok && ["refused", "bad_option", "forbidden", "error", "unsupported"].includes(r.status)) {
+          this.engineRefused.add(d.id);
+          this.engineRefusals.set(refusalKey, (this.engineRefusals.get(refusalKey) ?? 0) + 1);
+          if (this.engineRefusals.size > 5000) this.engineRefusals.delete(this.engineRefusals.keys().next().value!);
+        }
         if (d.kind === "draft.milty.pick") this.draftingSeenAt = Date.now();
         // The decision changed under us (windows are re-revised by every save at the table): not an answer; try again
         // on the next look with the fresh revision (live: bots' "Not Following" went stale and was never re-sent).
