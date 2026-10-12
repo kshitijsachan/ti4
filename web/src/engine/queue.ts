@@ -30,6 +30,16 @@ const TITLES: Record<string, string> = {
   "setup.deal_secrets": "Deal secret objectives",
   "setup.reveal_objectives": "Reveal objectives and start",
   "turn.action": "Your turn",
+  "choose.select": "Make a choice",
+  "faction.ability": "Faction ability",
+  "leader.use": "Use a leader",
+  "player.preference": "Preference",
+  "te.breach": "Breach",
+  "te.breakthrough": "Breakthrough",
+  "te.plot": "Plots",
+  "ui.undo_affordance": "Undo",
+  "ui.optional": "Optional",
+  "ui.info_menu": "Info",
   "tactical.activate": "Activate a system",
   "tactical.move": "Move ships",
   "tactical.land": "Land ground forces",
@@ -141,9 +151,10 @@ const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/
 
 /**
  * My decisions in the order to answer them (head first), and the background ones behind "Available now":
- * 1. the next step of what I just answered (pay after build, gain after pay), 2. combat, 3. trade offers to me,
- * 4. everything else oldest first, 5. table steps that move the phase on (after my homework), 6. my turn menu,
- * which stays up while what it spawned is answered, 7. untyped prompts (often leftovers). Prompts I hid are left out.
+ * 0. combat, 1. the next step of what I just answered (pay after build, gain after pay), 3. my turn menu while it is
+ * my turn, trade offers to me, 4. everything else oldest first, 5. table steps that move the phase on (after my
+ * homework), 6. the turn menu when it is not my turn, 7. untyped prompts (often leftovers). Perpetual action-card
+ * panels go behind "Available now"; prompts I hid are left out.
  */
 export function orderDecisions(
   mine: Decision[],
@@ -161,21 +172,28 @@ export function orderDecisions(
       (d) =>
         !hidden?.has(d.id) &&
         !(d.kind === "legacy" && underWay && setupOnly(d.options)) &&
-        !(d.kind === "strategy_card.resolve" && !actionPhase),
+        !(d.kind === "strategy_card.resolve" && !actionPhase) &&
+        !(d.kind === "setup.game_settings" && (underWay || !!state?.draft)),
     ),
   );
-  const background = (d: Decision) => openToAll(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+  const nextStep = (d: Decision) => answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2;
+  /* Perpetual "play an action card" panels sit open all game: on offer, unless one is what my last answer opened. */
+  const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && !nextStep(d);
+  const background = (d: Decision) => openToAll(d) || perpetual(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+  const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
   const offers = shown.filter(background);
   const own = shown.filter((d) => !background(d));
   const homework = own.some((d) => HOMEWORK.test(d.kind) && !PHASE_STEP.has(d.kind));
   const rank = (d: Decision) => {
+    /* A combat under way is fought before anything else, even what my last answer opened (landing waits on it). */
+    if (COMBAT.test(d.kind)) return 0;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
-    if (answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2) return 1;
+    if (nextStep(d)) return 1;
     /* Untyped prompts come last: the engine can't tell a live one from a leftover the game never closed. */
     if (d.kind === "legacy") return 7;
-    if (d.kind === "turn.action") return 6;
+    /* My turn: the table waits on it, so it goes before follows and other answer-any-time prompts. */
+    if (d.kind === "turn.action") return myTurn ? 3 : 6;
     if (PHASE_STEP.has(d.kind)) return homework ? 5 : 4;
-    if (COMBAT.test(d.kind)) return 2;
     if (d.kind === "trade.offer") return 3;
     return 4;
   };

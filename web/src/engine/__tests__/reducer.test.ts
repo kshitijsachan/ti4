@@ -164,3 +164,11 @@ void test("myDecisions: my prompts, open windows I haven't answered, oldest firs
   assert.deepEqual(myDecisions(v, "spectator").map((d) => d.id), []);
   assert.deepEqual(myDecisions(v, null), []);
 });
+
+void test("the neutral seat (Dicecord) is not a player in the engine view", () => {
+  const players = [...state(10).players, { userId: "n", userName: "Dicecord", faction: "neutral", color: "aberration" }] as GameState["players"];
+  const v = run(subscribeView(EMPTY_VIEW, G), snap(10, [], state(10, 10, { players })));
+  assert.deepEqual(v.state?.players.map((p) => p.userId), [ME, "u2"]);
+  const w = run(v, { t: "engine", type: "state", game: G, state: state(11, 11, { players }) });
+  assert.deepEqual(w.state?.players.map((p) => p.userId), [ME, "u2"]);
+});
