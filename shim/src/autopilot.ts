@@ -96,6 +96,8 @@ type Rule = {
    * in the next action phase ends that round on the spot.
    */
   phase?: RegExp;
+  /** Controls this rule never presses (full custom id). */
+  notId?: RegExp;
   /** Only while it is this seat's turn (the bot's active player) and the planner runs no action (brain.busy). */
   myTurn?: boolean;
 };
@@ -222,6 +224,9 @@ const RULES: Rule[] = [
     label: /^(done|confirm|ready|no\b|decline|skip|pass\b|not following|end turn|continue|finish|none|no thanks)/i,
     score: 30,
     typed: true,
+    // Never the turn buttons ("Pass (+1 ability)", "End Turn"): their own rules check our turn and that no action is
+    // under way (live pbd158 04:12: this catch-all passed mid tactical action, with the production bill half paid).
+    notId: /^FFCC_[^_]+_(turnEnd|endOfTurnAbilities|passForRound|passingAbilities|tacticalAction|componentAction|strategicAction_\d+)$/,
     why: "decline / move on",
   },
 ];
@@ -1001,7 +1006,7 @@ class SeatPilot {
         if (phase && !rule.phase.test(phase)) continue;
       }
       if (rule.myTurn && ((await this.midAction(game)) || !(await this.myTurn(game)))) continue;
-      let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true));
+      let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true) && !rule.notId?.test(c.custom_id));
       if (rule.distinct) hits = hits.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= 600000);
       if (!hits.length) continue;
       if (rule.rank) hits = [...hits].sort((a, b) => rule.rank!(a) - rule.rank!(b));
