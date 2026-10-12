@@ -123,6 +123,11 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
       return mine ? `${card.name}: your primary` : `Follow ${card.name}?`;
     }
   }
+  if (d.kind === "strategy_card.pre_decline") {
+    const sc = d.options.map((o) => (o.value as { strategyCard?: number } | null)?.strategyCard).find((n) => typeof n === "number");
+    const card = sc !== undefined ? state?.strategyCards.find((c) => c.number === sc) : undefined;
+    if (card) return `Pre-decline ${card.name}`;
+  }
   const typed = TITLES[d.kind];
   if (typed) return typed;
   if (d.kind !== "legacy") {

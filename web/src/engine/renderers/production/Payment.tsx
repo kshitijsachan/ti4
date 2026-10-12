@@ -63,10 +63,13 @@ export function PaymentRenderer({ decision, state, answer, pendingOptionId }: Ar
     else next.add(id);
     edit({ planets: [...next] });
   };
-  const pay = () => {
-    if (!doneOpt || short) return;
+  const pay = (anyway = false) => {
+    if (!doneOpt || (short && !anyway)) return;
     answer({ optionId: doneOpt.id, payload: { ...pick } as Record<string, unknown> });
   };
+  /* Short with nothing left to add (every ready planet chosen, all trade goods in): the bill can't be covered, but
+     the game still takes "Done" (as the bot's own button does), so the player is never stuck here. */
+  const exhaustedAll = planets.every((p) => chosen.has(p.planet)) && (pick.tg ?? 0) >= tgMax && (pick.commodities ?? 0) >= commMax;
 
   const spending = total - counted;
   return (
@@ -134,9 +137,14 @@ export function PaymentRenderer({ decision, state, answer, pendingOptionId }: Ar
       </div>
       <ExtraOptions options={extras} answer={answer} busy={busy} />
       <DecisionFooter>
-        <UnstyledButton className={classes.commit} onClick={pay} disabled={busy || !doneOpt || short}>
+        <UnstyledButton className={classes.commit} onClick={() => pay()} disabled={busy || !doneOpt || short}>
           {short ? `${cost - total} ${unit} short` : spending > 0 ? `Pay ${spending} ${unit}` : "Done — pay nothing more"}
         </UnstyledButton>
+        {short && exhaustedAll && doneOpt && (
+          <UnstyledButton className={classes.link} onClick={() => pay(true)} disabled={busy}>
+            Nothing more to spend — finish anyway
+          </UnstyledButton>
+        )}
       </DecisionFooter>
     </div>
   );
