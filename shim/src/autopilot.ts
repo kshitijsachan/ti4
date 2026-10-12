@@ -105,6 +105,11 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
 const ENGINE_GRACE_MS = 90_000;
 /** At most this many engine answers from one seat to one decision (multi-part answers walk a few options). */
 const ENGINE_MAX_ANSWERS = 8;
+/**
+ * Lifetime cap per seat and decision: the watchdog's forced re-evaluations reset ENGINE_MAX_ANSWERS, so a decision
+ * that never records our answer was re-answered forever (live pbd161: two Sabotage windows, "No Sabotage" ~450x).
+ */
+const ENGINE_LIFETIME_ANSWERS = 24;
 /** Watchdog: a typed decision that has awaited a bot this long is logged as an error (with a dump) for the soak. */
 const ENGINE_STALL_ERROR_MS = 180_000;
 
@@ -1421,6 +1426,8 @@ class SeatPilot {
   private lastResortLogged = new Set<string>();
   /** Answers this seat sent per decision id (capped at ENGINE_MAX_ANSWERS). */
   private engineAttempts = new Map<string, number>();
+  /** Answers this seat sent per decision id, never reset (capped at ENGINE_LIFETIME_ANSWERS). */
+  private engineLifetime = new Map<string, number>();
   /** Per decision id: the options this seat answered successfully (in order) and the revision of the last one. */
   private engineDone = new Map<string, { options: string[]; revision: number }>();
   /** Decisions the engine says are no longer open (stale copies): never answered or watched again. */
@@ -1538,6 +1545,14 @@ class SeatPilot {
         if (this.engineTried.has(key)) continue;
         const attempts = (this.engineAttempts.get(d.id) ?? 0) + 1;
         if (attempts > ENGINE_MAX_ANSWERS) continue;
+        const lifetime = (this.engineLifetime.get(d.id) ?? 0) + 1;
+        if (lifetime > ENGINE_LIFETIME_ANSWERS) {
+          log.error(`autopilot ${this.name}: giving up on engine ${d.kind} ${d.id} in ${game}: answered ${ENGINE_LIFETIME_ANSWERS}x and it still waits on us`);
+          this.engineDead.add(d.id);
+          continue;
+        }
+        this.engineLifetime.set(d.id, lifetime);
+        if (this.engineLifetime.size > 5000) this.engineLifetime.delete(this.engineLifetime.keys().next().value!);
         this.engineAttempts.set(d.id, attempts);
         if (this.engineAttempts.size > 2000) this.engineAttempts.delete(this.engineAttempts.keys().next().value!);
         this.engineTried.add(key);
@@ -1562,6 +1577,7 @@ class SeatPilot {
         if (r.status === "stale" && /changed/i.test(r.error ?? "")) {
           this.engineTried.delete(key);
           this.engineAttempts.set(d.id, attempts - 1);
+          this.engineLifetime.set(d.id, lifetime - 1);
           continue;
         }
         // Tell the legacy roll guard (mayRoll) about rolls made here, so it never rolls the same dice again.
