@@ -67,7 +67,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   // Affordances (ui.*: never answered), preferences (defaults) and select-only prompts (c12).
   const perpetual = choosePerpetual(d, state, me);
   if (perpetual !== undefined) return perpetual;
-  const setup = chooseSetup(d, state, me);
+  const setup = chooseSetup(d, state, me, ctx.history);
   if (setup !== undefined) return setup;
   if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);
   const status = chooseStatus(d, state, me, all.filter((x) => x.target?.userId === me));

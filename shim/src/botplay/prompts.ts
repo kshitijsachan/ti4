@@ -38,4 +38,17 @@ export const baseId = (id: string) => id.replace(/^FFCC_[^_]+_/, "");
 /** The faction a control is locked to, if any. */
 export const lockOf = (id: string) => /^FFCC_([^_]+)_/.exec(id)?.[1];
 
+/** Keleres is drafted as one faction and played as one of three (keleresa / keleresm / keleresx). */
+const factionFamily = (f: string | undefined) => (f?.startsWith("keleres") ? "keleres" : f);
+
+/**
+ * Whether a control is locked to `faction`. The autopilot names Keleres by its family ("keleres") while the bot locks
+ * its buttons to the flavour (FFCC_keleresa_): live pbd114, the unit-limit desk never recognised its own removal list
+ * and the rule table pressed "Done Removing" on it 178 times in 10 minutes.
+ */
+export const lockIs = (id: string, faction: string | undefined) => {
+  const lock = lockOf(id);
+  return !!lock && !!faction && factionFamily(lock) === factionFamily(faction);
+};
+
 export const snowflakeAfter = (a: string, b: string | undefined) => !b || BigInt(a) > BigInt(b);

@@ -13,7 +13,7 @@ import { chooseTyped, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
-import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, waitsOn } from "./engine/policy/fallback.js";
+import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
 import type { Decision } from "./engine/types.js";
 
 /*
@@ -1447,6 +1447,12 @@ class SeatPilot {
       if (!mine.length) continue;
       for (const d of mine) {
         if (this.engineDead.has(d.id)) continue;
+        // Still listed but no longer waiting on us (another player's turn, a finished combat's roll window): no
+        // answer, no watchdog clock (live: stale combat windows took every pass of Bot Beta's loop in pbd60).
+        if (staleForBot(d, state, this.userId)) {
+          this.engineWaiting.delete(`${game}|${d.id}`);
+          continue;
+        }
         const done = this.engineDone.get(d.id);
         const watch = this.watchdog(game, d, now);
         const ctx = {

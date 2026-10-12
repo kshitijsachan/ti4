@@ -1,5 +1,5 @@
 import { playerOf, type Board } from "./board.js";
-import { baseId, lockOf, type Prompt } from "./prompts.js";
+import { baseId, lockIs, lockOf, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { chooseGoal } from "./strategy.js";
 import { TACTICAL_ID, TacticalExecutor } from "./tactical.js";
@@ -71,9 +71,9 @@ export class Brain {
     // A tactical action under way that we do not have a plan for (e.g. after a restart): finish it.
     const retired = this.retired.get(game);
     // Our newest prompt, if it belongs to a tactical action (a later turn prompt means that action is over).
-    const newest = [...prompts].reverse().find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockOf(c.custom_id) === faction));
-    const stray = [newest].filter((p): p is Prompt => !!p && (!retired || BigInt(p.m.id) > BigInt(retired))).find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockOf(c.custom_id) === faction && /^(concludeMove_|landUnits_|doneLanding|doneWithTacticalAction|tacticalActionBuild_)/.test(baseId(c.custom_id))));
-    const turnOver = prompts.some((p) => p.controls.some((c) => c.custom_id === `FFCC_${faction}_turnEnd`));
+    const newest = [...prompts].reverse().find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockIs(c.custom_id, faction)));
+    const stray = [newest].filter((p): p is Prompt => !!p && (!retired || BigInt(p.m.id) > BigInt(retired))).find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockIs(c.custom_id, faction) && /^(concludeMove_|landUnits_|doneLanding|doneWithTacticalAction|tacticalActionBuild_)/.test(baseId(c.custom_id))));
+    const turnOver = prompts.some((p) => p.controls.some((c) => (lockIs(c.custom_id, faction) && baseId(c.custom_id) === "turnEnd")));
     const age = stray ? Date.now() - Date.parse(stray.m.edited_timestamp ?? stray.m.timestamp) : 0;
     if (stray && !turnOver && age > 20000 && age < 600000) {
       const board = await this.seat.board(game, true);
@@ -89,7 +89,7 @@ export class Brain {
 
   /** Our action-phase turn prompt: start a tactical action when that is the plan (the rule table plays cards / passes). */
   private async turn(game: string, faction: string, prompts: Prompt[]): Promise<boolean> {
-    const turn = [...prompts].reverse().find((p) => p.controls.some((c) => c.custom_id === `FFCC_${faction}_tacticalAction`));
+    const turn = [...prompts].reverse().find((p) => p.controls.some((c) => (lockIs(c.custom_id, faction) && baseId(c.custom_id) === "tacticalAction")));
     if (!turn || this.handled.has(turn.m.id) || turn.m._presses?.[this.seat.userId]) return false;
     const ids = turn.controls.map((c) => baseId(c.custom_id));
     // After an action the bot offers End Turn on the same kind of prompt; an unplayed card goes first.
@@ -104,7 +104,7 @@ export class Brain {
       return false;
     }
     this.seat.log(goal.kind === "produce" ? goal.why : `planned ${goal.why}`);
-    const control = turn.controls.find((c) => c.custom_id === `FFCC_${faction}_tacticalAction`)!;
+    const control = turn.controls.find((c) => (lockIs(c.custom_id, faction) && baseId(c.custom_id) === "tacticalAction"))!;
     this.tactical.start(game, goal, String(BigInt(turn.m.id)));
     const err = await this.seat.press(turn, control, `plan: ${goal.kind} ${goal.target}`);
     if (err) {
