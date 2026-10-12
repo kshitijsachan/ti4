@@ -1,0 +1,12 @@
+{
+  "name": "cc-gain-cap-summit",
+  "description": "CcGainCap: Summit (action card) grants 2 command tokens: two increases accepted, the third refused (the shared panel used to allow any number).",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "steps": [
+    { "press": "resolveSummit", "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc$" }, "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc$" }, "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_strategy_cc$" }, "as": "muaat", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}
