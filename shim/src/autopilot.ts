@@ -151,8 +151,10 @@ const RULES: Rule[] = [
   { id: /_strategicAction_\d+$/, score: 86, why: "play strategy card" },
   // Politics primary: someone must get the speaker token before the bot moves on.
   { id: /^sc_3_assign_speaker_to_/, score: 64, why: "Politics: assign the speaker token" },
-  { id: /_passForRound$/, score: 85, retry: true, why: "pass" },
-  { id: /_passingAbilities$/, score: 84, why: "pass" },
+  // Only in the action phase: a stale pass button pressed in the status phase passed again and, as the "last pass",
+  // re-started the status phase (scoring prompt re-posted on every press, pbd105).
+  { id: /_passForRound$/, score: 85, retry: true, phase: /^action/, why: "pass" },
+  { id: /_passingAbilities$/, score: 84, phase: /^action/, why: "pass" },
   // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
   { id: /^resolvePreassignment_Abstain On Agenda$/, score: 79, why: "agenda: pre-abstain" },
   { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, why: "agenda: pre-pass on shenanigans" },
