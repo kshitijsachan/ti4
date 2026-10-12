@@ -1,0 +1,45 @@
+{
+  "name": "audit-factions-shield-disable",
+  "description": "Rules audit (factions): PLANETARY SHIELD switched off by Disable — letnev plays Disable during its invasion of 210, so its dreadnought may BOMBARD tarmann despite xxcha's PDS (the bombardment assignment is posted, assigned to tarmann).",
+  "base": {
+    "recording": "pbd104",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/add_units tile_name:210 unit_names:\"pds tarmann, 2 gf tarmann\" faction_or_color:xxcha",
+    "/add_units tile_name:210 unit_names:dn faction_or_color:letnev",
+    "/ac draw_specific_ac ac_id:disable faction_or_color:letnev"
+  ],
+  "trigger": {
+    "press": "FFCC_letnev_ringTile_210",
+    "as": "letnev"
+  },
+  "steps": [
+    {
+      "wait": 2000
+    },
+    {
+      "command": "/ac play action_card_id:disable faction_or_color:letnev"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "press": "bombardConfirm_combatRoll_210_space_bombardment",
+      "as": "letnev"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "stored.assignedBombardmentletnev",
+        "match": "tarmann"
+      }
+    ]
+  }
+}
