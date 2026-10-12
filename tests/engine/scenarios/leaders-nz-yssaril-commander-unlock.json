@@ -1,0 +1,15 @@
+{
+  "name": "leaders-nz-yssaril-commander-unlock",
+  "description": "Rules audit (leaders N-Z): So Ata unlocks at 7 action cards (the original required 8 unless Mageon Implants was exhausted).",
+  "base": { "recording": "pbd91", "index": 35, "repost": false },
+  "setup": [],
+  "trigger": { "command": "/ac draw count:7 faction_or_color:yssaril", "as": "yssaril" },
+  "steps": [],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "players[faction=yssaril].leaders", "includes": "yssarilcommander" },
+      { "path": "players[faction=yssaril].leaders", "excludes": "yssarilcommander:locked" }
+    ]
+  }
+}

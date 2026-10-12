@@ -1,0 +1,19 @@
+{
+  "name": "leaders-nz-sardakk-commander-per-planet",
+  "description": "Rules audit (leaders N-Z): G'hom Sek'kus commits up to 1 ground force from each planet. A second commit from Quinarra (accepted by the original) is refused.",
+  "base": { "recording": "pbd116", "index": 42, "repost": false },
+  "setup": [
+    "/leaders unlock leader:sardakkcommander faction_or_color:sardakk"
+  ],
+  "trigger": { "press": "sardakkcommander_infantry_trenlak_quinarra", "as": "sardakk" },
+  "steps": [
+    { "press": "sardakkcommander_infantry_trenlak_quinarra", "as": "sardakk", "refused": true }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "tiles[position=313].holders[name=quinarra].units[unit=gf].count", "eq": 2 },
+      { "path": "tiles[position=313].holders[name=trenlak].units[unit=gf].count", "eq": 3 }
+    ]
+  }
+}

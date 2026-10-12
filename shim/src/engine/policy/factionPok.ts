@@ -71,8 +71,11 @@ export const POK_STEPS: Record<string, StepPolicy> = {
   argentHeroStep2: first,
   argentHeroStep3: first,
   argentHeroStep4: (opts, _s, _m, history) => (history.length >= 3 ? dismiss(opts) : null) ?? first(opts) ?? dismiss(opts),
-  // Nomad: Mercer moves the first offered force; TCS readies only our own agents, never spends a token for others.
-  mercerMove: first,
+  // Nomad: Mercer moves the first offered force, at most 2 (card text; the engine refuses a third, rules audit);
+  // TCS readies only our own agents, never spends a token for others.
+  mercerMove: (opts, _s, _m, history) => (history.length >= 2 ? dismiss(opts) : null) ?? first(opts) ?? dismiss(opts),
+  // Keleres: Suffi An's unlock costs 1 trade good (the engine refuses it at 0, rules audit).
+  pay1tgforKeleres: (opts, state, me) => ((self(state, me)?.tg ?? 0) >= 1 ? first(opts) : dismiss(opts)),
   exhaustTCS: (opts, state, me) => {
     const mine = self(state, me)?.faction ?? "~";
     return typed(opts).find((o) => String(o.value!.leader ?? "").startsWith(mine)) ?? dismiss(opts);
