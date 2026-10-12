@@ -104,7 +104,8 @@ export function chooseTePlot(_d: TePlot, c: Ctx): TeTableChoice | null {
     case "revealSeethe":
     case "revealExtract": {
       const opts = typed.filter((o) => !o.value.panel && o.value.target && o.value.target !== me).sort(byVpDesc(c.state));
-      return pick(opts[0] ?? typed.find((o) => !o.value.panel), "plot: the points leader");
+      // Never ourselves (pbd161: the last faction left on the Seethe picker was the Firmament itself): decline.
+      return pick(opts[0], "plot: the points leader") ?? pick(done(c.live), "plot: no other player to puppet");
     }
     case "resolveSeethe":
       return pick(typed.find((o) => o.value.planet) ?? typed[0], "Seethe: eradicate a planet");
