@@ -1,6 +1,7 @@
 import { countUnit, isShip, myUnits, playerOf, type Board, type PlayerView } from "./board.js";
 import { baseId, lockIs, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
+import { forgetGameKeys, type GameScope } from "../engine/rewind.js";
 import { promptForMe } from "./steps.js";
 import { statsOf } from "./units.js";
 
@@ -36,6 +37,12 @@ export class ViolationDesk {
   private pressed = new Set<string>();
 
   constructor(private seat: Seat) {}
+
+  /** The game was rolled back: reminders and lists are judged afresh. */
+  rewound(scope: GameScope) {
+    this.jobs.delete(scope.game);
+    forgetGameKeys([this.done, this.pressed], scope);
+  }
 
   /** The reminders addressed to us and the unit lists they open: the rule table leaves them alone. */
   owns(game: string, p: Prompt): boolean {

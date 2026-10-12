@@ -8,6 +8,7 @@ import { ViolationDesk } from "./violations.js";
 import { EngineTactical, TACTICAL_KINDS } from "./tacticalEngine.js";
 import type { Decision } from "../engine/types.js";
 import { passOption } from "../engine/policy/turn.js";
+import { forgetGameKeys, type GameScope } from "../engine/rewind.js";
 
 /** How long an unplanned tactical.activate waits before the planner adopts it (the policy that opened it moves on). */
 const ACTIVATE_GRACE_MS = 5000;
@@ -38,6 +39,19 @@ export class Brain {
     this.tactical = new TacticalExecutor(seat);
     this.cards = new CardPlanner(seat);
     this.violations = new ViolationDesk(seat);
+  }
+
+  /**
+   * The game was rolled back: running plans and jobs worked toward a state that is gone, and the turn prompts we
+   * handled may come back under their old ids. Drop them (an interrupted tactical action is resumed from whatever
+   * step is open again: engineRecover).
+   */
+  rewound(scope: GameScope) {
+    this.engineTacticalFor?.rewound(scope.game);
+    this.tactical.rewound(scope.game);
+    this.cards.rewound(scope);
+    this.violations.rewound(scope);
+    forgetGameKeys([this.handled], scope);
   }
 
   /** The planner runs an action in this game (legacy or engine tactical job): the turn is not over. */
@@ -145,10 +159,17 @@ export class Brain {
     const activate = !EngineTactical.turnMenu(decisions) ? mine.find((d) => d.kind === "tactical.activate") : undefined;
     const stray = activate ? [activate] : mine.filter((d) => d.kind !== "tactical.activate");
     const age = stray.length ? Date.now() - Math.max(...stray.map((d) => d.createdAt)) : 0;
-    if (!stray.length || age < (activate ? ACTIVATE_GRACE_MS : 20000) || age > 600000) return false;
+    // A roll-back interrupted our action: its restored step is ours to pick up at once (with the same goal).
+    const resuming = this.engineTactical!.interruptedIn(game) && mine.length > 0;
+    if (!resuming && (!stray.length || age < (activate ? ACTIVATE_GRACE_MS : 20000) || age > 600000)) return false;
     const board = await this.seat.board(game, true);
     const me = board ? playerOf(board, this.seat.userId) : undefined;
     if (!board || !me || board.activePlayer !== me.color || board.phase !== "action") return false;
+    if (resuming && this.engineTactical!.resume(game)) {
+      this.seat.log(`resuming a tactical action interrupted by a roll-back in ${game}`);
+      return this.engineTactical!.tick(board, decisions);
+    }
+    if (!stray.length) return false;
     if (activate) {
       const goal = chooseGoal(board, me);
       this.seat.log(`planning a tactical action started outside the turn menu in ${game}: ${goal.kind === "pass" ? "no job, activate a system with a space dock" : goal.why}`);

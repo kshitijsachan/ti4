@@ -51,8 +51,13 @@ export type EnginePlan = {
 
 const live = <V>(d: { options: Option<V>[] }) => d.options.filter((o) => !o.disabled && !o.needsInput && o.value);
 
+/** A plan interrupted by a roll-back is resumed (its goal, steps afresh) for this long. */
+const RESUME_MS = 120_000;
+
 export class EngineTactical {
   plan: EnginePlan | null = null;
+  /** Per game: the goal of a plan a roll-back interrupted (see rewound / resume). */
+  private interrupted = new Map<string, { goal: Goal; target: string | null; at: number }>();
 
   constructor(
     private seat: Seat,
@@ -77,6 +82,7 @@ export class EngineTactical {
   async start(game: string, menu: TurnAction, goal: ExpandGoal | ProduceGoal): Promise<boolean> {
     const opt = live(menu).find((o) => o.value!.action === "tactical");
     if (!opt) return false;
+    this.interrupted.delete(game);
     this.plan = this.fresh(game, goal, goal.target);
     const r = await this.engine.answer(game, menu, opt.id, `tactical action: ${goal.why}`);
     if (!r?.ok) {
@@ -93,6 +99,33 @@ export class EngineTactical {
    */
   adopt(game: string, goal: ExpandGoal | ProduceGoal | null) {
     this.plan = goal ? this.fresh(game, goal, goal.target) : this.fresh(game, { kind: "recover", why: "Warfare tactical action with no job" }, null);
+  }
+
+  /**
+   * The game was rolled back: the plan's steps (moved, landed, concluded, tried menus, the build job) describe undone
+   * answers, so it stops; its goal is kept for resume() — the restored state may be anywhere from before the
+   * activation to after the landing, and the brain picks the action up from whatever step is open again.
+   */
+  rewound(game: string) {
+    const plan = this.plan;
+    if (plan?.game !== game) return;
+    if (plan.goal.kind !== "recover") this.interrupted.set(game, { goal: plan.goal, target: plan.target, at: Date.now() });
+    this.plan = null;
+  }
+
+  /** Resumes the action a roll-back interrupted in this game (fresh steps, same goal). False when there was none. */
+  resume(game: string): boolean {
+    const r = this.interrupted.get(game);
+    this.interrupted.delete(game);
+    if (!r || Date.now() - r.at > RESUME_MS || r.goal.kind === "recover") return false;
+    this.plan = this.fresh(game, r.goal, r.target);
+    return true;
+  }
+
+  /** A roll-back interrupted our action in this game lately (resume() would take it up). */
+  interruptedIn(game: string): boolean {
+    const r = this.interrupted.get(game);
+    return !!r && Date.now() - r.at <= RESUME_MS;
   }
 
   /** Takes over a tactical action already under way (e.g. after a restart): pushes it to its end, moving nothing. */
