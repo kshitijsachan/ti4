@@ -79,6 +79,11 @@
   background: var(--turn, var(--mantine-color-gray-5));
 }
 
+.turnTrophy {
+  flex-shrink: 0;
+  color: var(--mantine-color-yellow-5);
+}
+
 /* My move: the one warm thing on the bar. */
 .turnMine {
   box-shadow: inset 0 0 0 1px var(--mantine-color-orange-5);

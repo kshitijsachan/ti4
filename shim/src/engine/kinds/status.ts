@@ -90,6 +90,8 @@ export type StatusRevealObjective = DecisionBaseOf<
   | { action: "reveal"; stage: 1 | 2; count: 1 | 2; position: number | null }
   | { action: "continue" }
   | { action: "end_game" }
+  /** "Rematch" next to End Game when the objectives ran out (bots never press it). */
+  | { action: "rematch" }
 >;
 
 /**

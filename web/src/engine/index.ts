@@ -14,7 +14,9 @@ export { engineStore, useEngine, useEngineEnabled, useEngineMode, useEngineState
 export { EngineDecisionHost, decisionTitle } from "./EngineDecisionHost";
 export { openToAll } from "./reducer";
 export { orderDecisions, useMyQueue } from "./queue";
-export { engineTurn } from "./board";
+export { engineGameOver, engineTurn } from "./board";
+export { gameOverHeadline, gameOverView, isGameOver } from "./gameOver";
+export type { GameOverView, StandingRow } from "./gameOver";
 export { useEngineDraftPick } from "./draftPick";
 export { GenericDecision } from "./GenericDecision";
 export { RENDERERS, rendererFor } from "./registry";

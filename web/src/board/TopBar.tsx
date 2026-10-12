@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip, UnstyledButton } from "@mantine/core";
-import { IconListDetails, IconMessageCircle, IconTarget, IconTransfer, IconUsers } from "@tabler/icons-react";
+import { IconListDetails, IconMessageCircle, IconTarget, IconTransfer, IconTrophy, IconUsers } from "@tabler/icons-react";
 import cx from "clsx";
 import { usePlay } from "@/discord";
 import { useSetupWaiting, useWaitingOnMe } from "@/decisions";
@@ -93,6 +93,8 @@ type Props = {
   incomingTrades: number;
   /** Decisions waiting on me from the engine stream; replaces the legacy prompt detection when given. */
   waiting?: { count: number; title: string | null; note?: string | null };
+  /** The game is over: its headline ("Navy wins", "Game over") replaces whose turn it is. */
+  gameOver?: string | null;
 };
 
 /** The table's header, one quiet line: which game, where we are in it, whose move it is, and a few icons. */
@@ -110,6 +112,7 @@ export function TopBar({
   talkUnread,
   incomingTrades,
   waiting,
+  gameOver,
 }: Props) {
   const toggle = (name: DrawerName) => onDrawer(drawer === name ? null : name);
   const legacyCount = useWaitingOnMe((s) => s.count);
@@ -119,15 +122,18 @@ export function TopBar({
   const firstDecision = waiting ? waiting.title : legacyTitle;
   const setup = waiting ? (waiting.note ? { text: waiting.note, me: false } : null) : legacySetup;
   /* A decision of mine is up (setup, agenda, a follow…): the table waits on me even when it is nobody's turn. */
-  const myMove = turn.mine || waitingOnMe > 0 || !!setup?.me;
+  const myMove = !gameOver && (turn.mine || waitingOnMe > 0 || !!setup?.me);
   let turnText = "";
   let turnTip: string | undefined;
-  if (turn.mine) turnText = "Your turn";
+  if (gameOver) {
+    turnText = gameOver;
+    turnTip = "The game is over — final standings on the board";
+  } else if (turn.mine) turnText = "Your turn";
   else if (myMove) {
     turnText = "Your move";
     turnTip = firstDecision ? `Waiting on you: ${firstDecision}` : setup?.text;
   } else if (turn.waitingOn) turnText = `${turn.waitingOn}'s turn`;
-  const note = myMove ? undefined : (myNote ?? (turnText ? undefined : setup?.text));
+  const note = myMove || gameOver ? undefined : (myNote ?? (turnText ? undefined : setup?.text));
   const where = [round ? `Round ${round}` : null, turn.phase].filter(Boolean).join(" · ");
 
   return (
@@ -144,11 +150,11 @@ export function TopBar({
         {turnText && (
           <span
             className={cx(classes.turn, myMove && classes.turnMine)}
-            style={activeColor ? ({ "--turn": activeColor } as CSSProperties) : undefined}
+            style={activeColor && !gameOver ? ({ "--turn": activeColor } as CSSProperties) : undefined}
             role="status"
             title={turnTip}
           >
-            <span className={classes.turnDot} />
+            {gameOver ? <IconTrophy size={13} stroke={1.8} className={classes.turnTrophy} aria-hidden /> : <span className={classes.turnDot} />}
             <span className={classes.turnText}>{turnText}</span>
           </span>
         )}
@@ -203,7 +209,7 @@ export function TopBar({
           onClick={() => toggle("trade")}
         />
         <span className={classes.sep} />
-        <UndoButton gameName={gameName} onOpenHistory={() => onDrawer("log")} className={classes.undo} />
+        <UndoButton gameName={gameName} onOpenHistory={() => onDrawer("log")} className={classes.undo} gameOver={!!gameOver} />
         <SettingsMenu onRawChannels={() => onDrawer("raw")} />
       </div>
     </header>

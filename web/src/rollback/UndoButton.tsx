@@ -13,6 +13,8 @@ export type UndoButtonProps = {
   /** Shows a "History…" link that should open the game log drawer (where any event can be rewound to). */
   onOpenHistory?: () => void;
   className?: string;
+  /** The game is over: undo reopens it, so it is never a one-click offer (the popover asks to confirm the reopen). */
+  gameOver?: boolean;
 };
 
 /** Fired (e.g. by the decision popup's Undo link) to open the top bar's Undo with its plan. */
@@ -62,7 +64,7 @@ function describe(plan: UndoPlan): { title: string; note?: string; action?: stri
  * within seconds), it rewinds to just before mine and says what else that undoes. The tooltip names what will be
  * undone; clicking asks once. Every refusal is shown with its next step. Must sit inside `<PlayProvider>`.
  */
-export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonProps) {
+export function UndoButton({ gameName, onOpenHistory, className, gameOver = false }: UndoButtonProps) {
   const { data, error } = useUndoPoints(gameName);
   const me = usePlay((s) => s.me);
   const undo = useUndoStore((s) => s.undo);
@@ -75,7 +77,9 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
     [data, me],
   );
   const text = describe(plan);
-  const tip = error ? `Undo unavailable: ${error}` : text.tip;
+  const [reopen, setReopen] = useState(false);
+  const overGuard = gameOver && plan.kind !== "none";
+  const tip = error ? `Undo unavailable: ${error}` : overGuard ? "The game is over — undoing reopens it" : text.tip;
 
   useEffect(() => {
     const onRequest = () => {
@@ -117,10 +121,12 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
 
   const toggle = () => {
     setStatus({ kind: "idle" });
+    setReopen(false);
     setOpen((o) => !o);
   };
 
   const canAct = !!text.action && !error && status.kind !== "done";
+  const blockedByEnd = overGuard && !reopen;
   const forceRetry = status.kind === "error" && status.needsForce;
 
   return (
@@ -133,7 +139,7 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
             onClick={toggle}
             aria-label={tip}
             aria-expanded={open}
-            data-disabled={plan.kind === "none" || undefined}
+            data-disabled={plan.kind === "none" || overGuard || undefined}
           >
             <IconArrowBackUp size={16} stroke={1.75} aria-hidden />
           </button>
@@ -146,6 +152,12 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
           <div className={classes.popTitle}>{error ? `Undo unavailable: ${error}` : text.title}</div>
         )}
         {text.note && status.kind !== "done" && <p className={classes.note}>{text.note}</p>}
+        {overGuard && canAct && (
+          <label className={classes.note} data-undo-reopen>
+            <input type="checkbox" checked={reopen} onChange={(e) => setReopen(e.currentTarget.checked)} /> The game is over. Undoing
+            reopens it for everyone — I want to reopen the game.
+          </label>
+        )}
         {status.kind === "error" && (
           <p className={classes.error} role="alert">
             {status.message}
@@ -166,7 +178,14 @@ export function UndoButton({ gameName, onOpenHistory, className }: UndoButtonPro
             </button>
           )}
           {canAct && (
-            <button type="button" className={classes.danger} disabled={status.kind === "busy"} onClick={() => void run(forceRetry)} data-autofocus>
+            <button
+              type="button"
+              className={classes.danger}
+              disabled={status.kind === "busy" || blockedByEnd}
+              title={blockedByEnd ? "Tick “reopen the game” first" : undefined}
+              onClick={() => void run(forceRetry)}
+              data-autofocus
+            >
               <IconArrowBackUp size={14} stroke={2} aria-hidden />
               {status.kind === "busy" ? "Undoing…" : forceRetry ? "Undo theirs too" : text.action}
             </button>

@@ -135,6 +135,7 @@ export function StatusRevealObjectiveRenderer({ decision, state, answer }: Statu
   const label = (v: NonNullable<StatusRevealObjective["options"][number]["value"]>) => {
     if (v.action === "end_game") return "End the game (no objectives left)";
     if (v.action === "continue") return "Continue without revealing";
+    if (v.action === "rematch") return "Rematch (new game, same players)";
     const stage = v.stage === 2 ? "II" : "I";
     if (v.count === 2) return `Reveal two stage ${stage} objectives`;
     return v.position ? `Reveal stage ${stage}, position ${v.position}` : `Reveal the next stage ${stage} objective`;

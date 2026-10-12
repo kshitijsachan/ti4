@@ -13,6 +13,8 @@ import { rendererFor } from "./registry";
 import { engineStore, useEngine, useMyDecisions } from "./store";
 import { DecisionFooter, FooterSlot, PopupLayer, popupClasses as classes, usePeek, useScrollEdges } from "./ui/Popup";
 import { EngineOutcomeToast } from "./ui/OutcomeToast";
+import { gameOverHeadline, gameOverView } from "./gameOver";
+import { WinnerPanel } from "./renderers/game/WinnerPanel";
 
 export { decisionTitle };
 
@@ -105,7 +107,9 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const shown = openOffer ?? queue.find((d) => d.id === jumpId) ?? queue[0];
   const more = queue.filter((d) => d.id !== shown?.id).length;
   const collapsed = !!shown && collapsedId === shown.id && !errors[shown.id];
-  const stalled = useTurnStalled(state, !shown && queue.length === 0);
+  const over = useMemo(() => gameOverView(state, Object.values(openIds)), [state, openIds]);
+  const stalled = useTurnStalled(over ? null : state, !shown && queue.length === 0);
+  const [overFolded, setOverFolded] = useState(false);
 
   /* The header's "Your move" pill: what is really waiting on me (background prompts never count). */
   const publishWaiting = useWaitingOnMe((s) => s.set);
@@ -194,6 +198,73 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
       {unhidePill}
     </div>
   );
+
+  /* Game over: the winner screen takes the popup's place (nothing else is asked of anyone any more). */
+  if (over) {
+    const endPending = over.endPrompt ? (pending[over.endPrompt.id]?.optionId ?? null) : null;
+    const endError = over.endPrompt ? errors[over.endPrompt.id] : undefined;
+    return (
+      <>
+        <PopupLayer contained={placement === "contained"} rightInset={rightInset} peeking={peek.peeking}>
+          <section
+            ref={cardRef}
+            className={cx(classes.card, overFolded && classes.collapsed)}
+            role="dialog"
+            aria-modal="false"
+            aria-label={gameOverHeadline(over)}
+            data-engine-decision="game.over"
+          >
+            <header className={classes.head}>
+              <div className={classes.headTop}>
+                <div className={classes.titles}>
+                  <span className={classes.eyebrow}>{over.finish === "ended" ? "Game ended" : "Game over"}</span>
+                  <h2 className={classes.title}>Final standings</h2>
+                </div>
+                <Tooltip label="Hold to see the map, or click to toggle" position="bottom">
+                  <UnstyledButton
+                    className={classes.peekBtn}
+                    onPointerDown={(e: PointerEvent) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      peek.hold();
+                    }}
+                    aria-label="Peek at map (hold, or click to toggle)"
+                  >
+                    <IconMap size={14} />
+                    <span>Peek at map</span>
+                  </UnstyledButton>
+                </Tooltip>
+                <Tooltip label={overFolded ? "Show the standings" : "Fold down to the title"} position="bottom">
+                  <UnstyledButton
+                    className={classes.iconBtn}
+                    onClick={() => setOverFolded((v) => !v)}
+                    aria-label={overFolded ? "Expand" : "Collapse"}
+                    aria-expanded={!overFolded}
+                  >
+                    {overFolded ? <IconChevronDown size={15} /> : <IconChevronUp size={15} />}
+                  </UnstyledButton>
+                </Tooltip>
+              </div>
+            </header>
+            <div className={classes.body} hidden={overFolded}>
+              <WinnerPanel view={over} answer={answer} pendingOptionId={endPending} />
+            </div>
+            {endError && over.endPrompt && (
+              <div className={classes.error} role="alert">
+                <IconAlertTriangle size={14} />
+                <span>{endError}</span>
+                <span className={classes.grow} />
+                <UnstyledButton className={classes.errorClose} onClick={() => engineStore.getState().dismissError(over.endPrompt!.id)}>
+                  Dismiss
+                </UnstyledButton>
+              </div>
+            )}
+          </section>
+        </PopupLayer>
+        <EngineOutcomeToast gameName={gameName} rightInset={rightInset} />
+      </>
+    );
+  }
 
   if (!shown) {
     return (

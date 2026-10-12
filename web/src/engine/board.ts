@@ -9,6 +9,7 @@ import { phaseLabel, type TurnState } from "@/play/turn";
 import type { Decision, GameState, PlayerState } from "./contract";
 import { decisionTitle } from "./queue";
 import { factionName } from "./names";
+import { gameOverHeadline, gameOverView, isGameOver } from "./gameOver";
 
 /** The engine's raw phase ("statusScoring", "agendaVoting", "miltydraft") as the board labels it. */
 export function enginePhaseLabel(raw: string | null | undefined): string | undefined {
@@ -23,6 +24,8 @@ export function enginePhaseLabel(raw: string | null | undefined): string | undef
 
 /** Whose move it is, from the engine state (the draft's current picker while a draft runs). */
 export function engineTurn(state: GameState, myId: string | undefined): TurnState {
+  /* Game over: nobody's turn (the phase the save still holds is not the table's). */
+  if (isGameOver(state)) return { mine: false, phase: "Game over" };
   const name = (id: string | null | undefined) => state.players.find((p) => p.userId === id)?.userName;
   if (state.draft?.currentPlayer) {
     return { mine: !!myId && state.draft.currentPlayer === myId, waitingOn: name(state.draft.currentPlayer), phase: "Draft" };
@@ -150,5 +153,12 @@ export function engineWaitingNote(state: GameState, myId: string | undefined): s
 
 /** The header's "Your move" count and tooltip (the popup's queue), else what the table waits on. */
 export function engineWaiting(state: GameState, queue: Decision[], myId: string | undefined) {
+  if (isGameOver(state)) return { count: 0, title: null, note: null };
   return { count: queue.length, title: queue[0] ? decisionTitle(queue[0], state) : null, note: queue.length ? null : engineWaitingNote(state, myId) };
+}
+
+/** The header's game-over line ("Navy wins"), or null while the game is on. */
+export function engineGameOver(state: GameState): string | null {
+  const view = gameOverView(state, []);
+  return view ? gameOverHeadline(view) : null;
 }
