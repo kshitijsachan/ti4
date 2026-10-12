@@ -492,10 +492,11 @@ export function answersOutsideWindow(d: Decision, userId: UserId, state: GameSta
 }
 
 /**
- * A player-scoped decision another seat may still answer (KindSpec.othersMayAnswer): agenda.resolve / agenda.next
+ * A player-scoped decision another seat may still answer (KindSpec.othersMayAnswer): status.reveal_objective, agenda.resolve / agenda.next
  * wait on the speaker, but the original button is pressable by anyone at the table.
  */
 export function othersMayAnswer(d: Decision): boolean {
+  if (d.kind === "status.reveal_objective") return true;
   return (d.kind === "agenda.resolve" || d.kind === "agenda.next") && d.target?.resolvedBy !== "owner_prefix";
 }
 
