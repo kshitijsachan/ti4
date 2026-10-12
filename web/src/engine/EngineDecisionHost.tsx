@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
 import { Tooltip, UnstyledButton } from "@mantine/core";
-import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEyeOff, IconMap, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEye, IconEyeOff, IconMap, IconX } from "@tabler/icons-react";
 import cx from "clsx";
 import { useDecisionFocus, useWaitingOnMe } from "@/decisions/model/focus";
 import { useReserveRect } from "@/state/reservedArea";
@@ -101,7 +101,17 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
     return () => window.removeEventListener("keydown", onKey);
   }, [queueOpen, offerList, openOffer, shown]);
 
-  const offerPill = offers.length > 0 && (
+  /* Prompts I hid that are still open: one page-wide control brings them all back. */
+  const hiddenOpen = decisions.filter((d) => hidden.has(d.id)).length;
+  const unhidePill = hiddenOpen > 0 && (
+    <Tooltip label="Show the prompts you hid again" position="right">
+      <UnstyledButton className={classes.unhidePill} onClick={() => engineStore.getState().unhideAll()} data-engine-hidden={hiddenOpen}>
+        <IconEye size={14} />
+        {hiddenOpen} hidden · Show
+      </UnstyledButton>
+    </Tooltip>
+  );
+  const offerPill = (offers.length > 0 || unhidePill) && (
     <div ref={offersRef} className={classes.offers}>
       {offerList && (
         <div className={classes.offerList} role="menu" aria-label="Available now">
@@ -120,6 +130,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
           ))}
         </div>
       )}
+      {offers.length > 0 && (
       <UnstyledButton
         className={classes.offerPill}
         onClick={() => (offers.length === 1 ? setOfferId(offerId ? null : offers[0].id) : setOfferList((v) => !v))}
@@ -129,6 +140,8 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
         <IconBolt size={14} />
         Available now{offers.length > 1 ? ` · ${offers.length}` : ""}
       </UnstyledButton>
+      )}
+      {unhidePill}
     </div>
   );
 

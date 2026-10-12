@@ -382,6 +382,23 @@
   border-color: rgba(var(--play-yellow), 0.85);
 }
 
+.unhidePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
+  background: var(--details-card-bg, #0b1020);
+  color: var(--play-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.unhidePill:hover {
+  color: var(--play-ink-bright);
+}
+
 .offerList {
   display: flex;
   flex-direction: column;
