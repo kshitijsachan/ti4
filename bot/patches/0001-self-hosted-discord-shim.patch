@@ -8105,10 +8105,10 @@ index 0000000..e45a167
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..42396ad
+index 0000000..e85edbf
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,233 @@
+@@ -0,0 +1,244 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -8311,9 +8311,20 @@ index 0000000..42396ad
 +                }
 +            }
 +            List<Option> options = values ? revalued(spec, d, ctx) : d.options();
++            // The scope follows the target as at capture (DecisionCapture.build): a prompt captured before its player
++            // was known (live pbd283: the Firmament's starting technology, captured ahead of the save that set the
++            // faction) opened as "table" and stayed so once retargeted, so the web offered it as optional.
++            String scope = d.scope();
++            if (retargets && !Objects.equals(t, d.target())) {
++                try {
++                    scope = w != null ? "table" : spec.scope(ctx);
++                } catch (Exception e) {
++                    BotLogger.error("engine: kind " + spec.kind() + " failed to re-read scope", e);
++                }
++            }
 +            if (Objects.equals(t, d.target()) && Objects.equals(w, d.window()) && Objects.equals(pr, d.progress())
-+                    && options.equals(d.options())) return;
-+            DecisionRegistry.update(d.withDynamic(game.getLastModifiedDate(), t, w, pr).withOptions(options));
++                    && Objects.equals(scope, d.scope()) && options.equals(d.options())) return;
++            DecisionRegistry.update(d.withDynamic(game.getLastModifiedDate(), t, w, pr, scope).withOptions(options));
 +        }
 +    }
 +
@@ -8832,10 +8843,10 @@ index 0000000..853beb8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineModels.java b/src/main/java/ti4/selfhost/engine/EngineModels.java
 new file mode 100644
-index 0000000..8641f14
+index 0000000..c8239e1
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineModels.java
-@@ -0,0 +1,471 @@
+@@ -0,0 +1,477 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -9155,7 +9166,13 @@ index 0000000..8641f14
 +        }
 +
 +        public Decision withDynamic(long newStateVersion, Target newTarget, ReactionWindow newWindow, Progress newProgress) {
-+            return new Decision(id, game, kind, seq, newStateVersion, newTarget, scope, visibility, prompt, options,
++            return withDynamic(newStateVersion, newTarget, newWindow, newProgress, scope);
++        }
++
++        /** As above, with the scope re-read too (a retargeted prompt: "table" while nobody was known, then "player"). */
++        public Decision withDynamic(
++                long newStateVersion, Target newTarget, ReactionWindow newWindow, Progress newProgress, String newScope) {
++            return new Decision(id, game, kind, seq, newStateVersion, newTarget, newScope, visibility, prompt, options,
 +                    source, createdAt, revision, newWindow, newProgress, inputs);
 +        }
 +
@@ -10306,10 +10323,10 @@ index 0000000..f641b0f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ScFollowGate.java b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
 new file mode 100644
-index 0000000..a9e47d5
+index 0000000..68deecd
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
-@@ -0,0 +1,259 @@
+@@ -0,0 +1,266 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -10487,13 +10504,7 @@ index 0000000..a9e47d5
 +    @Nullable
 +    public static String midAction(@Nullable Game game, @Nullable Player holder) {
 +        if (game == null || holder == null) return null;
-+        String active = game.getCurrentActiveSystem();
-+        // (A save written with no active system loads it as the text "null": not a system.)
-+        if (active != null
-+                && !active.isEmpty()
-+                && !"null".equalsIgnoreCase(active)
-+                && game.getStoredValue(ti4.helpers.ButtonHelperTacticalAction.TACTICAL_ACTION_LOGGED).isEmpty())
-+            return "your tactical action is still under way";
++        if (tacticalUnderway(game)) return "your tactical action is still under way";
 +        for (int sc : playedThisTurn(game, holder)) {
 +            List<String> parts =
 +                    ti4.selfhost.engine.kinds.StrategyCardResolveKind.primaryParts(
@@ -10508,6 +10519,19 @@ index 0000000..a9e47d5
 +            if (IN_FLIGHT.matcher(d.kind()).find()) return "your action is still under way (" + d.kind() + ")";
 +        }
 +        return null;
++    }
++
++    /**
++     * A tactical action is under way: a system is active and the action was not concluded yet (concluding logs it;
++     * EndTurnService clears the active system). A save written with no active system loads it as the text "null".
++     */
++    public static boolean tacticalUnderway(@Nullable Game game) {
++        if (game == null) return false;
++        String active = game.getCurrentActiveSystem();
++        return active != null
++                && !active.isEmpty()
++                && !"null".equalsIgnoreCase(active)
++                && game.getStoredValue(ti4.helpers.ButtonHelperTacticalAction.TACTICAL_ACTION_LOGGED).isEmpty();
 +    }
 +
 +    /** turn.action end_turn_when_followed / the upstream button: refused while the holder is mid-action. */
@@ -30112,13 +30136,14 @@ index 0000000..3cfacb3
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
 new file mode 100644
-index 0000000..d487206
+index 0000000..9c7c73f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,169 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
++import java.util.List;
 +import java.util.Map;
 +import java.util.regex.Matcher;
 +import java.util.regex.Pattern;
@@ -30216,6 +30241,35 @@ index 0000000..d487206
 +        if ("end_turn".equals(action) || "pass".equals(action))
 +            v.put("waitingFor", ti4.selfhost.engine.ScFollowGate.waitingFor(ctx.game(), p));
 +        return v;
++    }
++
++    /** Options that start an action (or pass): what a turn menu offers before the player's action begins. */
++    private static final Pattern STARTS_ACTION =
++            Pattern.compile("^(tacticalAction|componentAction|strategicAction_\\d+|passForRound|passingAbilities)$");
++
++    /**
++     * A menu offering to start an action is obsolete while that player's tactical action is under way (live pbd290:
++     * after an Undo of the activation, re-activating from the map left the start-of-turn menu open next to the move
++     * panel). The post-action "end turn or do another action" menu offers no start option (or, with a second-action
++     * ability, is posted once the action is concluded), so it stays. An Undo back before the activation re-opens the
++     * menu (GameRewind restores the version at the boundary, judged against the restored state).
++     */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        Game game = ctx.game();
++        Player p = ctx.player();
++        if (game == null || p == null || !ti4.selfhost.engine.ScFollowGate.tacticalUnderway(game)) return false;
++        if (!p.getUserID().equals(game.getActivePlayerID())) return false;
++        List<String> handlers = ctx.handlerIds();
++        if (handlers == null) {
++            String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
++            Decision d = id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
++            if (d == null) return false;
++            handlers = new java.util.ArrayList<>();
++            for (Option o : d.options()) if (o.handler() != null) handlers.add(o.handler());
++        }
++        for (String h : handlers) if (h != null && STARTS_ACTION.matcher(h).matches()) return true;
++        return false;
 +    }
 +
 +    /** tacticTokens follows the pool (walk pbd158: "3 tactic tokens" stayed after Leadership added one). */
