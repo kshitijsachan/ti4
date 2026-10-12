@@ -1,0 +1,40 @@
+{
+  "name": "status-redeclare",
+  "description": "Status scoring: a player who already declared 'no public' and 'no secret' presses both again (the original accepts and re-records; engine used to answer 409 'already responded'). pbd72 steps 736-741.",
+  "base": {
+    "recording": "pbd72",
+    "index": 736
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "status.score",
+        "option": "so_no_scoring"
+      },
+      "as": "empyrean"
+    },
+    {
+      "answer": {
+        "kind": "status.score",
+        "option": "po_no_scoring"
+      },
+      "as": "empyrean"
+    },
+    {
+      "answer": {
+        "kind": "status.score",
+        "option": "so_no_scoring"
+      },
+      "as": "empyrean"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.phase_of_game",
+        "eq": "statusHomework"
+      }
+    ]
+  }
+}
