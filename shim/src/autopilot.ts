@@ -713,6 +713,12 @@ class SeatPilot {
   private lastPressIn = new Map<string, number>();
   /** Per stalled prompt (message id): how often we re-checked it, and when last. */
   private stallChecks = new Map<string, { n: number; at: number }>();
+  /**
+   * Stalled strategy-card picks the engine has no decision for at all (it closed the fresh pick as obsolete: live
+   * pbd229 / pbd223 / pbd188, "round N strategy active=<us>" for the rest of the game). engineOwns calls a message
+   * without a decision "owned" (a leftover), so the typed pick rule skipped it too; for these the rule presses it.
+   */
+  private orphanPicks = new Set<string>();
   private lastStallScan = 0;
 
   /**
@@ -752,6 +758,14 @@ class SeatPilot {
       log.info(`autopilot ${this.name}: re-checking stalled prompt "${String(m.content ?? "").slice(0, 80).replace(/\s+/g, " ")}" in #${ch.name} (waiting on us for ${Math.round((Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp)) / 1000)}s)`);
       this.forgetFaction(game);
       this.forgetPrompt(m);
+      if (st.phase === "strategy" && this.mgr.engine?.isLive) {
+        const open = await this.mgr.engine.openDecisions(game);
+        if (open && !open.some((d) => d.source?.messageId === m.id)) {
+          if (this.orphanPicks.size > 500) this.orphanPicks.clear();
+          this.orphanPicks.add(m.id);
+          log.warn(`autopilot ${this.name}: the engine has no decision for our stalled strategy card pick in ${game}; the button rules answer it`);
+        }
+      }
       const choice = await this.consider(m, ch, game);
       if (choice) return { ...choice, why: `${choice.why}; re-checking stalled prompt` };
       log.info(`autopilot ${this.name}: the stalled prompt in #${ch.name} still has nothing for us to press (faction ${(await this.faction(game)) ?? "unknown"}; controls ${controlsOf(m.components).map((c) => c.custom_id).slice(0, 6).join(", ")})`);
@@ -971,7 +985,7 @@ class SeatPilot {
       if (rule.addressed && !ctx.addressed) continue;
       // (unpressed: a typed rule may still retry a lost press of its own, below.)
       if (rule.typed && rule.id && !unpressed.some((c) => rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id))) continue;
-      if (rule.typed && (owned ??= await this.mgr.engineOwns(game, m.id, me))) continue;
+      if (rule.typed && !this.orphanPicks.has(m.id) && (owned ??= await this.mgr.engineOwns(game, m.id, me))) continue;
       const retryPhase = rule.retry && lost ? String((await this.mgr.phaseOf(game)) ?? "") : "";
       if (
         rule.retry &&
