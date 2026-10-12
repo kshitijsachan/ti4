@@ -426,3 +426,16 @@ test("pbd223: our milty turn owing a slice — faction / speaker boards are stal
   assert.deepEqual(draftBoardsMissing([factions, orders], theirs, ME), []);
   assert.equal(staleForBot(slices, theirs, ME), true);
 });
+
+test("pbd228: starting technologies during setup — preferred pick, owned ones skipped, even without value.starting", () => {
+  const tech = (t: string) => opt(`FFCC_sol_getTech_${t}__noPay__comp`, t, { tech: t, free: true, starting: false, flags: ["noPay", "comp"], type: "PROPULSION" });
+  const d = decision("tech.gain", [tech("zzz"), tech("amd"), tech("nm")]);
+  const setup = (owing: number, techs: string[] = []) =>
+    ({ ...state, round: 1, players: state.players.map((p) => (p.userId === ME ? { ...p, techs } : p)), setup: { stage: "player_setup", waitingOn: [ME], players: [{ userId: ME, faction: "sol", startingTechsNeeded: owing, secretObjectivesToDiscard: 0, keleresFlavorPending: false }] } }) as unknown as GameState;
+  const pick = chooseTyped(d, setup(1), ME, { history: [], open: [], all: [d] });
+  assert.ok(pick && !pick.why.startsWith("fallback"), pick?.why);
+  assert.notEqual(pick!.option!.value.tech, "zzz", "a preferred technology before an unknown one");
+  const again = chooseTyped(d, setup(1, [pick!.option!.value.tech]), ME, { history: [], open: [], all: [d] });
+  assert.notEqual(again?.option?.value.tech, pick!.option!.value.tech, "never one we own");
+  assert.equal(chooseTyped(d, setup(0), ME, { history: [], open: [], all: [d] }), null, "nothing owed: not a starting technology");
+});

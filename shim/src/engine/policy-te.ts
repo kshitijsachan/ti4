@@ -52,7 +52,12 @@ function doneOption(d: Decision): Option<any> | undefined {
 /** null: a TE decision we leave alone (legacy may still look at it). Only call for isThundersEdgeKind(d). */
 export function chooseThundersEdge(d: ThundersEdgeDecision, state: GameState | null, me: string): TeChoice | null {
   const self = state?.players.find((p) => p.userId === me);
-  if (d.scope === "player" && (d.target?.userId !== me || !CERTAIN.has(d.target.resolvedBy))) return null;
+  // The Fracture roll is ours when our own breakthrough asks for it, whatever resolved the target (live pbd228: a
+  // weakly resolved roll prompt was left to the legacy "only option" rule).
+  const lockedToMe = (d.options as Option<any>[]).some((o) => !!self?.faction && /^FFCC_([a-z0-9]+)_/i.exec(o.id)?.[1] === self.faction);
+  const myBreakthrough = (d.options as Option<any>[]).some((o) => !!self?.faction && typeof o.value?.breakthrough === "string" && o.value.breakthrough.startsWith(self.faction));
+  const ownFracture = d.kind === "te.fracture.roll" && (d.target?.userId === me || (!d.target?.userId && lockedToMe)) && (myBreakthrough || lockedToMe);
+  if (d.scope === "player" && !ownFracture && (d.target?.userId !== me || !CERTAIN.has(d.target.resolvedBy))) return null;
   if (d.scope === "table" && !awaits(d, me)) return null;
   const live = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput && !lockedToOther(o.id, self?.faction));
   const typed = live.filter((o) => o.value);
