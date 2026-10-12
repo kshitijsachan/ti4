@@ -19,9 +19,10 @@ import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
 import { chooseComponents, isComponentsKind } from "./policy/components.js";
 import { chooseCappedBuild, chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
 import { TECH_PREFERENCE } from "../botplay/techs.js";
+import type { TurnActionValue } from "./kinds/tactical.js";
 import { chooseFallback, fallbackDue, mayPress, staleForBot } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
-import { actionInFlight, chooseTurnAction } from "./policy/turn.js";
+import { actionInFlight, chooseTurnAction, followWaits } from "./policy/turn.js";
 import { chooseManualBuild, chooseUnitsModify } from "./policy/units.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
@@ -226,6 +227,29 @@ export type EngineOwnership = { owned: boolean; why: string };
  *   purpose still owns it); free when no engine answer exists at all (optional offers). After the grace: free (the
  *   engine path failed to move it; the legacy rules may help).
  */
+/**
+ * Why our own turn menu (turn.action) must not be pressed by anyone right now, at any age, or null. The turn policy
+ * holds it on purpose and a legacy "End Turn" / "Pass" press is wrong there:
+ * - our strategy card's follow window holds the turn (end_turn / pass waitingFor, engine ScFollowGate): the bot
+ *   refuses the end, so a legacy press past the grace is refused every minute (live 20:08 pbd266: "End Turn" pressed
+ *   3x after Construction, "the first press was lost");
+ * - an action of ours is under way (tactical / production / payment / combat / Warfare redistribute …): the turn
+ *   policy waits for it, which read as "no engine answer" and freed the menu, so the rule table ended the turn
+ *   mid-action (live 20:17 pbd41: "End Turn" 3 s after Warfare's "Redistribute Command Tokens"; the Warfare tactical
+ *   action was dropped, "it is no longer our turn");
+ * - not our turn (another player active, other phase, we passed).
+ * Needs the state (without it the usual grace applies, so an unreadable engine still falls back to the legacy rules).
+ */
+function turnHeld(d: Decision, state: GameState | null, me: string, open: Decision[], now: number): string | null {
+  if (d.kind !== "turn.action" || !state || d.target?.userId !== me) return null;
+  const waits = followWaits(d.options as Option<TurnActionValue>[]);
+  if (waits.length) return `our turn waits on strategy card follows (${waits.map((w) => w.strategyCard).join(", ")})`;
+  if (state.phase !== "action" || state.activePlayer !== me) return "not our turn";
+  if (state.players.find((p) => p.userId === me)?.passed) return "we passed";
+  const busy = actionInFlight(me, open, now);
+  return busy ? `our action is under way (${busy})` : null;
+}
+
 export function engineOwnership(
   d: Decision | undefined,
   messageId: string,
@@ -240,6 +264,8 @@ export function engineOwnership(
   if (d.kind.startsWith("ui.")) return { owned: true, why: "an affordance bots never press" };
   if (d.window?.responded.includes(me)) return { owned: true, why: "answered already" };
   if (d.scope === "table" && !d.window && WINDOW_KINDS.has(d.kind)) return { owned: true, why: "its window is closed" };
+  const held = turnHeld(d, state, me, open, now);
+  if (held) return { owned: true, why: held };
   const age = now - d.createdAt;
   if (age >= ENGINE_GRACE_MS) return { owned: false, why: `typed, but still open after ${Math.round(age / 1000)}s` };
   if (d.scope === "player" && !d.window && d.target?.userId !== me) return { owned: true, why: "another player's prompt" };
