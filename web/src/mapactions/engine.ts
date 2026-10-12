@@ -148,3 +148,17 @@ export async function landViaEngine(landings: LandRequest["landings"], mine: Min
     expectedSeq: d.seq,
   } satisfies Omit<LandRequest, "userId">);
 }
+
+/**
+ * Takes back the last step (the bot's UNDO on the movement / landing prompt): undoing the activation from the
+ * movement step returns the tactic token and re-opens the activation; undoing the movement from the landing step
+ * re-opens the movement. False when the prompt has no UNDO (or the engine is unavailable).
+ */
+export async function undoViaEngine(kind: "tactical.move" | "tactical.land", mine: Mine): Promise<boolean> {
+  const ds = await myDecisions(mine);
+  const d = ds?.find((x) => x.kind === kind);
+  const opt = d?.options.find((o) => !o.disabled && /^ultimateUndo_/.test((o.handler || o.id).replace(/^FFCC_[^_]+_/, "")));
+  if (!d || !opt) return false;
+  await answer(mine.gameName, d, opt.id);
+  return true;
+}

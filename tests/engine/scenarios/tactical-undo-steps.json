@@ -1,0 +1,112 @@
+{
+  "name": "tactical-undo-steps",
+  "description": "pbd28@54: deepwrought activates 209, moves (direct move: carrier, dreadnought, 2 fighters, 2 infantry from 313) and lands 2 infantry on Vorhal (direct land), then presses UNDO on the conclude prompt, again on the landing prompt the undo re-opens, again on the movement prompt: each press takes back one step (landing, movement, activation), and at the end the tactic token is back, 209 has no deepwrought token and the activation prompt is open. Needs the bot's UndoGroup prompt fix (end-turn 54fe7c9): before it, undoing the direct move re-posted nothing (its last press was on an ephemeral picker) and the re-posted landing prompt offered lift-off buttons.",
+  "base": {
+    "recording": "pbd28",
+    "index": 54
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.activate",
+        "option": "ringTile_209"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "313",
+              "holder": "space",
+              "unit": "cv",
+              "count": 1
+            },
+            {
+              "from": "313",
+              "holder": "space",
+              "unit": "dn",
+              "count": 1
+            },
+            {
+              "from": "313",
+              "holder": "space",
+              "unit": "ff",
+              "count": 2
+            },
+            {
+              "from": "313",
+              "holder": "ikatena",
+              "unit": "gf",
+              "count": 2
+            }
+          ]
+        }
+      },
+      "as": "deepwrought"
+    },
+    {
+      "answer": {
+        "kind": "tactical.land",
+        "action": "land",
+        "body": {
+          "landings": [
+            {
+              "planet": "vorhal",
+              "unit": "gf",
+              "count": 2
+            }
+          ]
+        }
+      },
+      "as": "deepwrought"
+    },
+    {
+      "answer": {
+        "kind": "tactical.conclude",
+        "option": "ultimateUndo"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "answer": {
+        "kind": "tactical.land",
+        "option": "ultimateUndo"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "option": "ultimateUndo"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 2500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=deepwrought].commandTokens.tactic",
+        "eq": 3
+      }
+    ],
+    "decision": {
+      "kind": "tactical.activate",
+      "as": "deepwrought",
+      "open": true
+    }
+  }
+}
