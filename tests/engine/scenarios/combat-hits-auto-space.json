@@ -1,0 +1,8 @@
+{
+  "name": "combat-hits-auto-space",
+  "description": "Space combat hits auto-assigned (combat.hits auto): mentak (ca, dd) takes 2 hits in 306 vs muaat. No dice: the hits prompt is re-posted directly.",
+  "base": { "recording": "pbd60", "index": 165 },
+  "trigger": { "press": "FFCC_mentak_autoAssignSpaceHits_306_2", "as": "mentak" },
+  "steps": [ { "wait": 1500 } ],
+  "expect": { "invariants": true }
+}

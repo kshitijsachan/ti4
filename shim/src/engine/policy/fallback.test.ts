@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chooseTyped } from "../autopilot.js";
-import { chooseFallback, fallbackDue, FALLBACK_FORCE_MS, FALLBACK_GRACE_MS, KIND_CLASS } from "./fallback.js";
+import { chooseFallback, fallbackDue, FALLBACK_FORCE_MS, FALLBACK_GRACE_MS, KIND_CLASS, staleForBot } from "./fallback.js";
 import type { Decision, DecisionKind, GameState, Option, ReactionWindow } from "../types.js";
 
 const ME = "bot";
@@ -192,4 +192,106 @@ test("a weakly resolved target waits for the watchdog", () => {
   const d = decision("explore.outcome", [opt("x", "Proceed", { action: "resolve" })], { target: { userId: ME, faction: "sol", color: "blue", resolvedBy: "mention" } });
   assert.equal(fallbackDue(d, ME, { waitedMs: FALLBACK_GRACE_MS }), false);
   assert.equal(fallbackDue(d, ME, { force: true }), true);
+});
+
+// ---- live gaps (shim.log 23:50–00:01)
+
+const combatState = (fronts: { holder: string; mine: number; theirs: number }[], tile = "308") =>
+  ({
+    ...state,
+    combat: {
+      tile,
+      tileId: "102",
+      factions: ["sol", "xxcha"],
+      fronts: fronts.map((f) => ({
+        holder: f.holder,
+        sides: [
+          { faction: "sol", userId: ME, roundsRolled: 0, units: f.mine ? [{ holder: f.holder, unit: "gf", count: f.mine, damaged: 0, sustain: false }] : [], abilities: [] },
+          { faction: "xxcha", userId: OTHER, roundsRolled: 1, units: f.theirs ? [{ holder: f.holder, unit: "gf", count: f.theirs, damaged: 0, sustain: false }] : [], abilities: [] },
+        ],
+      })),
+      spaceCannonOffence: [],
+      rolls: [],
+    },
+  }) as unknown as GameState;
+
+const combatRound = (tile: string, holder: string) =>
+  decision(
+    "combat.round",
+    [
+      opt(`getDamageButtons_${tile}_spacecombat`, "Assign Hits", { action: "assign_manual", tile }),
+      opt("checkCombatACs", "Check Combat Action Cards", { action: "action_cards", tile }),
+      opt(`getRepairButtons_${tile}`, "Repair Damage", { action: "repair", tile }),
+      opt(`combatRoll_${tile}_${holder}_bombardment`, "Roll BOMBARDMENT", { action: "roll", tile, holder, rollType: "bombardment" }),
+      opt(`combatRoll_${tile}_${holder}`, "Roll Dice For Combat Round #1", { action: "roll", tile, holder, rollType: "combat" }),
+    ],
+    {
+      scope: "table",
+      target: { userId: null, faction: null, color: null, resolvedBy: "none" } as unknown as Decision["target"],
+      window: { kind: "combat_roll", subject: { tile, holder, rollType: "combat" }, eligible: [ME, OTHER], responded: [OTHER], responses: {} },
+    },
+  );
+
+test("pbd60: a finished fight's roll window is stale (no fallback, no watchdog)", () => {
+  const d = combatRound("308", "space");
+  const st = combatState([{ holder: "space", mine: 0, theirs: 2 }]);
+  assert.equal(staleForBot(d, st, ME), true);
+  assert.equal(chooseFallback(d, st, ME), null);
+  assert.equal(chooseTyped(d, st, ME, { history: [], open: [], all: [d], force: true }), null);
+});
+
+test("pbd60: a roll window of another system than the combat on the board is stale", () => {
+  assert.equal(staleForBot(combatRound("101", "space"), combatState([{ holder: "space", mine: 1, theirs: 1 }]), ME), true);
+});
+
+test("live combat round: the fallback rolls the window's dice, never Check Combat Action Cards / Repair", () => {
+  const d = combatRound("308", "space");
+  const st = combatState([{ holder: "space", mine: 2, theirs: 2 }]);
+  assert.equal(staleForBot(d, st, ME), false);
+  assert.equal(chooseFallback(d, st, ME)?.option.id, "combatRoll_308_space");
+});
+
+test("pbd86: turn.action targeted at us while another player is active is stale", () => {
+  const d = decision("turn.action", [opt("FFCC_sol_passingAbilities", "Pass (+1 ability)", { action: "pass", abilities: true })]);
+  const other = { ...state, activePlayer: OTHER } as GameState;
+  assert.equal(staleForBot(d, other, ME), true);
+  assert.equal(chooseFallback(d, other, ME), null);
+  assert.equal(staleForBot(d, state, ME), false);
+});
+
+test("pbd105: Leadership's token panel during the status homework goes to the strategy policy", () => {
+  const st = {
+    ...state,
+    phase: "status",
+    status: { step: "homework", players: { [ME]: { tokensConfirmed: true } } },
+    strategyCards: [{ number: 1, card: "pok1leadership", played: true, holder: ME, reactions: [] }],
+  } as unknown as GameState;
+  const d = decision(
+    "command_tokens.adjust",
+    [opt("FFCC_sol_increase_tactic_cc", "Gain 1 Tactic Token", { action: "adjust", pool: "tactic", delta: 1 }), opt("FFCC_sol_deleteButtons_leadership", "Done Gaining Command Tokens")],
+    { progress: { flow: "command_tokens", step: "adjust", accumulated: { tactic: 3, fleet: 3, strategy: 2 }, required: { original: { tactic: 3, fleet: 3, strategy: 2 } }, canCommit: true } as unknown as Decision["progress"] },
+  );
+  const pick = chooseTyped(d, st, ME, { history: [], open: [], all: [d] });
+  assert.equal(pick?.option?.id, "FFCC_sol_increase_tactic_cc");
+  assert.ok(!pick!.why.startsWith("fallback"));
+});
+
+const setupStep = (step: string, values: Record<string, unknown>[]) =>
+  decision(
+    "setup.player",
+    values.map((v, i) => opt(`setupStep_${i}`, String(v.faction ?? v.color ?? v.userId ?? step), { step, userId: null, faction: null, color: null, position: null, speaker: null, page: null, ...v })),
+  );
+const unseated = { ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: null, color: null } : p)) } as unknown as GameState;
+
+test("pbd147: setup.player — start once, then official free faction / free colour / no speaker", () => {
+  const start = setupStep("start", [{}]);
+  assert.equal(chooseTyped(start, unseated, ME, { history: [], open: [], all: [start] })?.why, "setup: set ourselves up");
+  assert.equal(chooseTyped(start, unseated, ME, { history: ["setupStep_0"], open: [], all: [start] }), null);
+  assert.equal(staleForBot(start, state, ME), true);
+  const faction = setupStep("faction", [{ userId: ME, faction: "xxcha" }, { userId: ME, faction: "franken20" }, { userId: ME, faction: null, page: "2!" }, { userId: ME, faction: "arborec" }]);
+  assert.equal(chooseTyped(faction, unseated, ME, { history: [], open: [], all: [faction] })?.option?.value.faction, "arborec");
+  const color = setupStep("color", [{ userId: ME, faction: "arborec", color: "green" }, { userId: ME, faction: "arborec", color: "forest" }]);
+  assert.equal(chooseTyped(color, unseated, ME, { history: [], open: [], all: [color] })?.option?.value.color, "forest");
+  const speaker = setupStep("speaker", [{ userId: ME, speaker: true }, { userId: ME, speaker: false }]);
+  assert.equal(chooseTyped(speaker, unseated, ME, { history: [], open: [], all: [speaker] })?.option?.value.speaker, false);
 });

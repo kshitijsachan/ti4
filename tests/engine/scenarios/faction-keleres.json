@@ -1,0 +1,31 @@
+{
+  "name": "faction-keleres",
+  "description": "Keleres (Argent variant): commander Suffi An (pay1tgforKeleres), Law's Order (useLawsOrder), hero Kuuasi Aun Jalatai (purgeKeleresAHero)",
+  "base": {
+    "recording": "pbd110",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/player stats trade_goods:3 faction_or_color:keleresa",
+    "/leaders unlock leader:kelerescommander faction_or_color:keleresa",
+    "/leaders unlock leader:keleresherokuuasi faction_or_color:keleresa"
+  ],
+  "trigger": {
+    "press": "pay1tgforKeleres",
+    "as": "keleresa"
+  },
+  "steps": [
+    {
+      "press": "FFCC_keleresa_useLawsOrder",
+      "as": "keleresa"
+    },
+    {
+      "press": "FFCC_keleresa_purgeKeleresAHero",
+      "as": "keleresa"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

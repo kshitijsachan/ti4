@@ -1,0 +1,30 @@
+{
+  "name": "faction-sardakk",
+  "description": "Sardakk: commander G'hom Sek'kus (sardakkcommander_infantry_<to>_<from>), agent T'ro on a planet (exhaustAgent_sardakkagent_<tile>_<planet>), hero (purgeSardakkHero)",
+  "base": {
+    "recording": "pbd116",
+    "index": 42,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:sardakkcommander faction_or_color:sardakk",
+    "/leaders unlock leader:sardakkhero faction_or_color:sardakk"
+  ],
+  "trigger": {
+    "press": "sardakkcommander_infantry_trenlak_quinarra",
+    "as": "sardakk"
+  },
+  "steps": [
+    {
+      "press": "exhaustAgent_sardakkagent_313_quinarra",
+      "as": "sardakk"
+    },
+    {
+      "press": "FFCC_sardakk_purgeSardakkHero",
+      "as": "sardakk"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

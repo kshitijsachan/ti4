@@ -20,7 +20,36 @@ export type EngineStore = {
   answerStarted(decisionId: string, nonce: string, optionId: string): void;
   answerFailed(decisionId: string, nonce: string, error: string): void;
   dismissError(decisionId: string): void;
+  /** My last answer from this page, for the outcome note and the queue's "next step first". */
+  lastAnswer: LastAnswer | null;
+  noteAnswer(answer: LastAnswer): void;
+  /** Untyped prompts I put away ("not for me"), by decision id; remembered in this browser. */
+  hidden: ReadonlySet<string>;
+  hide(decisionId: string): void;
+  unhideAll(): void;
 };
+
+const HIDDEN_KEY = "ti4online.engine.hidden";
+
+function readHidden(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeHidden(ids: Set<string>) {
+  try {
+    window.localStorage.setItem(HIDDEN_KEY, JSON.stringify([...ids].slice(-300)));
+  } catch {
+    /* storage unavailable: hidden for this page only */
+  }
+}
+
+/** `seq`: the stream position when I answered (decisions opened after it are the answer's next steps). */
+export type LastAnswer = { at: number; seq: number; decision: Decision; optionId: string | null; values?: string[] };
 
 /** One engine view per page (the game on screen), fed by the play socket's `t:"engine"` frames (see link.ts). */
 export const engineStore = createStore<EngineStore>((set) => ({
@@ -38,7 +67,22 @@ export const engineStore = createStore<EngineStore>((set) => ({
   answerStarted: (id, nonce, optionId) => set((s) => ({ view: startAnswer(s.view, id, nonce, optionId) })),
   answerFailed: (id, nonce, error) => set((s) => ({ view: settleAnswer(s.view, id, nonce, error) })),
   dismissError: (id) => set((s) => ({ view: settleAnswer(s.view, id, undefined, null) })),
+  lastAnswer: null,
+  noteAnswer: (lastAnswer) => set({ lastAnswer }),
+  hidden: readHidden(),
+  hide: (id) =>
+    set((s) => {
+      const hidden = new Set(s.hidden).add(id);
+      writeHidden(hidden);
+      return { hidden };
+    }),
+  unhideAll: () => {
+    writeHidden(new Set());
+    set({ hidden: new Set() });
+  },
 }));
+
+if (import.meta.env.DEV && typeof window !== "undefined") (window as unknown as { __engine?: unknown }).__engine = engineStore;
 
 export function useEngine<T>(selector: (s: EngineStore) => T): T {
   return useStore(engineStore, selector);

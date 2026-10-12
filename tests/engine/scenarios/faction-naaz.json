@@ -1,0 +1,23 @@
+{
+  "name": "faction-naaz",
+  "description": "Naaz-Rokha (no FactionSteps provider): agent Garv and Gunn (getAgentSelection_naazagent -> exhaustAgent_naazagent_<f>), Distant Suns / mech prompts",
+  "base": {
+    "recording": "pbd94",
+    "index": 43,
+    "repost": false
+  },
+  "setup": [],
+  "trigger": {
+    "press": "getAgentSelection_naazagent",
+    "as": "naaz"
+  },
+  "steps": [
+    {
+      "press": "exhaustAgent_naazagent_naaz",
+      "as": "naaz"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
