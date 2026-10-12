@@ -169,7 +169,7 @@ export function CommandTokensAdjustRenderer({ decision, state, answer }: StatusR
   const capReached = !!cap && cap.gained >= cap.limit;
   const noneLeft = reinforcements !== null && reinforcements <= 0;
   const blockReason = capReached
-    ? `${cap!.label ?? "This effect"} grants ${cap!.limit}`
+    ? `${cap.label ?? "This effect"} grants ${cap.limit}`
     : noneLeft
       ? "No command tokens left in your reinforcements"
       : null;
