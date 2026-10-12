@@ -205,7 +205,7 @@ export class Gateway {
 
   guildCreate(): Json {
     const s = this.store.state;
-    const all = Object.values(s.channels).filter((c) => c.type !== 1);
+    const all = Object.values(s.channels).filter((c) => c.type !== 1 && !c._archived);
     const channels = all.filter((c) => ![10, 11, 12].includes(c.type));
     const threads = all.filter((c) => [10, 11, 12].includes(c.type) && !c.thread_metadata?.archived);
     return {
