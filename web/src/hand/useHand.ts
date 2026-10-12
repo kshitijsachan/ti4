@@ -48,6 +48,8 @@ export type HandState = {
   actionTaken: boolean;
   /** Another player's action card waiting on Sabotage answers: the bot's cancel button for it. */
   sabotage?: BotButton;
+  /** Action cards the bot would refuse right now because their timing window is closed: card id -> reason. */
+  closed?: Record<string, string>;
 };
 
 /**
@@ -148,5 +150,6 @@ export function useHand(gameName: string, token?: string): HandState {
     acLimit: index.acLimit ?? 7,
     actionTaken,
     sabotage,
+    closed: hand.data?.closedActionCards ?? {},
   };
 }

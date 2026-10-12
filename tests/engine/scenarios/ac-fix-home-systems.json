@@ -1,0 +1,88 @@
+{
+  "name": "ac-fix-home-systems",
+  "description": "audit-acs F4 (deliberate improvement): Ghost Ship and Reactor Meltdown keep to non-home systems. pbd60 save 122, ghost's turn (turn_start): Ghost Ship's target list no longer offers the Creuss home (bl, delta wormhole, only ghost's own ships); a pressed ghostShipStep2_bl fizzles (no destroyer added: 2 stay). A space dock is added in the space area of the Mentak home (307); Reactor Meltdown against mentak does not offer it and a pressed reactorMeltdownStep3_mentak_307_space fizzles (the dock stays).",
+  "base": {
+    "recording": "pbd60",
+    "index": 122
+  },
+  "setup": [
+    "/player turn_start faction_or_color:ghost",
+    "/add_units tile_name:307 unit_names:\"sd\" faction_or_color:mentak"
+  ],
+  "steps": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "ghost_ship",
+        "faction_or_color": "ghost"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "ghost_ship"
+        }
+      },
+      "as": "ghost"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveGhostShipStep1"
+      },
+      "as": "ghost"
+    },
+    {
+      "press": "ghostShipStep2_bl",
+      "as": "ghost"
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "meltdown",
+        "faction_or_color": "ghost"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "meltdown"
+        }
+      },
+      "as": "ghost"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveReactorMeltdownStep1"
+      },
+      "as": "ghost"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "reactorMeltdownStep2_mentak"
+      },
+      "as": "ghost"
+    },
+    {
+      "press": "reactorMeltdownStep3_mentak_307_space",
+      "as": "ghost"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "tiles[position=bl].holders[name=space].units[unit=dd].count",
+        "eq": 2
+      },
+      {
+        "path": "tiles[position=307].holders[name=space].units[unit=sd].count",
+        "eq": 1
+      }
+    ]
+  }
+}

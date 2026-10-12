@@ -175,6 +175,11 @@ export interface Hand {
   actionCards: Partial<Record<ActionCardId, number>>;
   secretObjectives: Partial<Record<SecretObjectiveId, number>>;
   promissoryNotes: Partial<Record<PromissoryNoteId, number>>;
+  /**
+   * Action cards in this hand whose timing window is closed right now (card id -> the engine's reason); the engine
+   * refuses action_card.play for them. Absent cards may be played (or are not judged). Bot: ActionCardTiming.
+   */
+  closedActionCards?: Partial<Record<ActionCardId, string>>;
 }
 
 export interface StrategyCardState {
