@@ -331,6 +331,12 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
       return combat.fronts.some((f) => (f.holder === "space") === space && f.sides.some((side) => side.roundsRolled > 0));
     });
   }
+  // Secret objective list in the status phase once we declared this round's secret (or "none"): every option is
+  // refused, "You already declared your secret objective this round" (pbd160, re-pressed for 20 min).
+  if (d.kind === "status.score_secret" && state.status) {
+    const declared = state.status.players[me]?.secretScored;
+    if (declared !== null && declared !== undefined) return true;
+  }
   if (d.kind === "combat.round") {
     const w = d.window;
     if (!w || w.kind !== "combat_roll") return false;
@@ -358,6 +364,11 @@ export function chooseFallback(d: Decision, state: GameState | null, me: string)
     return pick ? { option: pick, why: `fallback: no specific policy answered ${d.kind}; pressed "${pick.label || pick.id}"` } : null;
   }
   let candidates = fallbackCandidates(d, state, me);
+  // In the status phase only status-phase secrets score (the engine refuses action / agenda ones: "… is not scored in
+  // the status phase"); an objective the engine cannot judge (met: null) is not claimed blind either.
+  if (d.kind === "status.score_secret") {
+    candidates = candidates.filter((o) => o.value?.met === true && (!state?.status || o.value.phase === "status"));
+  }
   // A combat round asks for dice: the fallback rolls the window's own roll or nothing (never "Check Combat Action
   // Cards", "Repair Damage", "Declare Ready", another roll type).
   if (d.kind === "combat.round" && d.window?.kind === "combat_roll") {

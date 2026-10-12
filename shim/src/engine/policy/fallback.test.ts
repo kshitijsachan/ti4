@@ -91,6 +91,13 @@ for (const kind of Object.keys(KIND_CLASS) as DecisionKind[]) {
       assert.equal(pick?.option?.id, "FFCC_sol_passingAbilities");
       return;
     }
+    if (kind === "status.score_secret") {
+      // Only a secret the engine says we meet (pbd160 below for the rest).
+      const d = decision(kind, [opt("so_score_hand_1", "(1) Become a Martyr", { handle: 1, secretObjective: "bam", phase: "action", points: 1, met: null }), opt("so_score_hand_2", "(2) Control the Region", { handle: 2, secretObjective: "ctr", phase: "status", points: 1, met: true })]);
+      const pick = chooseTyped(d, state, ME, { history: [], open: [], all: [d], waitedMs: FALLBACK_FORCE_MS, force: true });
+      assert.equal(pick?.option?.id, "so_score_hand_2");
+      return;
+    }
     const d = sample(kind);
     const pick = chooseTyped(d, state, ME, { history: [], open: [], all: [d], waitedMs: FALLBACK_FORCE_MS, force: true });
     assert.ok(pick, `${kind}: no answer`);
@@ -359,4 +366,23 @@ test("pbd181: a tactical action's prompts outside our action-phase turn are stal
   }
   assert.equal(staleForBot(conclude, state, ME), false, "our own turn");
   assert.equal(chooseFallback(conclude, state, ME)?.option.id, "FFCC_sol_doneWithTacticalAction");
+});
+
+test("pbd160: a declared secret objective's list is never re-pressed (stale; action-phase / unjudged secrets never claimed)", () => {
+  // The stall dump (shim.log 01:08:00, Bot Beta), target re-pointed at ME.
+  const d = decision("status.score_secret", [opt("so_score_hand_326", "(326) Become a Martyr", { handle: 326, secretObjective: "bam", phase: "action", points: 1, progress: 0, threshold: 0, met: null })], {
+    id: "d1559008824533319680",
+    prompt: "Please choose the secret objective you wish to score.",
+    target: { userId: ME, faction: "naalu", color: "watermelon", resolvedBy: "interaction_user" },
+    source: { channelId: "1558996814319976448", messageId: "1559008824533319680", customIdPrefix: "so_", ephemeral: true },
+  });
+  const status = (secretScored: string | null) =>
+    ({ ...state, phase: "statusScoring", status: { round: 2, step: "scoring", players: { [ME]: { publicScored: "none", secretScored } } } }) as unknown as GameState;
+  assert.equal(staleForBot(d, status("none"), ME), true);
+  assert.equal(staleForBot(d, status("bam"), ME), true);
+  assert.equal(chooseTyped(d, status("none"), ME, { history: [], open: [], all: [d], force: true }), null);
+  // Undeclared: still nothing to press (an action-phase secret, and the engine cannot judge it).
+  assert.equal(staleForBot(d, status(null), ME), false);
+  assert.equal(chooseFallback(d, status(null), ME), null);
+  assert.equal(chooseFallback(d, state, ME), null);
 });
