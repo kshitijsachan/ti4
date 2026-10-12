@@ -1,0 +1,38 @@
+{
+  "name": "relic-maw-of-worlds",
+  "description": "Maw of Worlds: purge (resolveMaw: exhaust all planets, gain a technology) then pick a technology.",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "mawofworlds",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "press": "resolveMaw",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "acquireAFreeTech"
+      },
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

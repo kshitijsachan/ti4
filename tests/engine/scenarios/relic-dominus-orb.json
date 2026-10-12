@@ -1,0 +1,36 @@
+{
+  "name": "relic-dominus-orb",
+  "description": "Dominus Orb: Empyrean, during its tactical action, purges Dominus Orb (dominusOrb, relic.use).",
+  "base": {
+    "recording": "pbd105",
+    "index": 205
+  },
+  "setup": [
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "dominusorb",
+        "player": "${faction:empyrean}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "press": "dominusOrb",
+      "as": "empyrean"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=empyrean].relics",
+        "excludes": "dominusorb"
+      }
+    ]
+  }
+}

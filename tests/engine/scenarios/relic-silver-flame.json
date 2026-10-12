@@ -1,0 +1,31 @@
+{
+  "name": "relic-silver-flame",
+  "description": "The Silver Flame (TE): component action rolls a die (dice: legacy and engine forks may differ) then offers point / purge.",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "thesilverflame",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "press": "FFCC_ralnel_componentActionRes_relic_thesilverflame",
+      "as": "ralnel"
+    },
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
