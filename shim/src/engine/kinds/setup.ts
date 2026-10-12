@@ -70,7 +70,7 @@ export type SetupRevealObjectives = DecisionBase<"setup.reveal_objectives", Reco
 /** Game creation: expansion, alternate modes, starting the draft, Milty settings pages. */
 export type SetupGameSettings = DecisionBase<
   "setup.game_settings",
-  { setting: "expansion" | "base_game" | "game_modes" | "draft_start" | "draft_settings"; choice: string }
+  { setting: "expansion" | "base_game" | "game_modes" | "game_options" | "draft_start" | "draft_settings"; choice: string }
 >;
 
 export type SetupDecision =

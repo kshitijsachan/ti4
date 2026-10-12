@@ -98,4 +98,59 @@ const place = {
 expect("construction_place: never a 4th space dock", chooseStrategy(place, docks(3), ME, ctx), null);
 expect("construction_place: a 3rd one is fine", chooseStrategy(place, docks(2), ME, ctx)?.option.id, "place_arnor");
 
+// Warfare redistribute panel (Done = deleteButtons~ccredist, outside the status phase).
+const redist = (acc: { tactic: number; fleet: number; strategy: number }, orig: typeof acc, status = false) =>
+  ({
+    id: "d3",
+    kind: "command_tokens.adjust",
+    revision: 1,
+    scope: "player",
+    target: { userId: ME },
+    progress: { flow: "command_tokens", step: "adjust", accumulated: acc, required: { status, original: orig, reinforcements: 4 }, canCommit: true },
+    options: [
+      ...(["tactic", "fleet", "strategy"] as const).flatMap((pool) => [
+        { id: `FFCC_mentak_increase_${pool}_cc`, handler: `increase_${pool}_cc`, label: "+", value: { action: "adjust", pool, delta: 1 } },
+        { id: `FFCC_mentak_decrease_${pool}_cc`, handler: `decrease_${pool}_cc`, label: "-", value: { action: "adjust", pool, delta: -1 } },
+      ]),
+      { id: "FFCC_mentak_resetCCs", handler: "resetCCs", label: "Reset", value: { action: "reset" } },
+      { id: "FFCC_mentak_deleteButtons~ccredist", handler: "deleteButtons~ccredist", label: "Done Redistributing Command Tokens", value: null },
+    ],
+  }) as unknown as Decision;
+const warfareState = (card: string) =>
+  ({
+    activePlayer: ME,
+    players: [{ userId: ME, faction: "mentak", self: true, strategyCards: [6], planets: [], commandTokens: { tactic: 1, fleet: 3, strategy: 2 } }],
+    strategyCards: [{ number: 6, card, played: true, holder: ME, reactions: [] }],
+  }) as unknown as GameState;
+const pok = warfareState("pok6warfare");
+const te = warfareState("te6warfare");
+const T = (tactic: number, fleet: number, strategy: number) => ({ tactic, fleet, strategy });
+expect("Warfare: gain back the removed token into tactic", chooseStrategy(redist(T(1, 3, 2), T(1, 3, 2)), pok, ME, ctx)?.option.id, "FFCC_mentak_increase_tactic_cc");
+expect("Warfare: token gained back, tactic 2: done", chooseStrategy(redist(T(2, 3, 2), T(1, 3, 2)), pok, ME, ctx)?.option.id, "FFCC_mentak_deleteButtons~ccredist");
+expect("TE Warfare: no gain; tactic 1 -> take a strategy token", chooseStrategy(redist(T(1, 3, 2), T(1, 3, 2)), te, ME, ctx)?.option.id, "FFCC_mentak_decrease_strategy_cc");
+expect("TE Warfare: the taken token goes into tactic", chooseStrategy(redist(T(1, 3, 1), T(1, 3, 2)), te, ME, ctx)?.option.id, "FFCC_mentak_increase_tactic_cc");
+expect("TE Warfare: strategy 1 kept, fleet 3 kept: done", chooseStrategy(redist(T(1, 3, 1), T(1, 3, 1)), te, ME, ctx)?.option.id, "FFCC_mentak_deleteButtons~ccredist");
+expect("TE Warfare: fleet 5 -> take a fleet token", chooseStrategy(redist(T(0, 5, 1), T(0, 5, 1)), te, ME, ctx)?.option.id, "FFCC_mentak_decrease_fleet_cc");
+expect("press cap: done", chooseStrategy(redist(T(1, 3, 2), T(1, 3, 2)), te, ME, { ...ctx, history: Array(8).fill("x") })?.option.id, "FFCC_mentak_deleteButtons~ccredist");
+expect("status-phase panel: not ours", chooseStrategy(redist(T(1, 3, 2), T(1, 3, 2), true), te, ME, ctx), null);
+// Warfare primary is resolved now (was skipped), and waits while its follow-ups are open.
+const warfareCard = (card: string, primaryDone?: string[]) =>
+  ({
+    id: "d4",
+    kind: "strategy_card.resolve",
+    revision: 1,
+    scope: "table",
+    target: null,
+    window: { kind: "strategy_card", subject: { strategyCard: 6, primaryDone }, eligible: [], responded: [], responses: {} },
+    options: [
+      { id: card === "te6warfare" ? "primaryOfTeWarfare" : "primaryOfWarfare", label: "Primary", disabled: false, needsInput: false, value: { strategyCard: 6, name: "Warfare", card, holder: "mentak", action: "warfare_primary", who: "holder", spendsToken: false, part: "warfare_primary", primaryParts: ["warfare_primary"], copy: false } },
+    ],
+  }) as unknown as Decision;
+expect("TE Warfare primary pressed", chooseStrategy(warfareCard("te6warfare", []), te, ME, ctx)?.option.id, "primaryOfTeWarfare");
+expect("Warfare primary pressed", chooseStrategy(warfareCard("pok6warfare", []), pok, ME, ctx)?.option.id, "primaryOfWarfare");
+expect("Warfare primary done: nothing", chooseStrategy(warfareCard("pok6warfare", ["warfare_primary"]), pok, ME, ctx), null);
+const offer = { id: "d5", kind: "choose.confirm", target: { userId: ME }, options: [{ id: "beginTacticalTeWarfare", value: { source: "warfare", confirm: true, choice: "tactical" } }] } as unknown as Decision;
+expect("Warfare follow-up open: wait", chooseStrategy(warfareCard("te6warfare", []), te, ME, { ...ctx, open: [offer] }), null);
+
+
 process.exit(failed ? 1 : 0);
