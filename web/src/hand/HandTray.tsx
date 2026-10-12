@@ -108,6 +108,8 @@ function foldOwnNotes(group: CardGroup, myColor: string | undefined): CardGroup 
 function cardTiming(card: HandCard, hand: HandState): Timing {
   if (card.kind === "ac" && hand.acHeld > hand.acLimit) return "blocked";
   if (isSabotage(card)) return hand.sabotage ? "now" : "reaction";
+  // The bot says this card's window is closed right now (phase, active player, active system, cost).
+  if (card.kind === "ac" && hand.closed?.[card.alias]) return "later";
   const timing = timingOf(card, hand.gameState, hand.myColor);
   // At status scoring the bot says which secrets it thinks you meet; the others are not scorable now.
   if (timing === "now" && botJudges(card, hand) && !hand.index.soMet!.includes(card.name.toLowerCase())) return "later";
@@ -244,6 +246,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
           card={selectedCard}
           number={hand.numbers.get(selectedCard.key)}
           timing={cardTiming(selectedCard, hand)}
+          closedReason={selectedCard.kind === "ac" ? hand.closed?.[selectedCard.alias] : undefined}
           overBy={selectedCard.kind === "ac" ? Math.max(0, hand.acHeld - hand.acLimit) : 0}
           unmet={botJudges(selectedCard, hand) && !hand.index.soMet!.includes(selectedCard.name.toLowerCase())}
           actions={liveCard ? actionsFor(selectedCard, hand) : []}

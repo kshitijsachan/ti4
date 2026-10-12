@@ -30,6 +30,8 @@ type Props = {
   overBy?: number;
   /** The game has said it does not think you meet this secret (status scoring). */
   unmet?: boolean;
+  /** The bot's reason this action card cannot be played right now (its timing window is closed). */
+  closedReason?: string;
 };
 
 type Sent = { action: CardAction; baseline?: string; error?: string; busy: boolean };
@@ -42,7 +44,11 @@ const DONE_TEXT: Record<string, string> = {
   sync: "Asked the bot to refresh your hand.",
 };
 
-function timingLine(card: HandCard, timing: Timing, hasPlay: boolean, overBy: number): string {
+function timingLine(card: HandCard, timing: Timing, hasPlay: boolean, overBy: number, closedReason?: string): string {
+  if (closedReason && timing !== "blocked") {
+    const reason = closedReason.replace(/_/g, "");
+    return reason.charAt(0).toUpperCase() + reason.slice(1);
+  }
   if (timing === "blocked")
     return `Over your action card hand limit — discard ${overBy} first; the bot refuses action cards until then.`;
   if (card.scored) return `Scored — worth ${card.vp ?? 1} VP.`;
@@ -61,7 +67,7 @@ function timingLine(card: HandCard, timing: Timing, hasPlay: boolean, overBy: nu
 
 /** The focused view of one card: big face, its timing, and what the bot lets you do with it. */
 export function CardPopup(props: Props) {
-  const { card, number, timing, actions, players, myColor, threadId, actionsId, meId, run, onClose, gone, overBy = 0, unmet } = props;
+  const { card, number, timing, actions, players, myColor, threadId, actionsId, meId, run, onClose, gone, overBy = 0, unmet, closedReason } = props;
   const [sent, setSent] = useState<Sent | null>(null);
   const [picking, setPicking] = useState<CardAction | null>(null);
   const thread = useChannelMessages(threadId);
@@ -111,7 +117,7 @@ export function CardPopup(props: Props) {
             </div>
           )}
           <p className={`${classes.popupTiming} ${timing === "now" && hasPlay && !gone ? classes.popupTimingNow : ""}`}>
-            {gone ? "This card has left your hand." : timingLine(card, timing, hasPlay, overBy)}
+            {gone ? "This card has left your hand." : timingLine(card, timing, hasPlay, overBy, closedReason)}
           </p>
           {unmet && !card.scored && (
             <p className={classes.popupWarn}>

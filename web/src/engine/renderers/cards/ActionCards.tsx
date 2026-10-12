@@ -8,9 +8,11 @@ import classes from "./Cards.module.css";
 type Props<K extends CardsDecision["kind"]> = EngineRendererProps<DecisionOf<K>>;
 
 /** Hand tray: every playable card with its timing window, plus the tray's own extras (discard menu, pre-assign). */
-export function ActionCardPlay({ decision, answer, pendingOptionId }: Props<"action_card.play">) {
+export function ActionCardPlay({ decision, state, answer, pendingOptionId }: Props<"action_card.play">) {
   useCardData();
   const cards = decision.options.filter((o) => o.value);
+  // The engine refuses a card outside its timing window: show why instead of a Play button.
+  const closed = me(state)?.hand?.closedActionCards ?? {};
   return (
     <div className={classes.root}>
       <Head title="Action cards" meta={<span className={classes.count}>{cards.length}</span>} />
@@ -19,9 +21,11 @@ export function ActionCardPlay({ decision, answer, pendingOptionId }: Props<"act
           <div key={o.id} className={classes.row}>
             <div className={classes.rowText}>
               <span className={classes.rowName}>{acName(o.value!.actionCard)}</span>
-              <span className={classes.meta}>{o.value!.window ?? acWindow(o.value!.actionCard)}</span>
+              <span className={classes.meta}>{closed[o.value!.actionCard]?.replace(/_/g, "") ?? o.value!.window ?? acWindow(o.value!.actionCard)}</span>
             </div>
-            <AnswerButton option={o} label="Play" tone="go" pendingOptionId={pendingOptionId} onAnswer={answer} />
+            {!closed[o.value!.actionCard] && (
+              <AnswerButton option={o} label="Play" tone="go" pendingOptionId={pendingOptionId} onAnswer={answer} />
+            )}
           </div>
         ))}
       </div>

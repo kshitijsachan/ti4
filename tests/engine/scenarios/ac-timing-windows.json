@@ -1,0 +1,96 @@
+{
+  "name": "ac-timing-windows",
+  "description": "Selfhost deliberate improvement (ActionCardTiming, audit-acs): action cards are refused outside their timing window. pbd72 r4 action phase, Winnu active, no active system. Refused: Imperial Rider (agenda phase only), Summit (strategy phase only), Morale Boost (needs a combat in the active system), Flank Speed (after you activate a system). Then Winnu's own Economic Initiative (open) is played and resolved. The original bot played every one of these (verified on the pre-fix bot, fork pbd254: steps 1-4 answered ok).",
+  "base": {
+    "recording": "pbd72",
+    "index": 815,
+    "repost": false
+  },
+  "setup": [
+    "/ac discard action_card_id:49 faction_or_color:winnu",
+    "/ac discard action_card_id:805 faction_or_color:winnu",
+    "/ac discard action_card_id:810 faction_or_color:winnu",
+    "/ac discard action_card_id:368 faction_or_color:winnu",
+    "/ac discard action_card_id:431 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:imp_rider faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:summit faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:mb1 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:fs1 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:economic_initiative faction_or_color:winnu"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "imp_rider"
+        }
+      },
+      "as": "winnu",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "summit"
+        }
+      },
+      "as": "winnu",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "mb1"
+        }
+      },
+      "as": "winnu",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "fs1"
+        }
+      },
+      "as": "winnu",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "economic_initiative"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "economicInitiative"
+      },
+      "as": "winnu"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=winnu].hand.closedActionCards.imp_rider",
+        "match": "agenda phase"
+      },
+      {
+        "path": "players[faction=winnu].hand.closedActionCards.summit",
+        "match": "strategy phase"
+      },
+      {
+        "path": "players[faction=winnu].hand.closedActionCards.fs1",
+        "exists": true
+      }
+    ]
+  }
+}

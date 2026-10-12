@@ -54,8 +54,10 @@ export function actionsFor(card: HandCard, hand: HandState): CardAction[] {
     if (n === undefined) return out.length ? out : sync();
     const play = index.acPlay.get(n);
     const answered = out.some((a) => a.id === "play");
-    if (!answered && play) out.push({ id: "play", label: "Play", tone: "go", step: { type: "press", button: play } });
-    else if (!answered && index.refresh)
+    // The bot refuses a card outside its timing window (ActionCardTiming), so Play is only offered while it is open.
+    const closed = !!hand.closed?.[card.alias];
+    if (!closed && !answered && play) out.push({ id: "play", label: "Play", tone: "go", step: { type: "press", button: play } });
+    else if (!closed && !answered && index.refresh)
       out.push({ id: "play", label: "Play", tone: "go",
         step: { type: "chain", opener: index.refresh, match: exact(`ac_play_from_hand_${n}`) } });
     const discard = index.acDiscard.get(n);
