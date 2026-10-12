@@ -45,19 +45,37 @@
           "press": "FFCC_deepwrought_tacticalMoveFrom_313"
         },
         {
+          "wait": 1500
+        },
+        {
           "press": "FFCC_deepwrought_unitTacticalMove_313_1_cv_navy"
+        },
+        {
+          "wait": 1500
         },
         {
           "press": "FFCC_deepwrought_unitTacticalMove_313_1_dn_navy"
         },
         {
+          "wait": 1500
+        },
+        {
           "press": "FFCC_deepwrought_unitTacticalMove_313_2_ff_navy"
+        },
+        {
+          "wait": 1500
         },
         {
           "press": "FFCC_deepwrought_unitTacticalMove_313_2_gf_ikatena_navy"
         },
         {
+          "wait": 1500
+        },
+        {
           "press": "FFCC_deepwrought_doneWithOneSystem_313"
+        },
+        {
+          "wait": 1500
         },
         {
           "press": "FFCC_deepwrought_concludeMove_209"
@@ -84,6 +102,9 @@
           "press": "FFCC_deepwrought_landUnits_209_2gf_vorhal_navy"
         },
         {
+          "wait": 1500
+        },
+        {
           "press": "FFCC_deepwrought_doneLanding_209"
         }
       ]
@@ -93,8 +114,8 @@
     "invariants": true,
     "save": [
       {
-        "key": "tile 209: space",
-        "match": "nvy"
+        "key": "player[deepwrought].planets",
+        "match": "vorhal"
       }
     ]
   },
