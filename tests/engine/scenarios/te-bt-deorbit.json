@@ -1,6 +1,6 @@
 {
   "name": "te-bt-deorbit",
-  "description": "Saar Deorbit Barrage (te.breakthrough) on pbd117 r1: componentActionRes_exhaustBT_saarbt -> deorbitBarrageTarget_<f> -> deorbitBarragePlanet_<planet> -> deorbitBarrageResource_<planet>_<n>",
+  "description": "Saar Deorbit Barrage (te.breakthrough) on pbd117 r1: componentActionRes_exhaustBT_saarbt -> deorbitBarrageTarget_<f> -> deorbitBarragePlanet_<planet> -> deorbitBarrageResource_<planet>_<n> (Saar ships in the asteroid field at 305 give the range)",
   "base": {
     "recording": "pbd117",
     "index": 45,
@@ -8,6 +8,7 @@
   },
   "setup": [
     "/breakthrough unlock breakthrough:saarbt faction_or_color:saar",
+    "/add_units tile_name:305 unit_names:\"cruiser\" faction_or_color:saar",
     "/add_units tile_name:204 unit_names:\"2 infantry semlore\" faction_or_color:sol",
     "/add_units tile_name:303 unit_names:\"2 infantry thewatchtower\" faction_or_color:sol",
     "/player turn_start faction_or_color:saar"

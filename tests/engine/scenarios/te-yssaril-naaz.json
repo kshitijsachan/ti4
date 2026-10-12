@@ -9,7 +9,7 @@
   "setup": [
     "/breakthrough unlock breakthrough:yssarilbt faction_or_color:yssaril",
     "/breakthrough unlock breakthrough:naazbt faction_or_color:naaz",
-    "/add_units tile_name:307 unit_names:\"4 mech naazir\" faction_or_color:naaz"
+    "/add_units tile_name:307 unit_names:\"3 mech naazir\" faction_or_color:naaz"
   ],
   "steps": [
     {
