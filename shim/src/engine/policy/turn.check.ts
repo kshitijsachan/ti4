@@ -7,9 +7,99 @@ import assert from "node:assert/strict";
 import { chooseTyped } from "../autopilot.js";
 import type { Decision, GameState } from "../types.js";
 import { chooseFallback, staleForBot } from "./fallback.js";
-import { TURN_PLANNER_GRACE_MS } from "./turn.js";
+import { actionInFlight, TURN_PLANNER_GRACE_MS } from "./turn.js";
 
 type Fixture = { decision: Decision; state: GameState };
+const PBD181_STATE = {
+  phase: "action",
+  round: 2,
+  activePlayer: "1559015287133700096",
+  players: [
+    {
+      userId: "1559020375344545792",
+      faction: "arborec",
+      color: "forest",
+      passed: false,
+      strategyCards: [],
+    },
+    {
+      userId: "1559015287314055168",
+      faction: "naaz",
+      color: "red",
+      passed: false,
+      strategyCards: [],
+    },
+    {
+      userId: "1558999886102396928",
+      faction: "muaat",
+      color: "magma",
+      passed: false,
+      strategyCards: [],
+    },
+    {
+      userId: "1558999886186283008",
+      faction: "sol",
+      color: "navy",
+      passed: false,
+      strategyCards: [],
+    },
+    {
+      userId: "1559021052238102528",
+      faction: "sardakk",
+      color: "chocolate",
+      passed: false,
+      strategyCards: [],
+    },
+    {
+      userId: "1558997170542215168",
+      faction: "empyrean",
+      color: "poison",
+      passed: false,
+      strategyCards: [],
+    },
+    {
+      userId: "1559015287133700096",
+      faction: "nomad",
+      color: "vapourwave",
+      passed: false,
+      strategyCards: [1],
+    },
+    {
+      userId: "1558508302810349568",
+      faction: "xxcha",
+      color: "yellow",
+      passed: false,
+      strategyCards: [8],
+    },
+    {
+      userId: "572698679618568193",
+      faction: "neutral",
+      color: "aberration",
+      passed: false,
+      strategyCards: [],
+    },
+  ],
+  strategyCards: [
+    {
+      number: 1,
+      holder: "1559015287133700096",
+      played: true,
+      card: "pok1leadership",
+    },
+    { number: 2, holder: null, played: false, card: "pok2diplomacy" },
+    { number: 3, holder: null, played: false, card: "pok3politics" },
+    { number: 4, holder: null, played: false, card: "te4construction" },
+    { number: 5, holder: null, played: false, card: "pok5trade" },
+    { number: 6, holder: null, played: false, card: "te6warfare" },
+    { number: 7, holder: null, played: false, card: "pok7technology" },
+    {
+      number: 8,
+      holder: "1558508302810349568",
+      played: true,
+      card: "pok8imperial",
+    },
+  ],
+};
 const LIVE: Record<string, Fixture> = {
   pbd42: {
     decision: {
@@ -789,5 +879,130 @@ check("pbd171: after the action, end the turn at once", () => {
   assert.equal(pick(f, f.state, 0), "FFCC_firmament_turnEnd");
   assert.equal(pick(f, at(f, { activePlayer: "someone else" }), 0), null);
 });
+
+// pbd181 02:13-02:14 (live): Bot Kappa 5 (nomad) activated 210, moved and landed; its tactical.move / tactical.conclude
+// prompts were still open when the turn menu passed "after 13 s" (02:14:01). State: /state of pbd181 at 02:30 with
+// the turn put back on Kappa; decision ids / options from shim.log + bot.log.
+check(
+  "pbd181: never pass / play / end turn while our tactical action's prompts are open",
+  () => {
+    const KAPPA = "1559015287133700096";
+    const state = PBD181_STATE as unknown as GameState;
+    const at = Date.now(); // (live: 02:14:00; ages relative to now)
+    const menu = clone(LIVE.pbd161.decision);
+    menu.id = "d-pbd181-menu";
+    menu.game = "pbd181";
+    menu.target = {
+      userId: KAPPA,
+      faction: "nomad",
+      color: "yellow",
+      resolvedBy: "owner_prefix",
+    };
+    menu.createdAt = at - 60_000;
+    menu.options = [
+      {
+        ...menu.options[0],
+        id: "FFCC_nomad_tacticalAction",
+        label: "Tactical Action (6)",
+        handler: "tacticalAction",
+        value: { action: "tactical", tacticTokens: 6 },
+      },
+      {
+        ...menu.options[0],
+        id: "FFCC_nomad_componentAction",
+        label: "Component Action (0)",
+        handler: "componentAction",
+        value: { action: "component" },
+      },
+      {
+        ...menu.options[0],
+        id: "FFCC_nomad_passingAbilities",
+        label: "Pass (+1 ability)",
+        handler: "passingAbilities",
+        value: { action: "pass", abilities: true },
+      },
+    ] as any;
+    const prompt = (
+      id: string,
+      kind: string,
+      optId: string,
+      label: string,
+      value: unknown,
+      createdAt: number,
+    ) =>
+      ({
+        ...clone(menu),
+        id,
+        kind,
+        createdAt,
+        options: [
+          {
+            ...menu.options[0],
+            id: optId,
+            label,
+            handler: optId.replace(/^FFCC_nomad_/, ""),
+            value,
+          },
+        ],
+      }) as unknown as Decision;
+    const move = prompt(
+      "d1559026163005915136",
+      "tactical.move",
+      "FFCC_nomad_concludeMove_210",
+      "Done moving",
+      { action: "done", position: "210", tileId: "64" },
+      at - 40_000,
+    );
+    const conclude = prompt(
+      "d1559026233507971072",
+      "tactical.conclude",
+      "FFCC_nomad_doneWithTacticalAction",
+      "Conclude Tactical Action",
+      { action: "conclude" },
+      at - 20_000,
+    );
+    const run = (open: Decision[], waitedMs: number, force = false) =>
+      chooseTyped(menu, state, KAPPA, {
+        history: [],
+        open,
+        all: [menu, ...open],
+        waitedMs,
+        force,
+      })?.option?.id ?? null;
+    // What happened live: nothing in flight known → pass after the grace.
+    assert.equal(run([], 13_000), "FFCC_nomad_passingAbilities");
+    // With the action's prompts open: nothing, not even forced.
+    assert.equal(
+      actionInFlight(KAPPA, [move, conclude], at),
+      "tactical.move open",
+    );
+    assert.equal(run([move, conclude], 13_000), null);
+    assert.equal(run([conclude], 600_000, true), null);
+    // An end-turn / strategy-card menu waits too.
+    const end = clone(menu);
+    end.options = [
+      {
+        ...menu.options[0],
+        id: "FFCC_nomad_turnEnd",
+        label: "End Turn",
+        handler: "turnEnd",
+        value: { action: "end_turn", abilities: false },
+      },
+    ] as any;
+    assert.equal(
+      chooseTyped(end, state, KAPPA, {
+        history: [],
+        open: [conclude],
+        all: [],
+      }),
+      null,
+    );
+    // A leftover from long ago (watchdog's business) does not block the turn.
+    assert.equal(
+      run([{ ...move, createdAt: at - 11 * 60_000 } as Decision], 13_000),
+      "FFCC_nomad_passingAbilities",
+    );
+  },
+);
 
 console.log(`turn.check: ${n} ok`);

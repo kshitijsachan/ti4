@@ -20,7 +20,7 @@ import { chooseComponents, isComponentsKind } from "./policy/components.js";
 import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
 import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
-import { chooseTurnAction } from "./policy/turn.js";
+import { actionInFlight, chooseTurnAction } from "./policy/turn.js";
 import { chooseManualBuild, chooseUnitsModify } from "./policy/units.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
@@ -56,6 +56,8 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
   }
   if (specific) return specific;
   if (!fallbackDue(d, me, { waitedMs: ctx.waitedMs, force: ctx.force })) return null;
+  // Our turn menu mid-action (pbd181): no last-resort answer either.
+  if (d.kind === "turn.action" && actionInFlight(me, ctx.open)) return null;
   // An option this seat already pressed on this decision is not pressed again by the fallback (multi-part answers
   // are the specific policies' business), except the watchdog's forced re-evaluation.
   const fb = chooseFallback(d, state, me);
@@ -146,7 +148,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "turn.action":
       // The action-phase turn policy (policy/turn.ts): end turn / play the strategy card / finish passing at once;
       // the start-of-turn menu is the planner's (brain.ts) for TURN_PLANNER_GRACE_MS, then pass.
-      return chooseTurnAction(d, state, me, { waitedMs: ctx.waitedMs, force: ctx.force });
+      return chooseTurnAction(d, state, me, { waitedMs: ctx.waitedMs, force: ctx.force, open: ctx.open });
     case "tactical.rift": {
       // The planner never paths through gravity rifts; a rift prompt outside its plan has nothing to roll.
       const done = d.options.find((o) => !o.disabled && o.value?.op === "done");
