@@ -1484,6 +1484,19 @@ index 05ddef3..0658a64 100644
              TransientGameInfoUpdater.update(game);
              return game;
          } catch (Exception e) {
+diff --git a/src/main/java/ti4/game/persistence/GameSaveService.java b/src/main/java/ti4/game/persistence/GameSaveService.java
+index c8dcdf7..eec5076 100644
+--- a/src/main/java/ti4/game/persistence/GameSaveService.java
++++ b/src/main/java/ti4/game/persistence/GameSaveService.java
+@@ -100,6 +100,8 @@ class GameSaveService {
+ 
+     private static void updateBeforeSave(Game game) {
+         TransientGameInfoUpdater.update(game);
++        // Engine records that belong to the press being saved (KindSpec.beforeAnswer).
++        ti4.selfhost.engine.EngineBookkeeping.applyPending(game);
+ 
+         // Ugly fix to update seen tiles data for fog since doing it in
+         // MapGenerator/TileGenerator won't save changes anymore
 diff --git a/src/main/java/ti4/game/persistence/GameUndoService.java b/src/main/java/ti4/game/persistence/GameUndoService.java
 index d91d9d5..50e3842 100644
 --- a/src/main/java/ti4/game/persistence/GameUndoService.java
@@ -3142,10 +3155,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..2193964
+index 0000000..e4c3ff5
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,603 @@
+@@ -0,0 +1,605 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -3357,6 +3370,8 @@ index 0000000..2193964
 +            if (staleInteraction(e)) return fail("stale", "That prompt is no longer answerable.", decisionId);
 +            return fail("error", String.valueOf(e.getMessage()), decisionId);
 +        } finally {
++            // A native press saved (and so recorded) synchronously; a synthetic one saves later on its own thread.
++            if (nativePath) EngineBookkeeping.clear(gameName);
 +            ExecutionLockManager.unlock(gameName, ExecutionLockType.WRITE);
 +            inFlight.remove(flightKey);
 +        }
@@ -4880,12 +4895,15 @@ index 0000000..dcb3e09
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..8d3c7f4
+index 0000000..70cec46
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,156 @@
 +package ti4.selfhost.engine;
 +
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
 +import java.util.Objects;
 +import net.dv8tion.jda.api.JDA;
 +import ti4.game.Game;
@@ -4893,6 +4911,7 @@ index 0000000..8d3c7f4
 +import ti4.selfhost.SelfHosted;
 +import ti4.game.Player;
 +import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Option;
 +import ti4.selfhost.engine.EngineModels.Progress;
 +import ti4.selfhost.engine.EngineModels.ReactionWindow;
 +import ti4.selfhost.engine.EngineModels.Target;
@@ -4986,21 +5005,113 @@ index 0000000..8d3c7f4
 +        closeObsolete(game);
 +        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
 +            KindSpec spec = DecisionKinds.byKind(d.kind());
-+            if (spec == null || !spec.dynamic()) continue;
++            if (spec == null || !(spec.dynamic() || spec.dynamicValues())) continue;
 +            Player p = d.target() == null || d.target().userId() == null ? null : game.getPlayer(d.target().userId());
 +            KindSpec.CaptureContext ctx = new KindSpec.CaptureContext(
 +                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(),
 +                    d.target(), p);
-+            Target t = spec.target(ctx, d.target());
-+            Player tp = t == null || t.userId() == null ? null : game.getPlayer(t.userId());
-+            ctx = new KindSpec.CaptureContext(
-+                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(), t, tp);
-+            ReactionWindow w = spec.window(ctx);
-+            if (spec.recordsResponses()) w = WindowResponses.merge(d.source().messageId(), w);
-+            Progress pr = spec.progress(ctx);
-+            if (Objects.equals(t, d.target()) && Objects.equals(w, d.window()) && Objects.equals(pr, d.progress()))
++            Target t = d.target();
++            ReactionWindow w = d.window();
++            Progress pr = d.progress();
++            if (spec.dynamic()) {
++                t = spec.target(ctx, d.target());
++                Player tp = t == null || t.userId() == null ? null : game.getPlayer(t.userId());
++                ctx = new KindSpec.CaptureContext(
++                        game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(), t,
++                        tp);
++                w = spec.window(ctx);
++                if (spec.recordsResponses()) w = WindowResponses.merge(d.source().messageId(), w);
++                pr = spec.progress(ctx);
++            }
++            List<Option> options = spec.dynamicValues() ? revalued(spec, d, ctx) : d.options();
++            if (Objects.equals(t, d.target()) && Objects.equals(w, d.window()) && Objects.equals(pr, d.progress())
++                    && options.equals(d.options())) continue;
++            DecisionRegistry.update(d.withDynamic(game.getLastModifiedDate(), t, w, pr).withOptions(options));
++        }
++    }
++
++    /** The decision's options with each typed value re-read (KindSpec.dynamicValues); unchanged options kept as is. */
++    private static List<Option> revalued(KindSpec spec, Decision d, KindSpec.CaptureContext ctx) {
++        List<Option> out = new ArrayList<>(d.options().size());
++        boolean changed = false;
++        for (Option o : d.options()) {
++            Map<String, Object> v = o.value();
++            if (o.handler() != null && spec.typesOption(o.handler())) {
++                try {
++                    v = spec.revalue(o.handler(), o.value(), ctx);
++                } catch (Exception e) {
++                    BotLogger.error("engine: kind " + spec.kind() + " failed to re-read option " + o.id(), e);
++                    v = o.value();
++                }
++            }
++            if (Objects.equals(v, o.value())) {
++                out.add(o);
 +                continue;
-+            DecisionRegistry.update(d.withDynamic(game.getLastModifiedDate(), t, w, pr));
++            }
++            changed = true;
++            out.add(new Option(o.id(), o.label(), o.style(), o.emoji(), o.disabled(), o.needsInput(), o.handler(), v,
++                    o.owner()));
++        }
++        return changed ? out : d.options();
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/EngineBookkeeping.java b/src/main/java/ti4/selfhost/engine/EngineBookkeeping.java
+new file mode 100644
+index 0000000..b1f3f8f
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/EngineBookkeeping.java
+@@ -0,0 +1,54 @@
++package ti4.selfhost.engine;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.function.Consumer;
++import ti4.game.Game;
++import ti4.logging.BotLogger;
++
++/**
++ * Engine-side records a kind keeps in the game (stored values) that must land in the SAME save as the press they
++ * belong to. KindSpec.beforeAnswer runs on the engine's copy of the game, but a press handler loads the game again
++ * from disk (GameManager.get has no cache) and saves that copy: a change made to the engine's copy was simply lost
++ * (walk pbd158: Construction's scPrimaryDone stayed empty, so a second structure looked unresolved and the 2nd PDS
++ * press was not tracked). Records queued here are applied by GameSaveService right before it writes the game — the
++ * press's own save, so no extra undo copy, and undoing the press undoes the record with it. A press that does not save
++ * (refused, nothing to do) records nothing. Queued under the game's WRITE lock; dropped after {@link #TTL_MS}.
++ */
++public final class EngineBookkeeping {
++    private static final long TTL_MS = 30_000;
++
++    private record Pending(long at, Consumer<Game> change) {}
++
++    private static final Map<String, List<Pending>> PENDING = new ConcurrentHashMap<>();
++
++    private EngineBookkeeping() {}
++
++    /** Applies {@code change} to the game in its next save (within {@link #TTL_MS}). */
++    public static void onNextSave(String gameName, Consumer<Game> change) {
++        PENDING.computeIfAbsent(gameName, k -> java.util.Collections.synchronizedList(new ArrayList<>())).add(new Pending(System.currentTimeMillis(), change));
++    }
++
++    /** Drops whatever is still queued for a game (its press ran and did not save). */
++    static void clear(String gameName) {
++        PENDING.remove(gameName);
++    }
++
++    /** Called by GameSaveService before it writes a game: applies (once) and forgets the records queued for it. */
++    public static void applyPending(Game game) {
++        if (game == null || PENDING.isEmpty()) return;
++        List<Pending> list = PENDING.remove(game.getName());
++        if (list == null) return;
++        long now = System.currentTimeMillis();
++        for (Pending p : list) {
++            if (now - p.at() > TTL_MS) continue;
++            try {
++                p.change().accept(game);
++            } catch (Exception e) {
++                BotLogger.error("engine: bookkeeping for " + game.getName() + " failed", e);
++            }
 +        }
 +    }
 +}
@@ -5434,10 +5545,10 @@ index 0000000..853beb8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineModels.java b/src/main/java/ti4/selfhost/engine/EngineModels.java
 new file mode 100644
-index 0000000..ec7dc55
+index 0000000..e785446
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineModels.java
-@@ -0,0 +1,445 @@
+@@ -0,0 +1,450 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -5738,6 +5849,11 @@ index 0000000..ec7dc55
 +        public Decision withDynamic(long newStateVersion, Target newTarget, ReactionWindow newWindow, Progress newProgress) {
 +            return new Decision(id, game, kind, seq, newStateVersion, newTarget, scope, visibility, prompt, options,
 +                    source, createdAt, revision, newWindow, newProgress, inputs);
++        }
++
++        public Decision withOptions(List<Option> newOptions) {
++            return new Decision(id, game, kind, seq, stateVersion, target, scope, visibility, prompt, newOptions,
++                    source, createdAt, revision, window, progress, inputs);
 +        }
 +    }
 +
@@ -6107,10 +6223,10 @@ index 0000000..bff8f8e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/KindSpec.java b/src/main/java/ti4/selfhost/engine/KindSpec.java
 new file mode 100644
-index 0000000..9ddd577
+index 0000000..f43527b
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/KindSpec.java
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,261 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -6181,6 +6297,25 @@ index 0000000..9ddd577
 +     */
 +    default boolean dynamic() {
 +        return false;
++    }
++
++    /**
++     * True when option values move with game state (hits left after cancels, tokens in a pool, a card's name once the
++     * owner is known): every typed option is re-read with {@link #revalue} after each state change while the decision
++     * is open, emitting decision.updated when a value changes.
++     */
++    default boolean dynamicValues() {
++        return false;
++    }
++
++    /**
++     * An open option's value re-read after a state change ({@link #dynamicValues}); {@code current} is its value now.
++     * ctx.handlerIds() is null here. Default: {@link #value}; override when value() has capture-time side effects or
++     * only some fields should move.
++     */
++    @Nullable
++    default Map<String, Object> revalue(String handlerId, @Nullable Map<String, Object> current, CaptureContext ctx) {
++        return value(handlerId, ctx);
 +    }
 +
 +    /**
@@ -6263,8 +6398,9 @@ index 0000000..9ddd577
 +    }
 +
 +    /**
-+     * Called under the game's lock once validate() accepted an option, just before the press runs (so the handler's
-+     * save keeps whatever this records). For engine-side bookkeeping that later validate() calls rely on.
++     * Called under the game's lock once validate() accepted an option, just before the press runs. For engine-side
++     * bookkeeping that later validate() calls rely on. {@code game} is the engine's copy: the handler loads and saves
++     * its own, so changes meant to persist go through EngineBookkeeping.onNextSave (applied in the press's save).
 +     */
 +    default void beforeAnswer(Game game, Player answering, Decision decision, String optionId) {}
 +
@@ -12472,10 +12608,10 @@ index 0000000..90f7d73
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChooseCardKind.java b/src/main/java/ti4/selfhost/engine/kinds/ChooseCardKind.java
 new file mode 100644
-index 0000000..2b589a5
+index 0000000..1516dd5
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChooseCardKind.java
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,85 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import static ti4.selfhost.engine.kinds.ChooseSupport.rule;
@@ -12483,6 +12619,7 @@ index 0000000..2b589a5
 +import java.util.List;
 +import java.util.Map;
 +import ti4.game.Game;
++import ti4.game.Player;
 +
 +/**
 + * Generic "choose a card" step: value {source, cardType, relic|card|trait|position, ...}. cardType: "relic",
@@ -12536,7 +12673,19 @@ index 0000000..2b589a5
 +                    "neuraloopPart2;(?<card>[^;]+);(?<choice>[^;]+);(?<relic>.+)",
 +                    Map.of("cardType", "relic", "step", 2)),
 +            // Mutagen (relic option).
-+            rule("mutagen", "chooseMutagenOption_(?<choice>.+)", Map.of("cardType", "card")));
++            rule("mutagen", "chooseMutagenOption_(?<choice>.+)", Map.of("cardType", "card")),
++            // Return a promissory note from our play area to its owner (a mistake fix from the deal builder).
++            rule(
++                    "return_play_area_pn",
++                    "returnPNInPlayArea_(?<card>.+)",
++                    Map.of("cardType", "promissory_note"),
++                    (v, ctx) -> {
++                        ti4.model.PromissoryNoteModel pn = ti4.image.Mapper.getPromissoryNote((String) v.get("card"));
++                        if (pn != null) v.put("cardName", pn.getName());
++                        Game g = ctx.game();
++                        Player owner = g == null ? null : g.getPNOwner((String) v.get("card"));
++                        if (owner != null) v.put("faction", owner.getFaction());
++                    }));
 +
 +    @Override
 +    public String kind() {
@@ -12550,16 +12699,17 @@ index 0000000..2b589a5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java b/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java
 new file mode 100644
-index 0000000..b28614d
+index 0000000..5e3ecba
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,76 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import static ti4.selfhost.engine.kinds.ChooseSupport.rule;
 +
 +import java.util.List;
 +import java.util.Map;
++import ti4.selfhost.engine.EngineModels.Target;
 +
 +/**
 + * Generic yes/no step: value {source, confirm: true|false, choice?}. confirm=true means "do it" (use the
@@ -12580,7 +12730,44 @@ index 0000000..b28614d
 +            // The Silver Flame purge cost a home planet: score Become a Martyr now.
 +            rule("thesilverflame_bam", "scoreSilverFlameBAM", Map.of("confirm", true)),
 +            // JR-XS455-O (relic): the chosen player places a space dock / PDS / monument or gains 1 trade good.
-+            rule("jrxs455o", "jrStructure_(?<choice>sd|pds|monument|tg)", Map.of("confirm", true)));
++            rule("jrxs455o", "jrStructure_(?<choice>sd|pds|monument|tg)", Map.of("confirm", true)),
++            // Imperial Arbiter (law, end of the strategy phase): swap strategy cards with someone (then choose.player /
++            // choose.card source imperialarbiter), or decline ("declineArbiter", or "deleteButtons" on the second copy).
++            rule("imperialarbiter", "startArbiter", Map.of("confirm", true)),
++            rule("imperialarbiter", "declineArbiter", Map.of("confirm", false)),
++            // Minister of Peace (law): end the active player's turn after they activate a system with others' units.
++            rule("minister_peace", "ministerOfPeace", Map.of("confirm", true)),
++            // Warfare: "Redistribute (& Gain) Command Tokens" offers outside the status phase (Warfare primary after
++            // removing a token; Thunder's Edge Warfare before / after its tactical action), which open the
++            // command_tokens.adjust panel; Thunder's Edge Warfare's "Perform Tactical Action" (no token placed).
++            rule("warfare", "redistributeCCButtons_", Map.of("confirm", true, "choice", "redistribute")),
++            rule("warfare", "beginTacticalTeWarfare", Map.of("confirm", true, "choice", "tactical")),
++            // Follow a just-played strategy card without a strategy token (PlayStrategyCardService.playSC, cards-info
++            // thread; one shared list, "Delete These Buttons" declines): Mahact agent, Scepter of Emelpar, Cognitive
++            // Parallax Engine.
++            rule("mahactagent", "mahactA_follow_(?<strategyCard>\\d+)", Map.of("confirm", true)),
++            rule("scepter_of_emelpar", "scepterE_follow_(?<strategyCard>\\d+)", Map.of("confirm", true)),
++            rule("cognitive_parallax_engine", "thardentiag_follow_(?<strategyCard>\\d+)", Map.of("confirm", true)),
++            // Ixthian Artifact (agenda, For): the speaker rolls (target = speaker); "roll anyway" for anyone else.
++            rule("ixthian_artifact", "rollIxthian", Map.of("confirm", true)),
++            rule("ixthian_artifact", "rollIxthianIgnoreSpeaker", Map.of("confirm", true, "choice", "ignore_speaker")),
++            // Debt reminder (AgendaHelper.pingAboutDebt, agenda phase): pay a creditor 1/3 commodities or trade goods,
++            // or erase 1/3 debt paid elsewhere; "Delete These Buttons" declines. faction = the creditor.
++            rule(
++                    "pay_debt",
++                    "sendTGTo_(?<faction>[^_]+)_(?<choice>comm|tg|debt)(?<amount>3)?",
++                    Map.of("confirm", true),
++                    (v, ctx) -> v.putIfAbsent("amount", 1)));
++
++    @Override
++    public Target target(CaptureContext ctx, Target resolved) {
++        List<String> hs = ctx.handlerIds();
++        if (hs != null && hs.contains("rollIxthian") && ctx.game() != null) {
++            Target s = AgendaSupport.speakerTarget(ctx.game(), "speaker");
++            if (s != null) return s;
++        }
++        return super.target(ctx, resolved);
++    }
 +
 +    @Override
 +    public String kind() {
@@ -12677,10 +12864,10 @@ index 0000000..0cc54f8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChoosePlayerKind.java b/src/main/java/ti4/selfhost/engine/kinds/ChoosePlayerKind.java
 new file mode 100644
-index 0000000..92e33fe
+index 0000000..44f250c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChoosePlayerKind.java
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,38 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import static ti4.selfhost.engine.kinds.ChooseSupport.rule;
@@ -12688,7 +12875,8 @@ index 0000000..92e33fe
 +import java.util.List;
 +
 +/**
-+ * Generic "choose a player" step: value {source, faction, color}. Add rules here (named group {@code faction}).
++ * Generic "choose a player" step: value {source, faction, color} (+ strategyCard / strategyCard2 / planet when the
++ * rule names them). Add rules here (named group {@code faction}).
 + */
 +public class ChoosePlayerKind extends ChooseKindBase {
 +
@@ -12696,7 +12884,17 @@ index 0000000..92e33fe
 +            // Quantum Entangler (relic): the player to swap relics with.
 +            rule("quantum_entangler", "quantumEntanglerTarget_(?<faction>[a-z0-9]+)"),
 +            // Titan Prototype / JR-XS455-O (relic): the player who readies a structure / gains the effect.
-+            rule("titanprototype", "jrResolution_(?<faction>[a-z0-9]+)"));
++            rule("titanprototype", "jrResolution_(?<faction>[a-z0-9]+)"),
++            // Checks and Balances (law, strategy phase): the player who gets the strategy card just picked.
++            rule("checks_and_balances", "checksNBalancesPt2_(?<strategyCard>\\d+)_(?<faction>[a-z0-9]+)"),
++            // Colonial Redistribution (agenda): the fewest-VP player who gets 1 infantry (and control) on the planet.
++            rule("colonial_redistribution", "colonialRedTarget_(?<faction>[a-z0-9]+)_(?<planet>.+)"),
++            // Imperial Arbiter: the player to swap strategy cards with. A player holding one card is a direct swap
++            // (their strategyCard for our strategyCard2); one holding more is picked first, then the same swap ids.
++            rule("imperialarbiter", "selectBeforeSwapSCs_(?<faction>[a-z0-9]+)_imperialarbiter"),
++            rule(
++                    "imperialarbiter",
++                    "swapSCs_(?<faction>[a-z0-9]+)_imperialarbiter_(?<strategyCard>\\d+)_(?<strategyCard2>\\d+)"));
 +
 +    @Override
 +    public String kind() {
@@ -12803,10 +13001,10 @@ index 0000000..e939f8c
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChooseSupport.java b/src/main/java/ti4/selfhost/engine/kinds/ChooseSupport.java
 new file mode 100644
-index 0000000..ac7d149
+index 0000000..30e2fab
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChooseSupport.java
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,164 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -12835,6 +13033,7 @@ index 0000000..ac7d149
 + * faction, faction2 {faction[, color]}                   (a seated player's faction)
 + * unit              {unit}                               (async unit id, e.g. "mech", "fs")
 + * amount, position  {amount | position} as integers
++ * strategyCard[2]   {strategyCard | strategyCard2} as integers (strategy card numbers)
 + * relic, relic2     {relic, relicName, relicText}
 + * card              {card}                               (any other card id)
 + * trait             {trait}                              (cultural / industrial / hazardous / frontier)
@@ -12941,7 +13140,7 @@ index 0000000..ac7d149
 +                    Player p = game == null ? null : game.getPlayerFromColorOrFaction(s);
 +                    if (p != null && "faction".equals(g)) v.put("color", p.getColor());
 +                }
-+                case "amount", "position" -> {
++                case "amount", "position", "strategyCard", "strategyCard2" -> {
 +                    try {
 +                        v.put(g, Integer.parseInt(s));
 +                    } catch (NumberFormatException e) {
@@ -12972,10 +13171,10 @@ index 0000000..ac7d149
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChooseSystemKind.java b/src/main/java/ti4/selfhost/engine/kinds/ChooseSystemKind.java
 new file mode 100644
-index 0000000..3f740c4
+index 0000000..742941c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChooseSystemKind.java
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,36 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import static ti4.selfhost.engine.kinds.ChooseSupport.rule;
@@ -12996,7 +13195,11 @@ index 0000000..3f740c4
 +            // Echo (Lazax-era frontier tokens): place a frontier token in a system.
 +            rule("echo", "echoPlaceFrontier_(?<tile>.+)"),
 +            // Horn of the Abyss (relic): system to place neutral ships in.
-+            rule("horn_of_the_abyss", "chooseHornOfTheAbyssSystem_(?<tile>[^_]+)"));
++            rule("horn_of_the_abyss", "chooseHornOfTheAbyssSystem_(?<tile>[^_]+)"),
++            // Remove one of your command tokens from the board (ButtonHelper.getButtonsToRemoveYourCC): Minister of War
++            // (choice "ministerOfWar"), Unexpected Action, and the other callers; choice = what it is for, faction =
++            // the token's owner.
++            rule("remove_cc", "removeCCFromBoard_(?<choice>[^_]+)_(?<tile>[^_]+)_(?<faction>[a-z0-9]+)"));
 +
 +    @Override
 +    public String kind() {
@@ -13010,10 +13213,10 @@ index 0000000..3f740c4
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChooseUnitKind.java b/src/main/java/ti4/selfhost/engine/kinds/ChooseUnitKind.java
 new file mode 100644
-index 0000000..b81b7b8
+index 0000000..ab0d788
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChooseUnitKind.java
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,45 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import static ti4.selfhost.engine.kinds.ChooseSupport.rule;
@@ -13021,7 +13224,7 @@ index 0000000..b81b7b8
 +import java.util.List;
 +
 +/**
-+ * Generic "choose a unit" step: value {source, unit (async unit id), tile?, planet?}. No rules yet: add one-step unit
++ * Generic "choose a unit" step: value {source, unit (async unit id), tile?, planet?, damaged?}. Add one-step unit
 + * prompts here (named groups {@code unit}, optionally {@code tile} / {@code planet}), e.g.
 + * {@code rule("my_ability", "myAbilityUnit_(?<tile>[^_]+)_(?<unit>[a-z]+)")}.
 + */
@@ -13036,7 +13239,18 @@ index 0000000..b81b7b8
 +            // holder = "space" or a planet id, color = the owner's color; destroy = "_destroy" when it destroys.
 +            rule(
 +                    "remove_unit_type",
-+                    "removeThisTypeOfUnit_(?<unit>[^_]+)_(?<tile>[^_]+)_(?<holder>[^_]+)(?:_(?<color>[a-z]+))?(?:_(?<destroy>destroy))?"));
++                    "removeThisTypeOfUnit_(?<unit>[^_]+)_(?<tile>[^_]+)_(?<holder>[^_]+)(?:_(?<color>[a-z]+))?(?:_(?<destroy>destroy))?"),
++            // The Cavalry (Nomad promissory note): the ship in the active system that becomes the Cavalry.
++            rule("cavalry", "cavStep2_(?<unit>[a-z]+?)(?<damaged>damaged)?"),
++            // Refit Troops (action card): the infantry replaced with a mech (two copies of the prompt, one per mech).
++            rule(
++                    "refit",
++                    "mitoMechPlacement_(?<tile>[^_]+)_(?<holder>[^_]+)_refit",
++                    java.util.Map.of("unit", "mech"),
++                    (v, ctx) -> {
++                        Object h = v.get("holder");
++                        if (h instanceof String s && !"space".equals(s)) ExploreSupport.putPlanet(v, ctx.game(), s);
++                    }));
 +
 +    @Override
 +    public String kind() {
@@ -13301,10 +13515,10 @@ index 0000000..4aebd9d
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
 new file mode 100644
-index 0000000..afee157
+index 0000000..d714f69
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
-@@ -0,0 +1,155 @@
+@@ -0,0 +1,204 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -13357,6 +13571,53 @@ index 0000000..afee157
 +
 +    @Override
 +    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
++        return captureValue(handlerId, ctx);
++    }
++
++    /**
++     * Re-read after a state change: only the hits left after Shields Holding move (units stay as posted, so assigning
++     * hits one by one does not churn the prompt's revision); no capture bookkeeping.
++     */
++    @Override
++    public Map<String, Object> revalue(String handlerId, Map<String, Object> current, CaptureContext ctx) {
++        if (current == null || !"auto".equals(current.get("action"))) return current;
++        Object ph = current.containsKey("promptHits") ? current.get("promptHits") : current.get("hits");
++        if (!(ph instanceof Number n)) return current;
++        int promptHits = n.intValue();
++        int left = CombatSupport.hitsAfterShields(ctx.game(), ctx.player(), ctx.messageId(), promptHits);
++        Map<String, Object> v = new java.util.LinkedHashMap<>(current);
++        v.remove("promptHits");
++        v.remove("cancelled");
++        v.put("hits", left);
++        if (left != promptHits) {
++            v.put("promptHits", promptHits);
++            v.put("cancelled", promptHits - left);
++        }
++        return v;
++    }
++
++    @Override
++    public boolean dynamicValues() {
++        return true;
++    }
++
++    /**
++     * The auto option assigns the hits in its button id: once Shields Holding cancelled some of them it would assign
++     * too many. Refuse it then: the plan (combat-plan, checked against the hits left) or "Cancel a Hit" is the way.
++     */
++    @Override
++    public String validate(Game game, Player answering, ti4.selfhost.engine.EngineModels.Decision decision, String optionId) {
++        for (ti4.selfhost.engine.EngineModels.Option o : decision.options()) {
++            if (!o.id().equals(optionId) || o.value() == null || !"auto".equals(o.value().get("action"))) continue;
++            if (o.value().get("cancelled") instanceof Number c && c.intValue() > 0)
++                return "Shields Holding cancelled " + c.intValue() + " of these hits: assign the "
++                        + o.value().get("hits") + " left (or press Cancel a Hit) instead of auto-assigning all "
++                        + o.value().get("promptHits") + ".";
++        }
++        return null;
++    }
++
++    private static Map<String, Object> captureValue(String handlerId, CaptureContext ctx) {
 +        Map<String, Object> v = CombatSupport.value(handlerId, ctx.game());
 +        if (v != null && isBombardmentAssign(handlerId)) return bombardment(v, ctx);
 +        if (v == null || !"auto".equals(v.get("action"))) return v;
@@ -13370,14 +13631,16 @@ index 0000000..afee157
 +        // Non-Euclidean Shielding: each SUSTAIN DAMAGE cancels 2 hits.
 +        int cancels = p != null && p.hasTech("nes") ? 2 : 1;
 +        v.put("sustainCancels", cancels);
++        int promptHits = (Integer) v.get("hits");
 +        CombatSupport.noteOwed(
-+                ctx.game(),
-+                p,
-+                (String) pos,
-+                (String) v.get("holder"),
-+                (String) v.get("source"),
-+                (Integer) v.get("hits"),
-+                cancels);
++                ctx.game(), p, (String) pos, (String) v.get("holder"), (String) v.get("source"), promptHits, cancels);
++        CombatSupport.noteShields(ctx.game(), p, ctx.messageId(), promptHits);
++        int left = CombatSupport.hitsAfterShields(ctx.game(), p, ctx.messageId(), promptHits);
++        if (left != promptHits) {
++            v.put("hits", left);
++            v.put("promptHits", promptHits);
++            v.put("cancelled", promptHits - left);
++        }
 +        return v;
 +    }
 +
@@ -14001,10 +14264,10 @@ index 0000000..9b6da10
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
 new file mode 100644
-index 0000000..ee6a008
+index 0000000..e9b39dc
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
-@@ -0,0 +1,695 @@
+@@ -0,0 +1,770 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayDeque;
@@ -14394,6 +14657,78 @@ index 0000000..ee6a008
 +        OWED.put(game.getName() + "|" + p.getFaction(), new Owed(tile, holder, source, hits, cancels, base));
 +    }
 +
++    // ------------------------------------------------------------------ Shields Holding (hits cancelled by a card)
++
++    /** Shields Holding (and its DS variant): "Cancel up to 2 hits" — the original only announces it; see shields(). */
++    private static final java.util.Set<String> SHIELDS_HOLDING = java.util.Set.of("sh1", "sh2", "sh3", "sh4", "shields_holding_ds");
++
++    /**
++     * A hits prompt as first captured: the hits it asked for, the Shields Holding cards then in the player's hand and
++     * the Sabotages then in the discard pile. Kept per prompt message (the "Cancel a Hit" edits keep the message).
++     */
++    record Shields(String faction, int baseHits, java.util.Set<String> inHand, java.util.Set<String> sabotagesDiscarded) {}
++
++    private static final Map<String, Shields> SHIELDS = new ConcurrentHashMap<>();
++    /** game|faction → the player's latest hits prompt message (for the manual menu's progress). */
++    private static final Map<String, String> LATEST_HITS_PROMPT = new ConcurrentHashMap<>();
++
++    /** Called when a hits prompt is captured: remembers what Shields Holding could still cancel on it. */
++    static void noteShields(Game game, @Nullable Player p, String messageId, int hits) {
++        if (p == null || messageId == null) return;
++        if (SHIELDS.size() > 2000) SHIELDS.clear();
++        LATEST_HITS_PROMPT.put(game.getName() + "|" + p.getFaction(), messageId);
++        if (SHIELDS.containsKey(messageId)) return; // an edit of the prompt ("Cancel a Hit"): keep the first capture
++        java.util.Set<String> hand = new java.util.HashSet<>();
++        for (String ac : p.getActionCards().keySet()) if (SHIELDS_HOLDING.contains(ac)) hand.add(ac);
++        SHIELDS.put(messageId, new Shields(p.getFaction(), hits, hand, sabotagesDiscarded(game)));
++    }
++
++    private static java.util.Set<String> sabotagesDiscarded(Game game) {
++        java.util.Set<String> out = new java.util.HashSet<>();
++        for (String ac : game.getDiscardActionCards().keySet()) if (ac.startsWith("sabo")) out.add(ac);
++        return out;
++    }
++
++    /**
++     * Hits cancelled by Shields Holding since the prompt was posted: 2 per Shields Holding that left the player's hand
++     * for the discard pile and is not waiting on its Sabotage window, less any Sabotage discarded meanwhile (one
++     * that cancelled it). The original code only announces the card (the player then presses "Cancel a Hit"), so the
++     * prompt's own hits (its button ids) do not move: the engine reads it here (walk pbd161: the hits prompt still
++     * said 2 after Shields Holding).
++     */
++    static int shieldsCancelled(Game game, @Nullable Player p, @Nullable String messageId) {
++        Shields sh = messageId == null ? null : SHIELDS.get(messageId);
++        if (p == null || sh == null || sh.inHand().isEmpty() || !sh.faction().equals(p.getFaction())) return 0;
++        int played = 0;
++        for (String ac : sh.inHand()) {
++            if (p.getActionCards().containsKey(ac) || !game.getDiscardActionCards().containsKey(ac)) continue;
++            if (sabotageWindowOpen(game, ac)) continue;
++            played++;
++        }
++        java.util.Set<String> sabotages = sabotagesDiscarded(game);
++        sabotages.removeAll(sh.sabotagesDiscarded());
++        return 2 * Math.max(0, played - sabotages.size());
++    }
++
++    private static boolean sabotageWindowOpen(Game game, String actionCard) {
++        for (ti4.selfhost.engine.EngineModels.Decision d : ti4.selfhost.engine.DecisionRegistry.openDecisions(game.getName())) {
++            if (!"action_card.sabotage".equals(d.kind()) || d.window() == null) continue;
++            if (actionCard.equals(d.window().subject().get("actionCard"))) return true;
++        }
++        return false;
++    }
++
++    /**
++     * Hits still owed on a prompt whose buttons ask for {@code idHits}: Shields Holding cancels count against the
++     * prompt's first hits, and each "Cancel a Hit" pressed since (idHits below that) already used one of them.
++     */
++    static int hitsAfterShields(Game game, @Nullable Player p, @Nullable String messageId, int idHits) {
++        Shields sh = messageId == null ? null : SHIELDS.get(messageId);
++        int cancelled = shieldsCancelled(game, p, messageId);
++        if (sh == null || cancelled == 0) return idHits;
++        return Math.max(0, Math.min(idHits, sh.baseHits() - cancelled));
++    }
++
 +    /**
 +     * Progress of a manual assignment: hits owed (from the last hits prompt) against what the units show now —
 +     * each unit gone or newly damaged since the prompt is one hit taken (two per sustain with Non-Euclidean
@@ -14423,13 +14758,16 @@ index 0000000..ee6a008
 +        acc.put("assigned", assigned);
 +        acc.put("destroyed", destroyed);
 +        acc.put("sustained", sustained);
++        // Shields Holding played since the prompt lowers what is owed (hitsAfterShields).
++        String prompt = LATEST_HITS_PROMPT.get(game.getName() + "|" + p.getFaction());
++        int owed = hitsAfterShields(game, p, prompt, o.hits());
 +        Map<String, Object> req = new LinkedHashMap<>();
-+        req.put("owed", o.hits());
-+        req.put("hits", Math.max(0, o.hits() - assigned));
++        req.put("owed", owed);
++        req.put("hits", Math.max(0, owed - assigned));
 +        req.put("tile", o.tile());
 +        req.put("holder", o.holder());
 +        req.put("source", o.source());
-+        boolean done = assigned >= o.hits() || left == 0;
++        boolean done = assigned >= owed || left == 0;
 +        return new Progress("combat.assign_hits", done ? "confirm" : "select_units", acc, req, done);
 +    }
 +
@@ -17804,10 +18142,10 @@ index 0000000..9f33f75
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/GameSettingsKind.java b/src/main/java/ti4/selfhost/engine/kinds/GameSettingsKind.java
 new file mode 100644
-index 0000000..c35596b
+index 0000000..3658c70
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/GameSettingsKind.java
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,97 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -17820,13 +18158,16 @@ index 0000000..c35596b
 + * setupBaseGameMode[_confirm]), alternate modes / homebrew menus (offerGameOptionButtons, getHomebrewButtons,
 + * offerTEOptionButtons, startTFGame, frankenSetup, setupHomebrew_…), starting a draft (miltySetup, startDraftSystem)
 + * and the Milty settings pages (jmf&lt;N|A|…&gt;_&lt;menu&gt;_&lt;item&gt;: navigate / act). Any seated player may press
-+ * (table). value: {setting: which control family ("expansion"|"base_game"|"game_modes"|"draft_start"|"draft_settings"),
++ * (table). value: {setting: which control family ("expansion"|"base_game"|"game_modes"|"game_options"|"draft_start"|"draft_settings"),
 + * choice: the specific item (expansion id, menu path, "milty", "startMilty", …)}.
 + */
 +public class GameSettingsKind implements KindSpec {
 +    private static final Pattern MODES = Pattern.compile(
 +            "offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|startTFGame|frankenSetup|setupHomebrewNone|setupHomebrew_.*");
 +    private static final Pattern JMF = Pattern.compile("jmf[A-Za-z]_.*");
++    /** GameOptionService.offerGameOptionButtons: the display toggles it posts (reactions, hex borders, PN area, rule links). */
++    private static final Pattern OPTIONS = Pattern.compile(
++            "enableAidReacts_.*|disableAidReacts|showHexBorders_.*|showOwnedPNsInPlayerArea_.*|injectRulesLinks_.*");
 +
 +    @Override
 +    public String kind() {
@@ -17845,7 +18186,8 @@ index 0000000..c35596b
 +                || "miltySetup".equals(handlerId)
 +                || "startDraftSystem".equals(handlerId)
 +                || MODES.matcher(handlerId).matches()
-+                || JMF.matcher(handlerId).matches();
++                || JMF.matcher(handlerId).matches()
++                || OPTIONS.matcher(handlerId).matches();
 +    }
 +
 +    /** Official-only (web) games: homebrew / alternate-mode controls are not typed options and are refused. */
@@ -17875,6 +18217,7 @@ index 0000000..c35596b
 +        if ("miltySetup".equals(handlerId)) return v("draft_start", "milty");
 +        if ("startDraftSystem".equals(handlerId)) return v("draft_start", "draft_system");
 +        if (JMF.matcher(handlerId).matches()) return v("draft_settings", handlerId.substring(5));
++        if (OPTIONS.matcher(handlerId).matches()) return v("game_options", handlerId);
 +        return v("game_modes", handlerId);
 +    }
 +
@@ -20452,14 +20795,23 @@ index 0000000..a11aff7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java b/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java
 new file mode 100644
-index 0000000..a9f7f9d
+index 0000000..f77065f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/SecretObjectiveDiscardKind.java
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,150 @@
 +package ti4.selfhost.engine.kinds;
 +
++import java.util.ArrayList;
 +import java.util.LinkedHashMap;
++import java.util.List;
 +import java.util.Map;
++import javax.annotation.Nullable;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.selfhost.engine.DecisionRegistry;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Option;
++import ti4.selfhost.engine.EngineModels.Target;
 +import ti4.selfhost.engine.KindSpec;
 +
 +/**
@@ -20493,8 +20845,9 @@ index 0000000..a9f7f9d
 +        try {
 +            int handle = Integer.parseInt(rest);
 +            v.put("handle", handle);
-+            if (ctx.player() != null) {
-+                for (Map.Entry<String, Integer> e : ctx.player().getSecrets().entrySet()) {
++            Player owner = ctx.player() != null ? ctx.player() : owner(ctx, List.of(handlerId));
++            if (owner != null) {
++                for (Map.Entry<String, Integer> e : owner.getSecrets().entrySet()) {
 +                    if (e.getValue() == handle) v.put("secretObjective", e.getKey());
 +                }
 +            }
@@ -20505,8 +20858,70 @@ index 0000000..a9f7f9d
 +        return v;
 +    }
 +
++    /**
++     * The prompt's owner when the generic resolver found none. Setup deals secrets into cards-info threads created
++     * in the same command, so the capture's copy of the game may not know the thread yet (walk pbd158: the discard
++     * values had no secretObjective and the target was empty, so four bots pressed it through the legacy path). Read
++     * the channel against the game as it is now, else the one player whose hand holds every handle of the prompt.
++     */
++    @Override
++    public Target target(CaptureContext ctx, @Nullable Target resolved) {
++        if (resolved != null && resolved.userId() != null) return resolved;
++        Player p = owner(ctx, ctx.handlerIds() != null ? ctx.handlerIds() : openHandlers(ctx.messageId()));
++        if (p == null) return resolved;
++        return ti4.selfhost.engine.DecisionCapture.target(p, "so_owner");
++    }
++
++    @Nullable
++    private static Player owner(CaptureContext ctx, @Nullable List<String> handlerIds) {
++        Game game = ctx.game();
++        if (game == null) return null;
++        String channel = ctx.channelId();
++        if (channel != null) {
++            for (Player p : game.getRealPlayers()) {
++                if (channel.equals(p.getCardsInfoThreadID()) || channel.equals(p.getPrivateChannelID())) return p;
++            }
++        }
++        List<Integer> handles = new ArrayList<>();
++        if (handlerIds != null) {
++            for (String h : handlerIds) {
++                if (h == null || !(h.startsWith("discardSecret_") || h.startsWith("SODISCARD_"))) continue;
++                try {
++                    handles.add(Integer.parseInt(
++                            h.replace("discardSecret_", "").replace("SODISCARD_", "").replace("redraw", "")));
++                } catch (NumberFormatException ignored) {
++                    // not a handle
++                }
++            }
++        }
++        if (handles.isEmpty()) return null;
++        Player found = null;
++        for (Player p : game.getRealPlayers()) {
++            if (!p.getSecrets().values().containsAll(handles)) continue;
++            if (found != null) return null; // ambiguous
++            found = p;
++        }
++        return found;
++    }
++
++    @Nullable
++    private static List<String> openHandlers(String messageId) {
++        String id = messageId == null ? null : DecisionRegistry.decisionIdForMessage(messageId);
++        Decision d = id == null ? null : DecisionRegistry.get(id);
++        if (d == null) return null;
++        List<String> hs = new ArrayList<>();
++        for (Option o : d.options()) hs.add(o.handler());
++        return hs;
++    }
++
 +    @Override
 +    public boolean dynamic() {
++        return true;
++    }
++
++    /** Values are re-read with the target (a capture without an owner gets its secretObjective names later). */
++    @Override
++    public boolean dynamicValues() {
 +        return true;
 +    }
 +
@@ -21912,10 +22327,10 @@ index 0000000..c2054a1
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
 new file mode 100644
-index 0000000..a37ad45
+index 0000000..cb62d9e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
-@@ -0,0 +1,277 @@
+@@ -0,0 +1,282 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -22154,7 +22569,12 @@ index 0000000..a37ad45
 +        int sc = StrategyCards.intOf(v.get("strategyCard"), -1);
 +        if (sc < 0 || answering.getSCs() == null || !answering.getSCs().contains(sc)) return;
 +        if (!"action".equalsIgnoreCase(game.getPhaseOfGame()) || !game.getPlayedSCs().contains(sc)) return;
-+        ButtonHelperSCs.recordPrimaryDone(game, sc, String.valueOf(v.get("part")));
++        String part = String.valueOf(v.get("part"));
++        ButtonHelperSCs.recordPrimaryDone(game, sc, part);
++        // The handler saves its own fresh copy of the game: record in that save, or the part is lost (walk pbd158:
++        // primaryDone stayed [] after both Construction structures).
++        ti4.selfhost.engine.EngineBookkeeping.onNextSave(
++                game.getName(), g -> ButtonHelperSCs.recordPrimaryDone(g, sc, part));
 +    }
 +
 +    @Override
@@ -24530,10 +24950,10 @@ index 0000000..3cfacb3
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
 new file mode 100644
-index 0000000..1bf913e
+index 0000000..b2672b5
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,107 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -24615,6 +25035,12 @@ index 0000000..1bf913e
 +            }
 +        }
 +        return v;
++    }
++
++    /** tacticTokens follows the pool (walk pbd158: "3 tactic tokens" stayed after Leadership added one). */
++    @Override
++    public boolean dynamicValues() {
++        return true;
 +    }
 +
 +    @Override
