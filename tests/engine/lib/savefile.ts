@@ -304,7 +304,7 @@ export function normalizeSave(text: string, o: NormalizeOpts = {}): string[] {
       if (VOLATILE_PLAYER_KEYS.has(k) || extra.has(`player.${k}`) || !/^[a-z0-9_]+$/.test(k)) continue;
       // promptState_*: per-prompt UI bookkeeping (landing note, payment currency, CC panel origin) the engine-int bot
       // writes on every path; recordings made before it never carry it.
-      const pv = k === "player_stored_values" ? v.split("|").filter((e) => e && !e.startsWith("promptState_")).join("|") : v;
+      const pv = k === "player_stored_values" ? v.split(";").filter((e) => e && !/^promptState(_|\{usc\})/.test(e)).join(";") : v;
       out.push(`player[${who}].${k} ${fix(!o.keepHandles && CARD_HANDLE_KEYS.test(k) ? stripHandles(pv) : pv)}`);
     }
   }
