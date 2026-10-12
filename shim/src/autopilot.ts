@@ -281,6 +281,8 @@ const MAX_RETRIES = 3;
 const STALL_MS = 60000;
 /** Our action-phase turn buttons. */
 const TURN_ID = /^FFCC_[^_]+_(tacticalAction|componentAction|turnEnd|endOfTurnAbilities|passForRound|strategicAction_\d+)$/;
+/** An untyped prompt pinging only us that nothing answered for this long gets its first control (see consider). */
+const UNTYPED_STALL_MS = 120_000;
 /** The same button on the same message: at most this many presses per seat (see pressCount). */
 const MAX_SAME_PRESS = 3;
 const BUSY_TEXT = /hasn't finished processing the last task/i;
@@ -1015,6 +1017,21 @@ class SeatPilot {
       const control = rule.last ? hits[hits.length - 1] : hits[0];
       return { msg: m, control, score: rule.score, why: rule.why };
     }
+    // Last resort for a prompt only we are pinged on that nothing answered for UNTYPED_STALL_MS (no rule, not strongly
+    // ours, the engine does not own it): an untyped prompt must never stall a game on a bot (pbd188: Checks and
+    // Balances' "give this card to…" picker). Its first control we may press; logged as an ERROR so it gets typed.
+    if (!ctx.strong && mentionsMe && !mentionsOther && !lockedOther && !answered && !TAKE_BACK_TEXT.test(content)
+        && Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp) > UNTYPED_STALL_MS
+        && !(owned ?? (await this.mgr.engineOwns(game, m.id, me)))) {
+      const first = controls.find((c) => !OPTIONAL_LABEL.test(c.label) && !OPTIONAL_ID.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")));
+      if (first) {
+        if (!this.untypedLogged.has(m.id)) {
+          this.untypedLogged.add(m.id);
+          log.error(`autopilot ${this.name}: untyped prompt stalled on us in #${ch.name} for ${Math.round((Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp)) / 1000)}s; pressing its first control "${first.label}" [${first.custom_id.replace(/^FFCC_[^_]+_/, "")}] (type this handler)`);
+        }
+        return { msg: m, control: first, score: 9, why: "untyped prompt stalled on us: first control" };
+      }
+    }
     // Only for prompts clearly addressed to us: never one for another player, or locked to another faction.
     if (!ctx.strong || mentionsOther || lockedOther || answered || TAKE_BACK_TEXT.test(content)) return null;
     // Nor one the typed engine path owns (its policies, or the watchdog's fallback, answer it).
@@ -1466,6 +1483,8 @@ class SeatPilot {
   private engineTried = new Set<string>();
   /** Prompts whose "last resort" candidate was logged (once each). */
   private lastResortLogged = new Set<string>();
+  /** Untyped prompts pressed by the stall last resort (logged once each). */
+  private untypedLogged = new Set<string>();
   /** Answers this seat sent per decision id (capped at ENGINE_MAX_ANSWERS). */
   private engineAttempts = new Map<string, number>();
   /** Answers this seat sent per decision id, never reset (capped at ENGINE_LIFETIME_ANSWERS). */
