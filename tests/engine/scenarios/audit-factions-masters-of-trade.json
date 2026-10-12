@@ -1,0 +1,15 @@
+{
+  "name": "audit-factions-masters-of-trade",
+  "description": "Rules audit (factions): Hacan's Masters of Trade — following Trade costs no command token. Sol plays Trade; Hacan presses 'Spend A Strategy Token' (sc_trade_follow): strategy pool stays at 2 (the original spent 1).",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "setup": [
+    "/player stats strategy_cc:2 faction_or_color:hacan",
+    "/player sc_play strategy_card:5 faction_or_color:sol"
+  ],
+  "trigger": { "press": "sc_trade_follow", "as": "hacan" },
+  "steps": [ { "wait": 1500 } ],
+  "expect": {
+    "invariants": true,
+    "state": [ { "path": "players[faction=hacan].commandTokens.strategy", "eq": 2 } ]
+  }
+}

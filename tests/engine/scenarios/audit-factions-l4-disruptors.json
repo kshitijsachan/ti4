@@ -1,0 +1,18 @@
+{
+  "name": "audit-factions-l4-disruptors",
+  "description": "Rules audit (factions): Letnev's L4 Disruptors — no SPACE CANNON DEFENCE against an invader who owns it. Letnev (active, l4) invades tarmann (210) where xxcha has a PDS: the SCD button is not posted, the engine refuses the roll and the legacy handler refuses it too (no dice, same state on both forks).",
+  "base": { "recording": "pbd104", "index": 44, "repost": false },
+  "setup": [
+    "/tech add tech:l4 faction_or_color:letnev",
+    "/add_units tile_name:210 unit_names:\"pds tarmann, 2 gf tarmann\" faction_or_color:xxcha",
+    "/add_units tile_name:210 unit_names:\"ca, 2 gf tarmann\" faction_or_color:letnev",
+    "/combat start_combat tile_name:210"
+  ],
+  "steps": [
+    { "wait": 3000 },
+    { "press": "combatRoll_210_tarmann_spacecannondefence", "as": "xxcha", "refused": true,
+      "legacy": [ { "press": "combatRoll_210_tarmann_spacecannondefence", "as": "xxcha" } ] },
+    { "wait": 1500 }
+  ],
+  "expect": { "invariants": true }
+}
