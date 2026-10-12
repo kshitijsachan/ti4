@@ -20,6 +20,7 @@ import { chooseComponents, isComponentsKind } from "./policy/components.js";
 import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
 import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
+import { chooseTurnAction } from "./policy/turn.js";
 import { chooseManualBuild, chooseUnitsModify } from "./policy/units.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
@@ -142,15 +143,10 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "relic.fragments":
     case "relic.draw":
       return chooseExplore(d, state, me);
-    case "turn.action": {
-      // After an action: end the turn (an unplayed strategy card first: the strategy policy plays it). The start of
-      // a turn (no end_turn option) belongs to the planner (brain.ts) and, for passing, the rule table.
-      const opts = d.options.filter((o) => !o.disabled && o.value);
-      if (opts.some((o) => o.value!.action === "strategic")) return null;
-      const end = opts.filter((o) => o.value!.action === "end_turn");
-      const pick = end.find((o) => o.value!.action === "end_turn" && !o.value!.abilities) ?? end[0];
-      return pick ? { option: pick, why: "action done: end turn" } : null;
-    }
+    case "turn.action":
+      // The action-phase turn policy (policy/turn.ts): end turn / play the strategy card / finish passing at once;
+      // the start-of-turn menu is the planner's (brain.ts) for TURN_PLANNER_GRACE_MS, then pass.
+      return chooseTurnAction(d, state, me, { waitedMs: ctx.waitedMs, force: ctx.force });
     case "tactical.rift": {
       // The planner never paths through gravity rifts; a rift prompt outside its plan has nothing to roll.
       const done = d.options.find((o) => !o.disabled && o.value?.op === "done");

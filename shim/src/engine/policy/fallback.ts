@@ -13,6 +13,7 @@
  * may deliberately hold the answer (combat rolls ahead of the opponent, a strategy card primary waiting for its
  * sub-prompt, the tactical planner, payment / production).
  */
+import { turnStale, unplayedCards } from "./turn.js";
 import { awaits, optionsFor, type Decision, type DecisionKind, type GameState, type Option } from "../types.js";
 
 /** Kinds with no specific policy that would wait on purpose: answered by the fallback this soon. */
@@ -285,7 +286,8 @@ export function fallbackDue(d: Decision, me: string, opts: { waitedMs?: number; 
 
 /**
  * A decision that still lists this seat but that the game no longer waits on (the engine has not closed it yet):
- * - turn.action targeted at us while another player is active (pbd86: "Pass" refused, "It is not your turn");
+ * - turn.action outside our own action-phase turn: another player active (pbd86, pbd160: "It is not your turn"),
+ *   another phase (pbd42: "The action phase is over"), or no state to tell (policy/turn.ts turnStale);
  * - "Setup a Player" once we are seated; the draft-time Keleres preset once we play a flavour;
  * - a bombardment / barrage hits opener once its fight has rolled a round;
  * - a combat roll window whose fight is over or is not the combat on the board (pbd60: rounds of a finished space
@@ -293,8 +295,9 @@ export function fallbackDue(d: Decision, me: string, opts: { waitedMs?: number; 
  * Neither the fallback nor the watchdog acts on it. Needs the state; without one nothing is stale.
  */
 export function staleForBot(d: Decision, state: GameState | null, me: string): boolean {
+  // Turn menus: only during our own action-phase turn (policy/turn.ts; without a state, never).
+  if (d.kind === "turn.action") return turnStale(d, state, me);
   if (!state) return false;
-  if (d.kind === "turn.action") return state.phase === "action" && !!state.activePlayer && state.activePlayer !== me;
   // "Setup a Player" stays up after it is pressed: once we are seated it asks nothing of us (pbd147).
   if (d.kind === "setup.player" && d.options.every((o) => !o.value || (o.value as { step?: string }).step === "start")) {
     return !!state.players.find((p) => p.userId === me)?.faction;
@@ -334,6 +337,15 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
 /** The last-resort answer: a passive option, else the first legal non-destructive one; null when there is none. */
 export function chooseFallback(d: Decision, state: GameState | null, me: string): { option: Option<any>; why: string } | null {
   if (staleForBot(d, state, me)) return null;
+  // Turn menus: never start an unplanned tactical / component action, never pass with a strategy card unplayed.
+  if (d.kind === "turn.action") {
+    const pick = fallbackCandidates(d, state, me).find((o) => {
+      const action = o.value?.action;
+      if (action === "end_turn" || action === "strategic") return true;
+      return action === "pass" && !unplayedCards(state, me).length;
+    });
+    return pick ? { option: pick, why: `fallback: no specific policy answered ${d.kind}; pressed "${pick.label || pick.id}"` } : null;
+  }
   let candidates = fallbackCandidates(d, state, me);
   // A combat round asks for dice: the fallback rolls the window's own roll or nothing (never "Check Combat Action
   // Cards", "Repair Damage", "Declare Ready", another roll type).

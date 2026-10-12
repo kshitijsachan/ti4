@@ -84,6 +84,13 @@ for (const kind of Object.keys(KIND_CLASS) as DecisionKind[]) {
       assert.equal(pick?.option?.id, "cancel");
       return;
     }
+    if (kind === "turn.action") {
+      // Turn menus: only turn options (end turn / strategy card / pass), never "Proceed" (policy/turn.ts).
+      const d = decision(kind, [opt("ultimateUndo_12", "UNDO"), opt("FFCC_sol_tacticalAction", "Tactical Action (3)", { action: "tactical", tacticTokens: 3 }), opt("FFCC_sol_passingAbilities", "Pass (+1 ability)", { action: "pass", abilities: true })]);
+      const pick = chooseTyped(d, state, ME, { history: [], open: [], all: [d], waitedMs: FALLBACK_FORCE_MS, force: true });
+      assert.equal(pick?.option?.id, "FFCC_sol_passingAbilities");
+      return;
+    }
     const d = sample(kind);
     const pick = chooseTyped(d, state, ME, { history: [], open: [], all: [d], waitedMs: FALLBACK_FORCE_MS, force: true });
     assert.ok(pick, `${kind}: no answer`);

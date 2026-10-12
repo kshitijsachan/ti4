@@ -7,6 +7,7 @@ import { CardPlanner } from "./cards.js";
 import { ViolationDesk } from "./violations.js";
 import { EngineTactical, TACTICAL_KINDS } from "./tacticalEngine.js";
 import type { Decision } from "../engine/types.js";
+import { passOption } from "../engine/policy/turn.js";
 
 /*
  * The planner of one autopilot seat: takes the decisions the rule table cannot (tactical actions, strategy card
@@ -140,8 +141,11 @@ export class Brain {
     const goal = chooseGoal(board, me);
     this.handled.add(key);
     if (goal.kind === "pass") {
-      this.seat.log(`passing: ${goal.why}`);
-      return false;
+      // No tactical job: pass now (policy/turn.ts would after its grace period; never with a strategy card unplayed).
+      const pass = passOption(menu.options);
+      if (!pass || me.scs.some((n) => !me.exhaustedSCs.includes(n))) return false;
+      const r = await this.seat.engine!.answer(game, menu, pass.id, `passing: ${goal.why}`);
+      return !!r?.ok;
     }
     this.seat.log(goal.kind === "produce" ? goal.why : `planned ${goal.why}`);
     return this.engineTactical!.start(game, menu, goal);
