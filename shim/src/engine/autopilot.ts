@@ -160,7 +160,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "turn.action":
       // The action-phase turn policy (policy/turn.ts): end turn / play the strategy card / finish passing at once;
       // the start-of-turn menu is the planner's (brain.ts) for TURN_PLANNER_GRACE_MS, then pass.
-      return chooseTurnAction(d, state, me, { waitedMs: ctx.waitedMs, force: ctx.force, open: ctx.open });
+      return chooseTurnAction(d, state, me, { waitedMs: ctx.waitedMs, force: ctx.force, open: ctx.open, history: ctx.history });
     case "tactical.rift": {
       // The planner never paths through gravity rifts; a rift prompt outside its plan has nothing to roll.
       const done = d.options.find((o) => !o.disabled && o.value?.op === "done");

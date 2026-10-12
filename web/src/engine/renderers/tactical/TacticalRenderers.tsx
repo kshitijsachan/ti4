@@ -13,6 +13,11 @@ import type {
 import { planetName, strategyCardName, systemName, unitName } from "./names";
 import classes from "./Tactical.module.css";
 import { optionRole } from "../../optionKinds";
+import type { FollowWait } from "../../../../../shim/src/engine/kinds/tactical";
+import { followsOwed, owesFollow } from "../../follows";
+import { useMyDecisions } from "../../store";
+import { useEngineAnswer } from "../../link";
+import { factionName } from "../../names";
 
 /**
  * A direct action payload for `answer`: the decision's kind-specific endpoint (`POST …/decisions/{id}/{action}`)
@@ -95,31 +100,84 @@ function Extras({
   );
 }
 
+type TurnOpt = Option<TurnAction["options"][number]["value"]>;
+
+function turnLabel(o: TurnOpt, tactic: number | undefined): string {
+  const v = o.value!;
+  switch (v.action) {
+    case "tactical":
+      // Live tokens first: the value is the count when the prompt was posted (a token gained since made it stale).
+      return `Tactical action (${tactic ?? v.tacticTokens ?? "?"} tactic tokens)`;
+    case "component":
+      return "Component action";
+    case "strategic":
+      return `Play ${strategyCardName(v.strategyCard)}`;
+    case "pass":
+      return v.abilities ? "Pass (with abilities)" : "Pass";
+    case "end_turn":
+      return v.abilities ? "End turn (abilities first)" : "End turn";
+    case "end_turn_when_followed":
+      return "End turn when all have followed";
+  }
+}
+
+/** The follow windows that hold this turn (the engine refuses end turn / pass until they close). */
+function followWaits(options: TurnOpt[]): FollowWait[] {
+  for (const o of options) {
+    const v = o.value;
+    if (v && (v.action === "end_turn" || v.action === "pass") && v.waitingFor?.length) return v.waitingFor;
+  }
+  return [];
+}
+
 export function TurnActionView({ decision, state, answer }: RendererProps<TurnAction>) {
   const me = state?.players.find((p) => p.userId === decision.target?.userId);
-  const label = (o: Option<TurnAction["options"][number]["value"]>) => {
-    const v = o.value!;
-    switch (v.action) {
-      case "tactical":
-        // Live tokens first: the value is the count when the prompt was posted (a token gained since made it stale).
-        return `Tactical action (${me?.commandTokens.tactic ?? v.tacticTokens ?? "?"} tactic tokens)`;
-      case "component":
-        return "Component action";
-      case "strategic":
-        return `Play ${strategyCardName(v.strategyCard)}`;
-      case "pass":
-        return v.abilities ? "Pass (with abilities)" : "Pass";
-      case "end_turn":
-        return v.abilities ? "End turn (abilities first)" : "End turn";
-    }
+  const mine = useMyDecisions();
+  const answerOther = useEngineAnswer();
+  const opts = live(decision.options) as TurnOpt[];
+  /* Rules: every player answers a played strategy card before the next turn begins. A follow I still owe (its prompt
+     is open) comes first: my actions wait, greyed out, until I answer it. */
+  const owed = followsOwed(state, me?.userId).filter((f) =>
+    mine.some((d) => owesFollow(d, me?.userId, me?.faction) && d.window?.subject?.strategyCard === f.strategyCard),
+  );
+  const waits = followWaits(opts);
+  const defer = opts.find((o) => o.value!.action === "end_turn_when_followed");
+  const ends = (o: TurnOpt) => o.value!.action === "end_turn" || o.value!.action === "pass";
+  const disabled = (o: TurnOpt) => owed.length > 0 || (waits.length > 0 && ends(o));
+  const pending = waits.flatMap((w) => w.userIds.map((id, i) => state?.players.find((p) => p.userId === id)?.userName ?? factionName(w.factions[i] ?? id)));
+  const reminders = waits
+    .map((w) => {
+      const panel = mine.find((d) => d.kind === "strategy_card.resolve" && d.options.some((o) => (o.value as { action?: string; strategyCard?: number } | null)?.action === "request_all" && (o.value as { strategyCard?: number }).strategyCard === w.strategyCard));
+      const option = panel?.options.find((o) => !o.disabled && (o.value as { action?: string } | null)?.action === "request_all");
+      return panel && option ? { panel, option, name: w.name } : null;
+    })
+    .filter((x) => x !== null);
+  const label = (o: TurnOpt) => {
+    if (waits.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow`;
+    return turnLabel(o, me?.commandTokens.tactic);
   };
-  const variant = (o: Option<TurnAction["options"][number]["value"]>) =>
-    o.value!.action === "pass" || o.value!.action === "end_turn" ? "light" : "filled";
+  const variant = (o: TurnOpt) => (o.value!.action === "pass" || o.value!.action === "end_turn" ? "light" : "filled");
   return (
     <div className={classes.panel}>
+      {owed.length > 0 && <span className={classes.heading}>Follow {owed.map((f) => f.name).join(" and ")} first: the next turn waits on your answer.</span>}
+      {waits.length > 0 && (
+        <span className={classes.heading}>
+          Waiting for {pending.join(", ")} to follow {waits.map((w) => w.name).join(" and ")}. Your turn ends once every player has answered.
+        </span>
+      )}
       <div className={classes.row}>
-        {live(decision.options).map((o) => (
-          <OptionButton key={o.id} id={o.id} label={label(o)} answer={answer} variant={variant(o)} />
+        {opts
+          .filter((o) => o.value!.action !== "end_turn_when_followed")
+          .map((o) => (
+            <Button key={o.id} size="xs" variant={variant(o)} disabled={disabled(o)} onClick={() => answer(o.id)}>
+              {label(o)}
+            </Button>
+          ))}
+        {defer && waits.length > 0 && <OptionButton id={defer.id} label={turnLabel(defer, undefined)} answer={answer} variant="filled" />}
+        {reminders.map((r) => (
+          <Button key={r.option.id} size="xs" variant="subtle" onClick={() => answerOther(r.panel, r.option.id)}>
+            Remind them ({r.name})
+          </Button>
         ))}
       </div>
       <Extras options={decision.options} answer={answer} />

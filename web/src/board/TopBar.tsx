@@ -92,7 +92,15 @@ type Props = {
   talkUnread: number;
   incomingTrades: number;
   /** Decisions waiting on me from the engine stream; replaces the legacy prompt detection when given. */
-  waiting?: { count: number; title: string | null; note?: string | null };
+  waiting?: {
+    count: number;
+    title: string | null;
+    note?: string | null;
+    /** A played strategy card I still owe a follow / decline on ("follow Leadership"): the next turn waits on me. */
+    follow?: string | null;
+    /** Who a strategy card's follow window still waits on, when it holds the turn ("Waiting for Bob to follow Leadership"). */
+    hold?: string | null;
+  };
 };
 
 /** The table's header, one quiet line: which game, where we are in it, whose move it is, and a few icons. */
@@ -119,13 +127,21 @@ export function TopBar({
   const firstDecision = waiting ? waiting.title : legacyTitle;
   const setup = waiting ? (waiting.note ? { text: waiting.note, me: false } : null) : legacySetup;
   /* A decision of mine is up (setup, agenda, a follow…): the table waits on me even when it is nobody's turn. */
-  const myMove = turn.mine || waitingOnMe > 0 || !!setup?.me;
+  const myMove = turn.mine || waitingOnMe > 0 || !!setup?.me || !!waiting?.follow;
   let turnText = "";
   let turnTip: string | undefined;
-  if (turn.mine) turnText = "Your turn";
-  else if (myMove) {
+  if (waiting?.follow) {
+    turnText = `Waiting for you: ${waiting.follow}`;
+    turnTip = "Every player answers a strategy card before the next turn begins.";
+  } else if (turn.mine) {
+    turnText = waiting?.hold ? "Your turn · waiting on follows" : "Your turn";
+    turnTip = waiting?.hold ?? undefined;
+  } else if (myMove) {
     turnText = "Your move";
     turnTip = firstDecision ? `Waiting on you: ${firstDecision}` : setup?.text;
+  } else if (waiting?.hold) {
+    turnText = waiting.hold;
+    turnTip = turn.waitingOn ? `${turn.waitingOn}'s turn` : undefined;
   } else if (turn.waitingOn) turnText = `${turn.waitingOn}'s turn`;
   const note = myMove ? undefined : (myNote ?? (turnText ? undefined : setup?.text));
   const where = [round ? `Round ${round}` : null, turn.phase].filter(Boolean).join(" · ");

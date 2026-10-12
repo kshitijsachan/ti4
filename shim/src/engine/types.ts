@@ -160,6 +160,11 @@ export interface StrategyCardState {
   holderFaction: FactionId | null;
   /** Once played: every seated player's answer to it. */
   reactions: ScReaction[];
+  /**
+   * Played this turn by the active player and some player has not followed / declined yet: the turn cannot end until
+   * they have (rules; engine ScFollowGate). Older engines: absent.
+   */
+  blocksTurn?: boolean;
 }
 
 /** A player's answer to a played strategy card. */

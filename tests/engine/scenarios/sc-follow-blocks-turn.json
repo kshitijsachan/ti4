@@ -1,0 +1,19 @@
+{
+  "name": "sc-follow-blocks-turn",
+  "description": "Strategy-card follows hold the turn (rules; user report: 'following Leadership doesn't block, the game just says my turn'). pbd28 r1: Mahact (Bot Gamma, a bot seat) plays Leadership; Yssaril and Naaz decline at once (bots), Deepwrought (mapclicker, the human seat) has not answered. Mahact's End Turn is refused (engine: turn.action validate 'Waiting for … to follow Leadership'; legacy: ButtonProcessor hook, nothing changes) until Deepwrought declines; then the turn ends and Deepwrought's turn menu opens.",
+  "base": { "recording": "pbd28", "index": 46 },
+  "trigger": { "answer": { "kind": "turn.action", "option": "strategicAction_1$" }, "as": "mahact" },
+  "steps": [
+    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_no_follow_1$" }, "as": "yssaril" },
+    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_no_follow_1$" }, "as": "naaz" },
+    { "answer": { "kind": "turn.action", "option": "_endOfTurnAbilities$" }, "as": "mahact", "refused": true },
+    { "answer": { "kind": "strategy_card.resolve", "option": "^sc_no_follow_1$" }, "as": "deepwrought" },
+    { "answer": { "kind": "turn.action", "option": "_endOfTurnAbilities$" }, "as": "mahact" },
+    { "answer": { "kind": "turn.action", "option": "_turnEnd$" }, "as": "mahact" }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [{ "path": "strategyCards[number=1].blocksTurn", "eq": false }],
+    "decision": [{ "kind": "turn.action", "as": "deepwrought", "open": true }]
+  }
+}
