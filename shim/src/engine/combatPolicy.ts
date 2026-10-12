@@ -107,7 +107,14 @@ function autoAssign(d: CombatHits, me: string): CombatChoice | null {
   if (d.scope !== "player" || d.target?.userId !== me) return null;
   const auto = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "auto");
   if (!auto) return bombardmentPlan(d);
-  if (auto.value?.action !== "auto" || auto.value.hits <= 0) return null;
+  if (auto.value?.action !== "auto") return null;
+  // Shields Holding cancelled some of the prompt's hits: the engine refuses "auto" (it would assign all of them); take
+  // the cancels off with "Cancel a Hit" (each press re-posts the prompt one hit lower), as a person would.
+  if ((auto.value.cancelled ?? 0) > 0) {
+    const cancel = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "cancel" && o.value.hits > 0);
+    return cancel ? { option: cancel, why: `combat: Shields Holding cancelled ${auto.value.cancelled} hit(s); cancel a hit` } : null;
+  }
+  if (auto.value.hits <= 0) return null;
   return { option: auto, why: `combat: auto-assign ${auto.value.hits} ${auto.value.source} hit(s) owed` };
 }
 

@@ -81,6 +81,7 @@ export function CombatHitsPanel({ decision: d, state, answer }: RendererProps<Co
     <div className={classes.panel}>
       <div className={classes.head}>
         <span className={classes.mono}>{auto.hits}</span> hit{auto.hits === 1 ? "" : "s"} from {SOURCE[auto.source] ?? auto.source}
+        {!!auto.cancelled && <span className={classes.sub}>{auto.cancelled} cancelled (Shields Holding)</span>}
         <span className={classes.sub}>
           {mineToAnswer ? "yours to assign" : `${owner} assigns`} · {auto.tile}
         </span>
@@ -104,7 +105,8 @@ export function CombatHitsPanel({ decision: d, state, answer }: RendererProps<Co
               <Button size="xs" disabled={!!problem} onClick={() => answer({ action: "combat-plan", body: { plan: toEntries(rows) } })}>
                 Assign
               </Button>
-              <Button size="xs" variant="default" onClick={() => answer(autoOpt.id)}>
+              {/* Auto-assign would assign every hit on the buttons, cancelled ones included: the engine refuses it then. */}
+              <Button size="xs" variant="default" disabled={!!auto.cancelled} onClick={() => answer(autoOpt.id)}>
                 Auto-assign
               </Button>
               <Button size="xs" variant="subtle" onClick={() => setRows(initial)}>
