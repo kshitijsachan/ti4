@@ -1,20 +1,53 @@
 {
   "name": "te-misc",
-  "description": "TE systems/leaders (pbd105 r1): Emelpar readying another faction's planet (getOtherFactionsEmelpar -> getEmelparButtons_<f> -> emelparReady_planet_<f>_<planet>, faction.ability), Naalu TE agent Z'eu (useNaaluAgent_<pos>_<faction>, leader.use: remove a command token)",
-  "base": { "recording": "pbd105", "index": 165, "repost": false },
+  "description": "TE systems/leaders (pbd105 r1): Emelpar legendary ability readying another faction's planet (/planet legendary_exhaust_ability -> getOtherFactionsEmelpar -> getEmelparButtons_<f> -> emelparReady_planet_<f>_<planet>, faction.ability; needs bot v-te 180d3e6: those save=false buttons were treated as an info menu, never captured), Naalu TE agent Z'eu (useNaaluAgent_<pos>_<faction>, leader.use)",
+  "base": {
+    "recording": "pbd105",
+    "index": 165,
+    "repost": false
+  },
   "setup": [
     "/planet add planet:emelpar faction_or_color:crimson",
     "/planet exhaust planet:mez faction_or_color:ralnel",
     "/add_cc tile_name:210 faction_or_color:ralnel"
   ],
-  "trigger": { "press": "getOtherFactionsEmelpar", "as": "crimson" },
   "steps": [
-    { "press": "getEmelparButtons_ralnel", "as": "crimson" },
-    { "answer": { "kind": "/./", "option": "^emelparReady_planet_ralnel_mez$" }, "as": "crimson" },
-    { "press": "useNaaluAgent_210_ralnel", "as": "naalu" }
+    {
+      "command": "/planet legendary_exhaust_ability planet:emelpar faction_or_color:crimson"
+    },
+    {
+      "answer": {
+        "kind": "faction.ability",
+        "option": "^getOtherFactionsEmelpar$"
+      },
+      "as": "crimson"
+    },
+    {
+      "answer": {
+        "kind": "faction.ability",
+        "option": "^getEmelparButtons_ralnel$"
+      },
+      "as": "crimson"
+    },
+    {
+      "answer": {
+        "kind": "faction.ability",
+        "option": "^emelparReady_planet_ralnel_mez$"
+      },
+      "as": "crimson"
+    },
+    {
+      "press": "useNaaluAgent_210_ralnel",
+      "as": "naalu"
+    }
   ],
   "expect": {
     "invariants": true,
-    "save": [ { "key": "player[ralnel].planets_exhausted", "excludes": "mez" } ]
+    "save": [
+      {
+        "key": "player[ralnel].planets_exhausted",
+        "excludes": "mez"
+      }
+    ]
   }
 }
