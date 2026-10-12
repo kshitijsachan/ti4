@@ -1,0 +1,30 @@
+{
+  "name": "sc-pick-after-status",
+  "description": "Round 2+ strategy phase start from the status phase (the last 'Ready For Strategy Phase' / 'Start Strategy Phase' press) posts the first pick mid-interaction. Capture read the pre-interaction save (statusHomework), so StrategyCardPickKind.obsolete closed the fresh pick and the speaker had nothing to answer (live pbd229 10:46 round 3 and 10:12 round 2, pbd223 rounds 2+3, pbd188 round 3: STALL 'round N strategy active=<speaker>'). The pick must be an open strategy_card.pick for the speaker (letnev). Base pbd229 undo 370 (statusHomework); the fork has no reaction registry for the homework message, so the phase is started with the status-advance button (same StartPhaseService path).",
+  "base": {
+    "game": "pbd229",
+    "index": 370
+  },
+  "steps": [
+    {
+      "press": "startStrategyPhase",
+      "as": "letnev"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.phase_of_game",
+        "eq": "strategy"
+      }
+    ],
+    "decision": [
+      {
+        "kind": "strategy_card.pick",
+        "as": "letnev",
+        "open": true
+      }
+    ]
+  }
+}
