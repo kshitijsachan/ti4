@@ -1,0 +1,16 @@
+{
+  "name": "leaders-nz-ralnel-agent-another-player",
+  "description": "Rules audit (leaders N-Z): Kan Kip Rel gives 1 drawn action card to ANOTHER player. The original also offered (and accepted) the Ral Nel player themself; the engine refuses handleRalNelAgentPt2_<ac>_ralnel.",
+  "base": { "recording": "pbd91", "index": 35, "repost": false },
+  "setup": [
+    "/ac draw_specific_ac ac_id:sabo2 faction_or_color:ralnel"
+  ],
+  "trigger": { "command": "/player stats commodities:0 faction_or_color:ralnel" },
+  "steps": [
+    { "press": "handleRalNelAgentPt2_sabo2_ralnel", "as": "ralnel", "refused": true }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "player[ralnel].action_cards", "match": "sabo2" } ]
+  }
+}

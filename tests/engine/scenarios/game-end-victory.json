@@ -1,0 +1,23 @@
+{
+  "name": "game-end-victory",
+  "description": "Victory: pbd243 (3 VP game) save 388, Sol's Imperial 'Score A Public' list is up; Sol scores Negotiate Trade Routes and reaches the victory points. The bot posts 'it appears as though Sol has won' (End Game / Rematch). Engine: GameState.ended, phase 'finished', finish 'won', winners = Sol, standings headed by Sol, and the typed game.end prompt open (table scope). Nobody presses End Game (it would archive the fork's channels).",
+  "base": { "game": "pbd243", "index": 388 },
+  "steps": [
+    { "press": "FFCC_sol_po_scoring_1", "as": "sol" },
+    { "wait": 3000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "ended", "eq": true },
+      { "path": "phase", "eq": "finished" },
+      { "path": "finish", "eq": "won" },
+      { "path": "winners", "includes": "${faction:sol}" },
+      { "path": "standings[0].faction", "eq": "sol" },
+      { "path": "standings[0].winner", "eq": true },
+      { "path": "standings[0].rank", "eq": 1 },
+      { "path": "victoryPointsToWin", "eq": 3 }
+    ],
+    "decision": { "kind": "game.end", "open": true }
+  }
+}

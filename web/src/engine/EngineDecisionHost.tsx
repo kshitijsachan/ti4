@@ -4,6 +4,7 @@ import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEye, I
 import cx from "clsx";
 import { useDecisionFocus, useWaitingOnMe } from "@/decisions/model/focus";
 import { useMovementUI } from "@/mapactions/store";
+import { mapTargets, useEngineMapPick } from "@/mapactions/enginePick";
 import { useReserveRect } from "@/state/reservedArea";
 import type { Decision, GameState } from "./contract";
 import { forgetClosedDrafts } from "./draftState";
@@ -13,6 +14,9 @@ import { rendererFor } from "./registry";
 import { engineStore, useEngine, useMyDecisions } from "./store";
 import { DecisionFooter, FooterSlot, PopupLayer, popupClasses as classes, usePeek, useScrollEdges } from "./ui/Popup";
 import { EngineOutcomeToast } from "./ui/OutcomeToast";
+import { gameOverHeadline, gameOverView } from "./gameOver";
+import { WinnerPanel } from "./renderers/game/WinnerPanel";
+import { planetName } from "./renderers/tactical/names";
 
 export { decisionTitle };
 
@@ -42,6 +46,30 @@ function useTurnStalled(state: GameState | null, empty: boolean): boolean {
     return () => window.clearTimeout(t);
   }, [waiting]);
   return stalled;
+}
+
+/** How long the popup may stay empty while the engine stream connects before it says so. */
+const CONNECTING_NOTE_MS = 1500;
+
+/**
+ * The popup's place while the engine stream connects (reload, server restart): after a moment, a one-line status
+ * where the prompts will appear, instead of an empty corner (or the legacy popup flashing in).
+ */
+export function EngineConnecting({ rightInset = 0, restarting = false }: { rightInset?: number; restarting?: boolean }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setShow(true), CONNECTING_NOTE_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+  if (!show) return null;
+  return (
+    <PopupLayer contained rightInset={rightInset}>
+      <div className={classes.stalled} role="status" data-engine-connecting>
+        <IconLoader2 size={14} className={classes.spin} />
+        {restarting ? "The game engine is restarting — your options will be back in a moment…" : "Loading your prompts…"}
+      </div>
+    </PopupLayer>
+  );
 }
 
 /** The system a decision is about, for the map highlight. */
@@ -83,9 +111,17 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   /* While the map answers the move / land step (its own panel on the board), that step is the map's, not the popup's. */
   const movement = useMovementUI();
   const mapKind = movement.step === "move" ? "tactical.move" : movement.step === "land" ? "tactical.land" : null;
+  /* …and while it does, my own played card's panel stays out of the way: the tactical action is what I am doing. */
+  const myFaction = state?.players.find((p) => p.self)?.faction;
   const queue = useMemo(
-    () => ordered.queue.filter((d) => !(drafting && BOARD_KINDS.has(d.kind)) && d.kind !== mapKind),
-    [drafting, ordered.queue, mapKind],
+    () =>
+      ordered.queue.filter(
+        (d) =>
+          !(drafting && BOARD_KINDS.has(d.kind)) &&
+          d.kind !== mapKind &&
+          !(mapKind && d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction),
+      ),
+    [drafting, ordered.queue, mapKind, myFaction],
   );
   const offers = ordered.offers;
 
@@ -105,7 +141,9 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const shown = openOffer ?? queue.find((d) => d.id === jumpId) ?? queue[0];
   const more = queue.filter((d) => d.id !== shown?.id).length;
   const collapsed = !!shown && collapsedId === shown.id && !errors[shown.id];
-  const stalled = useTurnStalled(state, !shown && queue.length === 0);
+  const over = useMemo(() => gameOverView(state, Object.values(openIds)), [state, openIds]);
+  const stalled = useTurnStalled(over ? null : state, !shown && queue.length === 0);
+  const [overFolded, setOverFolded] = useState(false);
 
   /* The header's "Your move" pill: what is really waiting on me (background prompts never count). */
   const publishWaiting = useWaitingOnMe((s) => s.set);
@@ -123,6 +161,17 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const focusLabel = shown?.kind.startsWith("combat.") ? "Combat" : null;
   useEffect(() => setFocus(position, "prompt", focusLabel), [position, focusLabel, setFocus]);
   useEffect(() => () => setFocus(null, null), [setFocus]);
+
+  /* Map-first: the shown decision's systems / planets answer from the map too (its buttons stay as the fallback). */
+  const setMapPick = useEngineMapPick((s) => s.set);
+  const shownPending = !!shown && !!pending[shown.id];
+  const targets = useMemo(() => (shownPending ? null : mapTargets(shown, state, planetName)), [shown, state, shownPending]);
+  useEffect(() => {
+    if (!shown || !targets) return setMapPick(null);
+    setMapPick({ decisionId: shown.id, byPosition: targets, answer: (optionId) => answer(shown, optionId) });
+    /* `answer` is a new function every render: the pick follows the decision and its targets only. */
+  }, [shown, targets, setMapPick]);
+  useEffect(() => () => setMapPick(null), [setMapPick]);
 
   /* The queue and "Available now" lists close on any click outside them (and on Escape, below). */
   useEffect(() => {
@@ -194,6 +243,73 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
       {unhidePill}
     </div>
   );
+
+  /* Game over: the winner screen takes the popup's place (nothing else is asked of anyone any more). */
+  if (over) {
+    const endPending = over.endPrompt ? (pending[over.endPrompt.id]?.optionId ?? null) : null;
+    const endError = over.endPrompt ? errors[over.endPrompt.id] : undefined;
+    return (
+      <>
+        <PopupLayer contained={placement === "contained"} rightInset={rightInset} peeking={peek.peeking}>
+          <section
+            ref={cardRef}
+            className={cx(classes.card, overFolded && classes.collapsed)}
+            role="dialog"
+            aria-modal="false"
+            aria-label={gameOverHeadline(over)}
+            data-engine-decision="game.over"
+          >
+            <header className={classes.head}>
+              <div className={classes.headTop}>
+                <div className={classes.titles}>
+                  <span className={classes.eyebrow}>{over.finish === "ended" ? "Game ended" : "Game over"}</span>
+                  <h2 className={classes.title}>Final standings</h2>
+                </div>
+                <Tooltip label="Hold to see the map, or click to toggle" position="bottom">
+                  <UnstyledButton
+                    className={classes.peekBtn}
+                    onPointerDown={(e: PointerEvent) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      peek.hold();
+                    }}
+                    aria-label="Peek at map (hold, or click to toggle)"
+                  >
+                    <IconMap size={14} />
+                    <span>Peek at map</span>
+                  </UnstyledButton>
+                </Tooltip>
+                <Tooltip label={overFolded ? "Show the standings" : "Fold down to the title"} position="bottom">
+                  <UnstyledButton
+                    className={classes.iconBtn}
+                    onClick={() => setOverFolded((v) => !v)}
+                    aria-label={overFolded ? "Expand" : "Collapse"}
+                    aria-expanded={!overFolded}
+                  >
+                    {overFolded ? <IconChevronDown size={15} /> : <IconChevronUp size={15} />}
+                  </UnstyledButton>
+                </Tooltip>
+              </div>
+            </header>
+            <div className={classes.body} hidden={overFolded}>
+              <WinnerPanel view={over} answer={answer} pendingOptionId={endPending} />
+            </div>
+            {endError && over.endPrompt && (
+              <div className={classes.error} role="alert">
+                <IconAlertTriangle size={14} />
+                <span>{endError}</span>
+                <span className={classes.grow} />
+                <UnstyledButton className={classes.errorClose} onClick={() => engineStore.getState().dismissError(over.endPrompt!.id)}>
+                  Dismiss
+                </UnstyledButton>
+              </div>
+            )}
+          </section>
+        </PopupLayer>
+        <EngineOutcomeToast gameName={gameName} rightInset={rightInset} />
+      </>
+    );
+  }
 
   if (!shown) {
     return (

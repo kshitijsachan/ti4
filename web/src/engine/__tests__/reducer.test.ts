@@ -172,3 +172,19 @@ void test("the neutral seat (Dicecord) is not a player in the engine view", () =
   const w = run(v, { t: "engine", type: "state", game: G, state: state(11, 11, { players }) });
   assert.deepEqual(w.state?.players.map((p) => p.userId), [ME, "u2"]);
 });
+
+void test("a roll-back (game.rewound) drops answers in flight; a prompt re-opened under its old id at revision 1 is taken", () => {
+  const a = dec("a", 11, { revision: 3 });
+  let v = run(subscribeView(EMPTY_VIEW, G), snap(10, []), ev(opened(a)));
+  v = startAnswer(v, "a", "n1", "a-a");
+  const rewound: EngineEvent = { seq: 12, type: "game.rewound", game: G, stateVersion: 5, decision: null, reason: "rewound" };
+  v = run(v, ev(closed(a, 13)), ev(rewound));
+  assert.deepEqual(v.pending, {});
+  assert.equal(v.seq, 13, "an older event is ignored, also a roll-back");
+  v = run(subscribeView(EMPTY_VIEW, G), snap(10, []), ev(opened(a)));
+  v = startAnswer(v, "a", "n1", "a-a");
+  v = run(v, ev({ ...rewound, seq: 14 }), ev(closed(a, 15)), ev(opened({ ...a, revision: 1 }, 16)));
+  assert.deepEqual(v.pending, {});
+  assert.deepEqual(ids(v), ["a"]);
+  assert.equal(v.decisions.a.revision, 1);
+});

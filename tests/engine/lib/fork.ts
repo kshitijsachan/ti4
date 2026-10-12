@@ -148,6 +148,9 @@ export async function createFork(n = 8, log: (s: string) => void = () => {}): Pr
     }
     await sleep(1000);
   }
+  // A launch that never saved its channels (e.g. the shim restarted mid-launch: pbd260) leaves only the "Game
+  // created" save; loadSave needs two. Fail here instead of handing out a fork every scenario refuses later.
+  if (latestUndo(game) < 2) throw new Error(`fork ${game} was not launched cleanly (only ${latestUndo(game)} save); end it and create another`);
   log(`fork ${game} ready`);
   return openFork(game);
 }
@@ -252,7 +255,7 @@ export function identityMap(fork: Fork): ForkMap {
  */
 export async function loadSave(fork: Fork, origText: string, map: ForkMap, carrier?: Carrier, nonce?: string): Promise<Msg | null> {
   const latest = latestUndo(fork.game);
-  if (latest < 2) throw new Error(`fork ${fork.game} has no undo history`);
+  if (latest < 2) throw new Error(`fork ${fork.game} has no undo history (latest save ${latest}): it was never launched cleanly or a failed rewind consumed its saves; use a fresh fork`);
   refreshThreads(fork, map);
   const target = rewriteForFork(origText, map, { savedButtons: "", savedMessage: "", savedChannel: fork.actionsId, customName: nonce });
   atomicWrite(undoFile(fork.game, latest - 1), target);

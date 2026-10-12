@@ -1,0 +1,12 @@
+{
+  "name": "cc-gain-cap-redistribute",
+  "description": "CcGainCap: the redistribute-only panel (after a Warfare tactical action / TE Warfare primary, redistributeCCButtons_deleteThisButton) nets 0: lose a tactic token, gain a fleet token (accepted), then another gain is refused.",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "steps": [
+    { "press": "FFCC_muaat_redistributeCCButtons_deleteThisButton", "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "decrease_tactic_cc$" }, "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc$" }, "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_strategy_cc$" }, "as": "muaat", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}

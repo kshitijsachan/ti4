@@ -1,0 +1,22 @@
+{
+  "name": "leaders-nz-mercer-cap",
+  "description": "Rules audit (leaders N-Z): Field Marshal Mercer moves up to 2 ground forces. The original let every mercerMove_ press move one more; the engine refuses the third.",
+  "base": { "recording": "pbd83", "index": 165, "repost": false },
+  "setup": [
+    "/leaders ready leader:nomadagentmercer faction_or_color:nomad",
+    "/add_units tile_name:313 unit_names:\"4 infantry\" faction_or_color:nomad"
+  ],
+  "trigger": { "press": "exhaustAgent_nomadagentmercer_313_arcturus", "as": "nomad" },
+  "steps": [
+    { "press": "mercerMove_arcturus_313_space_infantry", "as": "nomad" },
+    { "press": "mercerMove_arcturus_313_space_infantry", "as": "nomad" },
+    { "press": "mercerMove_arcturus_313_space_infantry", "as": "nomad", "refused": true }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "tiles[position=313].holders[name=arcturus].units[unit=gf].count", "eq": 8 },
+      { "path": "tiles[position=313].holders[name=space].units[unit=gf].count", "eq": 2 }
+    ]
+  }
+}

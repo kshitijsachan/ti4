@@ -41,6 +41,11 @@
   cursor: not-allowed;
 }
 
+/* A system I can't activate greys out under the cursor (the tooltip says why). */
+:global(.mapactions-cannot:hover) [data-map-tile-visual="true"] {
+  filter: grayscale(0.85) brightness(0.65);
+}
+
 /* Hex outlines drawn over tiles (origins, the activated system, a pending confirm). */
 .art {
   position: absolute;
@@ -172,6 +177,20 @@
 .iconButton:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* A chip choice that needs words (one per planet of the clicked system). */
+.textButton {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--play-hairline-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--play-ink);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .go {

@@ -160,8 +160,9 @@ const fragments = [...explores.keys()].filter((id) =>
   records("data/explores").some((r) => official(r) && r.id === id && r.resolution === "Fragment"),
 );
 
-// Phases: every literal the engine passes to Game.setPhaseOfGame (plus "" = a new game).
-const phases = new Set([""]);
+// Phases: every literal the engine passes to Game.setPhaseOfGame (plus "" = a new game, and "finished" = what the
+// engine's GameState reports once the game is won or ended, StateSnapshotBuilder.FINISHED).
+const phases = new Set(["", "finished"]);
 for (const root of javaRoots) {
   for (const f of walk(root, ".java")) {
     const src = readFileSync(f, "utf8");

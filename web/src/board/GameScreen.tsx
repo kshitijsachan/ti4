@@ -7,6 +7,7 @@ import { findGame, gameOfChannel } from "@/play/games";
 import { useChannelJump } from "@/play/channelJump";
 import type { TurnState } from "@/play/turn";
 import { useGameData } from "@/state/useGameContext";
+import { usePlayerData } from "@/api/usePlayerData";
 import { getPrimaryColorCSS } from "@/entities/lookup/colors";
 import { MapLoadingState } from "@/domains/map/components/MapLoadingState";
 import { BoardTable } from "./BoardTable";
@@ -14,7 +15,7 @@ import { GameDrawers } from "./GameDrawers";
 import { DecisionSlot, HandSlot, LogSlot } from "./Mounts";
 import { OPEN_TRADE_EVENT } from "@/decisions";
 import { useEngineLink, useEngineState, useMyQueue } from "@/engine";
-import { activePlayerColor, engineTurn, engineWaiting } from "@/engine/board";
+import { activePlayerColor, engineGameOver, engineTurn, engineWaiting } from "@/engine/board";
 import { ObjectivesModal } from "./ObjectivesModal";
 import { PlayerRail } from "./PlayerRail";
 import { PlayersView } from "./PlayersView";
@@ -73,6 +74,7 @@ export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing 
   /* Engine flag on and its stream live: the header and seats read the engine's state, not the web-data document. */
   const engineState = useEngineState(gameName);
   const myQueue = useMyQueue();
+  const webState = usePlayerData(gameName, { select: (d) => d.gameState ?? null }).data ?? null;
   const turn = engineState ? engineTurn(engineState, me?.id) : legacyTurn;
   const channels = usePlay((s) => s.channels);
   const game = findGame(channels, gameName);
@@ -121,6 +123,16 @@ export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing 
   const actionPhase = !!turn.phase && turn.phase.startsWith("Action");
   const passed = engineState ? engineState.players.find((p) => p.userId === me?.id)?.passed : mine?.passed;
   if (passed && actionPhase) myNote = "You passed";
+  /* Game over (engine state, else the bot's web data): the header names the winner instead of whose turn it is. */
+  const legacyWinner = webState?.phase === "finished" ? players.find((p) => p.color === webState.winner) : undefined;
+  const gameOver = engineState
+    ? engineGameOver(engineState)
+    : webState?.phase === "finished"
+      ? legacyWinner
+        ? `${legacyWinner.discordId === me?.id ? "You win!" : `${legacyWinner.userName} wins`}`
+        : "Game over"
+      : null;
+  if (gameOver) myNote = undefined;
   const revealed = [...(data?.objectives?.stage1Objectives ?? []), ...(data?.objectives?.stage2Objectives ?? [])].filter((o) => o.revealed).length;
 
   let stage: ReactNode = takeover;
@@ -136,6 +148,7 @@ export function GameScreen({ gameName, turn: legacyTurn, takeover, boardMissing 
         turn={turn}
         activeColor={engineState ? activePlayerColor(engineState) : active ? getPrimaryColorCSS(active.color) : undefined}
         waiting={engineState ? engineWaiting(engineState, myQueue, me?.id) : undefined}
+        gameOver={gameOver}
         myNote={myNote}
         objectives={revealed}
         drawer={drawer}

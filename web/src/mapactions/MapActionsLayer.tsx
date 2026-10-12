@@ -20,12 +20,14 @@ import { baseId } from "@/decisions/model/controls";
 import { useMapActionContext } from "./context";
 import { activationOf, type Activation } from "./eligibility";
 import { activateSystem as driveActivation } from "./activate";
+import { activateClick, activateLabel } from "./activateClick";
 import { buttonsOf, pressButton } from "./driver";
 import { promptHasMoves, unitsAt, type UnitGroup } from "./movement";
 import { distancesTo, maxBoost } from "./range";
 import { useMoveBonuses } from "./bonuses";
 import { landingOffer } from "./landing";
 import { useMapActions } from "./store";
+import { useEngineMapPick, type MapPickChoice } from "./enginePick";
 import {
   obstaclesIn,
   overlaps,
@@ -46,7 +48,7 @@ type Props = {
   docked?: boolean;
 };
 
-type Chip = { position: string; kind: "activate" | "pick"; label: string };
+type Chip = { position: string; kind: "activate" | "pick" | "engine"; label: string; choices?: MapPickChoice[] };
 
 const DRAG_SLOP = 6;
 const TOOLTIP_DELAY = 350;
@@ -128,6 +130,9 @@ export function MapActionsLayer({
   );
   const ctx = useMapActionContext(gameName, names);
   const { step, me, web, conn, scope, pick } = ctx;
+  /* The engine decision on screen picks a system / planet: the map answers it first (map-first). */
+  const enginePick = useEngineMapPick((s) => s.pick);
+  const engineTargets = enginePick?.byPosition ?? null;
   const frameRef = useRef<HTMLDivElement>(null);
   const [chip, setChip] = useState<Chip | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -152,7 +157,7 @@ export function MapActionsLayer({
       ? null
       : { channelId: step.prompt.channelId, messageId: step.prompt.message.id };
   const ownsPrompt = !!promptId && !handedBack[promptId];
-  const activating = step.kind === "turn" || step.kind === "choose";
+  const activating = !engineTargets && (step.kind === "turn" || step.kind === "choose");
   const target =
     step.kind === "move" || step.kind === "land" ? step.target : null;
   const moving =
@@ -243,6 +248,10 @@ export function MapActionsLayer({
   useEffect(() => {
     if (!activating) setChip((c) => (c?.kind === "activate" ? null : c));
   }, [activating]);
+  /* An engine chip belongs to the decision that offered it. */
+  useEffect(() => {
+    setChip((c) => (c?.kind === "engine" && !engineTargets?.[c.position] ? null : c));
+  }, [engineTargets]);
 
   const tileClasses = useMemo(() => {
     const out: Record<string, string> = {};
@@ -253,8 +262,10 @@ export function MapActionsLayer({
     if (pick)
       for (const pos of Object.keys(pick.byPosition))
         out[pos] = "mapactions-can";
+    if (engineTargets)
+      for (const pos of Object.keys(engineTargets)) out[pos] = "mapactions-can";
     return out;
-  }, [activation, moving, groups, pick]);
+  }, [activation, moving, groups, pick, engineTargets]);
   useTileClasses(tileClasses);
 
   /* Someone else (a link, another panel) asked to activate a system. */
@@ -266,7 +277,7 @@ export function MapActionsLayer({
       setChip({
         position: requested,
         kind: "activate",
-        label: `Activate ${names[requested] || requested}?`,
+        label: activateLabel(names[requested] || requested),
       });
     else
       setError(
@@ -279,14 +290,17 @@ export function MapActionsLayer({
   onTileClick.current = (position: string) => {
     if (busy) return true;
     setError(null);
+    const engineChoices = engineTargets?.[position];
+    if (engineChoices) {
+      if (chip?.kind === "engine" && chip.position === position && engineChoices.length === 1) confirmChip();
+      else setChip({ position, kind: "engine", label: engineChoices.length === 1 ? engineChoices[0].label : `${names[position] || "System"}: choose a planet`, choices: engineChoices });
+      return true;
+    }
     if (activating) {
-      const a = activation[position];
-      if (!a?.ok) return false;
-      setChip({
-        position,
-        kind: "activate",
-        label: `Activate ${names[position] || "system"}?`,
-      });
+      const click = activateClick(position, !!activation[position]?.ok, chip, names[position] ?? "");
+      if (click.kind === "ignore") return false;
+      if (click.kind === "confirm") confirmChip();
+      else setChip({ position, kind: "activate", label: click.label });
       return true;
     }
     if (moving && groups[position]) {
@@ -394,10 +408,15 @@ export function MapActionsLayer({
     }
   };
 
-  const confirmChip = () => {
+  const confirmChip = (optionId?: string) => {
     if (!chip) return;
     const { position, kind } = chip;
     setChip(null);
+    if (kind === "engine") {
+      const id = optionId ?? (chip.choices?.length === 1 ? chip.choices[0].optionId : undefined);
+      if (id) enginePick?.answer(id);
+      return;
+    }
     if (kind === "activate") {
       void run(() =>
         driveActivation(position, {
@@ -426,6 +445,9 @@ export function MapActionsLayer({
       return null;
     const name = names[hover.position];
     const label = `${name ? `${name} ` : ""}(${hover.position})`;
+    const engineChoices = engineTargets?.[hover.position];
+    if (engineChoices)
+      return { text: `${label} — click to ${engineChoices.map((c) => c.label.charAt(0).toLowerCase() + c.label.slice(1)).join(" or ")}`, blocked: false };
     if (activating) {
       const a = activation[hover.position];
       if (!a) return null;
@@ -566,21 +588,36 @@ export function MapActionsLayer({
             }
             role="dialog"
             aria-label={chip.label}
+            title={chip.kind === "activate" ? "Click the system again (or ✓, or Enter) to activate" : chip.kind === "engine" && (chip.choices?.length ?? 0) === 1 ? "Click the system again (or ✓, or Enter) to confirm" : undefined}
           >
             <span className={classes.chipText}>{chip.label}</span>
             <span className={cx(classes.mono, classes.muted)}>
               {chip.position}
             </span>
-            <button
-              type="button"
-              className={cx(classes.iconButton, classes.go)}
-              onClick={confirmChip}
-              autoFocus
-              aria-label="Confirm"
-              title="Confirm (Enter)"
-            >
-              <IconCheck size={16} stroke={2.2} />
-            </button>
+            {chip.kind === "engine" && chip.choices && chip.choices.length > 1 ? (
+              chip.choices.map((c, i) => (
+                <button
+                  key={c.optionId}
+                  type="button"
+                  className={cx(classes.textButton, classes.go)}
+                  onClick={() => confirmChip(c.optionId)}
+                  autoFocus={i === 0}
+                >
+                  {c.label}
+                </button>
+              ))
+            ) : (
+              <button
+                type="button"
+                className={cx(classes.iconButton, classes.go)}
+                onClick={() => confirmChip()}
+                autoFocus
+                aria-label="Confirm"
+                title="Confirm (Enter)"
+              >
+                <IconCheck size={16} stroke={2.2} />
+              </button>
+            )}
             <button
               type="button"
               className={classes.iconButton}

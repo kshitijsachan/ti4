@@ -56,7 +56,7 @@ export function PlayedCard({ decision, state, answer }: RendererProps<StrategyCa
       <Title sc={sc} sub={`Played by ${playerName(state, first.holder)}`}>
         {first.name}
       </Title>
-      {isHolder ? <Primary opts={opts} parts={first.primaryParts} pressed={pressed} done={serverDone(decision)} onPick={pick} /> : <Follow opts={opts} status={reaction?.status ?? "pending"} reason={reaction?.cantFollowReason ?? null} onPick={pick} />}
+      {isHolder ? <Primary opts={opts} parts={first.primaryParts} pressed={pressed} done={serverDone(decision)} holdsMecatol={holdsMecatol(me.planets)} onPick={pick} /> : <Follow opts={opts} status={reaction?.status ?? "pending"} reason={reaction?.cantFollowReason ?? null} onPick={pick} />}
       {card && card.reactions.length > 0 && (
         <div className={classes.reactions}>
           {card.reactions.map((r) => (
@@ -71,6 +71,21 @@ export function PlayedCard({ decision, state, answer }: RendererProps<StrategyCa
   );
 }
 
+/** Mecatol Rex (or Thunder's Edge's Mecatol Rex) among my planets. */
+function holdsMecatol(planets: readonly string[] | undefined): boolean {
+  return (planets ?? []).some((p) => /^(mr|mrte)$/i.test(p));
+}
+
+/**
+ * Imperial's second part: 1 VP if I control Mecatol Rex, otherwise draw a secret objective. The one that does not
+ * apply is greyed out with why (the engine offers both buttons).
+ */
+function imperialBlock(o: Opt, mecatol: boolean): string | null {
+  if (o.value!.action === "score_imperial" && !mecatol) return "you do not control Mecatol Rex";
+  if (o.value!.action === "draw_secret" && o.value!.part === "imperial" && mecatol) return "you control Mecatol Rex: score the point instead";
+  return null;
+}
+
 /** The primary parts the engine has recorded as done (window subject `primaryDone`). */
 function serverDone(d: StrategyCardResolve): string[] {
   const v = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
@@ -78,7 +93,21 @@ function serverDone(d: StrategyCardResolve): string[] {
 }
 
 /** Every part of the primary, in order; a part stays listed (ticked) once pressed so none is skipped. */
-function Primary({ opts, parts, pressed, done, onPick }: { opts: Opt[]; parts: PrimaryPart[]; pressed: string[]; done: string[]; onPick: (id: string) => void }) {
+function Primary({
+  opts,
+  parts,
+  pressed,
+  done,
+  holdsMecatol: mecatol,
+  onPick,
+}: {
+  opts: Opt[];
+  parts: PrimaryPart[];
+  pressed: string[];
+  done: string[];
+  holdsMecatol: boolean;
+  onPick: (id: string) => void;
+}) {
   const mine = opts.filter((o) => o.value!.who !== "others");
   /* What the engine reports done (survives reload), else what I pressed on this page. */
   const doneCount = (part: PrimaryPart) =>
@@ -105,12 +134,16 @@ function Primary({ opts, parts, pressed, done, onPick }: { opts: Opt[]; parts: P
         </ul>
       )}
       <div className={classes.choices}>
-        {mine.map((o) => (
-          <Choice key={o.id} option={o} onPick={onPick} quiet={o.value!.action === "request_all"}>
-            {o.label}
-            {pressedCount(o.id) > 0 && <Meta>pressed ×{pressedCount(o.id)}</Meta>}
-          </Choice>
-        ))}
+        {mine.map((o) => {
+          const blocked = imperialBlock(o, mecatol);
+          return (
+            <Choice key={o.id} option={blocked ? { ...o, disabled: true } : o} onPick={onPick} quiet={o.value!.action === "request_all"} title={blocked ?? undefined}>
+              {o.label}
+              {blocked && <Meta>{blocked}</Meta>}
+              {pressedCount(o.id) > 0 && <Meta>pressed ×{pressedCount(o.id)}</Meta>}
+            </Choice>
+          );
+        })}
       </div>
     </>
   );

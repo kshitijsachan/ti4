@@ -14,7 +14,9 @@
 //     trigger: { press: "<custom id>", as } | { command: "/…" } | { answer: {...} },
 //     steps:   [ { answer: { kind: "strategy_card.pick", option: "regex on option id/label", value: { strategyCard: 3 } }, as },
 //                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command } ],
+//     diffIgnore: [ "stored.violatedSystems" ]   (save keys --diff skips: game.<k> | stored.<k> | player.<k>)
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ] } }
+//   A step may carry its own "expect" (same shape), checked right after it (e.g. a prompt closed mid-flow).
 //   A step with "refused": true expects the engine to refuse it (the legacy fork must still end in the same state).
 //   "as": "seat1".."seat8" | a faction | a user id (default seat1). Strings may use ${seat1}…${seat8}, ${fork},
 //   ${faction:xxcha} (that faction's user id), ${color:red}.
@@ -428,7 +430,9 @@ async function checkExpect(run, expect) {
   if (expect.state?.length) {
     const st = await engineState(run.fork.game);
     for (const e of expect.state) {
-      const err = checkValue(getPath(st, interp(e.path, run.ctx)), e);
+      // Expected values may name seats too (${faction:sol} = that seat's user id on the fork).
+      const ev = Object.fromEntries(Object.entries(e).map(([k, v]) => [k, typeof v === "string" ? interp(v, run.ctx) : v]));
+      const err = checkValue(getPath(st, interp(e.path, run.ctx)), ev);
       if (err) fails.push(`state ${e.path}: ${err}`);
     }
   }
@@ -442,10 +446,13 @@ async function checkExpect(run, expect) {
     }
   }
   if (expect.decision) {
-    // { kind, as?, open: true|false }
+    // { kind, as?, scope?: "player"|"table", open: true|false }
     for (const e of [].concat(expect.decision)) {
-      const ds = (await openDecisions(run.fork.game)).filter((d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx)));
-      if ((e.open ?? true) !== ds.length > 0) fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}: expected ${(e.open ?? true) ? "open" : "closed"}`);
+      const ds = (await openDecisions(run.fork.game)).filter(
+        (d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx)) && (!e.scope || d.scope === e.scope),
+      );
+      if ((e.open ?? true) !== ds.length > 0)
+        fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}${e.scope ? ` (scope ${e.scope})` : ""}: expected ${(e.open ?? true) ? "open" : "closed"}`);
     }
   }
   return fails;
@@ -495,7 +502,7 @@ for (const { phase, st } of all) {
   }
   let diffs;
   if (diffMode) {
-    const [a, b] = runs.map((r) => normalizeSave(r.save(), { forkGame: r.fork.game, origGame: "fork" }));
+    const [a, b] = runs.map((r) => normalizeSave(r.save(), { forkGame: r.fork.game, origGame: "fork", extraVolatile: sc.diffIgnore ?? [] }));
     diffs = diffNormalized(a, b);
     if (diffs.length && !firstDiff) firstDiff = { step: n, phase, st, diffs: diffs.slice(0, 20) };
   }
@@ -516,6 +523,8 @@ for (const { phase, st } of all) {
     console.log(`        [${x.via}] ${pr.id} ${pr.kind} -> ${pr.target}: ${pr.options.map((o) => o.id).join(" | ")}`);
     if (flag("--values")) for (const o of pr.options) if (o.value) console.log(`            ${o.id} = ${JSON.stringify(o.value)}`);
   }
+  // A step's own "expect" (same shape as the scenario's) is checked right after it, on every fork.
+  if (st.expect) for (const r of runs) for (const f of await checkExpect(r, st.expect)) fail(`${phase} ${n} expect (${r.label}): ${f}`);
   if (diffs?.length) for (const d of diffs.slice(0, 6)) console.log(`        ${d.key}${d.orderOnly ? " (order)" : ""}: legacy ${short(d.expected, 60)}  |  engine ${short(d.actual, 60)}`);
 }
 if (firstDiff) fail(`legacy and engine saves differ from step ${firstDiff.n ?? firstDiff.step} (${firstDiff.phase}) on: ${firstDiff.diffs.slice(0, 5).map((d) => d.key).join(", ")}`);

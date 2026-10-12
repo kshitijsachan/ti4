@@ -9,6 +9,8 @@ import { baseId, type Choice } from "@/decisions/model/controls";
 import { buttonsOf, findButton, type Scope } from "./driver";
 import type { PlayState } from "@/discord";
 import { idFaction } from "@/decisions/model/controls";
+import { useEngine } from "@/engine/store";
+import { stepKindOf } from "./stepIds";
 
 /** Which step of a tactical action the bot is waiting on me for, read from its newest prompt to me. */
 export type TacticalStep =
@@ -36,9 +38,6 @@ export type SystemPick = {
   byPosition: Record<string, Choice>;
 };
 
-const CHOOSE = /^(ringTile_|ring_|getTilesThisFarAway_)/;
-const MOVE = /^(tacticalMoveFrom_|concludeMove_)/;
-const LAND = /^(landUnits_|doneLanding)/;
 /** Any later step of a tactical action (production, finishing it, combat, …). */
 const TACTICAL =
   /^(tacticalActionBuild|doneWithTacticalAction|doneWithOneSystem|place_|placeOneNDone|startCombat|combatRoll|planetsTake|getRiftButtons)/;
@@ -49,27 +48,8 @@ function stepOf(
   active?: string | null,
 ): TacticalStep | null {
   const ids = buttonsOf(prompt.message, faction).map((c) => baseId(c.customId));
-  if (ids.some((id) => LAND.test(id))) {
-    const target =
-      ids
-        .map((id) => id.match(/^(?:landUnits|doneLanding)_([^_]+)/)?.[1])
-        .find(Boolean) ??
-      active ??
-      "";
-    return { kind: "land", prompt, target };
-  }
-  if (ids.some((id) => /^concludeMove_/.test(id))) {
-    const target =
-      ids.map((id) => id.match(/^concludeMove_(\w+)/)?.[1]).find(Boolean) ??
-      active ??
-      "";
-    return { kind: "move", prompt, target };
-  }
-  if (ids.some((id) => MOVE.test(id)) && active)
-    return { kind: "move", prompt, target: active };
-  if (ids.some((id) => CHOOSE.test(id))) return { kind: "choose", prompt };
-  if (ids.includes("tacticalAction")) return { kind: "turn", prompt };
-  return null;
+  const k = stepKindOf(ids, active ?? null);
+  return k ? { ...k, prompt } : null;
 }
 
 /**
@@ -158,6 +138,21 @@ export function useMapActionContext(
 
   const active = web?.gameState?.activeSystem;
   const messages = usePlay((s) => s.messages);
+  /*
+   * The engine's own word: an open tactical.activate decision for me means the map may activate, whatever the
+   * message heuristics read (its prompt, when on screen, is the one the button fallback presses).
+   */
+  const myId = usePlay((s) => s.me?.id);
+  const activateOpen = useEngine((s) =>
+    Object.values(s.view.decisions).find((d) => d.kind === "tactical.activate" && !!myId && d.target?.userId === myId),
+  );
+  const engineChoose = useMemo<TacticalStep | null>(() => {
+    if (!activateOpen || (active && active !== "null")) return null;
+    const prompt =
+      prompts.find((p) => p.message.id === activateOpen.source.messageId) ??
+      [...prompts].sort((a, b) => compareSnowflakes(b.message.id, a.message.id))[0];
+    return prompt ? { kind: "choose", prompt } : null;
+  }, [activateOpen, active, prompts]);
   const step = useMemo<TacticalStep>(() => {
     if (!myTurn) return { kind: "none" };
     /*
@@ -183,9 +178,9 @@ export function useMapActionContext(
       )
         return { kind: "none" };
     }
-    return { kind: "none" };
+    return engineChoose ?? { kind: "none" };
     // `messages` is what newestFactionPrompt reads.
-  }, [prompts, myTurn, me?.faction, active, conn, scope, messages]);
+  }, [prompts, myTurn, me?.faction, active, conn, scope, messages, engineChoose]);
 
   const pick = useMemo<SystemPick | null>(() => {
     /* Only the newest prompt: a map click must never answer a question the player has moved past. */

@@ -1,0 +1,40 @@
+{
+  "name": "audit-factions-shield-warsun",
+  "description": "Rules audit (factions): PLANETARY SHIELD switched off by a war sun — with letnev's war sun in 210 ('other players' units in this system lose PLANETARY SHIELD') the dreadnought may BOMBARD tarmann.",
+  "base": {
+    "recording": "pbd104",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/add_units tile_name:210 unit_names:\"pds tarmann, 2 gf tarmann\" faction_or_color:xxcha",
+    "/add_units tile_name:210 unit_names:dn faction_or_color:letnev",
+    "/tech add tech:ws faction_or_color:letnev",
+    "/add_units tile_name:210 unit_names:ws faction_or_color:letnev"
+  ],
+  "trigger": {
+    "press": "FFCC_letnev_ringTile_210",
+    "as": "letnev"
+  },
+  "steps": [
+    {
+      "wait": 2000
+    },
+    {
+      "press": "bombardConfirm_combatRoll_210_space_bombardment",
+      "as": "letnev"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "stored.assignedBombardmentletnev",
+        "match": "tarmann"
+      }
+    ]
+  }
+}

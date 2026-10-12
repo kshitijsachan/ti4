@@ -882,8 +882,8 @@ check("pbd171: after the action, end the turn at once", () => {
 
 // Strategy-card follows hold the turn (engine ScFollowGate, user report: "following things like Leadership doesn't
 // block"): the bot played Leadership and a human seat has not answered. The engine refuses end_turn (its value lists
-// waitingFor); the bot presses "End Turn When All Have Reacted" once, then waits (no refused End Turn, no watchdog
-// fallback); once the window closes (waitingFor empty) it ends the turn as before.
+// waitingFor); the bot waits (no refused End Turn, no "End Turn When All Have Reacted", no watchdog fallback); once
+// the window closes (waitingFor empty) it ends the turn as before.
 check("sc follow window: a bot never ends its turn while its card waits on followers", () => {
   const f = clone(LIVE.pbd171);
   const wait = [{ strategyCard: 1, name: "Leadership", factions: ["sol"], userIds: ["human-1"] }];
@@ -900,16 +900,16 @@ check("sc follow window: a bot never ends its turn while its card waits on follo
   const me = owner(f);
   const choose = (d: Decision, history: string[] = [], force = false) =>
     chooseTyped(d, f.state, me, { ...ctx(d, force ? 600_000 : 0, force), history })?.option?.id ?? null;
-  assert.equal(choose(f.decision), defer.id, "defer the end while Leadership waits on a follower");
-  assert.equal(choose(f.decision, [defer.id]), null, "pressed once: wait");
-  // The button left the menu (upstream deletes it): nothing on the menu is ours to press; the watchdog stays out.
+  // Never the deferred end (live pbd273: pressed before the Warfare primary, the last follow ended the turn
+  // mid tactical action), never the refused end: the menu is stale for the bot until the window closes.
+  assert.equal(staleForBot(f.decision, f.state, me), true);
+  assert.equal(choose(f.decision), null, "wait while Leadership waits on a follower");
+  assert.equal(choose(f.decision, [], true), null, "forced: still wait");
+  assert.equal(chooseFallback(f.decision, f.state, me), null, "the fallback presses neither end");
   const held = clone(f.decision);
   held.options = held.options.filter((o) => o.id !== defer.id);
   assert.equal(staleForBot(held, f.state, me), true);
-  assert.equal(choose(held, [], true), null);
   assert.equal(chooseFallback(held, f.state, me), null);
-  // The fallback never presses the refused end; with the defer option it presses that.
-  assert.equal(chooseFallback(f.decision, f.state, me)?.option.id, defer.id);
   // The human answered: waitingFor is empty again, the bot ends its turn at once.
   const free = clone(held);
   free.options[0].value = { action: "end_turn", abilities: false, waitingFor: [] };
@@ -1041,6 +1041,24 @@ check(
     );
   },
 );
+
+// Folded end-of-turn menu (end-turn branch): plain End Turn, the end-of-turn abilities (untyped, e.g. the expedition)
+// and "take another action" (Master Plan in hand) on one menu: the bot ends its turn, never opens the abilities.
+check("folded end-of-turn menu: bot presses the plain End Turn", () => {
+  const KAPPA = "1559015287133700096";
+  const state = PBD181_STATE as unknown as GameState;
+  const d = clone(LIVE.pbd161.decision);
+  d.game = "pbd181";
+  d.createdAt = Date.now() - 5_000;
+  d.target = { userId: KAPPA, faction: "nomad", color: "yellow", resolvedBy: "owner_prefix" } as any;
+  const base = d.options[0];
+  d.options = [
+    { ...base, id: "FFCC_nomad_confirmSecondAction", label: "Use Ability To Do Another Action", handler: "confirmSecondAction", value: { action: "another_action", sources: ["Master Plan"] } },
+    { ...base, id: "FFCC_nomad_turnEnd", label: "End Turn", handler: "turnEnd", value: { action: "end_turn", abilities: false } },
+    { ...base, id: "FFCC_nomad_expeditionInfoAndButtons", label: "Do an Expedition (3 Remaining)", handler: "expeditionInfoAndButtons", value: null },
+  ] as any;
+  assert.equal(chooseTyped(d, state, KAPPA, { history: [], open: [], all: [d] })?.option?.id, "FFCC_nomad_turnEnd");
+});
 
 // Warfare primary follow-ups (offer, remove-a-token, token panel) keep the strategic action in flight.
 {

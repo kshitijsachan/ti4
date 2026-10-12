@@ -97,6 +97,7 @@ const TITLES: Record<string, string> = {
   "te.visionaria.respond": "Visionaria",
   "token_ingress.png": "Place an ingress token",
   "input.form": "Fill in",
+  "game.end": "End the game",
 };
 
 /** First line of an untyped prompt's text as a title: no markdown, mentions or emoji; empty when there is none. */
@@ -124,6 +125,7 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
       return mine ? `${card.name}: your primary` : `Follow ${card.name}?`;
     }
   }
+  if (d.kind === "strategy_card.politics_agenda" && d.options.some((o) => politicsPlacement(o.value))) return "Politics: place an agenda";
   if (d.kind === "strategy_card.pre_decline") {
     const sc = d.options.map((o) => (o.value as { strategyCard?: number } | null)?.strategyCard).find((n) => typeof n === "number");
     const card = sc !== undefined ? state?.strategyCards.find((c) => c.number === sc) : undefined;
@@ -189,6 +191,8 @@ export function orderDecisions(
   /* The status-phase secret list once I declared my secret (scored one, or none): the game leaves it open. */
   const selfId = state?.players.find((p) => p.self)?.userId;
   const secretDeclared = !!selfId && !!state?.status?.players[selfId]?.secretScored;
+  /* Politics: once the agendas are drawn (a placement prompt is open), the "draw 2 agendas" prompt is done. */
+  const agendasDrawn = mine.some((d) => d.kind === "strategy_card.politics_agenda" && d.options.some((o) => politicsPlacement(o.value)));
   const shown = dedupe(
     mine.filter(
       (d) =>
@@ -196,7 +200,8 @@ export function orderDecisions(
         !(d.kind === "legacy" && underWay && setupOnly(d.options)) &&
         !(d.kind === "strategy_card.resolve" && !actionPhase) &&
         !(d.kind === "setup.game_settings" && (underWay || !!state?.draft)) &&
-        !(d.kind === "status.score_secret" && secretDeclared) &&
+        !(d.kind === "status.score_secret" && (secretDeclared || (!!state && !state.status && !secretScorable(d, state)))) &&
+        !(d.kind === "strategy_card.politics_agenda" && agendasDrawn && !d.options.some((o) => politicsPlacement(o.value))) &&
         /* Agenda prompts outside the agenda phase, and when / after windows the agenda already moved past: moot. */
         !(AGENDA_LIVE.has(d.kind) && !agendaPhase) &&
         !(d.kind === "agenda.when" && !!state?.agenda?.whensResolved) &&
@@ -214,8 +219,20 @@ export function orderDecisions(
   const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
   /* A step of a tactical action is only live while it is my turn (else a leftover of an earlier one). */
   const staleStep = (d: Decision) => TACTICAL_STEP.test(d.kind) && !!state?.activePlayer && !myTurn;
+  /* The secret list left open past the status phase: on offer (it never takes the head), until nothing on it scores. */
+  const lateSecretList = (d: Decision) => d.kind === "status.score_secret" && !!state && !state.status;
+  /* My played card with nothing left to press (Trade resolves when played; every part of the checklist done): only
+     "request all resolve now" is left, so it goes behind "Available now" and never takes the panel from my turn. */
+  const finishedCard = (d: Decision) =>
+    d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction && !primaryOpen(d);
+  /* A setup choice the table waits on (my starting technology): mine to answer now, never an optional offer, even
+     when the engine still has it as a table prompt (live pbd283: captured before my faction was known). */
+  const requiredSetup = (d: Decision) => requiredSetupChoice(d, state, selfId);
   const background = (d: Decision) =>
-    openToAll(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+    !requiredSetup(d) &&
+    (openToAll(d) ||
+    lateSecretList(d) ||
+    finishedCard(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options)));
   /* Background prompts pile up (a new copy per round / per thread): one entry per title, the newest. Someone else's
      payment or production left open at the table is not on offer to me. */
   const newestByTitle = new Map<string, Decision>();
@@ -238,8 +255,9 @@ export function orderDecisions(
     if (owesFollow(d, selfId, myFaction)) return 0.8;
     /* A step of a strategy card's primary (place a structure, choose a system…): before the card's own panel. */
     if (d.kind.startsWith("strategy_card.") && !d.window && !IN_ADVANCE_KINDS.has(d.kind) && d.kind !== "strategy_card.pick") return 1.4;
-    /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */
-    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryStarted(d) ? 4.6 : 1.5;
+    /* The strategy card I played: a part of its primary not done yet is what I do now (before the turn menu that
+       offers "End turn"); with only an optional repeat left it waits behind the turn menu. */
+    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryPartMissing(d) ? 1.5 : 4.6;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
     /* (Not the turn menu: it reopens after everything, and waits behind what the action just started.) */
     if (nextStep(d) && d.kind !== "turn.action" && d.kind !== "trade.offer") return 1;
@@ -263,13 +281,88 @@ export function orderDecisions(
 }
 
 /**
- * Whether I already did part of my card's primary (the engine's primaryDone, or a part pressed on this page): then the
- * card's panel waits behind my turn menu instead of heading the queue for the rest of the round.
+ * A starting-technology prompt that is mine while setup waits on me for one: aimed at me, or (no target yet) offered
+ * while I am the one still owing starting technologies.
  */
-function primaryStarted(d: Decision): boolean {
-  const done = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
-  if (Array.isArray(done) && done.length > 0) return true;
-  return (readDecisionState<string[]>(d.id, "pressed") ?? []).length > 0;
+export function requiredSetupChoice(d: Decision, state: GameState | null | undefined, selfId: string | undefined): boolean {
+  if (d.kind !== "tech.gain" || !selfId || !state?.setup) return false;
+  if (!d.options.some((o) => (o.value as { starting?: boolean } | null)?.starting)) return false;
+  const owing = state.setup.players.find((p) => p.userId === selfId)?.startingTechsNeeded ?? 0;
+  if (owing <= 0) return false;
+  return d.target?.userId === selfId || (!d.target?.userId && state.setup.players.filter((p) => p.startingTechsNeeded > 0).length === 1);
+}
+
+type ResolveValue = { who?: string; action?: string; part?: string | null; primaryParts?: string[] } | null;
+
+/** My card's primary checklist (empty: a card with nothing to resolve by hand). */
+function checklist(d: Decision): string[] {
+  for (const o of d.options) {
+    const p = (o.value as ResolveValue)?.primaryParts;
+    if (Array.isArray(p) && p.length > 0) return p;
+  }
+  return [];
+}
+
+/** How often each part is done: the engine's primaryDone, or what I pressed on this page (whichever says more). */
+function doneCounts(d: Decision): Map<string, number> {
+  const count = (list: string[]) => list.reduce((m, p) => m.set(p, (m.get(p) ?? 0) + 1), new Map<string, number>());
+  const engine = count(((d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone as string[] | undefined) ?? []);
+  const pressedParts = (readDecisionState<string[]>(d.id, "pressed") ?? [])
+    .map((id) => (d.options.find((o) => o.id === id)?.value as ResolveValue)?.part)
+    .filter((p): p is string => typeof p === "string");
+  const page = count(pressedParts);
+  for (const [p, n] of page) engine.set(p, Math.max(engine.get(p) ?? 0, n));
+  return engine;
+}
+
+/**
+ * Whether my card's primary still has something to press: a checklist part not done as often as listed, or (a card
+ * without a checklist) any primary option besides "request all resolve now".
+ */
+export function primaryOpen(d: Decision): boolean {
+  const parts = checklist(d);
+  if (!parts.length) {
+    /* Typed primary options only: untyped utilities on the card's message (Transaction, Send 1 Trade Good) are not. */
+    return d.options.some((o) => {
+      const v = o.value as ResolveValue;
+      return !o.disabled && !!v && v.who !== "others" && v.action !== "request_all";
+    });
+  }
+  const done = doneCounts(d);
+  return [...new Set(parts)].some((p) => (done.get(p) ?? 0) < parts.filter((x) => x === p).length);
+}
+
+/**
+ * Whether a part of my card's primary has not been done at all (Politics' "draw 2 action cards" after the agendas):
+ * then the card leads, ahead of my turn menu, until it is pressed. A repeat that is left (Construction's optional
+ * second structure) does not: the card then waits behind my turn menu.
+ */
+export function primaryPartMissing(d: Decision): boolean {
+  const parts = checklist(d);
+  if (!parts.length) return primaryOpen(d) && doneCounts(d).size === 0 && !(readDecisionState<string[]>(d.id, "pressed") ?? []).length;
+  const done = doneCounts(d);
+  return parts.some((p) => !done.get(p));
+}
+
+/** A Politics "place this agenda" option (top / bottom / discard), as opposed to "draw 2 agendas". */
+function politicsPlacement(value: unknown): boolean {
+  const a = (value as { action?: string } | null)?.action;
+  return a === "top" || a === "bottom" || a === "discard";
+}
+
+type SecretValue = { met?: boolean | null; phase?: string } | null;
+
+/**
+ * Whether the status-phase secret list has a secret I could score now: not disabled, not known unmet, and (in the
+ * status phase) a status-phase secret. The list stays open after I scored or declined; with nothing to score it is moot.
+ */
+export function secretScorable(d: Decision, state?: GameState | null): boolean {
+  const inStatus = !!state?.status;
+  return d.options.some((o) => {
+    const v = o.value as SecretValue;
+    if (!v || o.disabled || v.met === false) return false;
+    return !inStatus || !v.phase || v.phase === "status";
+  });
 }
 
 /** One prompt per played strategy card (its message and its thread can both carry it): the newest. */

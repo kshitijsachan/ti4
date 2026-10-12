@@ -72,6 +72,60 @@ void test("in-advance prompts never head the queue", () => {
   assert.equal(r.offers.length, 2);
 });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const opt = (id: string, value: unknown, disabled = false): any => ({ id, label: id, style: "primary", emoji: null, disabled, needsInput: false, handler: id, value });
+
+void test("a secret list left open past the status phase never takes focus, and drops out when nothing scores", () => {
+  const unmet = dec("status.score_secret", { options: [opt("a", { secretObjective: "x", met: false, phase: "status" })] });
+  const r = orderDecisions([unmet, dec("strategy_card.pick")], 0, undefined, state({ phase: "strategy" as GameState["phase"], activePlayer: ME }));
+  assert.deepEqual(kinds(r), ["strategy_card.pick"]);
+  assert.ok(!r.offers.some((d) => d.kind === "status.score_secret"));
+  const scorable = dec("status.score_secret", { options: [opt("b", { secretObjective: "y", met: true, phase: "action" })] });
+  const r2 = orderDecisions([scorable, dec("turn.action")], 0, undefined, state());
+  assert.deepEqual(kinds(r2), ["turn.action"]);
+  assert.ok(r2.offers.some((d) => d.kind === "status.score_secret"), "still on offer while one can be scored");
+});
+
+void test("my played card with nothing left to press waits behind my turn menu", () => {
+  const card = { strategyCard: 5, name: "Trade", holder: "arborec", primaryDone: [] };
+  const trade = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: card } as unknown as Decision["window"],
+    options: [opt("ra", { who: "holder", action: "request_all", part: null, primaryParts: [] }), opt("f", { who: "others", action: "follow", part: null, primaryParts: [] })],
+  });
+  const r = orderDecisions([trade, dec("turn.action")], 0, undefined, state());
+  assert.deepEqual(kinds(r), ["turn.action"]);
+  assert.ok(r.offers.some((d) => d.id === trade.id), "nothing to press: behind Available now");
+
+  /* pbd273: Politics with every part done must not take the panel (e.g. mid tactical action, no turn menu open). */
+  const doneParts = ["speaker", "agendas", "action_cards"];
+  const politicsDone = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: { strategyCard: 3, name: "Politics", holder: "arborec", primaryDone: doneParts } } as unknown as Decision["window"],
+    options: [opt("ac2", { who: "anyone", action: "draw_action_cards", part: "action_cards", primaryParts: doneParts }), opt("ra2", { who: "holder", action: "request_all", part: null, primaryParts: doneParts })],
+  });
+  const r3 = orderDecisions([politicsDone], 0, undefined, state());
+  assert.deepEqual(kinds(r3), []);
+  assert.ok(r3.offers.some((d) => d.id === politicsDone.id));
+
+  const pol = { strategyCard: 3, name: "Politics", holder: "arborec", primaryDone: [] };
+  const parts = ["speaker", "action_cards", "agendas"];
+  const politics = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: pol } as unknown as Decision["window"],
+    options: [opt("ac", { who: "anyone", action: "draw_action_cards", part: "action_cards", primaryParts: parts })],
+  });
+  assert.equal(orderDecisions([politics, dec("turn.action")], 0, undefined, state()).queue[0].kind, "strategy_card.resolve");
+});
+
+void test("politics: the draw prompt drops once the agendas are drawn; placements are titled apart", () => {
+  const draw = dec("strategy_card.politics_agenda", { options: [opt("d", { action: "draw", count: 2 })] });
+  const top = dec("strategy_card.politics_agenda", { options: [opt("t", { action: "top", handle: 1, agenda: "mutiny", placedThisRound: 0 })] });
+  const r = orderDecisions([draw, top], 0, undefined, state());
+  assert.equal(r.queue.filter((d) => d.kind === "strategy_card.politics_agenda").length, 1);
+  assert.equal(r.queue[0].id, top.id);
+});
+
 void test("a strategy card I owe a follow on heads the queue, before my turn menu and trade offers", () => {
   const followWin = { kind: "strategy_card", eligible: [ME], responded: [], responses: { [ME]: "pending" }, subject: { strategyCard: 1, holder: "sol" } } as unknown as Decision["window"];
   const follow = dec("strategy_card.resolve", { scope: "table", window: followWin });
@@ -100,4 +154,44 @@ void test("follow helpers: what I owe, and who holds the turn", async () => {
   assert.deepEqual(followHolds(s)[0].pending.map((p) => p.userName), ["Me"]);
   assert.deepEqual(followHeader(s, ME), { mine: "follow Leadership", others: null });
   assert.deepEqual(followHeader(s, "u2"), { mine: null, others: "Waiting for Me to follow Leadership" });
+});
+
+void test("my card's undone primary part (Politics' action-card draw after the agendas) leads, ahead of my turn menu", () => {
+  const parts = ["speaker", "action_cards", "agendas"];
+  const subject = (done: string[]) => ({ strategyCard: 3, name: "Politics", holder: "arborec", primaryDone: done });
+  const card = (done: string[]) =>
+    dec("strategy_card.resolve", {
+      scope: "table",
+      window: { ...win(["u2"]), subject: subject(done) } as unknown as Decision["window"],
+      options: [opt("ac", { who: "anyone", action: "draw_action_cards", part: "action_cards", primaryParts: parts }), opt("ra", { who: "holder", action: "request_all", part: null, primaryParts: parts })],
+    });
+  assert.deepEqual(kinds(orderDecisions([dec("turn.action"), card(["speaker", "agendas"])], 0, undefined, state())), ["strategy_card.resolve", "turn.action"]);
+  const done = orderDecisions([dec("turn.action"), card(["speaker", "agendas", "action_cards"])], 0, undefined, state());
+  assert.deepEqual(kinds(done), ["turn.action"]);
+});
+
+void test("Construction with only the optional second structure left waits behind my turn menu", () => {
+  const parts = ["structure", "structure"];
+  const c = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: { strategyCard: 4, name: "Construction", holder: "arborec", primaryDone: ["structure"] } } as unknown as Decision["window"],
+    options: [opt("pds", { who: "anyone", action: "construction_structure", part: "structure", primaryParts: parts })],
+  });
+  assert.deepEqual(kinds(orderDecisions([dec("turn.action"), c], 0, undefined, state())), ["turn.action", "strategy_card.resolve"]);
+});
+
+void test("my starting technology is a required setup step even while the engine still has it as a table prompt (pbd283)", () => {
+  const setup = { stage: "player_setup", waitingOn: [ME], players: [{ userId: ME, faction: "firmament", startingTechsNeeded: 1, secretObjectivesToDiscard: 0, keleresFlavorPending: false }] };
+  const s = state({ phase: "setup" as GameState["phase"], round: 1, activePlayer: null, setup: setup as unknown as GameState["setup"] });
+  const tech = dec("tech.gain", {
+    scope: "table",
+    options: [{ id: "getTech_nm", label: "Neural Motivator", style: "primary", emoji: null, disabled: false, needsInput: false, handler: "getTech_nm", value: { tech: "nm", free: true, starting: true, flags: [] } }],
+  } as Partial<Decision>);
+  const deal = dec("setup.deal_secrets", { scope: "table", target: null });
+  const r = orderDecisions([tech, deal], null, undefined, s);
+  assert.deepEqual(kinds(r), ["tech.gain"]);
+  assert.ok(r.offers.some((d) => d.kind === "setup.deal_secrets"));
+  /* Once I owe none, a leftover table copy goes back behind "Available now". */
+  const done = state({ ...s, setup: { ...setup, players: [{ ...setup.players[0], startingTechsNeeded: 0 }] } as unknown as GameState["setup"] });
+  assert.deepEqual(kinds(orderDecisions([tech], null, undefined, done)), []);
 });

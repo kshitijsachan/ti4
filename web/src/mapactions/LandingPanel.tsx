@@ -1,4 +1,5 @@
 import { IconMinus, IconPlus } from "@tabler/icons-react";
+import { undoViaEngine } from "./engine";
 import cx from "clsx";
 import { usePlay, type PlayConnection } from "@/discord";
 import { baseId } from "@/decisions/model/controls";
@@ -269,6 +270,21 @@ export function LandingPanel({
           disabled={!!busy || !total}
         >
           Clear
+        </button>
+        <button
+          type="button"
+          className={classes.button}
+          onClick={() =>
+            void run(async () => {
+              setBusy("Undoing…");
+              if (!(await undoViaEngine("tactical.land", { conn, gameName }))) throw new Error("There is nothing to undo here.");
+              setLanding(() => ({}));
+            })
+          }
+          disabled={!!busy}
+          title="Take back the last step"
+        >
+          Undo
         </button>
       </div>
     </>

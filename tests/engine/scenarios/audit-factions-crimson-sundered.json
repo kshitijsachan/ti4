@@ -1,0 +1,23 @@
+{
+  "name": "audit-factions-crimson-sundered",
+  "description": "Rules audit (factions): Crimson Rebellion's Sundered — other players' units that move into the Crimson home system are destroyed. Arborec activates the Crimson home (br) and moves a cruiser in from 301: the cruiser is destroyed when movement ends.",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "trigger": { "press": "FFCC_arborec_ringTile_br", "as": "arborec" },
+  "steps": [
+    {
+      "answer": { "kind": "tactical.move", "action": "move", "body": { "units": [ { "from": "301", "holder": "space", "unit": "ca", "count": 1 } ] } },
+      "as": "arborec",
+      "legacy": [
+        { "press": "FFCC_arborec_tacticalMoveFrom_301" }, { "wait": 1500 },
+        { "press": "FFCC_arborec_unitTacticalMove_301_1_ca_green" }, { "wait": 1500 },
+        { "press": "FFCC_arborec_doneWithOneSystem_301" }, { "wait": 1500 },
+        { "press": "FFCC_arborec_concludeMove_br" }
+      ]
+    },
+    { "wait": 2000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "tile br: grn—ca", "exists": false }, { "key": "tile 301: grn—ca", "exists": false } ]
+  }
+}

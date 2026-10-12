@@ -10,11 +10,13 @@
 export type * from "./contract";
 export { useEngineLink, useEngineAnswer } from "./link";
 export type { AnswerPayload } from "./link";
-export { engineStore, useEngine, useEngineEnabled, useEngineMode, useEngineState, useMyDecisions } from "./store";
-export { EngineDecisionHost, decisionTitle } from "./EngineDecisionHost";
+export { engineStore, useEngine, useEngineEnabled, useEngineMode, useEngineRestarting, useEngineState, useMyDecisions } from "./store";
+export { EngineConnecting, EngineDecisionHost, decisionTitle } from "./EngineDecisionHost";
 export { openToAll } from "./reducer";
 export { orderDecisions, useMyQueue } from "./queue";
-export { engineTurn } from "./board";
+export { engineGameOver, engineTurn } from "./board";
+export { gameOverHeadline, gameOverView, isGameOver } from "./gameOver";
+export type { GameOverView, StandingRow } from "./gameOver";
 export { useEngineDraftPick } from "./draftPick";
 export { GenericDecision } from "./GenericDecision";
 export { RENDERERS, rendererFor } from "./registry";

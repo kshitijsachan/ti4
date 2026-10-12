@@ -151,6 +151,8 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "tech.step": "blocking",
   // C8b
   "units.modify": "optional", // Modify Units menu: opened by the player
+  // Game over: End Game / Rematch belong to the people at the table; bots never press them
+  "game.end": "optional",
   "combat.automate": "blocking", // automate-ground-combat vote / confirm
   "combat.engage": "blocking", // engage in combat or coexist (combatPolicy engages)
   "combat.modifier": "optional",
@@ -310,6 +312,8 @@ export function fallbackDue(d: Decision, me: string, opts: { waitedMs?: number; 
  * Neither the fallback nor the watchdog acts on it. Needs the state; without one nothing is stale.
  */
 export function staleForBot(d: Decision, state: GameState | null, me: string): boolean {
+  // The victory prompt (End Game / Rematch) waits on the people at the table, never on a bot.
+  if (d.kind === "game.end") return true;
   // Turn menus: only during our own action-phase turn (policy/turn.ts; without a state, never).
   if (d.kind === "turn.action") return turnStale(d, state, me);
   if (!state) return false;
@@ -419,11 +423,11 @@ export function chooseFallback(d: Decision, state: GameState | null, me: string)
   if (d.kind === "turn.action") {
     // (No `open` here: chooseFallback has no view of our other decisions; the shim's engineStep skips turn menus while
     // an action is in flight or the planner is busy.)
-    // A follow window holds the turn (policy/turn.ts followWaits): never press the refused end / pass.
-    const held = followWaits(d.options as Option<TurnActionValue>[]).length > 0;
+    // A follow window holds the turn (policy/turn.ts followWaits): never press the refused end / pass, nor the deferred
+    // end (it ended a turn mid-action, live pbd273): wait.
+    if (followWaits(d.options as Option<TurnActionValue>[]).length > 0) return null;
     const pick = fallbackCandidates(d, state, me).find((o) => {
       const action = o.value?.action;
-      if (held) return action === "end_turn_when_followed";
       if (action === "end_turn" || action === "strategic") return true;
       return action === "pass" && !unplayedCards(state, me).length;
     });

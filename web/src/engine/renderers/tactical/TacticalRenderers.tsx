@@ -14,7 +14,7 @@ import { planetName, strategyCardName, systemName, unitName } from "./names";
 import classes from "./Tactical.module.css";
 import { optionRole } from "../../optionKinds";
 import type { FollowWait } from "../../../../../shim/src/engine/kinds/tactical";
-import { followsOwed, owesFollow } from "../../follows";
+import { followHolds, followsOwed, owesFollow } from "../../follows";
 import { useMyDecisions } from "../../store";
 import { useEngineAnswer } from "../../link";
 import { factionName } from "../../names";
@@ -118,11 +118,23 @@ function turnLabel(o: TurnOpt, tactic: number | undefined): string {
       return v.abilities ? "End turn (abilities first)" : "End turn";
     case "end_turn_when_followed":
       return "End turn when all have followed";
+    case "another_action":
+      return v.sources?.length ? `Take another action (${v.sources.join(", ")})` : "Take another action";
   }
 }
 
 /** The follow windows that hold this turn (the engine refuses end turn / pass until they close). */
-function followWaits(options: TurnOpt[]): FollowWait[] {
+function followWaits(options: TurnOpt[], state: GameState | null | undefined): FollowWait[] {
+  /* Live from the game state when the engine reports blocksTurn (it re-enables by itself as players answer); the
+     option values only say who was pending when the turn menu was posted. */
+  if (state?.strategyCards.some((c) => c.blocksTurn !== undefined)) {
+    return followHolds(state).map((h) => ({
+      strategyCard: h.strategyCard as FollowWait["strategyCard"],
+      name: h.name,
+      factions: h.pending.map((p) => p.faction) as FollowWait["factions"],
+      userIds: h.pending.map((p) => p.userId),
+    }));
+  }
   for (const o of options) {
     const v = o.value;
     if (v && (v.action === "end_turn" || v.action === "pass") && v.waitingFor?.length) return v.waitingFor;
@@ -130,8 +142,14 @@ function followWaits(options: TurnOpt[]): FollowWait[] {
   return [];
 }
 
+/**
+ * My turn menu. A tactical action starts on the map (click a system: it is activated after one confirm there), so
+ * the menu says so instead of offering a "Tactical action" button that would only lead to a list of systems.
+ */
 export function TurnActionView({ decision, state, answer }: RendererProps<TurnAction>) {
   const me = state?.players.find((p) => p.userId === decision.target?.userId);
+  const tactical = decision.options.find((o) => o.value?.action === "tactical");
+  const tokens = tactical?.value?.action === "tactical" ? (me?.commandTokens.tactic ?? tactical.value.tacticTokens ?? null) : null;
   const mine = useMyDecisions();
   const answerOther = useEngineAnswer();
   const opts = live(decision.options) as TurnOpt[];
@@ -140,7 +158,7 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   const owed = followsOwed(state, me?.userId).filter((f) =>
     mine.some((d) => owesFollow(d, me?.userId, me?.faction) && d.window?.subject?.strategyCard === f.strategyCard),
   );
-  const waits = followWaits(opts);
+  const waits = followWaits(opts, state);
   const defer = opts.find((o) => o.value!.action === "end_turn_when_followed");
   const ends = (o: TurnOpt) => o.value!.action === "end_turn" || o.value!.action === "pass";
   const disabled = (o: TurnOpt) => owed.length > 0 || (waits.length > 0 && ends(o));
@@ -153,10 +171,12 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     })
     .filter((x) => x !== null);
   const label = (o: TurnOpt) => {
-    if (waits.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow`;
+    if (waits.length && ends(o))
+      return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow ${waits.map((w) => w.name).join(" and ")}`;
     return turnLabel(o, me?.commandTokens.tactic);
   };
-  const variant = (o: TurnOpt) => (o.value!.action === "pass" || o.value!.action === "end_turn" ? "light" : "filled");
+  const variant = (o: TurnOpt) =>
+    o.value!.action === "pass" || o.value!.action === "end_turn" || o.value!.action === "another_action" ? "light" : "filled";
   return (
     <div className={classes.panel}>
       {owed.length > 0 && <span className={classes.heading}>Follow {owed.map((f) => f.name).join(" and ")} first: the next turn waits on your answer.</span>}
@@ -165,9 +185,16 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
           Waiting for {pending.join(", ")} to follow {waits.map((w) => w.name).join(" and ")}. Your turn ends once every player has answered.
         </span>
       )}
+      {tactical && (
+        <p className={tactical.disabled || tokens === 0 ? classes.muted : classes.hint} data-map-activate-hint>
+          {tactical.disabled || tokens === 0
+            ? "Tactical action: no command tokens in your tactic pool."
+            : `Tactical action: click a system on the map to activate it (${tokens ?? "?"} tactic token${tokens === 1 ? "" : "s"}).`}
+        </p>
+      )}
       <div className={classes.row}>
         {opts
-          .filter((o) => o.value!.action !== "end_turn_when_followed")
+          .filter((o) => o.value!.action !== "end_turn_when_followed" && o.value!.action !== "tactical")
           .map((o) => (
             <Button key={o.id} size="xs" variant={variant(o)} disabled={disabled(o)} onClick={() => answer(o.id)}>
               {label(o)}
@@ -185,30 +212,13 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   );
 }
 
+/** The bot's system menu (rings, then systems) is answered by clicking the map; the panel only says so. */
 export function TacticalActivateView({ decision, answer }: RendererProps<TacticalActivate>) {
-  const opts = live(decision.options);
-  const systems = opts.filter((o) => o.value!.step === "system");
-  const menus = opts.filter((o) => o.value!.step !== "system");
   return (
     <div className={classes.panel}>
-      <span className={classes.heading}>Activate a system (or click it on the map)</span>
-      <div className={classes.row}>
-        {systems.map((o) => {
-          const v = o.value!;
-          if (v.step !== "system") return null;
-          return <OptionButton key={o.id} id={o.id} label={systemName(v.position, v.tileId)} answer={answer} />;
-        })}
-      </div>
-      {menus.length > 0 && (
-        <div className={classes.row}>
-          {menus.map((o) => {
-            const v = o.value!;
-            const what = v.step === "ring" ? `Ring ${v.ring.replace("_", " ")}` : v.step === "distance" ? `${v.distance} away` : "";
-            const n = v.step === "system" ? 0 : v.positions.length;
-            return <OptionButton key={o.id} id={o.id} label={`${what} (${n})`} answer={answer} variant="subtle" />;
-          })}
-        </div>
-      )}
+      <p className={classes.hint} data-map-activate-hint>
+        Click a system on the map to activate it (−1 tactic token). Systems you can't activate are greyed, with the reason on hover.
+      </p>
       <Extras options={decision.options} answer={answer} />
     </div>
   );
@@ -310,6 +320,7 @@ export function TacticalConcludeView({ decision, answer }: RendererProps<Tactica
     const v = o.value!;
     if (v.action === "produce") return `Produce in ${v.position} (${v.production} production)`;
     if (v.action === "rift") return "Roll for gravity rift";
+    if (v.endTurn) return "Conclude & end turn";
     return v.frontierExplore ? "Conclude (explores the frontier)" : "Conclude tactical action";
   };
   return (

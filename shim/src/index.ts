@@ -52,8 +52,15 @@ engine?.start();
 clients.engine = new EngineFanout(engine, process.env.TI4_ENGINE_WEB === "1");
 // Ended games' channels leave the guild's channel count (archive category; the web keeps their history).
 hub.ensureArchiveCategory();
+// Then attachment retention (retention.ts): superseded map / Milty renders, ended games' files but the final map.
 const sweepArchive = () =>
-  hub.sweepEndedGames(BOT_API).then((n) => n && log.info(`archived ${n} channels of ended games`)).catch(() => {});
+  hub
+    .sweepEndedGames(BOT_API)
+    .then((n) => n && log.info(`archived ${n} channels of ended games`))
+    .catch(() => {})
+    .then(() => hub.retention.sweep())
+    .then((r) => r.files && log.info(`attachment retention: removed ${r.files} files, ${(r.bytes / 1e6).toFixed(0)} MB (${JSON.stringify(r.byReason)})`))
+    .catch((e) => log.warn(`attachment retention failed: ${e}`));
 setTimeout(sweepArchive, 120_000);
 setInterval(sweepArchive, 6 * 3600_000);
 // Threads created before mention auto-join existed: replay it over stored messages (idempotent).
@@ -62,6 +69,10 @@ const lobby = new Lobby(hub, clients);
 // Seats flagged `autopilot` are played by the shim itself (solo testing).
 lobby.autopilot = new Autopilot(hub, clients, BOT_API);
 lobby.autopilot.engine = engine;
+// A roll-back (undo / rewind): the autopilots forget the game's history and look again (engine/rewind.ts).
+engine?.onEvent((e) => {
+  if (e.type === "game.rewound") lobby.autopilot?.rewound(e.game, "event", e.reason);
+});
 // One-click solo test games (autopilot opponents, set up as the human).
 lobby.solo = new SoloGames(hub, clients, lobby, BOT_API);
 void lobby.solo.resumeStewards();
@@ -83,6 +94,11 @@ const MIME: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8",
   ".md": "text/plain; charset=utf-8",
 };
+
+/** Shown in place of an attachment retention removed (an older map render, an ended game's image). */
+const GONE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270"><rect width="480" height="270" fill="#2b2d31"/>' +
+  '<text x="240" y="140" fill="#949ba4" font-family="sans-serif" font-size="18" text-anchor="middle">Image removed to save disk (older render or ended game)</text></svg>';
 
 function serveFile(
   res: import("node:http").ServerResponse,
@@ -132,7 +148,9 @@ const server = createServer({ shouldUpgradeCallback: (req: import("node:http").I
     if (path.startsWith("/attachments/")) {
       const [, , id, name] = path.split("/");
       if (serveFile(res, join(DATA_DIR, "files", id.replace(/\D/g, ""), decodeURIComponent(name ?? "").replace(/[\/\\]/g, "")))) return;
-      return discordError(res, 404, 0, "not found");
+      // Removed by attachment retention (an older render, or an ended game's file): 410 with a placeholder image.
+      res.writeHead(410, { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" });
+      return res.end(GONE_SVG);
     }
     if (path.startsWith("/emojis/")) {
       const id = path.slice(8).replace(/\.\w+$/, "").replace(/\D/g, "");

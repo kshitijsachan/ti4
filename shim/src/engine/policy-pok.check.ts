@@ -20,6 +20,14 @@ const ab = (step: string, id: string, extra: Record<string, unknown> = {}) => ({
 const decline = opt("deleteButtons", null);
 const pick = (d: Decision, s: GameState) => chooseTyped(d, s, ME, { history: [], open: [], all: [d] })?.option?.id;
 
+// Rules audit (leaders N-Z): Suffi An's unlock is paid only with a trade good in hand; Mercer stops after 2 moves.
+const kel = dec("leader.use", [opt("pay1tgforKeleres", { leader: "kelerescommander", step: "pay1tgforKeleres", action: "use", optional: true }), decline]);
+assert.equal(pick(kel, st("keleresa", "red")), "pay1tgforKeleres");
+const broke = { players: [{ userId: ME, faction: "keleresa", color: "red", tg: 0, planets: [], techs: [] }], tiles: [], combat: null, strategyCards: [] } as unknown as GameState;
+assert.equal(pick(kel, broke), "deleteButtons");
+const merc = dec("leader.use", [opt("mercerMove_arcturus_313_space_infantry", { leader: "nomadagentmercer", step: "mercerMove", action: "target", optional: false }), decline]);
+assert.equal(chooseTyped(merc, st("nomad", "blue"), ME, { history: [], open: [], all: [merc] })?.option?.id, "mercerMove_arcturus_313_space_infantry");
+assert.equal(chooseTyped(merc, st("nomad", "blue"), ME, { history: ["a", "b"], open: [], all: [merc] })?.option?.id, "deleteButtons");
 // Awaken prefers mech + infantry.
 assert.equal(pick(dec("faction.ability", [opt("FFCC_titans_replaceSleeperWith_pds_p", ab("replaceSleeperWith", "awaken", { unit: "pds", optional: true })), opt("FFCC_titans_replaceSleeperWith_mech_p", ab("replaceSleeperWith", "awaken", { unit: "mech", optional: true })), decline]), st("titans", "pink")), "FFCC_titans_replaceSleeperWith_mech_p");
 // Terragenesis: place the sleeper (not decline).

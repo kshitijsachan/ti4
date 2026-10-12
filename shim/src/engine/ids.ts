@@ -1629,7 +1629,7 @@ export const PLANET_TYPES = ["CULTURAL", "FACTION", "HAZARDOUS", "INDUSTRIAL", "
 export type PlanetType = (typeof PLANET_TYPES)[number];
 
 /** Game.phaseOfGame: every literal the engine passes to setPhaseOfGame ("" = a new game). Compare case-sensitively; older saves may hold other spellings (validate.ts logs them). */
-export const PHASES = ["", "action", "agenda", "agendaEnd", "agendaVoting", "agendawaiting", "miltydraft", "playerSetup", "statusHomework", "statusScoring", "strategy"] as const;
+export const PHASES = ["", "action", "agenda", "agendaEnd", "agendaVoting", "agendawaiting", "finished", "miltydraft", "playerSetup", "statusHomework", "statusScoring", "strategy"] as const;
 export type Phase = (typeof PHASES)[number];
 
 /** "<leaderId>", "<leaderId>:locked" or "<leaderId>:exhausted" (PlayerState.leaders). */

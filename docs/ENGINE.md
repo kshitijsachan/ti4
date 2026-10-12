@@ -243,7 +243,7 @@ prompt) override `classifies` so they never claim other areas' messages.
 
 ### 3.5 Stream, versioning, consistency
 
-* One global `seq` orders all events (`decision.opened|updated|closed`, `state.changed`). Registry listeners run
+* One global `seq` orders all events (`decision.opened|updated|closed`, `state.changed`, `game.rewound`). Registry listeners run
   under the registry lock, so the stream is strictly ordered.
 * `GET /api/public/selfhost/engine/stream?after=<seq>[&game=]` (SSE, Bot token, `Last-Event-ID` honoured): backlog
   from a 5,000-event ring, then live, 15 s pings. If `after` fell out of the ring: a `reset` event → re-read
@@ -267,6 +267,22 @@ prompt) override `classifies` so they never claim other areas' messages.
   undo and rewind, before the restored prompt is re-posted): every open decision whose message was **posted**
   (`createdAt` = message snowflake time, kept across edits) ≥ restored save + 1.5 s — the same rule as
   `UndoService.retirePrompts`.
+  The boundary is the restored save + 1.5 s, or the first press after the save in that game when sooner (bots press
+  again within a second: live pbd273); undone prompts also lose their buttons. Then (every roll-back): window answers
+  the engine recorded after the boundary are forgotten (`WindowResponses.forgetSince`), a **`game.rewound`** event
+  (`stateVersion` = restored save time, `decision` null, reason `rewound`) tells clients to drop what they remember
+  about the game, and 3 s later `GameRewind` puts every prompt back **as it was at the restored save**, from the
+  registry's per-game prompt history (`DecisionRegistry.Version`: each open / changed / closed version, timestamped):
+  open decisions are re-read against the restored state; each message an undone action changed (posted before the
+  boundary, not last pressed by the restored action itself) is re-captured if it shows its step at the boundary,
+  else its buttons are removed and that step is posted again; prompts posted since the roll-back that repeat another
+  step of such a message (the saved-buttons re-post of an older step, a start-of-turn menu mid-action) are retired.
+  Then a second `game.rewound` with reason `restored`. Live pbd252 (move prompt gone, game stuck) and pbd273 (the
+  turn message's undone move step re-posted next to a fresh turn menu: two activations in one turn). Clients: the
+  shim's autopilots forget the game (`shim/src/engine/rewind.ts`: caps, presses, give-ups, plans) and leave it alone
+  until `restored` (≤ 12 s); an interrupted tactical action resumes from the restored step with the same goal, and no
+  new action starts while one of the seat's tactical steps is open. Fallback signal without the event: the bot's
+  roll-back notice ("Rolled back to save `N`…" / "⏪ …"). Browsers get the events and fresh snapshots.
 
 ### 3.6 Flags
 
@@ -310,7 +326,7 @@ answers; humans are never auto-declined): `turn.action` validate ("Waiting for X
 a ButtonProcessor hook for button presses. `turn.action` end_turn / pass values carry `waitingFor`
 [{strategyCard, name, factions, userIds}]; the upstream "End Turn When All Have Reacted" button is typed as
 `{action: "end_turn_when_followed", strategyCard}` (the game ends the turn itself once the last player answered);
-`strategyCards[].blocksTurn` says which card holds the turn. Bots press end_turn_when_followed, then wait (turnStale);
+`strategyCards[].blocksTurn` says which card holds the turn. end_turn_when_followed is refused (and a deferred end is held, the holder told to end the turn) while the holder is mid-action (ScFollowGate.midAction, live pbd273). Bots never defer: they wait (turnStale) and end the turn once the window closes;
 the web puts an owed follow at the head of the queue, greys out the turn menu until it is answered, and names who is
 still pending (header + End turn label + "Remind them" = Request All Resolve Now). Scenarios: `sc-follow-blocks-turn`,
 `sc-follow-two-humans`.

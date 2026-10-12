@@ -346,7 +346,7 @@ export class EngineClient {
     this.decisions.set(e.game, map);
     applyTo(map, e);
     this.snapCache.delete(e.game);
-    if (e.type === "state.changed") for (const k of this.stateCache.keys()) if (k.startsWith(`${e.game}|`)) this.stateCache.delete(k);
+    if (e.type === "state.changed" || e.type === "game.rewound") for (const k of this.stateCache.keys()) if (k.startsWith(`${e.game}|`)) this.stateCache.delete(k);
     for (const l of this.listeners) {
       try {
         l(e);

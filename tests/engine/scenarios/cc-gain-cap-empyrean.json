@@ -1,0 +1,12 @@
+{
+  "name": "cc-gain-cap-empyrean",
+  "description": "CcGainCap: Acamar (Empyrean agent) grants exactly 1 command token. The shared gain panel used to allow any number: the first increase is accepted, the second is refused (bot CcGainCap / command_tokens.adjust validate).",
+  "base": { "recording": "pbd88", "index": 269, "repost": false },
+  "setup": [ "/leaders ready leader:empyreanagent faction_or_color:empyrean" ],
+  "steps": [
+    { "press": "exhaustAgent_empyreanagent", "as": "empyrean" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc$" }, "as": "empyrean" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc$" }, "as": "empyrean", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}

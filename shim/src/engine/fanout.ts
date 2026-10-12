@@ -137,7 +137,7 @@ export class EngineFanout {
   }
 
   private visible(e: EngineEvent, userId: string) {
-    return e.type === "state.changed" || visibleTo(e.decision, userId);
+    return !e.decision || visibleTo(e.decision, userId);
   }
 
   private deliver(seat: EngineSeat, e: EngineEvent) {
@@ -145,6 +145,7 @@ export class EngineFanout {
   }
 
   private onEvent(e: EngineEvent) {
+    if (e.type === "game.rewound") return this.rewound(e);
     const watchers: EngineSeat[] = [];
     for (const [seat, sub] of this.subs) {
       if (sub.game !== e.game) continue;
@@ -156,6 +157,18 @@ export class EngineFanout {
       watchers.push(seat);
     }
     if (e.type === "state.changed" && watchers.length) void this.pushState(e.game, watchers);
+  }
+
+  /**
+   * A roll-back: every browser watching the game gets the event (it drops answers in flight) and then a fresh
+   * snapshot, so its view is the restored state's whatever ids and revisions the re-opened decisions carry.
+   */
+  private rewound(e: EngineEvent) {
+    for (const [seat, sub] of [...this.subs]) {
+      if (sub.game !== e.game) continue;
+      if (sub.ready) this.deliver(seat, e);
+      void this.subscribe(seat, e.game);
+    }
   }
 
   /** Fetches each viewer's state once (coalescing bursts of state.changed) and sends it to that viewer's sockets. */

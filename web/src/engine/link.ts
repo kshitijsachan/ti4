@@ -6,7 +6,7 @@ import { engineStore, useEngineEnabled } from "./store";
 /** No snapshot after this long: treat the engine as unavailable for now and let the legacy UI run. */
 const SUBSCRIBE_TIMEOUT_MS = 15000;
 /** While the engine is unavailable (bot restarting, or without the engine), ask again this often. */
-const RETRY_MS = 30000;
+const RETRY_MS = 10000;
 const ANSWER_TIMEOUT_MS = 60000;
 
 /**
@@ -31,8 +31,9 @@ export function useEngineLink(gameName: string) {
       const { view } = engineStore.getState();
       const resume = view.game === gameName && view.status === "live" && view.seq > 0;
       engineStore.getState().follow(gameName);
-      conn.send({ op: "engine_sub", game: gameName, after: resume ? view.seq : undefined });
       window.clearTimeout(timer);
+      /* Socket down (server restarting): the hello resubscribes; only a sent subscription can time out to legacy. */
+      if (!conn.send({ op: "engine_sub", game: gameName, after: resume ? view.seq : undefined })) return;
       timer = window.setTimeout(() => {
         const v = engineStore.getState().view;
         if (v.game === gameName && v.status === "connecting") engineStore.getState().apply({ t: "engine", type: "unavailable", game: gameName });

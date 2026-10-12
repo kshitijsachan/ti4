@@ -1,0 +1,56 @@
+{
+  "name": "audit-factions-arborec-flagship-cap",
+  "description": "Rules audit (factions): Duha Menaimon (Arborec flagship) — 'produce up to 5 units in this system'. After 2+2 fighters and 1 destroyer, a second destroyer is refused.",
+  "base": {
+    "recording": "pbd117",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/add_units tile_name:301 unit_names:flagship faction_or_color:arborec"
+  ],
+  "trigger": {
+    "press": "FFCC_arborec_arboFlagshipBuild_301",
+    "as": "arborec"
+  },
+  "steps": [
+    {
+      "wait": 1500
+    },
+    {
+      "press": "FFCC_arborec_place_2ff_301",
+      "as": "arborec"
+    },
+    {
+      "press": "FFCC_arborec_place_2ff_301",
+      "as": "arborec"
+    },
+    {
+      "press": "FFCC_arborec_place_destroyer_301",
+      "as": "arborec"
+    },
+    {
+      "press": "FFCC_arborec_place_destroyer_301",
+      "as": "arborec",
+      "refused": true,
+      "legacy": [
+        {
+          "press": "FFCC_arborec_place_destroyer_301",
+          "as": "arborec"
+        }
+      ]
+    },
+    {
+      "wait": 1000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "tile 301: grn—dd",
+        "eq": "1,0,0,0"
+      }
+    ]
+  }
+}

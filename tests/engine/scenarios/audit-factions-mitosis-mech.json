@@ -1,0 +1,53 @@
+{
+  "name": "audit-factions-mitosis-mech",
+  "description": "Rules audit (factions): Mitosis with a Letani Behemoth (PRODUCTION 2) at 301 and no infantry: 2 infantry may be produced, a third is refused.",
+  "base": {
+    "recording": "pbd117",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/remove_units tile_name:301 unit_names:\"4 gf nestphar\" faction_or_color:arborec",
+    "/add_units tile_name:301 unit_names:\"mf nestphar\" faction_or_color:arborec"
+  ],
+  "trigger": {
+    "press": "FFCC_arborec_tacticalActionBuild_301",
+    "as": "arborec"
+  },
+  "steps": [
+    {
+      "wait": 1500
+    },
+    {
+      "press": "FFCC_arborec_place_infantry_nestphar",
+      "as": "arborec"
+    },
+    {
+      "press": "FFCC_arborec_place_infantry_nestphar",
+      "as": "arborec"
+    },
+    {
+      "press": "FFCC_arborec_place_infantry_nestphar",
+      "as": "arborec",
+      "refused": true,
+      "legacy": [
+        {
+          "press": "FFCC_arborec_place_infantry_nestphar",
+          "as": "arborec"
+        }
+      ]
+    },
+    {
+      "wait": 1000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "tile 301: grn—gf",
+        "eq": "2,0,0,0"
+      }
+    ]
+  }
+}

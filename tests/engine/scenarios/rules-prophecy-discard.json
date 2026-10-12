@@ -1,0 +1,16 @@
+{
+  "name": "rules-prophecy-discard",
+  "description": "Rules audit (deliberate improvement over the original): Prophecy of Ixth - 'When the owner of this card uses PRODUCTION, they discard this card unless they produce 2 or more fighters.' The original only reminded ('its removal is not automated'). Ral Nel is elected Prophecy of Ixth, then produces a carrier and a destroyer (no fighters) at 307: the law must be discarded (DeleteButtonsButtonHandler.resolveProphecyOfIxth).",
+  "base": { "recording": "pbd19", "index": 319 },
+  "setup": [ "/agenda reveal_specific agenda_id:prophecy force:true" ],
+  "steps": [
+    { "press": "agendaResolution_ralnel", "as": "seat1" },
+    { "answer": { "kind": "production.produce", "payload": { "units": [ { "unit": "carrier", "count": 1 }, { "unit": "destroyer", "tile": "307", "count": 1 } ] } },
+      "as": "ralnel",
+      "legacy": [ { "press": "FFCC_ralnel_place_carrier_307" }, { "wait": 1500 }, { "press": "FFCC_ralnel_place_destroyer_307" }, { "wait": 1500 }, { "press": "/deleteButtons/" } ] }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "game.law", "excludes": "prophecy" } ]
+  }
+}

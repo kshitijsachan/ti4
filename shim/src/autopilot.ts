@@ -11,6 +11,7 @@ import { TradeDesk } from "./botplay/trade.js";
 import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
 import { chooseTyped, ENGINE_GRACE_MS, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
+import { forgetGameKeys, isRollbackNotice, newRewind, REWIND_SETTLE_MS, type GameScope } from "./engine/rewind.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { planPayment, productionPayload } from "./engine/policy/production.js";
@@ -133,7 +134,7 @@ const ENGINE_STALL_ERROR_MS = 180_000;
  * The strategy-card pick queue too: the planner picks when it is up, and the fallback filled the queue, pressed its
  * only button left ("Restart Queue") and filled it again, forever (pbd26). */
 const BLOCKED_ID =
-  /(ultimateUndo|^undo|deleteButtons|queueScPick_|restartSCQueue|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|getDamageButtons|^assignHits_|^assign_|^remove_|removeThisTypeOfUnit|removeNCaptureThisTypeOfUnit|removeAll|^destroy|^sustain|cancelSpaceHits|cancelGroundHits|blessBoonCC|placeCCBack_|spendAStratCC|getToggleGalvanizeTiles|toggleGalvanize_|^ungalvanize_)/i;
+  /(ultimateUndo|^undo|deleteButtons|queueScPick_|restartSCQueue|requestAllFollow|moveAlongAfterAllHaveReacted|^transaction$|getModifyTiles|showMap|showPlayerAreas|offerPlayerPref|searchMyGames|showObjInfo|chooseMapView|resolvePreassignment_(?!Abstain On Agenda$|Pass On Shenanigans$)|^queueAWhen|^queueAnAfter|^preVote|unlockQueued|distinguished_|eraseMy|proceedToVoting|pingNonresponders|refreshAgenda|refresh|notepad|cardsInfo|showGameAgain|offerDeckButtons|gameInfoButtons|miltyFactionInfo|showMiltyDraft|checkCombatACs|announceARetreat|^retreat_|getRepairButtons|announceReadyForDice|ac_play_from_hand|getDiscardButtonsACs|^sabotage_|forceAbstain|tacticalAction|componentAction|doAnotherAction|endTurnWhenAllReactedTo|^jmf|chooseExp_|setupBaseGameMode|startTFGame|frankenSetup|offerGameOptionButtons|getHomebrewButtons|offerTEOptionButtons|miltySetup|startDraftSystem|addMapString|~MDL|sendTradeHolder|acceptOffer|resetOffer|resetMyVote|wrongButtonEphemeral|leadershipGenerateCCButtons|redistributeCCButtons|^sc_follow|^sc_trade_follow|toggleTfHomebrew|gain_CC|deal2SOToAll|startOfGameObjReveal|run_status_cleanup|^showDeck|^offerInfoButtons|^setPath_|^bindsToGame|^applytoreceive|^getStartingTech|purge|^draftPresets|startPlayerSetup|setupPlayer|^player_setup|purgeOverrule|queueMil|MiltyQueue|drawSpecificSO|get_so_discard_buttons|answerSurvey|noSupportSwaps|offerSurvey|draftPresetKeleres|explain|preScoreObbie|^reduceTG|^reduceComm|resetSpend|^exhaust|^spend|^sc_(?!no_follow|3_assign_speaker_to_)|^score|_score|^po_scoring|^get_so_|endGameMostPoints|^rematch|^gameEnd|reveal_stage_none|checkForAllACAssignments|increase_(fleet|strategy|tactic)_cc|getDamageButtons|^assignHits_|^assign_|^remove_|removeThisTypeOfUnit|removeNCaptureThisTypeOfUnit|removeAll|^destroy|^sustain|cancelSpaceHits|cancelGroundHits|blessBoonCC|placeCCBack_|spendAStratCC|getToggleGalvanizeTiles|toggleGalvanize_|^ungalvanize_)/i;
 /** A Decline / Done / No button (deleteButtons…) a seat may press on its own prompt when nothing else is pressable. */
 const LAST_RESORT_LABEL = /^(decline|done|no\b|pass\b|skip|not now|dismiss)/i;
 const BLOCKED_LABEL = /^(sustain|destroy|remove all|done removing|manually assign|cancel a hit|undo|un-|unqueue|spend|exhaust|retrieve|reassign|reset|remove|erase|be asked again|delete|dismiss|refresh|.*\binfo$|show |request all|pause timer|\(for others\))/i;
@@ -378,6 +379,61 @@ export class Autopilot {
     return run;
   }
 
+  private lastRewind = new Map<string, { at: number; via: "event" | "notice" }>();
+  /** game -> until when the autopilots leave it alone after a roll-back (see rewound). */
+  private settling = new Map<string, number>();
+
+  /** The game was rolled back moments ago and its prompts are still being restored: nobody acts in it. */
+  isSettling(game: string): boolean {
+    const until = this.settling.get(game);
+    if (until === undefined) return false;
+    if (Date.now() < until) return true;
+    this.settling.delete(game);
+    return false;
+  }
+
+  /**
+   * A game was rolled back (engine/rewind.ts): every seat forgets what it remembers about the game's prompts and
+   * decisions (answers sent, caps, give-ups, plans, watchdog clocks) and looks again at once. `via`: the engine's
+   * game.rewound event, or the bot's roll-back notice (fallback for bots without the event / engine off).
+   */
+  rewound(game: string, via: "event" | "notice", reason = "rewound") {
+    // The engine put the restored state's prompts back (GameRewind): play on.
+    if (reason === "restored") {
+      if (!this.settling.delete(game)) return;
+      log.info(`autopilot: ${game}: the restored prompts are in place; playing on`);
+      for (const pilot of this.pilots.values()) pilot.wake();
+      return;
+    }
+    if (!newRewind(this.lastRewind, game, via)) return;
+    // Nobody acts in the game until its prompts are restored (old turn menus, re-posts of other steps would start a
+    // second action: live pbd273), at most REWIND_SETTLE_MS (bots without the "restored" event).
+    this.settling.set(game, Date.now() + REWIND_SETTLE_MS);
+    this.states.delete(game);
+    this.drafts.delete(game);
+    this.webFactions.delete(game);
+    this.lastReveal.delete(game);
+    this.lastStrategyStart.delete(game);
+    const scope = this.scopeOf(game);
+    log.info(`autopilot: ${game} was rolled back (${via}): ${this.pilots.size} seats forget its ${scope.messageIds.size} messages' history`);
+    for (const pilot of this.pilots.values()) pilot.rewound(scope);
+  }
+
+  /** The game's channels (actions, table talk, threads, private channels) and every message stored in them. */
+  scopeOf(game: string): GameScope {
+    const channels = this.hub.store.state.channels;
+    const channelIds = new Set<string>();
+    const messageIds = new Set<string>();
+    for (const ch of Object.values(channels)) {
+      if (gameOf(ch, channels) !== game) continue;
+      channelIds.add(String(ch.id));
+      for (const m of this.hub.store.messages(String(ch.id))) messageIds.add(String(m.id));
+    }
+    // Decisions the engine knows about (ephemeral prompts are not in a channel's history).
+    for (const d of this.engine?.decisions.get(game)?.values() ?? []) messageIds.add(d.source.messageId);
+    return { game, channelIds, messageIds };
+  }
+
   forgetDrafts() {
     for (const [game, hit] of this.drafts) if (hit.data?.status !== "finished") this.drafts.delete(game);
   }
@@ -588,9 +644,39 @@ class SeatPilot {
     log.info(`autopilot ${this.name}: stopped`);
   }
 
+  /** Look again soon (a game's restored prompts are in place). */
+  wake() {
+    this.schedule();
+  }
+
+  /** The game was rolled back (Autopilot.rewound): forget everything about it, then look again. */
+  rewound(scope: GameScope) {
+    const n = forgetGameKeys(
+      [
+        this.pressed, this.pressCount, this.fails, this.miltyPress, this.miltyTurn, this.startingTechChecked, this.factions,
+        this.recent, this.answered, this.nudges, this.lockChecked, this.skipped, this.siblings, this.retries,
+        this.orphanSince, this.turnStartAt, this.lastPressIn, this.stallChecks, this.orphanPicks, this.boards,
+        this.engineTried, this.lastResortLogged, this.untypedLogged, this.engineAttempts, this.engineLifetime,
+        this.engineDone, this.engineAccepted, this.engineDead, this.engineRefused, this.engineRefusals,
+        this.engineWaiting, this.draftResnap,
+      ],
+      scope,
+    );
+    this.inversePresses = this.inversePresses.filter((p) => !scope.channelIds.has(p.channel));
+    this.brain.rewound(scope);
+    if (n) log.info(`autopilot ${this.name}: ${scope.game} rolled back: forgot ${n} remembered presses / answers / caps`);
+    this.schedule();
+  }
+
   private onFrame(f: Json) {
     switch (f.t) {
       case "message_create":
+        // The bot's roll-back notice: the fallback signal when the engine's game.rewound event does not come.
+        if (isRollbackNotice(f.message?.content) && this.store.state.users[f.message?.author?.id]?.bot) {
+          const ch = this.store.channel(String(f.message.channel_id ?? ""));
+          const game = ch ? gameOf(ch, this.store.state.channels) : null;
+          if (game) this.mgr.rewound(game, "notice");
+        }
         if (f.message?.ephemeral && BUSY_WRONG.test(f.message.content ?? "")) {
           // The bot says we pressed another player's buttons: never that prompt again, and our idea of our own
           // faction in this game was wrong (it decides which locked buttons are ours): read it again from the bot.
@@ -1871,6 +1957,7 @@ class SeatPilot {
       if (!last || Date.now() - Date.parse(last.timestamp) > 3600000) continue;
       const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
       if (await this.mgr.ended(game)) continue;
+      if (this.mgr.isSettling(game)) continue;
       out.push(game);
     }
     return out;

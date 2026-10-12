@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { undoViaEngine } from "./engine";
 import { IconMinus, IconPlus, IconX } from "@tabler/icons-react";
 import cx from "clsx";
 import type { PlayConnection } from "@/discord";
@@ -494,6 +495,21 @@ export function MovePanel({
           disabled={!!busy || sum.empty}
         >
           Clear
+        </button>
+        <button
+          type="button"
+          className={classes.button}
+          onClick={() =>
+            void run(async () => {
+              setBusy("Undoing…");
+              if (!(await undoViaEngine("tactical.move", { conn, gameName }))) throw new Error("There is nothing to undo here.");
+              resetPlans();
+            })
+          }
+          disabled={!!busy}
+          title="Take back the last step"
+        >
+          Undo
         </button>
       </div>
     </>

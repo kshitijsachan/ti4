@@ -34,9 +34,27 @@ export function Title({ sc, children, sub }: { sc?: number; children: ReactNode;
   );
 }
 
-export function Choice({ option, onPick, children, quiet }: { option: Option<unknown>; onPick: (id: string) => void; children?: ReactNode; quiet?: boolean }) {
+export function Choice({
+  option,
+  onPick,
+  children,
+  quiet,
+  title,
+}: {
+  option: Option<unknown>;
+  onPick: (id: string) => void;
+  children?: ReactNode;
+  quiet?: boolean;
+  title?: string;
+}) {
   return (
-    <button type="button" className={quiet ? `${classes.choice} ${classes.quiet}` : classes.choice} disabled={option.disabled || option.needsInput} onClick={() => onPick(option.id)}>
+    <button
+      type="button"
+      className={quiet ? `${classes.choice} ${classes.quiet}` : classes.choice}
+      disabled={option.disabled || option.needsInput}
+      title={title}
+      onClick={() => onPick(option.id)}
+    >
       {children ?? option.label}
     </button>
   );
