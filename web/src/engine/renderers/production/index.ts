@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { PaymentRenderer } from "./Payment";
+import { CommoditiesRenderer, PlacementRenderer } from "./Placement";
 import { ProductionRenderer } from "./Production";
 import type { AreaRendererProps } from "./shared";
 
@@ -11,4 +12,6 @@ import type { AreaRendererProps } from "./shared";
 export const renderers: Record<string, ComponentType<AreaRendererProps<any>>> = {
   "payment.spend": PaymentRenderer,
   "production.produce": ProductionRenderer,
+  "production.place": PlacementRenderer,
+  "commodities.gain": CommoditiesRenderer,
 };

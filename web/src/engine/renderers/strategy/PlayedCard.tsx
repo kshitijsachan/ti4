@@ -1,8 +1,8 @@
-import { useState } from "react";
 import type { Option } from "../../../../../shim/src/engine/types";
 import type { PrimaryPart, StrategyCardResolve } from "../../../../../shim/src/engine/kinds/strategy";
 import { Choice, live, Meta, playerName, Title, viewer, type RendererProps } from "./shared";
 import classes from "./strategy.module.css";
+import { useDecisionState } from "../../draftState";
 
 type Value = NonNullable<StrategyCardResolve["options"][number]["value"]>;
 type Opt = Option<Value>;
@@ -37,7 +37,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 /** A played strategy card: the holder walks the primary checklist; everyone else follows (once) or declines. */
 export function PlayedCard({ decision, state, answer }: RendererProps<StrategyCardResolve>) {
-  const [pressed, setPressed] = useState<string[]>([]);
+  const [pressed, setPressed] = useDecisionState<string[]>(decision.id, "pressed", []);
   const opts = live(decision.options).filter((o): o is Opt => !!o.value);
   const first = opts[0]?.value;
   const me = viewer(state);

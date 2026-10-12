@@ -1,0 +1,8 @@
+{
+  "name": "combat-round-open",
+  "description": "Control for combat-round-closes: the combat.round prompt of a fight that is still on stays open.",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [ "/combat start_combat tile_name:306" ],
+  "steps": [ { "wait": 3000 } ],
+  "expect": { "invariants": true, "decision": { "kind": "combat.round", "open": true } }
+}

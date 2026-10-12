@@ -1,0 +1,25 @@
+{
+  "name": "faction-nomad",
+  "description": "Nomad: agent Artuno with trade goods (exhaustAgent_nomadagentartuno_<tg>), Temporal Command Suite (exhaustTCS_/useTCS_), The Cavalry PN (cavStep2_)",
+  "base": {
+    "recording": "pbd114",
+    "index": 269,
+    "repost": false
+  },
+  "setup": [
+    "/tech add tech:tcs faction_or_color:nomad"
+  ],
+  "trigger": {
+    "press": "exhaustAgent_nomadagentartuno_2",
+    "as": "nomad"
+  },
+  "steps": [
+    {
+      "press": "FFCC_nomad_useTCS_nomadagentartuno_nomad",
+      "as": "nomad"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

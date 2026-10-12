@@ -2,6 +2,7 @@ import { Button } from "@mantine/core";
 import { useDecisionRequests } from "@/decisions";
 import type { DecisionOf, GameState, TradeItem } from "../../../../../shim/src/engine/types";
 import classes from "./trade.module.css";
+import { playerLabel } from "../../names";
 
 export type TradeRendererProps<K extends "trade.offer" | "trade.offer_sent" | "trade.force_replenish"> = {
   decision: DecisionOf<K>;
@@ -16,7 +17,7 @@ function itemText(i: TradeItem) {
 }
 
 export function nameOf(state: GameState | null, faction: string | null | undefined) {
-  return state?.players.find((p) => p.faction === faction)?.userName ?? faction ?? "?";
+  return faction ? playerLabel(state, faction) : "?";
 }
 
 /** Both sides of an offer from the viewer's point of view. */

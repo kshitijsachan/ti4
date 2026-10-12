@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Button } from "@mantine/core";
 import { getPlanetData } from "@/entities/lookup/planets";
 import type { AgendaPreassign, AgendaVote, Ballot } from "../../../../../shim/src/engine/types";
 import { AgendaHeader, Tally, Tile, VotingOrder, factionOf, optionsOf, outcomeLabel, str, type RendererProps } from "./shared";
 import classes from "./agenda.module.css";
+import { DecisionFooter } from "../../ui/Popup";
+import { useDecisionState } from "../../draftState";
 
 /**
  * Cast a vote in one answer: pick an outcome, tick the planets to exhaust (their votes add up live), cast.
@@ -16,8 +18,8 @@ export function VotePanel({ decision, state, answer }: RendererProps<AgendaVote 
   const abstain = options.find((o) => str(o, "action") === "abstain" || str(o, "preset") === "abstain");
   const ballot = voteOption?.value as Ballot | undefined;
   const prevote = str(voteOption, "preset") === "prevote";
-  const [outcome, setOutcome] = useState<string | null>(null);
-  const [planets, setPlanets] = useState<string[]>(() => ballot?.planets.map((p) => p.planet) ?? []);
+  const [outcome, setOutcome] = useDecisionState<string | null>(decision.id, "outcome", null);
+  const [planets, setPlanets] = useDecisionState<string[]>(decision.id, "planets", () => ballot?.planets.map((p) => p.planet) ?? []);
   const selectedVotes = useMemo(
     () => (ballot?.planets ?? []).filter((p) => planets.includes(p.planet)).reduce((n, p) => n + p.votes, 0),
     [ballot, planets],
@@ -74,19 +76,21 @@ export function VotePanel({ decision, state, answer }: RendererProps<AgendaVote 
           </div>
         </>
       )}
-      <div className={classes.actions}>
-        {voteOption && (
-          <Button size="xs" disabled={!outcome || voteOption.disabled} onClick={cast}>
-            {castLabel}
-          </Button>
-        )}
-        {abstain && (
-          <Button size="xs" variant="default" disabled={abstain.disabled} onClick={() => answer(abstain.id)}>
-            {prevote ? "Pre-abstain" : "Abstain"}
-          </Button>
-        )}
-        <span className={classes.meter}>{selectedVotes}</span>
-      </div>
+      <DecisionFooter>
+        <div className={classes.actions}>
+          {voteOption && (
+            <Button size="xs" disabled={!outcome || voteOption.disabled} onClick={cast}>
+              {castLabel}
+            </Button>
+          )}
+          {abstain && (
+            <Button size="xs" variant="default" disabled={abstain.disabled} onClick={() => answer(abstain.id)}>
+              {prevote ? "Pre-abstain" : "Abstain"}
+            </Button>
+          )}
+          <span className={classes.meter}>{selectedVotes}</span>
+        </div>
+      </DecisionFooter>
     </div>
   );
 }

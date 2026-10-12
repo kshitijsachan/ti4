@@ -1,6 +1,6 @@
 import { playerOf, type Board, type PlayerView } from "./board.js";
 import { BuildJob, payStep, type JobResult } from "./production.js";
-import { baseId, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
+import { baseId, lockIs, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { promptForMe, Steps } from "./steps.js";
 import { dockSystems, hasMyCC, spendable } from "./strategy.js";
@@ -543,7 +543,7 @@ export class CardPlanner {
 
   /** Our turn to vote on an agenda: vote (cheaply) rather than abstain, so agendas do not end in a speaker tie. */
   private async vote(game: string, faction: string, p: Prompt): Promise<boolean> {
-    const c = p.controls.find((x) => x.custom_id === `FFCC_${faction}_vote`);
+    const c = p.controls.find((x) => (lockIs(x.custom_id, faction) && baseId(x.custom_id) === "vote"));
     if (!c) return this.resumeVote(game, faction, p);
     if (Date.now() - Date.parse(p.m.timestamp) > 10 * 60000) return false;
     const pressedAt = p.m._presses?.[this.seat.userId]?.at;

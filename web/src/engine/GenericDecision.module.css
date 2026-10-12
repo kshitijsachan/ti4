@@ -64,6 +64,40 @@
   --edge: rgba(var(--play-red), 0.4);
 }
 
+.quiet {
+  --fill: transparent;
+  font-weight: 500;
+  color: var(--play-ink);
+}
+
+.promptWrap {
+  position: relative;
+}
+
+.clipped {
+  max-height: 160px;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+
+.link {
+  align-self: flex-start;
+  font-size: 11px;
+  color: var(--play-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover {
+  color: var(--play-ink-bright);
+}
+
+.empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--play-ink-muted);
+}
+
 .primary {
   --fill: rgba(var(--play-blue), 0.14);
   --fill-hover: rgba(var(--play-blue), 0.24);

@@ -1,0 +1,41 @@
+{
+  "name": "faction-mentak",
+  "description": "Mentak: Pillage (pillage_<color>_unchecked -> _checked; declinePillage_), commander S'ula Mentarion (mentakCommander_<color>), hero Ipswitch (purgeMentakHero_<pos>), Salvage Operations (salvageOps_<pos>)",
+  "base": {
+    "recording": "pbd101",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/player stats trade_goods:3 faction_or_color:nekro",
+    "/player stats commodities:2 faction_or_color:nekro",
+    "/leaders unlock leader:mentakcommander faction_or_color:mentak",
+    "/leaders unlock leader:mentakhero faction_or_color:mentak",
+    "/tech add tech:so faction_or_color:mentak"
+  ],
+  "trigger": {
+    "press": "FFCC_mentak_pillage_ruby_unchecked",
+    "as": "mentak"
+  },
+  "steps": [
+    {
+      "press": "FFCC_mentak_pillage_ruby_checked",
+      "as": "mentak"
+    },
+    {
+      "press": "FFCC_mentak_mentakCommander_ruby",
+      "as": "mentak"
+    },
+    {
+      "press": "purgeMentakHero_313",
+      "as": "mentak"
+    },
+    {
+      "press": "salvageOps_313",
+      "as": "mentak"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

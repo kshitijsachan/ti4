@@ -1,5 +1,5 @@
 import { isShip, myUnits, type Board, type PlayerView, type SystemView } from "./board.js";
-import { baseId, lockOf, type Control, type Prompt } from "./prompts.js";
+import { baseId, lockIs, lockOf, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { Steps } from "./steps.js";
 import { buildList, spendable } from "./strategy.js";
@@ -52,7 +52,7 @@ export class BuildJob {
         }
         if (typeof typed === "string") s.seat.log(`engine refused the build (${typed}); pressing buttons instead`);
       }
-      const ours = p.controls.filter((c) => !lockOf(c.custom_id) || lockOf(c.custom_id) === faction);
+      const ours = p.controls.filter((c) => !lockOf(c.custom_id) || lockIs(c.custom_id, faction));
       while (this.build.length) {
         const unit = this.build[0];
         let c: Control | undefined;

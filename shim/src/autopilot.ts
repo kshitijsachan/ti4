@@ -13,7 +13,7 @@ import { chooseTyped, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
-import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, waitsOn } from "./engine/policy/fallback.js";
+import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
 import type { Decision } from "./engine/types.js";
 
 /*
@@ -151,8 +151,10 @@ const RULES: Rule[] = [
   { id: /_strategicAction_\d+$/, score: 86, why: "play strategy card" },
   // Politics primary: someone must get the speaker token before the bot moves on.
   { id: /^sc_3_assign_speaker_to_/, score: 64, why: "Politics: assign the speaker token" },
-  { id: /_passForRound$/, score: 85, retry: true, why: "pass" },
-  { id: /_passingAbilities$/, score: 84, why: "pass" },
+  // Only in the action phase: a stale pass button pressed in the status phase passed again and, as the "last pass",
+  // re-started the status phase (scoring prompt re-posted on every press, pbd105).
+  { id: /_passForRound$/, score: 85, retry: true, phase: /^action/, why: "pass" },
+  { id: /_passingAbilities$/, score: 84, phase: /^action/, why: "pass" },
   // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
   { id: /^resolvePreassignment_Abstain On Agenda$/, score: 79, why: "agenda: pre-abstain" },
   { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, why: "agenda: pre-pass on shenanigans" },
@@ -184,7 +186,9 @@ const RULES: Rule[] = [
   { id: /^rejectOffer_/, score: 74, why: "reject transaction" },
   // Reaction windows everyone answers.
   { id: /^sc_no_follow_\d+$/, score: 70, table: true, why: "strategy card: not following" },
-  { id: /^no_sabotage$/, score: 70, table: true, why: "no sabotage" },
+  // typed: the engine policy (policy/cards.ts) passes Sabotage windows; this rule only runs when the engine does not
+  // own the window (engine off/down, or the typed decision outlived its grace period). See engineOwns.
+  { id: /^no_sabotage$/, score: 70, table: true, typed: true, why: "no sabotage" },
   { id: /^no_when(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no whens" },
   { id: /^no_after(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no afters" },
   { id: /^po_no_scoring$/, score: 66, table: true, typed: true, again: true, phase: /^status/, why: "status: no public objective" },
@@ -251,6 +255,8 @@ const MAX_RETRIES = 3;
 const STALL_MS = 60000;
 /** Our action-phase turn buttons. */
 const TURN_ID = /^FFCC_[^_]+_(tacticalAction|componentAction|turnEnd|endOfTurnAbilities|passForRound|strategicAction_\d+)$/;
+/** The same button on the same message: at most this many presses per seat (see pressCount). */
+const MAX_SAME_PRESS = 3;
 const BUSY_TEXT = /hasn't finished processing the last task/i;
 
 export class Autopilot {
@@ -364,6 +370,10 @@ export class Autopilot {
     const open = (await engine.openDecisions(game)) ?? [];
     const d = open.find((x) => x.source.messageId === messageId);
     if (!d || d.kind === "legacy") return false;
+    // A Sabotage window this seat already answered, or was auto-passed in (no Sabotage feasible: the bot itself adds
+    // that faction's reaction, MessageHelper.sendMessageToChannelWithEmbedsAndFactionReact): nothing left to press.
+    // Without this the legacy "no_sabotage" rule pressed No Sabotage on the engine's behalf (live pbd161, Shields Holding).
+    if (d.kind === "action_card.sabotage" && d.window?.responded.includes(userId)) return true;
     const state = await engine.state(game, userId, 2000);
     if (d.scope === "player" ? d.target?.userId !== userId : !!d.window && !awaits(d, userId)) {
       // Not awaited by the window, but ours to answer (the strategy card we played): still the engine's.
@@ -446,6 +456,12 @@ class SeatPilot {
   private readonly started = Date.now();
   /** `${message id}:${custom id}` already pressed. */
   private pressed = new Set<string>();
+  /**
+   * `${message id}:${custom id}` → presses, never forgotten (forgetPrompt clears `pressed` for stalled re-checks):
+   * the same button on the same message is pressed at most MAX_SAME_PRESS times (live pbd114: a last-resort "Done
+   * Removing" pressed ~1,500 times).
+   */
+  private pressCount = new Map<string, number>();
   private fails = new Map<string, number>();
   private streak = 0;
   private restUntil = 0;
@@ -770,6 +786,7 @@ class SeatPilot {
     if ((this.fails.get(m.id) ?? 0) >= MAX_FAILS) return null;
     let controls = controlsOf(m.components);
     if (!controls.length) return null;
+    if (await this.mgr.ended(game)) return null; // web-data phase "finished" (cached 3 s)
     if (this.brain.owns(game, { ch, m, controls }) || (this.mgr.engine?.isLive ? this.trade.owns(game, { ch, m, controls }) : this.legacyTrade.owns(game, { ch, m, controls }))) return null;
     // Answered before this pilot started (e.g. before a restart), and unchanged since.
     // When we answered this prompt (unchanged since): this run, a re-posted copy, or before a restart.
@@ -855,7 +872,7 @@ class SeatPilot {
       const decline = certainlyOurs && !tokenPanel
         ? ours.find((c) => /^deleteButtons/i.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && LAST_RESORT_LABEL.test(c.label.trim()) && !this.pressed.has(`${m.id}:${c.custom_id}`))
         : undefined;
-      if (decline && !(await this.mgr.engineOwns(game, m.id, me))) {
+      if (decline && (this.pressCount.get(`${m.id}:${decline.custom_id}`) ?? 0) < MAX_SAME_PRESS && !(await this.mgr.engineOwns(game, m.id, me))) {
         log.warn(`autopilot ${this.name}: last resort in #${ch.name}: nothing else we may press on "${content.slice(0, 60).replace(/\s+/g, " ")}"; pressing "${decline.label}"`);
         return { msg: m, control: decline, score: 20, why: "last resort: decline / done" };
       }
@@ -1299,6 +1316,14 @@ class SeatPilot {
     }
     await sleep(0);
     const key = `${msg.id}:${control.custom_id}`;
+    const n = (this.pressCount.get(key) ?? 0) + 1;
+    if (n > MAX_SAME_PRESS) {
+      if (n === MAX_SAME_PRESS + 1) log.error(`autopilot ${this.name}: giving up on "${control.label}" in #${this.store.channel(msg.channel_id)?.name ?? msg.channel_id}: pressed ${MAX_SAME_PRESS}x on the same message`);
+      this.pressCount.set(key, n);
+      return "pressed too often";
+    }
+    this.pressCount.set(key, n);
+    if (this.pressCount.size > 20000) this.pressCount.clear();
     if (this.siblings.has(msg.id)) {
       // Answering the second copy of a prompt starts its follow-ups afresh: they are not re-posts of the first's.
       for (const k of [...this.recent.keys()]) if (k.startsWith(`${msg.channel_id}:`) && !k.includes(":roll:") && !k.includes(":label:")) this.recent.delete(k);
@@ -1447,6 +1472,12 @@ class SeatPilot {
       if (!mine.length) continue;
       for (const d of mine) {
         if (this.engineDead.has(d.id)) continue;
+        // Still listed but no longer waiting on us (another player's turn, a finished combat's roll window): no
+        // answer, no watchdog clock (live: stale combat windows took every pass of Bot Beta's loop in pbd60).
+        if (staleForBot(d, state, this.userId)) {
+          this.engineWaiting.delete(`${game}|${d.id}`);
+          continue;
+        }
         const done = this.engineDone.get(d.id);
         const watch = this.watchdog(game, d, now);
         const ctx = {

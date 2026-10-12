@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@mantine/core";
 import type { GameState, Option } from "../../../../../shim/src/engine/types";
 import type {
@@ -11,6 +12,7 @@ import type {
 } from "../../../../../shim/src/engine/kinds/tactical";
 import { planetName, strategyCardName, systemName, unitName } from "./names";
 import classes from "./Tactical.module.css";
+import { optionRole } from "../../optionKinds";
 
 /**
  * A direct action payload for `answer`: the decision's kind-specific endpoint (`POST …/decisions/{id}/{action}`)
@@ -55,14 +57,41 @@ function Extras({
   options: Option<unknown>[];
   answer: (id: string) => void;
 }) {
+  const [more, setMore] = useState(false);
   const extras = options.filter((o) => !o.disabled && !o.needsInput && !o.value);
   if (!extras.length) return null;
+  const main = extras.filter((o) => optionRole(o) === "main");
+  const back = extras.filter((o) => optionRole(o) === "back");
+  const utilities = extras.filter((o) => optionRole(o) === "utility");
   return (
-    <div className={classes.row}>
-      {extras.map((o) => (
-        <OptionButton key={o.id} id={o.id} label={o.label} answer={answer} variant="subtle" />
-      ))}
-    </div>
+    <>
+      {main.length > 0 && (
+        <div className={classes.row}>
+          {main.map((o) => (
+            <OptionButton key={o.id} id={o.id} label={o.label} answer={answer} variant="light" />
+          ))}
+        </div>
+      )}
+      {(back.length > 0 || utilities.length > 0) && (
+        <div className={classes.row}>
+          {back.map((o) => (
+            <OptionButton key={o.id} id={o.id} label={o.label} answer={answer} variant="subtle" />
+          ))}
+          {utilities.length > 0 && (
+            <Button size="xs" variant="subtle" color="gray" onClick={() => setMore((v) => !v)} aria-expanded={more}>
+              {more ? "Fewer options" : `More options (${utilities.length})`}
+            </Button>
+          )}
+        </div>
+      )}
+      {more && (
+        <div className={classes.row}>
+          {utilities.map((o) => (
+            <OptionButton key={o.id} id={o.id} label={o.label} answer={answer} variant="subtle" />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

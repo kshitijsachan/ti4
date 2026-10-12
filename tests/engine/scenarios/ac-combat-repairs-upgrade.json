@@ -1,0 +1,17 @@
+{
+  "name": "ac-combat-repairs-upgrade",
+  "description": "Space combat at 308 (pbd60): mentak plays Upgrade (cruiser -> dreadnought, resolveUpgrade_308) and Emergency Repairs (resolveEmergencyRepairs_308), both action_card.target steps keyed on the active system.",
+  "base": { "recording": "pbd60", "index": 122 },
+  "setup": [
+    "/add_units tile_name:308 unit_names:\"1 cruiser\" faction_or_color:mentak",
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "upgrade", "faction_or_color": "mentak" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "emergency", "faction_or_color": "mentak" } }
+  ],
+  "steps": [
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "upgrade" } }, "as": "mentak" },
+    { "answer": { "kind": "action_card.target", "option": "resolveUpgrade_308" }, "as": "mentak" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "emergency" } }, "as": "mentak" },
+    { "answer": { "kind": "action_card.target", "option": "resolveEmergencyRepairs_308" }, "as": "mentak" }
+  ],
+  "expect": { "invariants": true }
+}
