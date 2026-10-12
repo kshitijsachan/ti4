@@ -186,7 +186,9 @@ export function orderDecisions(
         !(d.kind === "legacy" && underWay && setupOnly(d.options)) &&
         !(d.kind === "strategy_card.resolve" && !actionPhase) &&
         !(d.kind === "setup.game_settings" && (underWay || !!state?.draft)) &&
-        !(d.kind === "status.score_secret" && secretDeclared),
+        !(d.kind === "status.score_secret" && secretDeclared) &&
+        /* A turn menu left open from my last turn: not mine while someone else is taking theirs. */
+        !(d.kind === "turn.action" && !!state?.activePlayer && !!selfId && state.activePlayer !== selfId),
     ),
   );
   const nextStep = (d: Decision) => answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2;
@@ -210,7 +212,8 @@ export function orderDecisions(
     /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */
     if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryStarted(d) ? 4.6 : 1.5;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
-    if (nextStep(d)) return 1;
+    /* (Not the turn menu: it reopens after everything, and waits behind what the action just started.) */
+    if (nextStep(d) && d.kind !== "turn.action") return 1;
     /* Untyped prompts come last: the engine can't tell a live one from a leftover the game never closed. */
     if (d.kind === "legacy") return 7;
     /* My turn: the table waits on it, so it goes before follows and other answer-any-time windows (after what is
