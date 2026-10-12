@@ -24,7 +24,9 @@
   color: var(--play-ink);
   font-size: 12px;
   line-height: 1.4;
-  pointer-events: none;
+  /* Catches its own clicks: a click on the note must not fall through to what lies under it (the log's undo). */
+  pointer-events: auto;
+  cursor: default;
   animation: outcomeIn 160ms var(--play-ease), outcomeOut 400ms ease 5.6s forwards;
 }
 

@@ -154,7 +154,7 @@ export function EngineOutcomeToast({ gameName, rightInset }: { gameName: string;
         </div>
       ))}
       {shown.map((o) => (
-        <div key={`${o.key}:${o.text}`} className={classes.toast}>
+        <div key={`${o.key}:${o.text}`} className={classes.toast} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
           {o.fromLog ? (
             <>
               <span className={classes.you}>You</span> {o.text}
