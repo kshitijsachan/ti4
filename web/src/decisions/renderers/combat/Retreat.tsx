@@ -1,8 +1,8 @@
 import { UnstyledButton } from "@mantine/core";
 import { getPlanetData } from "@/entities/lookup/planets";
 import type { Decision } from "../../model/classify";
-import { baseId, type Choice } from "../../model/controls";
-import { useDecisionFocus } from "../../model/focus";
+import { baseId, type Choice } from "../../../prompts/controls";
+import { useDecisionFocus } from "../../../engine/focus";
 import type { RendererProps } from "../types";
 import { HitPanel } from "./HitPanel";
 import { useRunFlow, doneOf } from "./run";

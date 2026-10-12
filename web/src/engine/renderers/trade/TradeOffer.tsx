@@ -1,5 +1,5 @@
 import { Button } from "@mantine/core";
-import { useDecisionRequests } from "@/decisions";
+import { useDecisionRequests } from "@/engine/focus";
 import type { DecisionOf, GameState, TradeItem } from "../../../../../shim/src/engine/types";
 import classes from "./trade.module.css";
 import { playerLabel } from "../../names";

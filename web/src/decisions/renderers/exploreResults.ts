@@ -1,5 +1,5 @@
 import { usePlay } from "@/discord";
-import { cleanLabel } from "../model/controls";
+import { cleanLabel } from "../../prompts/controls";
 
 /**
  * What this tactical action's explores found so far ("Quann → Mining World: gain 1 trade good"), oldest first: every

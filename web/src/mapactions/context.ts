@@ -2,13 +2,13 @@ import { useMemo } from "react";
 import { usePlay, usePlayConnection, type PlayConnection } from "@/discord";
 import { usePlayerData } from "@/api/usePlayerData";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
-import { usePendingPrompts, type PendingPrompt } from "@/decisions";
+import { usePendingPrompts, type PendingPrompt } from "@/prompts/pending";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
-import { findGame } from "@/decisions/detect/games";
-import { baseId, type Choice } from "@/decisions/model/controls";
+import { findGame } from "@/prompts/games";
+import { baseId, type Choice } from "@/prompts/controls";
 import { buttonsOf, findButton, type Scope } from "./driver";
 import type { PlayState } from "@/discord";
-import { idFaction } from "@/decisions/model/controls";
+import { idFaction } from "@/prompts/controls";
 
 /** Which step of a tactical action the bot is waiting on me for, read from its newest prompt to me. */
 export type TacticalStep =

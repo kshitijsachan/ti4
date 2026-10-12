@@ -7,6 +7,9 @@ import type { EntityData, PlayerData, PlayerDataResponse } from "@/entities/data
 import { getStrategyCardByInitiative } from "@/entities/lookup/strategyCards";
 import { getColorAlias } from "@/entities/lookup/colors";
 import classes from "./parts.module.css";
+import { FactionIcon } from "@/engine/ui/FactionIcon";
+
+export { FactionIcon };
 
 /** Cleaned bot prose; long prose is clamped behind "Show all". */
 export function Prose({ text, clamp = 2, muted }: { text: string; clamp?: number; muted?: boolean }) {
@@ -117,20 +120,6 @@ export function ResourceStrip({ me, show = ["tactic", "fleet", "strategy", "tg",
     resources: <Stat key="resources" label="Resources ready" value={me.resources} />,
   };
   return <div className={classes.strip}>{show.map((k) => all[k])}</div>;
-}
-
-export function FactionIcon({ faction, size = 18 }: { faction?: string; size?: number }) {
-  if (!faction) return null;
-  return (
-    <img
-      src={cdnImage(`/factions/${faction}.png`)}
-      alt=""
-      width={size}
-      height={size}
-      className={classes.factionIcon}
-      onError={(e) => (e.currentTarget.style.visibility = "hidden")}
-    />
-  );
 }
 
 /** A player's faction icon and name. */

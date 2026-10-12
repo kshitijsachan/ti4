@@ -1,4 +1,4 @@
-import { buttonUndoPhrase, lowerFirst, plainId } from "../decisions/model/phrasing.ts";
+import { buttonUndoPhrase, lowerFirst, plainId } from "../prompts/phrasing.ts";
 import type { Flow } from "./flows.ts";
 import type { UndoPoint } from "./types";
 

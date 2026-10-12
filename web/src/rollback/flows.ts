@@ -1,4 +1,4 @@
-import { plainId } from "../decisions/model/phrasing.ts";
+import { plainId } from "../prompts/phrasing.ts";
 
 /**
  * One panel action the web made of several bot presses ("ready Nestphar" = press the planet, then "Done Readying

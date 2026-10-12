@@ -12,7 +12,7 @@ import { MapLoadingState } from "@/domains/map/components/MapLoadingState";
 import { BoardTable } from "./BoardTable";
 import { GameDrawers } from "./GameDrawers";
 import { DecisionSlot, HandSlot, LogSlot } from "./Mounts";
-import { OPEN_TRADE_EVENT } from "@/decisions";
+import { OPEN_TRADE_EVENT } from "@/engine/focus";
 import { useEngineLink, useEngineState, useMyQueue } from "@/engine";
 import { activePlayerColor, engineTurn, engineWaiting } from "@/engine/board";
 import { ObjectivesModal } from "./ObjectivesModal";

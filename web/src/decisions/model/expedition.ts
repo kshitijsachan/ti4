@@ -1,6 +1,6 @@
 import { planets } from "@/entities/data/planets";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
-import { baseId, type Choice } from "./controls";
+import { baseId, type Choice } from "../../prompts/controls";
 
 /** The bot's button that opens the expedition list ("Do an Expedition (N Remaining)"). */
 export const EXPEDITION_ID = /^expeditionInfoAndButtons$/;

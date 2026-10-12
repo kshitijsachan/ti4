@@ -3,7 +3,7 @@ import { Loader, UnstyledButton } from "@mantine/core";
 import cx from "clsx";
 import { secretObjectives } from "@/entities/data/secretObjectives";
 import type { SecretObjective } from "@/entities/data/types";
-import { baseId, type Choice } from "../model/controls";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
 import type { RendererProps } from "./types";
 import classes from "./renderers.module.css";

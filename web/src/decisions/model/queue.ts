@@ -1,5 +1,5 @@
 import type { Decision } from "./classify";
-import { baseId } from "./controls";
+import { baseId } from "../../prompts/controls";
 
 /** Rolling dice or assigning hits: a combat waits on me only while one of these is up. */
 const COMBAT_MOVE = /^(combatRoll_[^_]+_[^_]+$|autoAssign\w*Hits|getDamageButtons|assignHits|rollForAmbush)/;

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useDecisionFocus } from "@/decisions";
+import { useDecisionFocus } from "@/engine/focus";
 import { useLogFocus } from "@/gamelog";
 import { useBoardFocus } from "./focus";
 

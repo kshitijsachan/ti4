@@ -4,7 +4,7 @@ import { IconCheck } from "@tabler/icons-react";
 import cx from "clsx";
 import { usePlay } from "@/discord";
 import type { ChannelMessages } from "@/discord/client/store";
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "../../../prompts/controls";
 import { ChoiceButton, ChoiceButtons } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { useRunner } from "../strategy/runner";

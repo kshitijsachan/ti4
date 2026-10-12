@@ -16,8 +16,8 @@ import {
   isKeleresFlavorPrompt,
   isTableSetupPrompt,
   needsAnswer,
-} from "../model/controls";
-import { isScoringSummary, scoringOpenFor } from "../model/scoring";
+} from "./controls";
+import { isScoringSummary, scoringOpenFor } from "./scoring";
 import { findGame, type GameChannels } from "./games";
 
 /** Why a prompt is considered mine. */

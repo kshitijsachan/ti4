@@ -26,8 +26,8 @@ import type { PlayerDataResponse } from "@/entities/data/types";
 import { DecisionHost, useDecisionFocus, useDecisionRequests } from "../index";
 import { DecisionPopup } from "../ui/DecisionHost";
 import { classify } from "../model/classify";
-import { findGame } from "../detect/games";
-import { usePendingPrompts } from "../detect/pending";
+import { findGame } from "../../prompts/games";
+import { usePendingPrompts } from "../../prompts/pending";
 import classes from "./harness.module.css";
 
 const theme = createTheme({

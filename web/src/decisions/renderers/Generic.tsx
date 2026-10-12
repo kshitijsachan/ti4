@@ -2,7 +2,7 @@ import { Loader, UnstyledButton } from "@mantine/core";
 import cx from "clsx";
 import { cdnImage } from "@/entities/data/cdnImage";
 import { getTileById } from "@/entities/lookup/systems";
-import { baseId, type Choice } from "../model/controls";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
 import { Prose } from "../ui/parts";
 import { riftNote } from "../model/classify";

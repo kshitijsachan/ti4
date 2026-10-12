@@ -6,7 +6,7 @@ import type { ChannelMessages } from "@/discord/client/store";
 import { readStored, writeStored } from "@/discord/client/lastRead";
 import { compareSnowflakes, snowflakeTime } from "@/discord/shared/snowflake";
 import type { PlayerDataResponse } from "@/entities/data/types";
-import { findGame } from "../detect/games";
+import { findGame } from "../../prompts/games";
 import { CARDS } from "../renderers/strategy/cards";
 import classes from "./OutcomeToast.module.css";
 

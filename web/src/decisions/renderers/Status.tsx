@@ -1,8 +1,8 @@
 import { actionCards } from "@/entities/data/actionCards";
 import { readStored, writeStored } from "@/discord/client/lastRead";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
-import { baseId } from "../model/controls";
-import { reactedBy } from "../detect/pending";
+import { baseId } from "../../prompts/controls";
+import { reactedBy } from "../../prompts/pending";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { FactionIcon, Prose, ResourceStrip, Section } from "../ui/parts";
 import { GainTokensBody } from "./Economy";

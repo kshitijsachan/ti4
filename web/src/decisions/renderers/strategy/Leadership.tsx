@@ -4,7 +4,7 @@ import { IconCheck, IconMinus, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
 import { usePlay } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
-import { baseId, choicesOf, type Choice } from "../../model/controls";
+import { baseId, choicesOf, type Choice } from "../../../prompts/controls";
 import { ChoiceButton } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { cardSpec } from "./cards";

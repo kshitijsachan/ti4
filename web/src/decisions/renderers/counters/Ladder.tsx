@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "../../../prompts/controls";
 import type { Decision } from "../../model/classify";
 import { ChoiceButtons } from "../../ui/ChoiceButtons";
 import { Prose } from "../../ui/parts";

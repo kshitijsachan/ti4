@@ -1,7 +1,7 @@
 import type { PlayConnection } from "@/discord";
 import type { PlanetId, UnitId } from "../../../shim/src/engine/types";
 import { controlSignature } from "@/discord/client/store";
-import { baseId } from "@/decisions/model/controls";
+import { baseId } from "@/prompts/controls";
 import {
   buttonsOf,
   messageOf,

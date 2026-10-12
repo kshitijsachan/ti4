@@ -1,6 +1,6 @@
 import type { Message, PlayConnection, PlayState } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
-import { baseId, choicesOf, idFaction } from "@/decisions/model/controls";
+import { baseId, choicesOf, idFaction } from "@/prompts/controls";
 
 /**
  * Drives the bot's own buttons from the map, exactly as if the player pressed them in the popup: find the button

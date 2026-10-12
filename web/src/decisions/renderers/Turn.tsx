@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconCards, IconFlag, IconPlayerSkipForward, IconRocket } from "@tabler/icons-react";
 import cx from "clsx";
-import { baseId, type Choice } from "../model/controls";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { ScArt, scDefinition } from "../ui/parts";
 import type { DecisionData, RendererProps } from "./types";

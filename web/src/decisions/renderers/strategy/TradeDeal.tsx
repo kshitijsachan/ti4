@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getToken } from "@/play/session";
 import { fetchTradeOptions } from "@/trade";
 import type { PlayerData } from "@/entities/data/types";
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "../../../prompts/controls";
 import { ChoiceButton, type PressFn } from "../../ui/ChoiceButtons";
 import { playerLabel } from "./shared";
 import classes from "./strategy.module.css";

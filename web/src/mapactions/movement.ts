@@ -8,7 +8,7 @@ import type {
 } from "@/entities/data/types";
 import { lookupUnit } from "@/entities/lookup/units";
 import { getToken } from "@/play/session";
-import { baseId } from "@/decisions/model/controls";
+import { baseId } from "@/prompts/controls";
 import {
   buttonsOf,
   newestId,

@@ -1,7 +1,7 @@
 import type { Message } from "@/discord";
 import { getStrategyCardByInitiative } from "@/entities/lookup/strategyCards";
-import { baseId, choicesOf, cleanLabel } from "../model/controls";
-import { buttonOutcome, secretName } from "../model/phrasing";
+import { baseId, choicesOf, cleanLabel } from "../../prompts/controls";
+import { buttonOutcome, secretName } from "../../prompts/phrasing";
 
 const SO_DISCARD = /^(?:discardSecret_|SODISCARD_)\d+$/;
 const NO_FOLLOW = /^(?:sc_no_follow_|preDeclineSC_)(\d+)/;

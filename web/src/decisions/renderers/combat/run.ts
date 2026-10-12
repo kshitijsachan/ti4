@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { usePlayConnection, type Message } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { usePressButton } from "@/play/usePressButton";
-import { choicesOf, baseId } from "../../model/controls";
+import { choicesOf, baseId } from "../../../prompts/controls";
 
 type RunState = {
   /** Key of the flow being pressed (one at a time). */

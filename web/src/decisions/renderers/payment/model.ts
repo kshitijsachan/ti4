@@ -1,6 +1,6 @@
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { getPlanetData } from "@/entities/lookup/planets";
-import { baseId, cleanLabel, type Choice } from "../../model/controls";
+import { baseId, cleanLabel, type Choice } from "../../../prompts/controls";
 
 export type PayKind = "resources" | "influence";
 

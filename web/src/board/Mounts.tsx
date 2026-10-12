@@ -1,5 +1,5 @@
 import { DecisionHost } from "@/decisions";
-import { CombatOutcome } from "@/decisions/renderers/combat/Outcome";
+import { CombatOutcome } from "@/engine/ui/CombatOutcome";
 import { EngineDecisionHost, useEngineMode } from "@/engine";
 import { GameLog, type GameLogProps } from "@/gamelog";
 import { HandTray } from "@/hand";

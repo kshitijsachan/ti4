@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent,
 import { Tooltip, UnstyledButton } from "@mantine/core";
 import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEye, IconEyeOff, IconLoader2, IconMap, IconX } from "@tabler/icons-react";
 import cx from "clsx";
-import { useDecisionFocus, useWaitingOnMe } from "@/decisions/model/focus";
+import { useDecisionFocus, useWaitingOnMe } from "@/engine/focus";
 import { useMovementUI } from "@/mapactions/store";
 import { useReserveRect } from "@/state/reservedArea";
 import type { Decision, GameState } from "./contract";

@@ -1,4 +1,4 @@
-import { OPEN_TRADE_EVENT } from "@/decisions";
+import { OPEN_TRADE_EVENT } from "@/engine/focus";
 
 /** Fired when something outside the panel asks it to select a partner. */
 export const SELECT_PARTNER_EVENT = "ti4:trade:select-partner";

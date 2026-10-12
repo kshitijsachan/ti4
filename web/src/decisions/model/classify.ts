@@ -5,12 +5,14 @@ import { agendas } from "@/entities/data/agendas";
 import { explorations } from "@/entities/data/explorations";
 import { actionCards } from "@/entities/data/actionCards";
 import { compareSnowflakes, snowflakeTime } from "@/discord/shared/snowflake";
-import type { PendingPrompt } from "../detect/pending";
-import type { GameChannels } from "../detect/games";
-import { baseId, choicesOf, cleanLabel, idFaction, type Choice } from "./controls";
+import type { PendingPrompt } from "../../prompts/pending";
+import type { GameChannels } from "../../prompts/games";
+import { baseId, choicesOf, cleanLabel, idFaction, type Choice } from "../../prompts/controls";
 import { cleanText, firstLine, namesFrom } from "./text";
-import { isScoringSummary, myScoringLine, scoringSummary, type ScoringLine } from "./scoring";
+import { isScoringSummary, myScoringLine, scoringSummary, type ScoringLine } from "../../prompts/scoring";
 import { affordableExpeditions, isExpeditionChoice } from "./expedition";
+import { riftRolled } from "@/prompts/rift";
+export { riftRolled };
 
 export type DecisionKind =
   | "tech"
@@ -982,22 +984,6 @@ function tableSetup(choices: Choice[]): { title: string; text: string } {
 }
 
 const RIFT_RULE = "Each ship that moved out of or through a gravity rift rolls one die: on 1–3 it is destroyed.";
-
-/**
- * Whether the gravity-rift roll of the current tactical action was already taken: the bot's rift prompt or a rift die
- * result posted in this channel since the newest activation. The bot keeps offering the roll button after it.
- */
-export function riftRolled(state: Pick<PlayState, "messages">, channelId: string): boolean {
-  const data = state.messages[channelId];
-  if (!data) return false;
-  for (let i = data.ids.length - 1; i >= 0; i--) {
-    const m = data.byId[data.ids[i]];
-    if (!m?.author.bot) continue;
-    if (/\bactivated \d+\b/i.test(m.content)) return false;
-    if (/\bis rifting some units\b|\bin tile \w+ rolled a\b/i.test(m.content)) return true;
-  }
-  return false;
-}
 
 /** What the step after moving says about the gravity rift (empty when the bot offers no rift roll). */
 export function riftNote(d: Decision): string {

@@ -2,7 +2,7 @@ import { getAgendaData } from "@/entities/lookup/agendas";
 import cx from "clsx";
 import { Button, UnstyledButton } from "@mantine/core";
 import { getPlanetData } from "@/entities/lookup/planets";
-import { FactionIcon } from "@/decisions/ui/parts";
+import { FactionIcon } from "@/engine/ui/FactionIcon";
 import type { AgendaState, Decision, GameState, Option } from "../../../../../shim/src/engine/types";
 import classes from "./agenda.module.css";
 

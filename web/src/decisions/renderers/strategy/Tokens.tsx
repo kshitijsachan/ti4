@@ -4,7 +4,7 @@ import { IconMinus, IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import cx from "clsx";
 import { getToken } from "@/play/session";
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "../../../prompts/controls";
 import { ChoiceButton } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { useRunner, useRunSequence, type Press } from "./runner";

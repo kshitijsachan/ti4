@@ -3,7 +3,7 @@ import type { PlayerData } from "@/entities/data/types";
 import { lookupUnit } from "@/entities/lookup/units";
 import { getPlanetData } from "@/entities/lookup/planets";
 import type { Decision } from "../../model/classify";
-import { baseId, choicesOf } from "../../model/controls";
+import { baseId, choicesOf } from "../../../prompts/controls";
 import { ChoiceButtons } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { HitPanel } from "./HitPanel";

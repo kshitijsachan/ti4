@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePlay, type Message, type PlayConnection } from "@/discord";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import type { Tile } from "@/entities/game/types";
-import { baseId } from "@/decisions/model/controls";
+import { baseId } from "@/prompts/controls";
 import { useHand } from "@/hand/useHand";
 import { actionsFor, useRunCardAction } from "@/hand/useHandActions";
 import { buttonsOf, pressButton } from "./driver";

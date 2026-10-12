@@ -1,6 +1,6 @@
 import cx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useDecisionRequests } from "@/decisions";
+import { useDecisionRequests } from "@/engine/focus";
 import { useGameData } from "@/state/useGameContext";
 import { answerTrade, proposeTrade } from "./api";
 import { LedgerColumn } from "./components/LedgerColumn";

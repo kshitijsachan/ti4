@@ -4,7 +4,7 @@ import { relics } from "@/entities/data/relics";
 import { promissoryNotes } from "@/entities/data/promissoryNotes";
 import { abilities } from "@/entities/data/abilities";
 import { breakthroughs } from "@/entities/data/breakthroughs";
-import { baseId, type Choice } from "../model/controls";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
 import type { RendererProps } from "./types";
 import classes from "./renderers.module.css";

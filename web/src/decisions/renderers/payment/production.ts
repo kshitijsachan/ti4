@@ -1,6 +1,6 @@
 import type { PlayerData } from "@/entities/data/types";
 import { lookupUnit } from "@/entities/lookup/units";
-import { baseId, cleanLabel, type Choice } from "../../model/controls";
+import { baseId, cleanLabel, type Choice } from "../../../prompts/controls";
 
 /** One thing I can produce somewhere: a row with a stepper. */
 export type ProduceRow = {

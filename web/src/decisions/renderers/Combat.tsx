@@ -4,14 +4,14 @@ import { compareSnowflakes } from "@/discord/shared/snowflake";
 import type { PlayerData, TileUnitData } from "@/entities/data/types";
 import { getPlanetData } from "@/entities/lookup/planets";
 import type { Decision } from "../model/classify";
-import { baseId, choicesOf as choicesOfMessage, type Choice, type ChoiceRank } from "../model/controls";
+import { baseId, choicesOf as choicesOfMessage, type Choice, type ChoiceRank } from "../../prompts/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { FactionIcon } from "../ui/parts";
 import { playerByFaction, type RendererProps } from "./types";
 import { HitPanel, UnitTile } from "./combat/HitPanel";
 import { RollRow } from "./combat/Dice";
 import { RetreatPicker, isRetreatPrompt } from "./combat/Retreat";
-import { readCombatLog, type CombatLog, type Roll } from "./combat/rolls";
+import { readCombatLog, type CombatLog, type Roll } from "../../prompts/combatLog";
 import { useCombatRun, useRunFlow, doneOf } from "./combat/run";
 import {
   botPlan,

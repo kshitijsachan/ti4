@@ -16,7 +16,7 @@ import {
   TILE_HEIGHT,
   TILE_WIDTH,
 } from "@/entities/geometry/tilePositioning";
-import { baseId } from "@/decisions/model/controls";
+import { baseId } from "@/prompts/controls";
 import { useMapActionContext } from "./context";
 import { activationOf, type Activation } from "./eligibility";
 import { activateSystem as driveActivation } from "./activate";

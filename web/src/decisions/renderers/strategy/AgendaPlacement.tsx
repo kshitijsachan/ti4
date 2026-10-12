@@ -5,7 +5,7 @@ import { usePlay, type Message } from "@/discord";
 import { snowflakeTime } from "@/discord/shared/snowflake";
 import { agendas } from "@/entities/data/agendas";
 import type { AgendaInfo } from "../../model/classify";
-import { baseId, choicesOf, cleanLabel, type Choice } from "../../model/controls";
+import { baseId, choicesOf, cleanLabel, type Choice } from "../../../prompts/controls";
 import { DecisionFooter } from "../../ui/Footer";
 import { ChoiceButton } from "../../ui/ChoiceButtons";
 import { AgendaCard } from "../Agenda";

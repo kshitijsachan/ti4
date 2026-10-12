@@ -1,5 +1,5 @@
 import { actionCards } from "@/entities/data/actionCards";
-import { baseId, type Choice } from "../model/controls";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { Details, Prose } from "../ui/parts";
 import { AgendaCard } from "./Agenda";

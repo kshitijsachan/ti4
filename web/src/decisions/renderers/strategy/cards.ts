@@ -1,4 +1,4 @@
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "../../../prompts/controls";
 
 /**
  * What each strategy card does, in plain words, and which of the bot's buttons resolve it. The bot's "Spend A

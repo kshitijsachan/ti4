@@ -6,10 +6,10 @@ import { usePlay } from "@/discord";
 import { usePlayerData } from "@/api/usePlayerData";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { getPlanetData } from "@/entities/lookup/planets";
-import { FactionIcon } from "../../ui/parts";
-import { readCombatLog, type CombatLog } from "./rolls";
-import { EMOJI_UNIT, countName } from "./units";
-import classes from "./combat.module.css";
+import { readCombatLog, type CombatLog } from "@/prompts/combatLog";
+import { EMOJI_UNIT, countName } from "@/prompts/units";
+import { FactionIcon } from "./FactionIcon";
+import classes from "./CombatOutcome.module.css";
 
 /** A fight that ended in the last few minutes is reported; older ones are history (the game log has them). */
 const RECENT_MS = 10 * 60_000;
@@ -136,11 +136,11 @@ export function CombatOutcome({ gameName, rightInset = 0 }: { gameName: string; 
   };
   const style = { "--decision-right-inset": `${rightInset}px` } as CSSProperties;
   return createPortal(
-    <div className={`ti4play ${classes.outcomeStack}`} style={style} role="status" aria-live="polite">
+    <div className={`ti4play ${classes.stack}`} style={style} role="status" aria-live="polite">
       {shown.map((r) => (
-        <div key={r.key} className={classes.outcomeCard}>
-          <div className={classes.outcome}>
-            <span className={classes.outcomeWord} data-tone={r.iWon ? "good" : r.winner ? "bad" : "even"}>
+        <div key={r.key} className={classes.card}>
+          <div className={classes.head}>
+            <span className={classes.word} data-tone={r.iWon ? "good" : r.winner ? "bad" : "even"}>
               {r.iWon ? "Victory" : r.winner ? "Defeat" : "Both sides destroyed"}
             </span>
             <span className={classes.status}>
@@ -153,8 +153,8 @@ export function CombatOutcome({ gameName, rightInset = 0 }: { gameName: string; 
             </UnstyledButton>
           </div>
           {r.losses.map((l) => (
-            <div key={l.player?.faction ?? "?"} className={classes.rollRow}>
-              <span className={classes.rollWho}>
+            <div key={l.player?.faction ?? "?"} className={classes.row}>
+              <span className={classes.who}>
                 <FactionIcon faction={l.player?.faction} size={14} />
                 {l.player?.userName ?? "Opponent"}
               </span>

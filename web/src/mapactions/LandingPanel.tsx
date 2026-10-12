@@ -1,8 +1,8 @@
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
 import { usePlay, type PlayConnection } from "@/discord";
-import { baseId } from "@/decisions/model/controls";
-import { riftRolled } from "@/decisions/model/classify";
+import { baseId } from "@/prompts/controls";
+import { riftRolled } from "@/prompts/rift";
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import { cdnImage } from "@/entities/data/cdnImage";
 import { getColorAlias, getPrimaryColorCSS } from "@/entities/lookup/colors";

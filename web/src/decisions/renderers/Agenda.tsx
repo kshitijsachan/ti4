@@ -4,7 +4,7 @@ import { getPlanetData } from "@/entities/lookup/planets";
 import { FactionIcon } from "../ui/parts";
 import local from "./Agenda.module.css";
 import type { AgendaInfo } from "../model/classify";
-import { baseId, type Choice } from "../model/controls";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { Prose } from "../ui/parts";
 import type { RendererProps } from "./types";

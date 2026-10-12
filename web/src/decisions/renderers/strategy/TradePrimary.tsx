@@ -4,7 +4,7 @@ import { IconCheck } from "@tabler/icons-react";
 import { usePlay } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { useFactionBundles } from "@/faction/data";
-import { baseId, choicesOf, type Choice } from "../../model/controls";
+import { baseId, choicesOf, type Choice } from "../../../prompts/controls";
 import { ChoiceButton } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { CARDS } from "./cards";

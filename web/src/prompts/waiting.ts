@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { displayName, usePlay, type PlayState } from "@/discord";
 import { usePlayerData } from "@/api/usePlayerData";
 import type { PlayerDataResponse } from "@/entities/data/types";
-import { baseId, forwardChoices, idFaction, isTableSetupPrompt } from "../model/controls";
+import { baseId, forwardChoices, idFaction, isTableSetupPrompt } from "./controls";
 import { findGame, type GameChannels } from "./games";
 
 /** What the table is waiting on while the game is being set up, in plain words. */

@@ -1,7 +1,7 @@
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
-import { baseId, type Choice } from "../../model/controls";
-import { cleanButtonLabel } from "../../model/phrasing";
+import { baseId, type Choice } from "../../../prompts/controls";
+import { cleanButtonLabel } from "../../../prompts/phrasing";
 import { useStoredState } from "../../model/stored";
 import { ChoiceButton } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";

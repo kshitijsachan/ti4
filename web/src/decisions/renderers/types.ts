@@ -1,6 +1,6 @@
 import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import type { Decision } from "../model/classify";
-import type { Choice } from "../model/controls";
+import type { Choice } from "../../prompts/controls";
 import type { PressFn } from "../ui/ChoiceButtons";
 
 /** Live game context a renderer can draw on. */

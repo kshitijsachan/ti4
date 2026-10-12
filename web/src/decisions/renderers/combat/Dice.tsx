@@ -4,7 +4,7 @@ import type { PlayerData } from "@/entities/data/types";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { FactionIcon } from "../../ui/parts";
 import type { DecisionData } from "../types";
-import { parseRoll, type Roll } from "./rolls";
+import { parseRoll, type Roll } from "../../../prompts/combatLog";
 import { unitName } from "./units";
 import classes from "./combat.module.css";
 

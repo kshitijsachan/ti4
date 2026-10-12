@@ -1,4 +1,4 @@
-import type { Choice } from "../../model/controls";
+import type { Choice } from "../../../prompts/controls";
 import classes from "./payment.module.css";
 
 /** A button of my own (not a bot button) styled like the bot's choices. */

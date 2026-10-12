@@ -4,7 +4,7 @@ import { Loader, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconChevronUp, IconArrowBackUp, IconExternalLink } from "@tabler/icons-react";
 import cx from "clsx";
 import { SelectControl } from "@/discord/render/SelectControl";
-import type { Choice, ChoiceRank } from "../model/controls";
+import type { Choice, ChoiceRank } from "../../prompts/controls";
 import classes from "./ChoiceButtons.module.css";
 
 export type PressFn = (choice: Choice, values?: string[]) => void;

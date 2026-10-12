@@ -1,4 +1,4 @@
-import { baseId } from "../../model/controls";
+import { baseId } from "../../../prompts/controls";
 import { strategyStepRenderers } from "../index";
 import type { RendererProps } from "../types";
 import { isPaymentPrompt } from "./model";

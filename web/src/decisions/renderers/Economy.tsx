@@ -1,7 +1,7 @@
 import { Loader, UnstyledButton } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
-import { baseId, type Choice } from "../model/controls";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
 import { Prose } from "../ui/parts";
 import type { RendererProps } from "./types";

@@ -1,4 +1,4 @@
-import { useSetupWaiting } from "@/decisions";
+import { useSetupWaiting } from "@/prompts/waiting";
 import { LogSlot } from "./Mounts";
 import classes from "./SetupScreen.module.css";
 

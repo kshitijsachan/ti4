@@ -1,5 +1,5 @@
 import cx from "clsx";
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "../../../prompts/controls";
 import { ChoiceButton, ChoiceButtons } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { DECLINE, SPEND_ONLY, cardSpec, findChoice, type FollowAction } from "./cards";

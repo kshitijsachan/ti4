@@ -2,7 +2,7 @@ import { usePlayConnection, type Message } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
 import { usePressButton } from "@/play/usePressButton";
 import { recordFlow } from "@/rollback/flows";
-import { baseId, choicesOf, type Choice } from "../model/controls";
+import { baseId, choicesOf, type Choice } from "../../prompts/controls";
 import { useRunner } from "../renderers/strategy/runner";
 
 type Conn = ReturnType<typeof usePlayConnection>;

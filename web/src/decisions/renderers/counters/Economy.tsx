@@ -1,6 +1,6 @@
 import { useStoredState } from "../../model/stored";
 import { cdnImage } from "@/entities/data/cdnImage";
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "../../../prompts/controls";
 import { ChoiceButtons } from "../../ui/ChoiceButtons";
 import { Prose } from "../../ui/parts";
 import { Quantity, QuantityConfirm, QuantityTotal, RunError, RunProgress, useAnyRunning, useRunning } from "../../ui/Quantity";

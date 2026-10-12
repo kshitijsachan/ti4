@@ -1,4 +1,4 @@
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "../../../prompts/controls";
 import { ChoiceButton } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";
 import { CardHeader } from "./shared";

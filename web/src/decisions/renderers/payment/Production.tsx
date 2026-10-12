@@ -3,7 +3,7 @@ import { Loader } from "@mantine/core";
 import cx from "clsx";
 import { usePlay } from "@/discord";
 import { compareSnowflakes } from "@/discord/shared/snowflake";
-import { baseId, choicesOf, type Choice } from "../../model/controls";
+import { baseId, choicesOf, type Choice } from "../../../prompts/controls";
 import { useStoredState } from "../../model/stored";
 import { ChoiceButton, ChoiceButtons } from "../../ui/ChoiceButtons";
 import type { RendererProps } from "../types";

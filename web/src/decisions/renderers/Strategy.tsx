@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Loader, UnstyledButton } from "@mantine/core";
 import cx from "clsx";
-import { baseId, type Choice } from "../model/controls";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButton, ChoiceButtons } from "../ui/ChoiceButtons";
 import { Details, ScArt, scDefinition } from "../ui/parts";
 import { playerByFaction, type RendererProps } from "./types";

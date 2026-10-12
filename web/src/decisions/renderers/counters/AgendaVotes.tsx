@@ -4,7 +4,7 @@ import { UnstyledButton } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 import { getPlanetData } from "@/entities/lookup/planets";
 import type { Message } from "@/discord";
-import { baseId, choicesOf, cleanLabel, idFaction, type Choice } from "../../model/controls";
+import { baseId, choicesOf, cleanLabel, idFaction, type Choice } from "../../../prompts/controls";
 import { AgendaCard } from "../Agenda";
 import { FactionIcon } from "../../ui/parts";
 import { Quantity, QuantityConfirm, QuantityLink, QuantityTotal, RunError, RunProgress, useAnyRunning, useRunning } from "../../ui/Quantity";

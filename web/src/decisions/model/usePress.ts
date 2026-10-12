@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { usePlayConnection } from "@/discord";
 import { usePressButton, type PressResult } from "@/play/usePressButton";
 import type { Decision } from "./classify";
-import { baseId, type Choice } from "./controls";
+import { baseId, type Choice } from "../../prompts/controls";
 
 const TIMEOUT_MS = 20000;
 

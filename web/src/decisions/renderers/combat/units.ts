@@ -1,52 +1,15 @@
 import type { EntityData, PlayerData, TileUnitData } from "@/entities/data/types";
 import { lookupUnit } from "@/entities/lookup/units";
-import { baseId, type Choice } from "../../model/controls";
+import { baseId, type Choice } from "@/prompts/controls";
+import { EMOJI_UNIT, UNIT_NAME, countName, unitName } from "@/prompts/units";
+
+export { EMOJI_UNIT, UNIT_NAME, countName, unitName };
 
 /** Unit async ids, biggest first (the order units are listed in). */
 export const UNIT_ORDER = ["ws", "fs", "dn", "ca", "cv", "dd", "ff", "mf", "gf", "pd", "sd"];
 
-export const UNIT_NAME: Record<string, [string, string]> = {
-  ws: ["War Sun", "War Suns"],
-  fs: ["Flagship", "Flagships"],
-  dn: ["Dreadnought", "Dreadnoughts"],
-  ca: ["Cruiser", "Cruisers"],
-  cv: ["Carrier", "Carriers"],
-  dd: ["Destroyer", "Destroyers"],
-  ff: ["Fighter", "Fighters"],
-  mf: ["Mech", "Mechs"],
-  gf: ["Infantry", "Infantry"],
-  pd: ["PDS", "PDS"],
-  sd: ["Space Dock", "Space Docks"],
-};
-
-/** The bot's unit emoji names ("<:dreadnought:…>") → async ids. */
-export const EMOJI_UNIT: Record<string, string> = {
-  warsun: "ws",
-  flagship: "fs",
-  dreadnought: "dn",
-  cruiser: "ca",
-  carrier: "cv",
-  destroyer: "dd",
-  fighter: "ff",
-  mech: "mf",
-  infantry: "gf",
-  pds: "pd",
-  spacedock: "sd",
-};
-
 /** What losing one unit costs, for suggesting the cheapest assignment (fighters and infantry first). */
 const LOSS_COST: Record<string, number> = { ff: 0.5, gf: 0.5, dd: 1, ca: 2, mf: 2, cv: 3, pd: 4, sd: 4, dn: 4, fs: 8, ws: 12 };
-
-export function unitName(id: string, n = 1) {
-  const names = UNIT_NAME[id];
-  if (!names) return id;
-  return n === 1 ? names[0] : names[1];
-}
-
-/** "2 Dreadnoughts", "1 Infantry". */
-export function countName(id: string, n: number) {
-  return `${n} ${unitName(id, n)}`;
-}
 
 const SHIPS = new Set(["ws", "fs", "dn", "ca", "cv", "dd", "ff"]);
 const GROUND = new Set(["gf", "mf"]);

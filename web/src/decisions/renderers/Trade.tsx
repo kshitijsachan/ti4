@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchPendingTrades, type PendingOffer, type TradeItem } from "@/trade";
 import { getToken } from "@/play/session";
-import { useDecisionRequests } from "../model/focus";
-import { baseId, type Choice } from "../model/controls";
+import { useDecisionRequests } from "../../engine/focus";
+import { baseId, type Choice } from "../../prompts/controls";
 import { ChoiceButtons } from "../ui/ChoiceButtons";
 import { Prose } from "../ui/parts";
 import { playerByName, type RendererProps } from "./types";

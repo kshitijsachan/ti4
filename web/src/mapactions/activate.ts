@@ -1,5 +1,5 @@
 import type { PlayConnection } from "@/discord";
-import { baseId, type Choice } from "@/decisions/model/controls";
+import { baseId, type Choice } from "@/prompts/controls";
 import {
   buttonsOf,
   findButton,
