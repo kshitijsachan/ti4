@@ -1694,7 +1694,7 @@ index 9b27bd5..42a5e0e 100644
                          }
                          if (specificVote.contains("Warfare Rider")) {
 diff --git a/src/main/java/ti4/helpers/ButtonHelper.java b/src/main/java/ti4/helpers/ButtonHelper.java
-index d4c34fb..06a8b3a 100644
+index d4c34fb..e2a41e4 100644
 --- a/src/main/java/ti4/helpers/ButtonHelper.java
 +++ b/src/main/java/ti4/helpers/ButtonHelper.java
 @@ -131,6 +131,7 @@ import ti4.model.TechnologyModel.TechnologyType;
@@ -1861,7 +1861,24 @@ index d4c34fb..06a8b3a 100644
          ringButtons.add(Buttons.red("resetTacticalMovement", "Reset all unit movement"));
          return ringButtons;
      }
-@@ -7888,7 +7884,8 @@ public class ButtonHelper {
+@@ -6694,6 +6690,16 @@ public class ButtonHelper {
+     @ButtonHandler("combatRoll_")
+     public static void resolveCombatRoll(
+             Player player, Game game, GenericInteractionCreateEvent event, String buttonID) {
++        // Rules order (selfhost engine, pbd203): no combat round while hits from the last roll are unassigned there,
++        // and no space combat round 1 before ANTI-FIGHTER BARRAGE — on every path (buttons, autopilots, engine).
++        String blocked = ti4.selfhost.engine.kinds.CombatSupport.rollBlocked(
++                game, buttonID.replaceFirst("^FFCC_[^_]+_", ""));
++        if (blocked != null) {
++            MessageHelper.sendMessageToChannel(
++                    event.getMessageChannel(),
++                    player.getRepresentationNoPing() + ", not yet: " + blocked + ".");
++            return;
++        }
+         resolveCombatRoll(player, game, event, buttonID, true);
+     }
+ 
+@@ -7888,7 +7894,8 @@ public class ButtonHelper {
      public static List<Button> getGainAndLoseCCButtons(Player player) {
          List<Button> buttons = getGainCCButtons(player);
          buttons.removeIf(b -> !b.getCustomId().startsWith("increase_")); // remove the wiring buttons
@@ -1871,7 +1888,7 @@ index d4c34fb..06a8b3a 100644
          return buttons;
      }
  
-@@ -7897,17 +7894,19 @@ public class ButtonHelper {
+@@ -7897,17 +7904,19 @@ public class ButtonHelper {
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_tactic_cc", "Gain 1 Tactic Token"));
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_fleet_cc", "Gain 1 Fleet Token"));
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_strategy_cc", "Gain 1 Strategy Token"));
@@ -1894,7 +1911,7 @@ index d4c34fb..06a8b3a 100644
          List<Button> buttons = new ArrayList<>();
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_tactic_cc", "Lose 1 Tactic Token"));
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_fleet_cc", "Lose 1 Fleet Token"));
-@@ -7915,7 +7914,7 @@ public class ButtonHelper {
+@@ -7915,7 +7924,7 @@ public class ButtonHelper {
              buttons.addAll(MahactTokenService.removeFleetTokenOptions(player.getGame(), player, false, true));
          }
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_strategy_cc", "Lose 1 Strategy Token"));
@@ -1903,7 +1920,7 @@ index d4c34fb..06a8b3a 100644
          buttons.add(Buttons.gray(player.factionButtonChecker() + "resetCCs", "Reset Tokens"));
          player.getGame().setStoredValue("originalCCsFor" + player.getFaction(), player.getCCRepresentation());
          return buttons;
-@@ -7925,7 +7924,8 @@ public class ButtonHelper {
+@@ -7925,7 +7934,8 @@ public class ButtonHelper {
          List<Button> buttons = new ArrayList<>();
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_fleet_cc", "Lose 1 Fleet Token"));
          buttons.addAll(MahactTokenService.removeFleetTokenOptions(player.getGame(), player, false, true));
@@ -1913,7 +1930,7 @@ index d4c34fb..06a8b3a 100644
          return buttons;
      }
  
-@@ -8673,7 +8673,7 @@ public class ButtonHelper {
+@@ -8673,7 +8683,7 @@ public class ButtonHelper {
              int page = Integer.parseInt(buttonID.substring("narrowWayDestination_page".length()));
              List<Button> destinationButtons = getNarrowWayDestinationButtons(game, player);
              List<Button> buttons = getNarrowWayDestinationPage(player, destinationButtons, page);
@@ -1922,7 +1939,7 @@ index d4c34fb..06a8b3a 100644
              return;
          }
          String destination = buttonID.substring("narrowWayDestination_".length());
-@@ -8862,7 +8862,7 @@ public class ButtonHelper {
+@@ -8862,7 +8872,7 @@ public class ButtonHelper {
          MessageHelper.sendMessageToChannelWithButtons(
                  player.getCorrectChannel(),
                  "Use buttons to resolve a secondary.",
@@ -3734,10 +3751,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..a624e5a
+index 0000000..7ee76c3
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,617 @@
+@@ -0,0 +1,621 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -4189,6 +4206,10 @@ index 0000000..a624e5a
 +        // A form button has no synthetic fallback (it would answer "needs_input"): wait for the analysis if it is
 +        // still running (first seconds after a restart) instead of refusing.
 +        boolean form = plan.option() != null && plan.option().needsInput();
++        // Plain buttons on ephemeral prompts keep the synthetic click: handlers delete their own message
++        // (ButtonHelperModifyUnits.genericPlaceUnit: message.delete()), which JDA refuses for an ephemeral message
++        // read from the capture's copy ("Cannot delete ephemeral messages", live 07:45 pbd208 Construction PDS).
++        if (d.source().ephemeral() && !form) return false;
 +        NativeCoverage.HandlerCoverage c = form
 +                ? NativeCoverage.forHandler("button", handlerId)
 +                : NativeCoverage.forHandlerIfReady("button", handlerId);
@@ -14214,6 +14235,64 @@ index 0000000..4aebd9d
 +        return new Progress("combat.bombard", "assign", acc, req, true);
 +    }
 +}
+diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatEngageKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatEngageKind.java
+new file mode 100644
+index 0000000..b38e176
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/kinds/CombatEngageKind.java
+@@ -0,0 +1,52 @@
++package ti4.selfhost.engine.kinds;
++
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import ti4.selfhost.engine.KindSpec;
++
++/**
++ * "The game is unsure if a combat should occur on &lt;planet&gt;": Engage in Combat (startCombatOn_&lt;planet&gt;) or
++ * They Are Coexisting (deleteButtons); after a won combat with coexisters left, Claim Planet (claimPlanet_) or Fight
++ * Coexisters (startCombatOn_). Coexistence ability buttons on the same message stay untyped (value null).
++ * pbd203: untyped, a bot waited 122 s on it. Target: the player the message names (or the FFCC_ owner).
++ */
++public class CombatEngageKind implements KindSpec {
++
++    @Override
++    public String kind() {
++        return "combat.engage";
++    }
++
++    @Override
++    public int priority() {
++        return 100;
++    }
++
++    @Override
++    public boolean classifies(List<String> handlerIds) {
++        for (String h : handlerIds) if (h != null && h.startsWith("startCombatOn_")) return true;
++        return false;
++    }
++
++    @Override
++    public boolean matches(String handlerId) {
++        return handlerId.startsWith("startCombatOn_") || handlerId.startsWith("claimPlanet_") || handlerId.equals("deleteButtons");
++    }
++
++    @Override
++    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
++        Map<String, Object> v = new LinkedHashMap<>();
++        if (handlerId.startsWith("startCombatOn_")) {
++            v.put("action", "engage");
++            v.put("planet", handlerId.substring("startCombatOn_".length()));
++        } else if (handlerId.startsWith("claimPlanet_")) {
++            v.put("action", "claim");
++            v.put("planet", handlerId.substring("claimPlanet_".length()));
++        } else {
++            v.put("action", "coexist");
++            v.put("planet", null);
++        }
++        return v;
++    }
++}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
 new file mode 100644
 index 0000000..791612c
@@ -14833,10 +14912,10 @@ index 0000000..b9ec9db
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
 new file mode 100644
-index 0000000..83d1944
+index 0000000..931777f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,141 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -14929,13 +15008,17 @@ index 0000000..83d1944
 +    }
 +
 +    /**
-+     * The window only advises (autopilots read eligible/responded); it never gates. The original buttons accept a press
++     * The window only advises (autopilots read eligible/responded); it never gates a player who has units there. The original buttons accept a press
 +     * from anyone at the table at any time: a combatant without ANTI-FIGHTER BARRAGE units rolling barrage, the same
 +     * side rolling again, a player rolling space cannon from a prompt opened for someone else (pbd60 168-195).
 +     */
 +    @Override
 +    public boolean answersOutsideWindow(Game game, Player answering, Decision decision) {
-+        return true;
++        // ...but only for a player with units in that system: with two combats at once, the other combat's prompt is
++        // not theirs (pbd203: the human's "roll" went to 314's prompt).
++        Object tile = decision.window() == null ? null : decision.window().subject().get("tile");
++        if (tile == null) return true;
++        return CombatSupport.hasUnitsIn(answering, game.getTileByPosition(String.valueOf(tile)));
 +    }
 +
 +    /** A combat round may not be rolled while hits are owed there or before anti-fighter barrage (pbd203). */
@@ -14976,10 +15059,10 @@ index 0000000..83d1944
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
 new file mode 100644
-index 0000000..ce31266
+index 0000000..93971bc
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
-@@ -0,0 +1,834 @@
+@@ -0,0 +1,856 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayDeque;
@@ -15271,11 +15354,9 @@ index 0000000..ce31266
 +        if (m == null || m.tile() == null) return null;
 +        Tile tile = game.getTileByPosition(m.tile());
 +        if (tile == null) return null;
-+        List<Player> fighters = new ArrayList<>();
-+        for (String f : game.getStoredValue("factionsInCombat").split("_")) {
-+            Player p = f.isBlank() ? null : game.getPlayerFromColorOrFaction(f);
-+            if (p != null) fighters.add(p);
-+        }
++        // Who fights is read from this tile, never from factionsInCombat (the latest combat anywhere): with two combats
++        // at once the other system's players were made eligible here (pbd203: 209's human rolled 314's round).
++        List<Player> fighters = combatants(game, tile, "space");
 +        Map<String, Object> subject = new LinkedHashMap<>();
 +        subject.put("tile", m.tile());
 +        List<String> eligible = new ArrayList<>();
@@ -15290,6 +15371,7 @@ index 0000000..ce31266
 +                    break;
 +                }
 +            }
++            fighters = combatants(game, tile, combatHolder);
 +            if (fighters.size() < 2) return null;
 +            Map<String, Object> rounds = new LinkedHashMap<>();
 +            int min = Integer.MAX_VALUE;
@@ -15784,11 +15866,7 @@ index 0000000..ce31266
 +        }
 +        // 2. anti-fighter barrage before space combat round 1
 +        if (!"space".equals(holder)) return null;
-+        List<Player> fighters = new ArrayList<>();
-+        for (String f : game.getStoredValue("factionsInCombat").split("_")) {
-+            Player p = f.isBlank() ? null : game.getPlayerFromColorOrFaction(f);
-+            if (p != null) fighters.add(p);
-+        }
++        List<Player> fighters = combatants(game, tile, "space");
 +        if (fighters.size() < 2) return null;
 +        for (Player p : fighters) if (roundsRolled(game, p, pos, "space") > 0) return null;
 +        UnitHolder space = tile.getSpaceUnitHolder();
@@ -15807,11 +15885,38 @@ index 0000000..ce31266
 +
 +    /** rollBlocked for a combat-round roll button (combatRoll_<pos>_<holder>, no roll type), else null. */
 +    @Nullable
-+    static String rollBlocked(Game game, String handlerId) {
++    public static String rollBlocked(Game game, String handlerId) {
 +        if (handlerId == null) return null;
 +        Matcher m = ROLL.matcher(handlerId);
 +        if (!m.matches() || m.group(1) != null || m.group(4) != null) return null;
 +        return rollBlocked(game, m.group(2), m.group(3));
++    }
++
++    /**
++     * The players fighting in this holder of this tile: those with units able to fight there (ships in space, ground
++     * forces on a planet). With fewer than two, the factionsInCombat players that have units anywhere in the tile.
++     */
++    static List<Player> combatants(Game game, Tile tile, String holder) {
++        List<Player> out = new ArrayList<>();
++        if (tile == null) return out;
++        String h = holder == null ? "space" : holder;
++        boolean space = "space".equals(h);
++        for (Player p : game.getRealPlayersNNeutral())
++            if (!hittableUnits(game, p, tile, h, space ? "space" : "ground").isEmpty()) out.add(p);
++        if (out.size() >= 2) return out;
++        out.clear();
++        for (String f : game.getStoredValue("factionsInCombat").split("_")) {
++            Player p = f.isBlank() ? null : game.getPlayerFromColorOrFaction(f);
++            if (p != null && !out.contains(p) && hasUnitsIn(p, tile)) out.add(p);
++        }
++        return out;
++    }
++
++    static boolean hasUnitsIn(Player p, Tile tile) {
++        if (p == null || tile == null) return false;
++        for (UnitHolder uh : tile.getUnitHolders().values())
++            for (UnitKey k : uh.getUnitKeys()) if (p.unitBelongsToPlayer(k) && uh.getUnitCount(k) > 0) return true;
++        return false;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java b/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java
