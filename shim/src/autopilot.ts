@@ -95,6 +95,8 @@ type Rule = {
    * in the next action phase ends that round on the spot.
    */
   phase?: RegExp;
+  /** Only while it is this seat's turn (the bot's active player). */
+  myTurn?: boolean;
 };
 
 /** Strategy cards an autopilot likes, best first (1 Leadership, 7 Technology, 8 Imperial, 6 Warfare, ...). */
@@ -146,15 +148,18 @@ const RULES: Rule[] = [
     },
   },
   // Action phase: play the strategy card, then pass; always end the turn.
-  { id: /_turnEnd$/, score: 88, retry: true, why: "end turn" },
-  { id: /_endOfTurnAbilities$/, score: 87, retry: true, why: "end turn" },
-  { id: /_strategicAction_\d+$/, score: 86, why: "play strategy card" },
+  // typed: the engine's turn policy (engine/policy/turn.ts) answers turn.action; these rules run when it does not
+  // own the menu (engine off/down, untyped, or past its grace period).
+  { id: /_turnEnd$/, score: 88, retry: true, typed: true, why: "end turn" },
+  { id: /_endOfTurnAbilities$/, score: 87, retry: true, typed: true, why: "end turn" },
+  { id: /_strategicAction_\d+$/, score: 86, typed: true, why: "play strategy card" },
   // Politics primary: someone must get the speaker token before the bot moves on.
   { id: /^sc_3_assign_speaker_to_/, score: 64, why: "Politics: assign the speaker token" },
   // Only in the action phase: a stale pass button pressed in the status phase passed again and, as the "last pass",
   // re-started the status phase (scoring prompt re-posted on every press, pbd105).
-  { id: /_passForRound$/, score: 85, retry: true, phase: /^action/, why: "pass" },
-  { id: /_passingAbilities$/, score: 84, phase: /^action/, why: "pass" },
+  // And only on our own turn (a stale pass menu of ours pressed on another player's turn: "It is not your turn").
+  { id: /_passForRound$/, score: 85, retry: true, typed: true, phase: /^action/, myTurn: true, why: "pass" },
+  { id: /_passingAbilities$/, score: 84, typed: true, phase: /^action/, myTurn: true, why: "pass" },
   // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
   { id: /^resolvePreassignment_Abstain On Agenda$/, score: 79, why: "agenda: pre-abstain" },
   { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, why: "agenda: pre-pass on shenanigans" },
@@ -876,6 +881,11 @@ class SeatPilot {
         log.warn(`autopilot ${this.name}: last resort in #${ch.name}: nothing else we may press on "${content.slice(0, 60).replace(/\s+/g, " ")}"; pressing "${decline.label}"`);
         return { msg: m, control: decline, score: 20, why: "last resort: decline / done" };
       }
+      // Our turn prompt with only actions we do not plan left (its strategy card / pass button pressed on an identical
+      // earlier copy within REPOST_MS, so filtered above): it is still our action-phase turn, so press it again here
+      // rather than leaving the turn to a person (pbd160: "leaving 'Use buttons to do your turn.' … to a person").
+      const turnAgain = ffccMine ? await this.turnAgain(m, ours, game) : null;
+      if (turnAgain) return turnAgain;
       // Say so (once) when a prompt that is certainly ours offers nothing we may press: a likely stall.
       if (certainlyOurs && !this.answered.has(m.id) && !this.skipped.has(m.id) && Date.now() - Date.parse(m.timestamp) < 600000) {
         this.skipped.add(m.id);
@@ -925,14 +935,16 @@ class SeatPilot {
     for (const rule of RULES) {
       if (!rule.table && !ctx.direct) continue;
       if (rule.addressed && !ctx.addressed) continue;
-      if (rule.typed && rule.id && !controls.some((c) => rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id))) continue;
+      // (unpressed: a typed rule may still retry a lost press of its own, below.)
+      if (rule.typed && rule.id && !unpressed.some((c) => rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id))) continue;
       if (rule.typed && (owned ??= await this.mgr.engineOwns(game, m.id, me))) continue;
       const retryPhase = rule.retry && lost ? String((await this.mgr.phaseOf(game)) ?? "") : "";
       if (
         rule.retry &&
         lost &&
         (!rule.phase || rule.phase.test(retryPhase)) &&
-        (rule.retryIn ? rule.retryIn.test(retryPhase) : this.tableStalled(m, game) || (await this.myTurn(game)))
+        (rule.retryIn ? rule.retryIn.test(retryPhase) : this.tableStalled(m, game) || (await this.myTurn(game))) &&
+        (!rule.myTurn || (await this.myTurn(game)))
       ) {
         const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && (rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id)));
         const techAlias = /(?:^|_)getTech_(.+?)__noPay/.exec(again[0]?.custom_id ?? "")?.[1];
@@ -977,6 +989,7 @@ class SeatPilot {
         if (phase === undefined) phase = await this.mgr.phaseOf(game);
         if (phase && !rule.phase.test(phase)) continue;
       }
+      if (rule.myTurn && !(await this.myTurn(game))) continue;
       let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true));
       if (rule.distinct) hits = hits.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= 600000);
       if (!hits.length) continue;
@@ -1116,6 +1129,21 @@ class SeatPilot {
   }
 
   /** Whether the bot's web data says it is this seat's turn (in the strategy or action phase). */
+  /**
+   * A turn prompt of ours whose usable buttons were all filtered as recent repeats: play the strategy card, else pass
+   * (pass now before "pass with abilities"), when it is our action-phase turn, the engine does not own the menu, the
+   * planner left it (brain.owns was asked before), and we pressed nothing on this message yet.
+   */
+  private async turnAgain(m: StoredMessage, ours: Control[], game: string): Promise<Choice | null> {
+    if (m._presses?.[this.userId] || [...this.pressed].some((k) => k.startsWith(`${m.id}:`))) return null;
+    const rank = (c: Control) => (/_strategicAction_\d+$/.test(c.custom_id) ? 0 : /_passForRound$/.test(c.custom_id) ? 1 : /_passingAbilities$/.test(c.custom_id) ? 2 : 9);
+    const pick = ours.filter((c) => rank(c) < 9).sort((a, b) => rank(a) - rank(b))[0];
+    if (!pick || (this.pressCount.get(`${m.id}:${pick.custom_id}`) ?? 0) >= MAX_SAME_PRESS) return null;
+    if (!/^action/.test(String((await this.mgr.phaseOf(game)) ?? "")) || !(await this.myTurn(game))) return null;
+    if (await this.mgr.engineOwns(game, m.id, this.userId)) return null;
+    return { msg: m, control: pick, score: 86, why: rank(pick) === 0 ? "play strategy card (turn prompt re-posted)" : "pass (turn prompt re-posted)" };
+  }
+
   private async myTurn(game: string) {
     const st = await this.mgr.stateOf(game);
     return !!st?.active && st.active === st.colors.get(this.userId);
