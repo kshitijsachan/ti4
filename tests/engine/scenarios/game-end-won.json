@@ -1,0 +1,17 @@
+{
+  "name": "game-end-won",
+  "description": "Victory already reached (pbd243 save 389: Sol at the victory points, End Game not pressed; the base re-posts the 'has won' prompt the next save pressed). Engine: ended + phase 'finished' + finish 'won' + winners = Sol, and the prompt is the typed game.end with end / rematch values (anyone at the table may press it). Nobody presses End Game (it would archive the fork's channels).",
+  "base": { "game": "pbd243", "index": 389 },
+  "steps": [{ "wait": 2000 }],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "ended", "eq": true },
+      { "path": "phase", "eq": "finished" },
+      { "path": "finish", "eq": "won" },
+      { "path": "winners", "includes": "${faction:sol}" },
+      { "path": "standings[faction=sol].winner", "eq": true }
+    ],
+    "decision": { "kind": "game.end", "open": true }
+  }
+}

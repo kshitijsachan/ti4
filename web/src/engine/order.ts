@@ -97,6 +97,7 @@ const TITLES: Record<string, string> = {
   "te.visionaria.respond": "Visionaria",
   "token_ingress.png": "Place an ingress token",
   "input.form": "Fill in",
+  "game.end": "End the game",
 };
 
 /** First line of an untyped prompt's text as a title: no markdown, mentions or emoji; empty when there is none. */

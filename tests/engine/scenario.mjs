@@ -429,7 +429,9 @@ async function checkExpect(run, expect) {
   if (expect.state?.length) {
     const st = await engineState(run.fork.game);
     for (const e of expect.state) {
-      const err = checkValue(getPath(st, interp(e.path, run.ctx)), e);
+      // Expected values may name seats too (${faction:sol} = that seat's user id on the fork).
+      const ev = Object.fromEntries(Object.entries(e).map(([k, v]) => [k, typeof v === "string" ? interp(v, run.ctx) : v]));
+      const err = checkValue(getPath(st, interp(e.path, run.ctx)), ev);
       if (err) fails.push(`state ${e.path}: ${err}`);
     }
   }

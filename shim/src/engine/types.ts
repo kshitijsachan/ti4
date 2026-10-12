@@ -10,6 +10,7 @@ import type { CombatDecision, CombatState, UnitsModify, UnitsRemove } from "./ki
 import type { ComponentsDecision } from "./kinds/components.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
 import type { FactionDecision } from "./kinds/faction.js";
+import type { GameDecision } from "./kinds/game.js";
 import type { InputFormDecision } from "./kinds/input.js";
 import type { ProductionDecision } from "./kinds/production.js";
 import type { SetupDecision } from "./kinds/setup.js";
@@ -25,6 +26,7 @@ export type * from "./kinds/cards.js";
 export type * from "./kinds/components.js";
 export type * from "./kinds/explore.js";
 export type * from "./kinds/faction.js";
+export type * from "./kinds/game.js";
 export type * from "./kinds/input.js";
 export type * from "./kinds/production.js";
 export type * from "./kinds/setup.js";
@@ -77,8 +79,20 @@ export interface GameState {
   /** Engine event seq at snapshot time; resume the stream with after=seq. */
   seq: number;
   phase: Phase;
-  /** The game is over (ended or won): nothing is asked of anyone any more (phase keeps its last value). */
+  /**
+   * The game is over: ended (Game.hasEnded) or won (a player meets the victory requirement). Then phase is "finished"
+   * and nothing is asked of the players any more except the end-of-game prompt (kind game.end: End Game / Rematch),
+   * which stays answerable until the game is ended.
+   */
   ended: boolean;
+  /** Why the game is over: "won" (End Game not pressed yet), "ended" (Game.hasEnded); null while it is on. Older engines: absent. */
+  finish?: "won" | "ended" | null;
+  /** Winners' user ids (alliance partners included); empty while nobody has won. Older engines: absent. */
+  winners?: UserId[];
+  /** Victory points needed to win (Game.vp). Older engines: absent. */
+  victoryPointsToWin?: number;
+  /** Final standings, best first (only when ended; null otherwise). Older engines: absent. */
+  standings?: Standing[] | null;
   round: number;
   activePlayer: UserId | null;
   speaker: UserId | null;
@@ -104,6 +118,20 @@ export interface GameState {
   trade?: TradeState | null;
   /** Combat in the active system (G4); null when there is none. */
   combat?: CombatState | null;
+}
+
+/**
+ * One seat's final place. rank: 1 = most victory points (ties share a rank; a winner always ranks 1, ahead of anyone
+ * tied with them on points). winner: among GameState.winners.
+ */
+export interface Standing {
+  userId: UserId;
+  userName: string;
+  faction: FactionId | null;
+  color: ColorName | null;
+  victoryPoints: number;
+  rank: number;
+  winner: boolean;
 }
 
 export interface PlayerState {
@@ -443,6 +471,7 @@ export type Decision =
   | FactionDecision
   | UiDecision
   | ComponentsDecision
+  | GameDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;

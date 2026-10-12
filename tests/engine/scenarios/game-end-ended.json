@@ -1,0 +1,15 @@
+{
+  "name": "game-end-ended",
+  "description": "After End Game (pbd243 save 390, pressed via legacy in playtest 4): engine state must read ended + phase 'finished' + finish 'ended' with winners = Sol (playtest: ended:true but phase 'action' and no winner), and no game.end prompt stays open (an ended game takes no answers).",
+  "base": { "game": "pbd243", "index": 390, "repost": false },
+  "steps": [{ "wait": 2000 }],
+  "expect": {
+    "state": [
+      { "path": "ended", "eq": true },
+      { "path": "phase", "eq": "finished" },
+      { "path": "finish", "eq": "ended" },
+      { "path": "winners", "includes": "${faction:sol}" }
+    ],
+    "decision": { "kind": "game.end", "open": false }
+  }
+}
