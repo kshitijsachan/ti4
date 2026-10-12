@@ -19,6 +19,8 @@ export type CardAction = {
   label: string;
   tone: "go" | "neutral" | "danger";
   hint?: string;
+  /** Shown greyed out with the hint as the reason (the bot would refuse it now), never hidden. */
+  disabled?: boolean;
   step: Step;
 };
 
@@ -54,9 +56,12 @@ export function actionsFor(card: HandCard, hand: HandState): CardAction[] {
     if (n === undefined) return out.length ? out : sync();
     const play = index.acPlay.get(n);
     const answered = out.some((a) => a.id === "play");
-    if (!answered && play) out.push({ id: "play", label: "Play", tone: "go", step: { type: "press", button: play } });
+    // The bot refuses a card outside its timing window (ActionCardTiming): Play stays visible, greyed, with the reason.
+    const closed = hand.closed?.[card.alias];
+    const gate = closed ? { disabled: true, hint: closed.replace(/_/g, "") } : {};
+    if (!answered && play) out.push({ id: "play", label: "Play", tone: "go", ...gate, step: { type: "press", button: play } });
     else if (!answered && index.refresh)
-      out.push({ id: "play", label: "Play", tone: "go",
+      out.push({ id: "play", label: "Play", tone: "go", ...gate,
         step: { type: "chain", opener: index.refresh, match: exact(`ac_play_from_hand_${n}`) } });
     const discard = index.acDiscard.get(n);
     if (discard) out.push({ id: "discard", label: "Discard", tone: "danger", step: { type: "press", button: discard } });

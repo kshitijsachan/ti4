@@ -108,6 +108,8 @@ function foldOwnNotes(group: CardGroup, myColor: string | undefined): CardGroup 
 function cardTiming(card: HandCard, hand: HandState): Timing {
   if (card.kind === "ac" && hand.acHeld > hand.acLimit) return "blocked";
   if (isSabotage(card)) return hand.sabotage ? "now" : "reaction";
+  // The bot says this card's window is closed right now (phase, active player, active system, cost).
+  if (card.kind === "ac" && hand.closed?.[card.alias]) return "later";
   const timing = timingOf(card, hand.gameState, hand.myColor);
   // At status scoring the bot says which secrets it thinks you meet; the others are not scorable now.
   if (timing === "now" && botJudges(card, hand) && !hand.index.soMet!.includes(card.name.toLowerCase())) return "later";
@@ -118,7 +120,7 @@ function cardTiming(card: HandCard, hand: HandState): Timing {
 
 function isPlayableNow(card: HandCard, hand: HandState) {
   const actions = actionsFor(card, hand);
-  if (!actions.some((a) => a.id === "play" || a.id === "score")) return false;
+  if (!actions.some((a) => (a.id === "play" || a.id === "score") && !a.disabled)) return false;
   return cardTiming(card, hand) === "now";
 }
 
@@ -244,6 +246,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
           card={selectedCard}
           number={hand.numbers.get(selectedCard.key)}
           timing={cardTiming(selectedCard, hand)}
+          closedReason={selectedCard.kind === "ac" ? hand.closed?.[selectedCard.alias] : undefined}
           overBy={selectedCard.kind === "ac" ? Math.max(0, hand.acHeld - hand.acLimit) : 0}
           unmet={botJudges(selectedCard, hand) && !hand.index.soMet!.includes(selectedCard.name.toLowerCase())}
           actions={liveCard ? actionsFor(selectedCard, hand) : []}
@@ -346,7 +349,7 @@ function GroupFan({ group, hand, budget, onPick, onFold, newKeys }: GroupFanProp
         >
           {group.cards.map((card, i) => {
             const actions = actionsFor(card, hand);
-            const actionable = actions.some((a) => a.id === "play" || a.id === "score");
+            const actionable = actions.some((a) => (a.id === "play" || a.id === "score") && !a.disabled);
             const timing = cardTiming(card, hand);
             return (
               <button

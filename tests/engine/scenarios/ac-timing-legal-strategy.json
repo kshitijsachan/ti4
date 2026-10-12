@@ -1,0 +1,81 @@
+{
+  "name": "ac-timing-legal-strategy",
+  "description": "Positive control for ActionCardTiming (audit-acs): STRATEGY window: Summit, Manipulate Investments and Public Disgrace played by Empyrean in the strategy phase (pbd72 r4, phase strategy) must be ACCEPTED.",
+  "base": {
+    "recording": "pbd72",
+    "index": 805,
+    "repost": false
+  },
+  "setup": [],
+  "steps": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "summit",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "summit"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "investments",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "investments"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "disgrace",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "disgrace"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

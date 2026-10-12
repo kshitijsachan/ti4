@@ -7,6 +7,8 @@ export type HandResponse = {
   actionCards: string[];
   secretObjectives: string[];
   promissoryNotes: string[];
+  /** Action cards whose timing window is closed right now (card id -> the bot's reason); absent = playable. */
+  closedActionCards?: Record<string, string>;
 };
 
 export type CardKind = "ac" | "so" | "pn" | "relic" | "fragment";
