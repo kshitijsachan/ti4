@@ -1,0 +1,17 @@
+{
+  "name": "setup-keleres-flavor-tech",
+  "description": "Keleres setup (pbd75@23, Bot Eta drafted Keleres, the after-draft flavour prompt setupStep5_<uid>_keleres<m|x|a>_null_<pos>_<yes|no>): the setup.keleres_flavor answer (Mentak, seat2 on the fork) sets the seat up as keleresm, and the Get Keleres Technology Options prompt it posts (FFCC_keleresm_getKeleresTechOptions, setup.keleres_tech) must be the Keleres seat's own (target = that seat, scope player). Before the fix it was captured with target null (posted while the faction was being set: the owner prefix named nobody yet) and nobody was asked, so web/e2e/setup-flow.mjs never answered it.",
+  "base": { "recording": "pbd75", "index": 23 },
+  "steps": [
+    { "press": "setupStep5_${seat2}_keleresm_null_313_no", "as": "seat2" },
+    { "wait": 3000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [ { "path": "players[userId=${seat2}].faction", "eq": "keleresm" } ],
+    "decision": [
+      { "kind": "setup.keleres_flavor", "as": "seat2", "open": false },
+      { "kind": "setup.keleres_tech", "as": "seat2", "scope": "player", "open": true }
+    ]
+  }
+}

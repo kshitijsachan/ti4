@@ -206,6 +206,25 @@ while (Date.now() < end2 && !done) {
     const confirm = dialog.getByRole("button", { name: /^(Take|Keep|Start with|Research|Discard|Pick)\b/ }).first();
     say(`my decision: ${title} -> ${(await confirm.textContent())?.trim()}`);
     await confirm.click();
+  } else if (/keleres flavou?r/i.test(title) && (await dialog.locator('button[class*="choice"]:not([disabled])').count())) {
+    // setup.keleres_flavor: every card answers at once (no "go" confirm); uncontested flavours are the "go"-styled ones.
+    const free = dialog.locator('button[class*="choice"][class*="go"]:not([disabled])');
+    const card = (await free.count()) ? free.first() : dialog.locator('button[class*="choice"]:not([disabled])').first();
+    say(`my decision: ${title} -> ${((await card.textContent()) ?? "").trim().slice(0, 60)}`);
+    await card.click({ timeout: 10000 }).catch(() => seen.pop());
+  } else if (/keleres starting tech/i.test(title)) {
+    // setup.keleres_tech: one "go" card, enabled once every other player has their starting technologies.
+    const get = dialog.locator('button[class*="choice"]:not([disabled])').first();
+    if (await get.count()) {
+      say(`my decision: ${title} -> ${((await get.textContent()) ?? "").trim().slice(0, 60)}`);
+      await get.click({ timeout: 10000 }).catch(() => seen.pop());
+    } else {
+      seen.pop();
+      if (n++ % 5 === 0) say(`${title}: waiting for the other players' starting technologies`);
+      await nextDecision(dialog, title);
+      await page.waitForTimeout(3000);
+      continue;
+    }
   } else if (await dialog.locator('button[class*="choice"]:not([disabled])').count()) {
     // Engine UI (the default since the TI4_ENGINE_WEB=1 flip): choice cards, then a "go" card to confirm when the
     // renderer asks for one (secret objective keep, ...). A repeated prompt takes a different card than last time.

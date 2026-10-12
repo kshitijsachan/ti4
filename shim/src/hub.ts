@@ -340,34 +340,47 @@ export class Hub {
   }
 
   /**
-   * Startup / periodic sweep: channels already in the archive category are archived, and an ended game's channels
-   * (bot web-data phase "finished") still outside it are moved there and archived. Keeps the guild under Discord's
-   * 500-channel limit for good (live 10:05: "481 / 500 channels", no new game could be created). Returns the count.
+   * Startup / periodic sweep, by the bot's web-data phase now: an ended game's channels (phase "finished") still
+   * outside the archive category are moved there and archived; an archived game whose phase is no longer "finished"
+   * (a rewind past its End Game) gets its channels back (unarchiveGameChannels), so the sweep never re-archives a
+   * game that is live again. Non-game channels in the archive category are archived. Keeps the guild under
+   * Discord's 500-channel limit for good (live 10:05: "481 / 500 channels", no new game could be created).
+   * Returns the count of channels archived or restored.
    */
   async sweepEndedGames(botApi: string): Promise<number> {
     const cat = this.ensureArchiveCategory();
     let n = 0;
     const games = new Map<string, Json[]>();
     for (const ch of Object.values(this.store.state.channels)) {
-      if (ch._archived || [1, 4, 10, 11, 12].includes(ch.type)) continue;
-      if (ch.parent_id === cat.id) {
+      if ([1, 4, 10, 11, 12].includes(ch.type)) continue;
+      const m = /^(pbd\d+)-/i.exec(String(ch.name ?? ""));
+      if (m) {
+        const g = m[1].toLowerCase();
+        (games.get(g) ?? games.set(g, []).get(g)!).push(ch);
+      } else if (!ch._archived && ch.parent_id === cat.id) {
         this.archiveChannel(ch);
         n++;
-        continue;
       }
-      const m = /^(pbd\d+)-/i.exec(String(ch.name ?? ""));
-      if (m) (games.get(m[1].toLowerCase()) ?? games.set(m[1].toLowerCase(), []).get(m[1].toLowerCase())!).push(ch);
     }
     for (const [game, chans] of games) {
       try {
         const res = await fetch(`${botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(5000) });
         if (!res.ok) continue;
         const data = (await res.json()) as Json;
-        if (data?.gameState?.phase !== "finished") continue;
+        const phase = data?.gameState?.phase;
+        if (!phase) continue;
+        if (phase !== "finished") {
+          if (chans.some((c) => c._archived || c.parent_id === cat.id)) n += this.unarchiveGameChannels(game, chans);
+          continue;
+        }
         for (const ch of chans) {
-          ch.parent_id = cat.id;
-          this.store.invalidateViews();
-          this.channelUpdate(ch);
+          if (ch._archived) continue;
+          if (ch.parent_id !== cat.id) {
+            ch._archive_parent = ch.parent_id ?? null;
+            ch.parent_id = cat.id;
+            this.store.invalidateViews();
+            this.channelUpdate(ch);
+          }
           this.archiveChannel(ch);
           n++;
         }
@@ -378,10 +391,76 @@ export class Hub {
     return n;
   }
 
-  /** Archives a channel now parented to the archive category (after a move). */
-  archiveIfMoved(ch: Json) {
+  /** Whether a channel is parented to the archive category. */
+  private inArchiveCategory(ch: Json): boolean {
     const parent = ch.parent_id ? this.store.state.channels[ch.parent_id] : undefined;
-    if (parent && parent.type === 4 && parent.name === Hub.ARCHIVE_CATEGORY) this.archiveChannel(ch);
+    return !!parent && parent.type === 4 && parent.name === Hub.ARCHIVE_CATEGORY;
+  }
+
+  /** Archives a channel now parented to the archive category (after a move). */
+  archiveIfMoved(ch: Json, previousParent?: string | null) {
+    if (!this.inArchiveCategory(ch)) return;
+    if (previousParent !== undefined && previousParent !== ch.parent_id) ch._archive_parent = previousParent;
+    this.archiveChannel(ch);
+  }
+
+  /**
+   * The reverse of archiveChannel: the channel is back for the bot (CHANNEL_CREATE, then THREAD_CREATE for its
+   * open threads, which the bot's cache dropped with the channel). For a game un-ended by a rewind.
+   */
+  restoreChannel(ch: Json) {
+    if (!ch._archived) return;
+    delete ch._archived;
+    delete ch._archive_parent;
+    this.store.invalidateViews();
+    this.store.scheduleSave(ch.id);
+    this.gateway.dispatch("CHANNEL_CREATE", ch);
+    for (const l of this.listeners) l.channelUpsert(ch);
+    for (const t of Object.values(this.store.state.channels)) {
+      if (t.parent_id === ch.id && [10, 11, 12].includes(t.type) && !t.thread_metadata?.archived)
+        this.gateway.dispatch("THREAD_CREATE", t);
+    }
+  }
+
+  /** An archived channel moved out of the archive category (the bot restoring a rewound game) is restored. */
+  restoreIfMovedOut(ch: Json) {
+    if (ch._archived && !this.inArchiveCategory(ch)) this.restoreChannel(ch);
+  }
+
+  /**
+   * The normal category for a game's channels: the one it came from if it still exists, else the bot's "PBD #a-b"
+   * category covering the game number (created when missing, like the bot's CreateGameService).
+   */
+  gameCategoryFor(game: string, ch: Json): Json {
+    const from = ch._archive_parent ? this.store.state.channels[ch._archive_parent] : undefined;
+    if (from && from.type === 4 && from.name !== Hub.ARCHIVE_CATEGORY) return from;
+    const num = Number(/^pbd(\d+)$/i.exec(game)?.[1] ?? NaN);
+    const cats = Object.values(this.store.state.channels).filter((c) => c.type === 4);
+    for (const c of cats) {
+      const r = /^PBD #(\d+)-(\d+)/.exec(String(c.name ?? ""));
+      if (r && Number(r[1]) <= num && num <= Number(r[2])) return c;
+    }
+    const lo = Number.isFinite(num) ? num - (num % 10) : 0;
+    const name = Number.isFinite(num) ? `PBD #${lo}-${lo + 9}` : "PBD Games";
+    const cat = this.store.createChannel({ type: 4, name, position: 1000 });
+    this.channelCreate(cat);
+    return cat;
+  }
+
+  /** Moves a game's archived channels back to its normal category and restores them. Returns how many. */
+  unarchiveGameChannels(game: string, chans: Json[]): number {
+    let n = 0;
+    for (const ch of chans) {
+      if (!ch._archived && !this.inArchiveCategory(ch)) continue;
+      if (this.inArchiveCategory(ch)) ch.parent_id = this.gameCategoryFor(game, ch).id;
+      if (ch._archived) this.restoreChannel(ch);
+      else {
+        this.store.invalidateViews();
+        this.channelUpdate(ch);
+      }
+      n++;
+    }
+    return n;
   }
 
   channelDelete(ch: Json) {
