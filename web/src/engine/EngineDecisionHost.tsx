@@ -73,7 +73,11 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
   const hidden = useEngine((s) => s.hidden);
   const answer = useEngineAnswer();
-  const ordered = useMemo(() => orderDecisions(decisions, answeredAtSeq, hidden, state), [decisions, answeredAtSeq, hidden, state]);
+  const answeredKind = useEngine((s) => s.lastAnswer?.decision.kind ?? null);
+  const ordered = useMemo(
+    () => orderDecisions(decisions, answeredAtSeq, hidden, state, answeredKind),
+    [decisions, answeredAtSeq, hidden, state, answeredKind],
+  );
   /* While the draft runs, the draft board (the table's takeover) is where picks are made: no popup on top of it. */
   const drafting = state?.draft?.status === "drafting";
   /* While the map answers the move / land step (its own panel on the board), that step is the map's, not the popup's. */
