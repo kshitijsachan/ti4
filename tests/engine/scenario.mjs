@@ -3,6 +3,7 @@
 //
 //   node tests/engine/scenario.mjs <scenario file|name> [--diff] [--via engine|press] [--forks pbdA,pbdB] [--keep]
 //        [--json] [--out report.json] [--quiet]
+//   --buttons [--values]: after every step print the prompts (decisions) it opened: kind, target, option ids (+ typed values)
 //   node tests/engine/scenario.mjs --list            scenarios in tests/engine/scenarios/
 //   node tests/engine/scenario.mjs --commands ac     the bot's slash commands (sub-commands, options) matching "ac"
 //
@@ -214,6 +215,7 @@ class Runner {
   /** Runs one step; returns {ok, error?, detail}. */
   async step(st) {
     const since = latestUndo(this.fork.game);
+    if (flag("--buttons")) this.seenSeq = Math.max(0, ...(await openDecisions(this.fork.game).catch(() => [])).map((d) => d.seq ?? 0));
     const r = await this.perform(this.via === "press" && st.legacy ? st.legacy : [st]);
     const s = await this.settle(since);
     return { ...r, saves: s.saves };
@@ -348,6 +350,12 @@ class Runner {
     return { ok: false, error: `no ${spec.kind} option matches ${JSON.stringify(spec.option ?? spec.value)} (options: ${ds[0].options.map((o) => o.id).slice(0, 12).join(", ")})` };
   }
 
+  /** --buttons: decisions opened by the last step (kind, target, every option id + typed value). */
+  async newPrompts() {
+    const ds = (await openDecisions(this.fork.game)).filter((d) => (d.seq ?? 0) > (this.seenSeq ?? 0)).sort((a, b) => a.seq - b.seq);
+    return ds.map((d) => ({ id: d.id, kind: d.kind, target: d.target?.faction ?? d.target?.userId ?? d.scope, options: d.options.map((o) => ({ id: o.id, label: o.label, value: o.value })) }));
+  }
+
   invariants(id, label) {
     const vs = checkSnapshot({ id, label, save: this.save(), web: null }).filter((v) => v.severity === "error");
     this.violations.push(...vs);
@@ -450,6 +458,7 @@ for (const { phase, st } of all) {
   for (const r of runs) {
     // setup commands are the same on every fork (always commands / presses, never "the thing under test")
     const out = await r.step(st).catch((e) => ({ ok: false, error: e.message }));
+    if (flag("--buttons")) out.prompts = await r.newPrompts().catch((e) => [`(prompts: ${e.message})`]);
     const vs = r.invariants(`${phase}${n}`, JSON.stringify(st));
     res.push({ fork: r.fork.game, via: r.label, ...out, invariants: vs.map((v) => `${v.id}: ${v.message}`) });
   }
@@ -470,6 +479,11 @@ for (const { phase, st } of all) {
       if (!x.refused) fail(`${phase} ${n} (${x.via}): expected the engine to refuse, it answered`);
     } else if (!x.ok) fail(`${phase} ${n} (${x.via}): ${x.error}`);
     for (const v of x.invariants) fail(`${phase} ${n} (${x.via}) invariant ${v}`);
+  }
+  if (flag("--buttons")) for (const x of res) for (const pr of x.prompts ?? []) {
+    if (typeof pr === "string") { console.log(`        [${x.via}] ${pr}`); continue; }
+    console.log(`        [${x.via}] ${pr.id} ${pr.kind} -> ${pr.target}: ${pr.options.map((o) => o.id).join(" | ")}`);
+    if (flag("--values")) for (const o of pr.options) if (o.value) console.log(`            ${o.id} = ${JSON.stringify(o.value)}`);
   }
   if (diffs?.length) for (const d of diffs.slice(0, 6)) console.log(`        ${d.key}${d.orderOnly ? " (order)" : ""}: legacy ${short(d.expected, 60)}  |  engine ${short(d.actual, 60)}`);
 }

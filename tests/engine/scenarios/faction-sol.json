@@ -1,0 +1,16 @@
+{
+  "name": "faction-sol",
+  "description": "Sol: commander Claire Gibson (utilizeSolCommander_<planet>), Orbital Drop mech follow-up (orbitalMechDrop_<planet>), agent Evelyn Delouis (getAgentSelection_solagent -> exhaustAgent_solagent_<faction>)",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "setup": [
+    "/leaders unlock leader:solcommander faction_or_color:sol",
+    "/player stats trade_goods:4 faction_or_color:sol"
+  ],
+  "trigger": { "press": "FFCC_sol_utilizeSolCommander_jord", "as": "sol" },
+  "steps": [
+    { "press": "orbitalMechDrop_jord", "as": "sol" },
+    { "press": "getAgentSelection_solagent", "as": "sol" },
+    { "press": "exhaustAgent_solagent_sol", "as": "sol" }
+  ],
+  "expect": { "invariants": true }
+}

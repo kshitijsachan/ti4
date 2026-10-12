@@ -1,0 +1,30 @@
+{
+  "name": "faction-argent",
+  "description": "Argent: hero Mirik Aun Sissiri (argentHeroStep2_<pos> -> argentHeroStep3_<dest>_<origin> -> argentHeroStep4_...), agent on the production menu (exhaustAgent_argentagent_<pos>)",
+  "base": {
+    "recording": "pbd118",
+    "index": 140,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:argenthero faction_or_color:argent",
+    "/add_units tile_name:304 unit_names:\"2 destroyer\" faction_or_color:argent"
+  ],
+  "trigger": {
+    "press": "FFCC_argent_argentHeroStep2_304",
+    "as": "argent"
+  },
+  "steps": [
+    {
+      "press": "argentHeroStep3_304_304",
+      "as": "argent"
+    },
+    {
+      "press": "exhaustAgent_argentagent_304",
+      "as": "argent"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
