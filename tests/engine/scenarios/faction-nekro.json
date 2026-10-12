@@ -1,0 +1,42 @@
+{
+  "name": "faction-nekro",
+  "description": "Nekro: agent Nekro Malleon (getAgentSelection_nekroagent -> exhaustAgent_nekroagent_<f> / nekroAgentRes_<f>), Technological Singularity (nekroStealTech_<f>), Propagation (propagationGainCC), hero (nekroHeroStep2_<planet>)",
+  "base": {
+    "recording": "pbd101",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/player stats trade_goods:3 faction_or_color:nekro",
+    "/leaders unlock leader:nekrohero faction_or_color:nekro"
+  ],
+  "trigger": {
+    "press": "getAgentSelection_nekroagent",
+    "as": "nekro"
+  },
+  "steps": [
+    {
+      "press": "exhaustAgent_nekroagent_mentak",
+      "as": "nekro"
+    },
+    {
+      "press": "nekroAgentRes_mentak",
+      "as": "nekro"
+    },
+    {
+      "press": "FFCC_nekro_nekroStealTech_mentak",
+      "as": "nekro"
+    },
+    {
+      "press": "FFCC_nekro_propagationGainCC",
+      "as": "nekro"
+    },
+    {
+      "press": "nekroHeroStep2_mollprimus",
+      "as": "nekro"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

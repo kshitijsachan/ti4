@@ -1,0 +1,50 @@
+{
+  "name": "relic-crown-emphidia",
+  "description": "The Crown of Emphidia: Empyrean (holding it) concludes a tactical action, presses Use Crown of Emphidia To Explore (crownofemphidiaexplore, choose.confirm after c6), then explores Torkan (explore.planet).",
+  "base": {
+    "recording": "pbd105",
+    "index": 205
+  },
+  "setup": [
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "emphidia",
+        "player": "${faction:empyrean}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "/tactical/",
+        "option": "doneWithTacticalAction"
+      },
+      "as": "empyrean"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "crownofemphidiaexplore"
+      },
+      "as": "empyrean"
+    },
+    {
+      "answer": {
+        "kind": "explore.planet",
+        "option": "movedNExplored_filler_torkan_cultural"
+      },
+      "as": "empyrean"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[empyrean].exhausted_relics",
+        "includes": "emphidia"
+      }
+    ]
+  }
+}

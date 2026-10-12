@@ -1,0 +1,21 @@
+{
+  "name": "faction-empyrean",
+  "description": "Empyrean: flagship Dynamo (empyreanFlagshipAbilityStep1_<pos> -> empyreanFlagshipAbilityStep2_<pos>_<f>_<unit>_<holder>), agent (getAgentSelection_empyreanagent)",
+  "base": {
+    "recording": "pbd110",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/add_units tile_name:310 unit_names:\"flagship\" faction_or_color:empyrean",
+    "/add_units tile_name:310 unit_names:\"2 infantry thedark\" faction_or_color:empyrean"
+  ],
+  "trigger": {
+    "press": "FFCC_empyrean_empyreanFlagshipAbilityStep1_310",
+    "as": "empyrean"
+  },
+  "steps": [],
+  "expect": {
+    "invariants": true
+  }
+}

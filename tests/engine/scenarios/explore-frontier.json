@@ -1,0 +1,16 @@
+{
+  "name": "explore-frontier",
+  "description": "Frontier explores: Empyrean (has Dark Energy Tap) concludes a tactical action in 205 after a frontier token was added there (ButtonHelper.exploreDET), then the Empyrean hero frontier button exploreFront_<pos> (explore.frontier) on another frontier system.",
+  "base": { "recording": "pbd105", "index": 205 },
+  "setup": ["/add_token token:frontier tile_name:205"],
+  "steps": [
+    { "answer": { "kind": "/tactical/", "option": "doneWithTacticalAction" }, "as": "empyrean" },
+    { "wait": 1500 },
+    { "press": "FFCC_empyrean_exploreFront_210", "as": "empyrean" },
+    { "wait": 1500 }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "game.phase_of_game", "eq": "action" } ]
+  }
+}

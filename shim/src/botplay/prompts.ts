@@ -32,10 +32,27 @@ export function controlsOf(components: Json[] | undefined): Control[] {
   return out;
 }
 
-/** The custom id without its `FFCC_<faction>_` lock. */
-export const baseId = (id: string) => id.replace(/^FFCC_[^_]+_/, "");
+/**
+ * The custom id without its `FFCC_<faction>_` lock, and without the bot's DoneRole tag on deleteButtons closers
+ * (`deleteButtons_<ctx>~pay`, `~prod`, `~ccgain`, `~ccredist`, `~cclose`, `~fleetlose`): those say what the closer
+ * finishes in the id instead of the label, and every match here is on the plain closer id.
+ */
+export const baseId = (id: string) => id.replace(/^FFCC_[^_]+_/, "").replace(/~(pay|prod|ccgain|ccredist|cclose|fleetlose)$/, "");
 
 /** The faction a control is locked to, if any. */
 export const lockOf = (id: string) => /^FFCC_([^_]+)_/.exec(id)?.[1];
+
+/** Keleres is drafted as one faction and played as one of three (keleresa / keleresm / keleresx). */
+const factionFamily = (f: string | undefined) => (f?.startsWith("keleres") ? "keleres" : f);
+
+/**
+ * Whether a control is locked to `faction`. The autopilot names Keleres by its family ("keleres") while the bot locks
+ * its buttons to the flavour (FFCC_keleresa_): live pbd114, the unit-limit desk never recognised its own removal list
+ * and the rule table pressed "Done Removing" on it 178 times in 10 minutes.
+ */
+export const lockIs = (id: string, faction: string | undefined) => {
+  const lock = lockOf(id);
+  return !!lock && !!faction && factionFamily(lock) === factionFamily(faction);
+};
 
 export const snowflakeAfter = (a: string, b: string | undefined) => !b || BigInt(a) > BigInt(b);

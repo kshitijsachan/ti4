@@ -1,0 +1,30 @@
+{
+  "name": "faction-winnu",
+  "description": "Winnu: Reclamation (winnuStructure_sd_<planet>), hero Mathis Mathinus (winnuHero_<sc>), Acquiescence PN played by its holder (winnuPNPlay_<sc>)",
+  "base": {
+    "recording": "pbd116",
+    "index": 42,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:winnuhero faction_or_color:winnu",
+    "/pn send promissory_note_id:acq target_faction_or_color:sardakk faction_or_color:winnu"
+  ],
+  "trigger": {
+    "press": "winnuStructure_sd_winnu",
+    "as": "winnu"
+  },
+  "steps": [
+    {
+      "press": "winnuHero_3",
+      "as": "winnu"
+    },
+    {
+      "press": "winnuPNPlay_7",
+      "as": "sardakk"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

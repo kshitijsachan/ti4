@@ -1,0 +1,19 @@
+{
+  "name": "faction-arborec-leaders",
+  "description": "Arborec agent Letani Ospha (pick target -> system -> ship -> replace with ship), commander build (arboCommanderBuild), flagship 5-unit build (arboHeroBuild)",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "setup": [
+    "/add_units tile_name:301 unit_names:\"2 destroyer, cruiser, flagship\" faction_or_color:arborec",
+    "/leaders unlock leader:arboreccommander faction_or_color:arborec"
+  ],
+  "trigger": { "press": "getAgentSelection_arborecagent", "as": "arborec" },
+  "steps": [
+    { "press": "exhaustAgent_arborecagent_arborec", "as": "arborec" },
+    { "press": "FFCC_arborec_arboAgentIn_301", "as": "arborec" },
+    { "press": "FFCC_arborec_arboAgentOn_301_destroyer", "as": "arborec" },
+    { "press": "FFCC_arborec_arboAgentPutShip_cruiser_301", "as": "arborec" },
+    { "press": "FFCC_arborec_arboCommanderBuild_301", "as": "arborec" },
+    { "press": "FFCC_arborec_arboHeroBuild_301deleteThisMessage", "as": "arborec" }
+  ],
+  "expect": { "invariants": true }
+}

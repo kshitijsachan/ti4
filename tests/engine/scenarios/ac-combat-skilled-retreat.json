@@ -1,0 +1,12 @@
+{
+  "name": "ac-combat-skilled-retreat",
+  "description": "Space combat at 308 (pbd60): muaat (defender) plays Skilled Retreat; resolve retreat_308_skilled (combat.round retreat variant skilled), then pick the first destination (retreatUnitsFrom_308_<to>skilled, combat.retreat).",
+  "base": { "recording": "pbd60", "index": 122 },
+  "setup": [{ "command": "ac draw_specific_ac", "options": { "ac_id": "s_retreat1", "faction_or_color": "muaat" } }],
+  "steps": [
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "s_retreat1" } }, "as": "muaat" },
+    { "answer": { "kind": "/combat/", "option": "retreat_308_skilled" }, "as": "muaat" },
+    { "answer": { "kind": "/combat/", "option": "retreatUnitsFrom_308_.*skilled" }, "as": "muaat" }
+  ],
+  "expect": { "invariants": true }
+}

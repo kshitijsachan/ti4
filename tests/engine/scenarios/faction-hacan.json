@@ -1,0 +1,21 @@
+{
+  "name": "faction-hacan",
+  "description": "Hacan: agent Carth (exhaustAgent_hacanagent -> hacanAgentRefresh_<faction>), Production Biomes (useProductionBiomes -> productionBiomes_<faction>), Quantum Datahub Node (startQDN -> selectBeforeSwapSCs_ -> swapSCs_), hero purge",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "setup": [
+    "/tech add tech:pb tech2:qdn faction_or_color:hacan",
+    "/player stats trade_goods:6 faction_or_color:hacan",
+    "/leaders unlock leader:hacanhero faction_or_color:hacan"
+  ],
+  "trigger": { "press": "FFCC_hacan_exhaustAgent_hacanagent", "as": "hacan" },
+  "steps": [
+    { "press": "hacanAgentRefresh_sol", "as": "hacan" },
+    { "press": "useProductionBiomes", "as": "hacan" },
+    { "press": "productionBiomes_saar", "as": "hacan" },
+    { "press": "startQDN", "as": "hacan" },
+    { "press": "selectBeforeSwapSCs_sol_qdn", "as": "hacan" },
+    { "press": "swapSCs_sol_qdn_5_4", "as": "hacan" },
+    { "press": "purgeHacanHero", "as": "hacan" }
+  ],
+  "expect": { "invariants": true }
+}
