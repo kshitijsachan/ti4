@@ -77,6 +77,8 @@ export interface GameState {
   /** Engine event seq at snapshot time; resume the stream with after=seq. */
   seq: number;
   phase: Phase;
+  /** The game is over (ended or won): nothing is asked of anyone any more (phase keeps its last value). */
+  ended: boolean;
   round: number;
   activePlayer: UserId | null;
   speaker: UserId | null;

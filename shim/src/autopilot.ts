@@ -1508,6 +1508,7 @@ class SeatPilot {
       const open = (await engine.openDecisions(game)) ?? [];
       const table = open.filter(isTableSetupStep);
       const state = await engine.state(game, this.userId, 2000);
+      if (state?.ended) continue; // the game is over: nothing to answer (live pbd114 kept its phase "action")
       // And the strategy cards we played: their windows list only followers; we resolve the primary on them.
       const holding = open.filter((d) => answersOutsideWindow(d, this.userId, state) && !own?.some((x) => x.id === d.id));
       const mine = [...(own ?? []), ...table, ...holding];
