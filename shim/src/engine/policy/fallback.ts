@@ -290,6 +290,7 @@ export function fallbackDue(d: Decision, me: string, opts: { waitedMs?: number; 
  *   another phase (pbd42: "The action phase is over"), or no state to tell (policy/turn.ts turnStale);
  * - "Setup a Player" once we are seated; the draft-time Keleres preset once we play a flavour;
  * - a bombardment / barrage hits opener once its fight has rolled a round;
+ * - an agent prompt once that agent of ours is exhausted;
  * - a combat roll window whose fight is over or is not the combat on the board (pbd60: rounds of a finished space
  *   combat stayed open with us "eligible"; the fallback pressed "Check Combat Action Cards" / rolled them).
  * Neither the fallback nor the watchdog acts on it. Needs the state; without one nothing is stale.
@@ -312,6 +313,15 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
   if (d.kind === "setup.player" && !state.tiles.length) return true;
   if (d.kind === "setup.player" && d.options.every((o) => !o.value || (o.value as { step?: string }).step === "start")) {
     return !!state.players.find((p) => p.userId === me)?.faction;
+  }
+  // An agent prompt ("Use on <player>": exhaustAgent_<agent>_…) once that agent of ours is exhausted: each press
+  // re-runs the agent's effect (pbd31: the Winnu agent's buttons on a spent payment, pressed 783 times).
+  if (d.kind === "leader.use") {
+    const typed = d.options.filter((o) => o.value && !/^(deleteButtons|ultimateUndo)/.test(o.handler));
+    const agents = typed.map((o) => o.value as { step?: string; leader?: string });
+    if (!agents.length || agents.some((v) => v.step !== "exhaustAgent" || !v.leader)) return false;
+    const leaders = state.players.find((p) => p.userId === me)?.leaders ?? [];
+    return agents.every((v) => leaders.includes(`${v.leader}:exhausted` as never));
   }
   // The draft-time Keleres preset once we play a flavour (pbd175: still open in setup, reported as a stall).
   if (d.kind === "setup.keleres_flavor" && d.options.some((o) => (o.value as { preset?: boolean } | null)?.preset)) {

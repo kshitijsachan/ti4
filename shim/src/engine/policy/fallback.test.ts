@@ -386,3 +386,12 @@ test("pbd160: a declared secret objective's list is never re-pressed (stale; act
   assert.equal(chooseFallback(d, status(null), ME), null);
   assert.equal(chooseFallback(d, state, ME), null);
 });
+
+test("pbd31: Winnu agent 'use on' buttons once our agent is exhausted are stale (no 783 presses)", () => {
+  const agent = (target: string) => opt(`exhaustAgent_winnuagent_${target}`, target, { leader: "winnuagent", leaderType: "agent", faction: "winnu", step: "exhaustAgent", action: "target", optional: true, target, args: [target] });
+  const d = decision("leader.use", [agent("hacan"), agent("yin"), agent("crimson")]);
+  const withLeader = (status: string) => ({ ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: "winnu", leaders: [status] } : p)) }) as unknown as GameState;
+  assert.equal(staleForBot(d, withLeader("winnuagent:exhausted"), ME), true);
+  assert.equal(chooseFallback(d, withLeader("winnuagent:exhausted"), ME), null);
+  assert.equal(staleForBot(d, withLeader("winnuagent"), ME), false);
+});
