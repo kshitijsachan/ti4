@@ -1,0 +1,17 @@
+{
+  "name": "te-deepwrought",
+  "description": "Deepwrought Scholarate (TE): Research Team coexistence (enterCoexistence_<planet>, faction.ability) and hero Ta Zern's Wave Function Collapse (dwsHeroPurge_<tech>, leader.use: purge Psychoarchaeology from Mahact, who must research a replacement)",
+  "base": { "recording": "pbd28", "index": 50, "repost": false },
+  "setup": [
+    "/add_units tile_name:313 unit_names:\"infantry ikatena\" faction_or_color:mahact",
+    "/leaders unlock leader:deepwroughthero faction_or_color:deepwrought"
+  ],
+  "trigger": { "press": "FFCC_deepwrought_enterCoexistence_ikatena", "as": "deepwrought" },
+  "steps": [
+    { "press": "dwsHeroPurge_pi", "as": "deepwrought" }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "player[mahact].tech", "excludes": "pi" } ]
+  }
+}
