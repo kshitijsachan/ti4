@@ -1,0 +1,14 @@
+{
+  "name": "cc-gain-cap-predictive-intelligence",
+  "description": "CcGainCap: Predictive Intelligence (exhaust at end of turn: redistribute) opens a redistribute-only panel (net 0): lose a tactic token, gain a fleet token (accepted), another gain refused.",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [ "/tech add tech:pi faction_or_color:muaat" ],
+  "steps": [
+    { "press": "FFCC_muaat_exhaustTech_pi", "as": "muaat" },
+    { "press": "redistributeCCButtons", "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "decrease_tactic_cc$" }, "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc$" }, "as": "muaat" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_strategy_cc$" }, "as": "muaat", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}

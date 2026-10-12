@@ -1,0 +1,14 @@
+{
+  "name": "cc-gain-cap-ordinian",
+  "description": "CcGainCap: Ordinian's legendary ability (draw 1 action card, gain 1 command token) opens the gain panel capped at 1: one increase accepted, the second refused.",
+  "base": { "recording": "pbd104", "index": 44, "repost": false },
+  "setup": [
+    "/planet add planet:ordinian faction_or_color:letnev",
+    "/planet legendary_exhaust_ability planet:ordinian faction_or_color:letnev"
+  ],
+  "steps": [
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc$" }, "as": "letnev" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc$" }, "as": "letnev", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}
