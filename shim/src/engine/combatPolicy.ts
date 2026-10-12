@@ -53,7 +53,8 @@ function bombardDone(d: CombatBombard, me: string): CombatChoice | null {
 /** "Engage in Combat or coexist?": a bot engages (claims the planet when that is offered instead). pbd203: untyped, 122 s. */
 function engage(d: CombatEngage, me: string): CombatChoice | null {
   if (d.target?.userId && d.target.userId !== me) return null;
-  if (!d.target?.userId && d.scope !== "player") return null;
+  // The unprefixed "unsure" prompt is anyone's (no target): answer it only when it names us.
+  if (!d.target?.userId && !String(d.prompt ?? "").includes(me)) return null;
   const live = d.options.filter((o) => !o.disabled && !forDummy(o) && o.value);
   const o = live.find((x) => x.value!.action === "engage") ?? live.find((x) => x.value!.action === "claim");
   return o ? { option: o, why: `combat: ${o.value!.action} on ${o.value!.planet}` } : null;
