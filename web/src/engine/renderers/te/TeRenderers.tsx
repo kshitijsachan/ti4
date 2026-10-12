@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { UnstyledButton } from "@mantine/core";
 import cx from "clsx";
-import type { Decision, GameState, Option } from "../../../../../shim/src/engine/types";
+import type { Decision, GameState, Option, UnitId } from "../../../../../shim/src/engine/types";
 import type {
   ExpeditionKey,
   TeExpedition,
@@ -13,6 +13,7 @@ import type {
   TeVisionaria,
 } from "../../../../../shim/src/engine/kinds/te";
 import classes from "./Te.module.css";
+import { playerLabel } from "../../names";
 
 export type TeRendererProps<D extends Decision = Decision> = {
   decision: D;
@@ -41,7 +42,7 @@ const UNIT_NAME: Record<string, string> = {
   gf: "Infantry",
   pd: "PDS",
   sd: "Space dock",
-};
+} satisfies Partial<Record<UnitId, string>>;
 
 function live<V>(d: { options: Option<V>[] }) {
   return d.options.filter((o) => !o.disabled && !o.needsInput);
@@ -49,7 +50,7 @@ function live<V>(d: { options: Option<V>[] }) {
 
 /** The prompt's dismiss / commit button (value null, handler deleteButtons). */
 function doneOf(d: Decision) {
-  return (d.options as Option<unknown>[]).find((o) => o.value === null && /^deleteButtons(_|$)/.test(o.handler));
+  return (d.options as Option<unknown>[]).find((o) => o.value === null && /^deleteButtons(_|~|$)/.test(o.handler));
 }
 
 function Choice(props: { onClick: () => void; disabled?: boolean; go?: boolean; back?: boolean; children: ReactNode; sub?: ReactNode }) {
@@ -245,7 +246,7 @@ export function Expedition({ decision, state, answer }: TeRendererProps<TeExpedi
 export function PlaceThundersEdge({ decision, state, answer }: TeRendererProps<TePlaceThundersEdge>) {
   const opts = live(decision).filter((o) => o.value);
   const step = opts[0]?.value?.step ?? "start";
-  const factionName = (f: string) => state?.players.find((p) => p.faction === f)?.userName ?? f;
+  const factionName = (f: string) => playerLabel(state, f);
   const title = step === "infantry" ? "Who places infantry on it?" : step === "system" ? "Choose its system" : "Place Thunder's Edge";
   return (
     <div className={classes.stack}>

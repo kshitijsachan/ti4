@@ -41,6 +41,8 @@ export function ActionCardSabotage({ decision, state, answer, pendingOptionId }:
   const playedBy = (w?.subject.faction as string | null | undefined) ?? first?.playedBy;
   const owe = !w || (!!self && w.eligible.includes(self.userId) && !w.responded.includes(self.userId));
   const answerable = typed.filter((o) => o.value!.action !== "wait" && (o.value!.playedBy !== self?.faction || !w));
+  // The player who played the card may pause the auto-pass timer while the others decide.
+  const pause = w && self?.faction === playedBy ? typed.find((o) => o.value!.action === "wait") : undefined;
   return (
     <div className={classes.root}>
       <Head title={acName(cardId)} meta={`played by ${playerLabel(state, playedBy)}`} />
@@ -71,6 +73,11 @@ export function ActionCardSabotage({ decision, state, answer, pendingOptionId }:
         </div>
       ) : (
         <span className={classes.meta}>Waiting for the others to answer.</span>
+      )}
+      {pause && (
+        <div className={classes.options}>
+          <AnswerButton option={pause} label="Pause timer" pendingOptionId={pendingOptionId} onAnswer={answer} />
+        </div>
       )}
       {!w && <ExtraOptions options={decision.options} pendingOptionId={pendingOptionId} onAnswer={answer} />}
     </div>
@@ -125,11 +132,13 @@ export function ActionCardDraw({ decision, answer, pendingOptionId }: Props<"act
   );
 }
 
-/** "Resolve <card>": the engine's own button text names the card; we only add the framing. */
+/** "Resolve <card>": the card comes from the typed value; the engine's button text only labels the step. */
 export function ActionCardResolve({ decision, answer, pendingOptionId }: Props<"action_card.resolve">) {
+  useCardData();
+  const card = decision.options.find((o) => o.value?.actionCard)?.value?.actionCard;
   return (
     <div className={classes.root}>
-      <Head title="Resolve your action card" meta="after any Sabotage window" />
+      <Head title={card ? `Resolve ${acName(card)}` : "Resolve your action card"} meta="after any Sabotage window" />
       <div className={classes.options}>
         {decision.options.map((o) => (
           <AnswerButton

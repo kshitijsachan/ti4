@@ -321,7 +321,7 @@ export class Clients implements Listener {
     const m = this.store.findMessage(channelId, messageId);
     if (!m || !this.messageVisible(userId, m)) return { error: "Unknown message" };
     m._presses = { ...m._presses, [userId]: { at: new Date().toISOString(), controls: controlIds(m.components) } };
-    this.store.scheduleSave();
+    this.store.scheduleSave(channelId, messageId);
     const inter = this.store.newInteraction({ type: 3, user_id: userId, channel_id: channelId, message_id: messageId });
     const data: Json = { custom_id: customId, component_type: componentType };
     if (componentType !== 2) data.values = values ?? [];
@@ -337,7 +337,7 @@ export class Clients implements Listener {
     // Remember this player's latest press on the message (shown back to them as `my_press`), so every
     // device they use knows which prompts they already answered.
     m._presses = { ...m._presses, [c.userId]: { at: new Date().toISOString(), controls: controlIds(m.components) } };
-    this.store.scheduleSave();
+    this.store.scheduleSave(m.channel_id, m.id);
     const data: Json = { custom_id: msg.custom_id, component_type: componentType };
     if (componentType !== 2) {
       data.values = msg.values ?? [];

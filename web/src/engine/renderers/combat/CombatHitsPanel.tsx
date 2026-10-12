@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ActionIcon, Button } from "@mantine/core";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import cx from "clsx";
@@ -7,6 +7,8 @@ import type { Option } from "../../../../../shim/src/engine/types";
 import { assigned, planProblem, rowKey, suggestPlan, toEntries, type PlanRow } from "./plan";
 import { holderName, live, me, unitName, type RendererProps } from "./types";
 import classes from "./combat.module.css";
+import { DecisionFooter } from "../../ui/Popup";
+import { useDecisionState } from "../../draftState";
 
 type Auto = Extract<CombatHitsValue, { action: "auto" }>;
 
@@ -66,7 +68,7 @@ export function CombatHitsPanel({ decision: d, state, answer }: RendererProps<Co
   const auto = autoOpt?.value ?? null;
   const cancels = options.filter((o) => o.value?.action === "cancel");
   const initial = useMemo(() => (auto ? suggestPlan(auto.units, auto.hits, auto.sustainCancels) : []), [auto]);
-  const [rows, setRows] = useState<PlanRow[]>(initial);
+  const [rows, setRows] = useDecisionState<PlanRow[]>(d.id, "rows", initial);
   const mineToAnswer = d.target?.userId === self?.userId;
 
   if (!auto || !autoOpt) return <p className={classes.note}>Hits to assign.</p>;
@@ -97,22 +99,24 @@ export function CombatHitsPanel({ decision: d, state, answer }: RendererProps<Co
             </span>{" "}
             assigned{problem ? ` — ${problem}` : ""}
           </p>
-          <div className={classes.actions}>
-            <Button size="xs" disabled={!!problem} onClick={() => answer({ action: "combat-plan", body: { plan: toEntries(rows) } })}>
-              Assign
-            </Button>
-            <Button size="xs" variant="default" onClick={() => answer(autoOpt.id)}>
-              Auto-assign
-            </Button>
-            <Button size="xs" variant="subtle" onClick={() => setRows(initial)}>
-              Reset
-            </Button>
-            {cancels.map((o) => (
-              <Button key={o.id} size="xs" variant="subtle" onClick={() => answer(o.id)}>
-                Cancel a hit (ability)
+          <DecisionFooter>
+            <div className={classes.actions}>
+              <Button size="xs" disabled={!!problem} onClick={() => answer({ action: "combat-plan", body: { plan: toEntries(rows) } })}>
+                Assign
               </Button>
-            ))}
-          </div>
+              <Button size="xs" variant="default" onClick={() => answer(autoOpt.id)}>
+                Auto-assign
+              </Button>
+              <Button size="xs" variant="subtle" onClick={() => setRows(initial)}>
+                Reset
+              </Button>
+              {cancels.map((o) => (
+                <Button key={o.id} size="xs" variant="subtle" onClick={() => answer(o.id)}>
+                  Cancel a hit (ability)
+                </Button>
+              ))}
+            </div>
+          </DecisionFooter>
         </>
       )}
     </div>

@@ -6,8 +6,10 @@
 
 import type { AgendaDecision, AgendaState } from "./kinds/agenda.js";
 import type { CardsDecision } from "./kinds/cards.js";
-import type { CombatDecision, CombatState } from "./kinds/combat.js";
+import type { CombatDecision, CombatState, UnitsModify, UnitsRemove } from "./kinds/combat.js";
+import type { ComponentsDecision } from "./kinds/components.js";
 import type { ExplorationState, ExploreDecision } from "./kinds/explore.js";
+import type { FactionDecision } from "./kinds/faction.js";
 import type { InputFormDecision } from "./kinds/input.js";
 import type { ProductionDecision } from "./kinds/production.js";
 import type { SetupDecision } from "./kinds/setup.js";
@@ -16,10 +18,13 @@ import type { StrategyDecision } from "./kinds/strategy.js";
 import type { TacticalDecision } from "./kinds/tactical.js";
 import type { ThundersEdgeDecision, ThundersEdgeState } from "./kinds/te.js";
 import type { TradeForceReplenish, TradeOffer, TradeOfferSent, TradeState } from "./kinds/trade.js";
+import type { UiDecision } from "./kinds/ui.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
+export type * from "./kinds/components.js";
 export type * from "./kinds/explore.js";
+export type * from "./kinds/faction.js";
 export type * from "./kinds/input.js";
 export type * from "./kinds/production.js";
 export type * from "./kinds/setup.js";
@@ -27,13 +32,42 @@ export type * from "./kinds/status.js";
 export type * from "./kinds/tactical.js";
 export type * from "./kinds/te.js";
 export type * from "./kinds/trade.js";
+export type * from "./ids.js";
+import type {
+  ActionCardId,
+  AgendaId,
+  ColorName,
+  FactionId,
+  LeaderStatus,
+  Phase,
+  PlanetId,
+  PromissoryNoteId,
+  PublicObjectiveId,
+  RelicFragmentId,
+  RelicId,
+  SecretObjectiveId,
+  StrategyCardId,
+  StrategyCardNumber,
+  TechId,
+  TechType,
+  TileId,
+  UnitId,
+} from "./ids.js";
 
 export const CONTRACT_VERSION = 1;
 
 // ---------------------------------------------------------------- state
 
 export type UserId = string;
-export type FactionId = string;
+/** Board position ("000", "101", "tl", …): depends on the map template, so not a closed set. */
+export type TilePosition = string;
+/** A unit holder on a tile: the space area or a planet. */
+export type HolderName = "space" | PlanetId;
+/**
+ * Key of GameState.publicObjectives: a public objective id, or the display name of a custom one the engine adds
+ * itself ("Custodian/Imperial", "Imperial Rider", "Shard of the Throne", a secret made public, …): an open set.
+ */
+export type RevealedObjectiveKey = PublicObjectiveId | (string & {});
 
 export interface GameState {
   contract: number;
@@ -42,16 +76,19 @@ export interface GameState {
   stateVersion: number;
   /** Engine event seq at snapshot time; resume the stream with after=seq. */
   seq: number;
-  phase: string;
+  phase: Phase;
+  /** The game is over (ended or won): nothing is asked of anyone any more (phase keeps its last value). */
+  ended: boolean;
   round: number;
   activePlayer: UserId | null;
   speaker: UserId | null;
   players: PlayerState[];
   strategyCards: StrategyCardState[];
   tiles: TileState[];
-  /** Revealed public objective id → user ids... (today: factions/user ids as the engine stores them) that scored it. */
-  publicObjectives: Record<string, string[]>;
-  laws: string[];
+  /** Revealed public objective (RevealedObjectiveKey: an id, or a custom objective's name) → user ids that scored it. */
+  publicObjectives: Record<string, UserId[]>;
+  /** Laws in play (agenda ids). */
+  laws: AgendaId[];
   draft: DraftState | null;
   /** Exploration decks, relic deck, recent explore results / relic draws (G9). Older engines: absent. */
   exploration?: ExplorationState | null;
@@ -74,7 +111,7 @@ export interface PlayerState {
   userName: string;
   /** Authoritative. null until drafted. */
   faction: FactionId | null;
-  color: string | null;
+  color: ColorName | null;
   /** This is the viewer (only then is `hand` filled). */
   self: boolean;
   real: boolean;
@@ -87,17 +124,18 @@ export interface PlayerState {
   commodities: number;
   commoditiesMax: number;
   commandTokens: { tactic: number; fleet: number; strategy: number };
-  strategyCards: number[];
-  techs: string[];
-  exhaustedTechs: string[];
-  planets: string[];
-  exhaustedPlanets: string[];
-  relics: string[];
-  fragments: string[];
+  strategyCards: StrategyCardNumber[];
+  techs: TechId[];
+  exhaustedTechs: TechId[];
+  planets: PlanetId[];
+  exhaustedPlanets: PlanetId[];
+  relics: RelicId[];
+  fragments: RelicFragmentId[];
   /** "<leaderId>" or "<leaderId>:locked" / ":exhausted". */
-  leaders: string[];
-  promissoryNotesInPlayArea: string[];
-  secretsScored: Record<string, number>;
+  leaders: LeaderStatus[];
+  promissoryNotesInPlayArea: PromissoryNoteId[];
+  /** Scored secret objective id → engine handle. */
+  secretsScored: Partial<Record<SecretObjectiveId, number>>;
   actionCardCount: number;
   secretObjectiveCount: number;
   promissoryNoteCount: number;
@@ -106,19 +144,19 @@ export interface PlayerState {
 
 /** Card id → the per-player numeric handle the engine uses in its option ids. */
 export interface Hand {
-  actionCards: Record<string, number>;
-  secretObjectives: Record<string, number>;
-  promissoryNotes: Record<string, number>;
+  actionCards: Partial<Record<ActionCardId, number>>;
+  secretObjectives: Partial<Record<SecretObjectiveId, number>>;
+  promissoryNotes: Partial<Record<PromissoryNoteId, number>>;
 }
 
 export interface StrategyCardState {
-  number: number;
+  number: StrategyCardNumber;
   holder: UserId | null;
   tradeGoods: number;
   played: boolean;
   name: string;
   /** Automation id the engine resolves the card as ("pok4construction", …). */
-  card: string | null;
+  card: StrategyCardId | null;
   holderFaction: FactionId | null;
   /** Once played: every seated player's answer to it. */
   reactions: ScReaction[];
@@ -135,14 +173,14 @@ export interface ScReaction {
 }
 
 export interface TileState {
-  position: string;
-  tileId: string;
+  position: TilePosition;
+  tileId: TileId;
   holders: HolderState[];
 }
 
 /** name: "space" or a planet id. */
 export interface HolderState {
-  name: string;
+  name: HolderName;
   units: UnitStack[];
   tokens: string[];
   control: string[];
@@ -150,9 +188,9 @@ export interface HolderState {
 
 export interface UnitStack {
   owner: FactionId | null;
-  color: string;
-  /** async unit id: inf, ff, mf, pd, sd, dd, ca, cv, dn, fs, ws, ... */
-  unit: string;
+  color: ColorName;
+  /** async unit id: gf, ff, mf, pd, sd, dd, ca, cv, dn, fs, ws, ... */
+  unit: UnitId;
   count: number;
   damaged: number;
   galvanized: number;
@@ -225,7 +263,7 @@ export type ResolvedBy =
 export interface Target {
   userId: UserId | null;
   faction: FactionId | null;
-  color: string | null;
+  color: ColorName | null;
   resolvedBy: ResolvedBy;
 }
 
@@ -353,17 +391,17 @@ export type DecisionBaseOf<K extends string, V> = DecisionBase<K, V>;
 
 export type StrategyCardPick = DecisionBase<
   "strategy_card.pick",
-  { strategyCard: number; tradeGoods: number; name?: string; card?: string | null }
+  { strategyCard: StrategyCardNumber; tradeGoods: number; name?: string; card?: StrategyCardId | null }
 >;
 export type TechGain = DecisionBase<
   "tech.gain",
   {
-    tech: string;
+    tech: TechId;
     free: boolean;
     starting: boolean;
     flags: string[];
     /** PROPULSION | BIOTIC | CYBERNETIC | WARFARE | UNITUPGRADE | … */
-    type?: string | null;
+    type?: TechType | null;
     /** Prerequisite letters, e.g. "GG". */
     requirements?: string | null;
     factionTech?: boolean;
@@ -371,7 +409,7 @@ export type TechGain = DecisionBase<
 >;
 export type SecretObjectiveDiscard = DecisionBase<
   "secret_objective.discard",
-  { handle: number; secretObjective?: string; redraw: boolean }
+  { handle: number; secretObjective?: SecretObjectiveId; redraw: boolean }
 >;
 
 /** Everything not yet typed: options carry label/style/handler only. */
@@ -393,8 +431,13 @@ export type Decision =
   | TradeOfferSent
   | TradeForceReplenish
   | CombatDecision
+  | UnitsRemove
+  | UnitsModify
   | ProductionDecision
   | InputFormDecision
+  | FactionDecision
+  | UiDecision
+  | ComponentsDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -469,8 +512,18 @@ export interface DecisionsSnapshot {
   decisions: Decision[];
 }
 
+/** A non-decision affordance (ui.undo_affordance, ui.optional, ui.info_menu): never pending, bots ignore it. */
+export function isAffordance(d: Pick<Decision, "kind">): boolean {
+  return AFFORDANCE_KINDS.has(d.kind);
+}
+
+/** Kinds that are affordances, not questions (Java UiAffordanceKind, UiOptionalKind, InfoMenuSplit). */
+export const AFFORDANCE_KINDS: ReadonlySet<string> = new Set(["ui.undo_affordance", "ui.optional", "ui.info_menu"]);
+
 /** Is this decision waiting on `userId`? (player scope: target; table scope: eligible and not yet responded.) */
 export function awaits(d: Decision, userId: UserId): boolean {
+  // Undo / optional / info-menu affordances (ui.*): nobody is asked anything; answerable on click, never awaited.
+  if (isAffordance(d)) return false;
   if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
   if (d.scope === "player") return d.target?.userId === userId;
   // Mixed-owner menu: only the options owned by this user (or by nobody) are theirs.
@@ -480,13 +533,40 @@ export function awaits(d: Decision, userId: UserId): boolean {
 
 /**
  * The player may answer although the window does not await them (KindSpec.answersOutsideWindow): the holder of a
- * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only).
+ * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only);
+ * the player who played an action card may press "Pause Timer" on its sabotage window.
  */
 export function answersOutsideWindow(d: Decision, userId: UserId, state: GameState | null): boolean {
-  if (d.kind !== "strategy_card.resolve" || !d.window) return false;
-  const holder = d.window.subject?.holder;
+  // Status scoring / homework: a player who declared or is ready may still press again, like the buttons.
+  if ((d.kind === "status.score" || d.kind === "status.homework") && d.window) return d.window.eligible.includes(userId);
+  if (!d.window) return false;
   const me = state?.players.find((p) => p.userId === userId);
+  if (d.kind === "action_card.sabotage") return !!me?.faction && d.window.subject?.faction === me.faction;
+  if (d.kind !== "strategy_card.resolve") return false;
+  const holder = d.window.subject?.holder;
   return !!holder && !!me?.faction && me.faction === holder;
+}
+
+/**
+ * A player-scoped decision another seat may still answer (KindSpec.othersMayAnswer): status.reveal_objective, agenda.resolve / agenda.next
+ * wait on the speaker, but the original button is pressable by anyone at the table.
+ */
+export function othersMayAnswer(d: Decision): boolean {
+  if (d.kind === "status.reveal_objective") return true;
+  return (d.kind === "agenda.resolve" || d.kind === "agenda.next") && d.target?.resolvedBy !== "owner_prefix";
+}
+
+/**
+ * The player already followed this played strategy card (spent the token): the window counts them as responded, yet
+ * they may still press the card's secondary (the original code allows "Spend A Strategy Token", then "Draw 2 Action
+ * Cards" / "Ready Planets" / "Research"; the engine's KindSpec.answersOutsideWindow agrees). Not "waiting on me".
+ */
+export function followedPlayedCard(d: Decision, userId: UserId, state: GameState | null): boolean {
+  if (d.kind !== "strategy_card.resolve" || !d.window) return false;
+  const sc = d.window.subject?.strategyCard;
+  const me = state?.players.find((p) => p.userId === userId);
+  const card = state?.strategyCards?.find((c) => c.number === sc);
+  return !!me?.faction && !!card?.reactions?.some((r) => r.faction === me.faction && r.status === "followed");
 }
 
 /** The options of `d` this user may press (per-option owner on mixed-owner menus; all options otherwise). */

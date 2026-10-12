@@ -1,10 +1,11 @@
-import { useState } from "react";
 import { UnstyledButton } from "@mantine/core";
-import type { Option } from "../../../../../shim/src/engine/types";
+import type { HolderName, Option, TilePosition, UnitId } from "../../../../../shim/src/engine/types";
 import type { ProductionPayload, ProductionPlaceValue, ProductionProduce, ProductionValue } from "../../../../../shim/src/engine/kinds/production";
 import { isPlacement, isProductionDone } from "./model";
 import { ExtraOptions, Stepper, type AreaRendererProps } from "./shared";
 import classes from "./production.module.css";
+import { useDecisionState } from "../../draftState";
+import { DecisionFooter } from "../../ui/Popup";
 
 const UNIT_NAME: Record<string, string> = {
   ws: "War Sun",
@@ -18,9 +19,9 @@ const UNIT_NAME: Record<string, string> = {
   mf: "Mech",
   sd: "Space Dock",
   pd: "PDS",
-};
+} satisfies Partial<Record<UnitId, string>>;
 
-type Line = { key: string; unit: string; holder: string; tile: string | null; cost: number | null; step: number };
+type Line = { key: string; unit: UnitId; holder: HolderName; tile: TilePosition | null; cost: number | null; step: number };
 
 /** One line per unit + place; the engine's "2 at once" buttons only change the step, not the line. */
 function linesOf(options: Option<ProductionValue>[]): Line[] {
@@ -46,7 +47,7 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
   const doneOpt = options.find((o) => isProductionDone(o.value));
   const done = doneOpt && isProductionDone(doneOpt.value) ? doneOpt.value : undefined;
   const lines = linesOf(options);
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [counts, setCounts] = useDecisionState<Record<string, number>>(decision.id, "counts", {});
   const busy = !!pendingOptionId;
 
   const already = done?.unitCount ?? 0;
@@ -94,9 +95,11 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
           Build nothing
         </UnstyledButton>
       </div>
-      <UnstyledButton className={classes.commit} onClick={produce} disabled={busy || !doneOpt || over || picked === 0}>
-        {picked ? `Produce ${picked} unit${picked === 1 ? "" : "s"} · ${cost} resources` : "Choose units"}
-      </UnstyledButton>
+      <DecisionFooter>
+        <UnstyledButton className={classes.commit} onClick={produce} disabled={busy || !doneOpt || over || picked === 0}>
+          {picked ? `Produce ${picked} unit${picked === 1 ? "" : "s"} · ${cost} resources` : "Choose units"}
+        </UnstyledButton>
+      </DecisionFooter>
     </div>
   );
 }

@@ -1,0 +1,20 @@
+{
+  "name": "ac-combat-parley-salvage",
+  "description": "pbd60 save 122 (combat at 308): mentak infantry on muaat's Andeara; muaat plays Parley (resolveParleyStep1 -> resolveParleyStep2_andeara: enemy ground forces back to space) then Salvage (resolveSalvageStep1 -> salvageStep2_mentak: take mentak's commodities).",
+  "base": { "recording": "pbd60", "index": 122 },
+  "setup": [
+    "/add_units tile_name:308 unit_names:\"2 infantry andeara\" faction_or_color:mentak coexist:true",
+    "/player stats commodities:3 faction_or_color:mentak",
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "parley", "faction_or_color": "muaat" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "salvage", "faction_or_color": "muaat" } }
+  ],
+  "steps": [
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "parley" } }, "as": "muaat" },
+    { "answer": { "kind": "action_card.resolve", "option": "resolveParleyStep1" }, "as": "muaat" },
+    { "answer": { "kind": "action_card.target", "option": "resolveParleyStep2_andeara" }, "as": "muaat" },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "salvage" } }, "as": "muaat" },
+    { "answer": { "kind": "action_card.resolve", "option": "resolveSalvageStep1" }, "as": "muaat" },
+    { "answer": { "kind": "action_card.target", "option": "salvageStep2_mentak" }, "as": "muaat" }
+  ],
+  "expect": { "invariants": true, "save": [{ "key": "player[mentak].commodities", "eq": "0" }] }
+}

@@ -4,13 +4,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Decision, EngineEvent, GameState, ReactionWindow } from "../contract.ts";
 import type { EngineFrame } from "../protocol.ts";
-import { EMPTY_VIEW, myDecisions, reduce, settleAnswer, startAnswer, subscribeView, type EngineView } from "../reducer.ts";
+import { EMPTY_VIEW, myDecisions, openToAll, reduce, settleAnswer, startAnswer, subscribeView, type EngineView } from "../reducer.ts";
 
 const G = "pbd1";
 const ME = "u1";
 
 const state = (seq: number, stateVersion = seq, extra: Partial<GameState> = {}): GameState => ({
-  contract: 1, game: G, stateVersion, seq, phase: "action", round: 2, activePlayer: ME, speaker: null,
+  contract: 1, game: G, stateVersion, seq, phase: "action", ended: false, round: 2, activePlayer: ME, speaker: null,
   players: [
     { userId: ME, userName: "Me", faction: "arborec", color: "red" },
     { userId: "u2", userName: "Two", faction: "sol", color: "blue" },
@@ -129,6 +129,21 @@ void test("answers: pending until the reply; errors stay on the decision; late t
   assert.equal(v.errors.a, undefined);
   v = run(v, ev(closed(dec("a", 5), 11)));
   assert.deepEqual(v.errors, {});
+});
+
+void test("affordances (ui.*) are never mine; preferences are background, listed after real prompts", () => {
+  const v = run(
+    subscribeView(EMPTY_VIEW, G),
+    snap(30, [
+      dec("undo", 3, { kind: "ui.undo_affordance" } as Partial<Decision>),
+      dec("optional", 4, { kind: "ui.optional", scope: "table", target: null } as Partial<Decision>),
+      dec("menu", 5, { kind: "ui.info_menu" } as Partial<Decision>),
+      dec("pref", 6, { kind: "player.preference" } as Partial<Decision>),
+      dec("mine", 9),
+    ]),
+  );
+  assert.deepEqual(myDecisions(v, ME).map((d) => d.id), ["mine", "pref"]);
+  assert.ok(openToAll(v.decisions.pref));
 });
 
 void test("myDecisions: my prompts, open windows I haven't answered, oldest first; not others' or untargeted", () => {

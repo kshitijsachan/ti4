@@ -1,0 +1,34 @@
+{
+  "name": "faction-cabal",
+  "description": "Vuil'raith: hero It Feeds on Carrion (cabalHeroTile_<pos>), Devour release (cabalRelease_<f>_<unit>), Vortex capture (cabalVortextCapture_<unit>_<f>), agent (exhaustAgent_cabalagent_startCabalAgent_<f> -> cabalAgentCapture_<unit>_<f>)",
+  "base": {
+    "recording": "pbd115",
+    "index": 54,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:cabalhero faction_or_color:cabal",
+    "/tech add tech:vax faction_or_color:cabal"
+  ],
+  "trigger": {
+    "press": "FFCC_cabal_cabalHeroTile_310",
+    "as": "cabal"
+  },
+  "steps": [
+    {
+      "press": "cabalVortextCapture_destroyer_mahact",
+      "as": "cabal"
+    },
+    {
+      "press": "cabalRelease_mahact_destroyer",
+      "as": "cabal"
+    },
+    {
+      "press": "exhaustAgent_cabalagent_startCabalAgent_mahact",
+      "as": "cabal"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

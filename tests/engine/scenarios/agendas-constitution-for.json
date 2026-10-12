@@ -1,0 +1,24 @@
+{
+  "name": "agendas-constitution-for",
+  "description": "New Constitution For: discard all laws, exhaust home planets next round.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:constitution force:true"
+  ],
+  "steps": [
+    {
+      "press": "agendaResolution_for",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

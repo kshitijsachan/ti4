@@ -13,6 +13,7 @@
 import { researchable, TECH_PREFERENCE } from "../../botplay/techs.js";
 import type { Decision, GameState, Option, PlayerState } from "../types.js";
 import type {
+  ConstructionBuild,
   ConstructionPlace,
   DiplomacySystem,
   PlanetReady,
@@ -34,6 +35,10 @@ export interface PolicyCtx {
   open: Decision[];
   /** Every open decision of the game, all seats (other areas' policies look for windows / pending prompts). */
   all: Decision[];
+  /** How long this decision has awaited this seat (the shim's watchdog clock); drives the last-resort fallback. */
+  waitedMs?: number;
+  /** Watchdog re-evaluation: the decision has waited too long; the fallback answers whatever the kind. */
+  force?: boolean;
 }
 
 /** Kinds whose prompt is edited in place after each press: wait for the new revision before answering again. */
@@ -47,6 +52,7 @@ export const STRATEGY_POLICY_KINDS = new Set([
   "strategy_card.politics_speaker",
   "strategy_card.politics_agenda",
   "strategy_card.construction_place",
+  "strategy_card.construction_build",
   "command_tokens.adjust",
 ]);
 
@@ -70,6 +76,8 @@ export function chooseStrategy(d: Decision, state: GameState | null, me: string,
       return agenda(d as PoliticsAgenda);
     case "strategy_card.construction_place":
       return constructionPlace(d as ConstructionPlace);
+    case "strategy_card.construction_build":
+      return constructionBuild(d as ConstructionBuild);
     case "command_tokens.adjust":
       return commandTokens(d, state, self, me, ctx);
     default:
@@ -119,9 +127,13 @@ function resolveCard(d: StrategyCardResolve, state: GameState | null, self: Play
 function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["options"][number]["value"]>[], self: PlayerState, ctx: PolicyCtx): StrategyChoice | null {
   const v = opts[0].value!;
   const mine = opts.filter((o) => o.value!.who !== "others");
-  const pressed = (part: PrimaryPart) => ctx.history.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length;
+  // This seat's presses (in memory) or the engine's record (survives a shim restart: live pbd114 re-resolved every
+  // primary after a restart, Leadership 4x), whichever saw more.
+  const recorded = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
+  const done = (part: PrimaryPart) => (Array.isArray(recorded) ? recorded : []).filter((p) => p === part).length;
+  const pressed = (part: PrimaryPart) => Math.max(done(part), ctx.history.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length);
   // Wait for the sub-prompt a previous part opened (a system to choose, a planet for a structure).
-  if (ctx.open.some((x) => x.kind === "strategy_card.diplomacy_system" || x.kind === "strategy_card.construction_place")) return null;
+  if (ctx.open.some((x) => x.kind === "strategy_card.diplomacy_system" || x.kind === "strategy_card.construction_place" || x.kind === "strategy_card.construction_build")) return null;
   const needed: Record<string, number> = {};
   for (const p of v.primaryParts) needed[p] = (needed[p] ?? 0) + 1;
   const holdsMecatol = self.planets.some((p) => /^(mr|mrte)$/i.test(p));
@@ -211,7 +223,8 @@ const isPools = (x: unknown): x is Pools => !!x && typeof (x as Pools).tactic ==
  */
 function commandTokens(d: Decision, state: GameState | null, self: PlayerState | null, me: string, ctx: PolicyCtx): StrategyChoice | null {
   const opts = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput);
-  const done = opts.find((o) => o.handler === "deleteButtons_leadership");
+  // Done Gaining Command Tokens is deleteButtons_leadership~ccgain (the bot's DoneRole tag).
+  const done = opts.find((o) => o.handler.replace(/~\w+$/, "") === "deleteButtons_leadership");
   if (!done || !self) return null;
   const isGain = (o?: Option<any>) => !!o?.value && (o.value.action === "gain" || (o.value.action === "adjust" && o.value.delta === 1));
   const acc = d.progress?.accumulated;
@@ -219,7 +232,8 @@ function commandTokens(d: Decision, state: GameState | null, self: PlayerState |
   const origRaw = d.progress?.required?.original ?? opts.find((o) => isPools(o.value?.original))?.value?.original;
   const original = isPools(origRaw) ? origRaw : null;
   const gained = original ? sum(current) - sum(original) : ctx.history.filter((id) => isGain(opts.find((o) => o.id === id))).length;
-  const reinforcements = Number(opts.find((o) => typeof o.value?.reinforcements === "number")?.value?.reinforcements ?? Infinity);
+  // Tokens left to gain (the engine refuses a gain at 16 in play): progress.required.reinforcements on newer bots.
+  const reinforcements = Number(d.progress?.required?.reinforcements ?? opts.find((o) => typeof o.value?.reinforcements === "number")?.value?.reinforcements ?? Infinity);
   const leadership = state?.strategyCards.find((c) => c.card === "pok1leadership" && c.played && c.holder === me);
   const allowance = leadership ? 3 : 0;
   if (gained < allowance && reinforcements > 0) {
@@ -238,4 +252,12 @@ export function chooseResearch(options: Option<any>[], owned: string[]): Option<
   const offered = options.filter((o) => !o.disabled && o.value?.tech && !owned.includes(o.value.tech) && researchable(o.value.tech, owned));
   offered.sort((a, b) => rank(a.value.tech) - rank(b.value.tech));
   return offered[0] ?? null;
+}
+
+/** Construction "produce" (Thunder's Edge): no decline here, so use the dock with the most PRODUCTION (home last). */
+function constructionBuild(d: ConstructionBuild): StrategyChoice | null {
+  const opts = live(d).filter((o) => o.value);
+  const score = (o: (typeof opts)[number]) => (o.value!.productionLimit ?? 0) * 10 + o.value!.spaceDocks - (o.value!.home ? 1 : 0);
+  const best = [...opts].sort((a, b) => score(b) - score(a))[0];
+  return best ? { option: best, why: `Construction: produce at ${best.value!.tile}` } : null;
 }

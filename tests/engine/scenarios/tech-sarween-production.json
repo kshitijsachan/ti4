@@ -1,0 +1,72 @@
+{
+  "name": "tech-sarween-production",
+  "description": "Sarween Tools on production (pbd105 r1, Naalu tactical action build at 310): produce a cruiser + destroyer, then pay with Druaa (3) and Sarween Tools in one payment.spend payload (sarween: true). Naalu's planets are readied first (all exhausted at that save).",
+  "base": {
+    "recording": "pbd105",
+    "index": 212
+  },
+  "setup": [
+    "/planet ready_all faction_or_color:naalu"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "production.produce",
+        "option": "place_cruiser"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "production.produce",
+        "option": "place_destroyer"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "production.produce",
+        "option": "deleteButtons_tacticalAction"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "druaa"
+          ],
+          "sarween": true
+        }
+      },
+      "as": "naalu",
+      "legacy": [
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "useTech_st"
+          },
+          "as": "naalu"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_druaa"
+          },
+          "as": "naalu"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
+          "as": "naalu"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

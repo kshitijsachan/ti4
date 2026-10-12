@@ -8,16 +8,17 @@
  * - Never toggle galvanize: optional galvanize menus are left alone; the Bastion agent's forced prompt gets exactly
  *   one galvanize (progress says how many are done), then "Done". Ungalvanize is never chosen.
  */
-import type { Decision, GameState, Option, PlayerState } from "./types.js";
+import type { Decision, GameState, Option, PlayerState, UnitId } from "./types.js";
 import { awaits } from "./types.js";
 import { INGRESS_TOKEN, type TeGalvanizeValue, type ThundersEdgeDecision } from "./kinds/te.js";
+import { chooseTeBreach, chooseTeBreakthrough, chooseTePlot } from "./policy/te-factions.js";
 
 export type TeChoice = { option: Option<any>; why: string };
 
-const CERTAIN = new Set(["owner_prefix", "spoof_prefix", "cards_thread", "private_channel", "interaction_user"]);
+const CERTAIN = new Set(["owner_prefix", "spoof_prefix", "cards_thread", "private_channel", "interaction_user", "faction_component"]);
 
 /** Galvanize the biggest ship first. */
-const GALVANIZE_RANK = ["ws", "fs", "dn", "cv", "ca", "dd", "mf", "gf", "ff", "pd", "sd"];
+const GALVANIZE_RANK: UnitId[] = ["ws", "fs", "dn", "cv", "ca", "dd", "mf", "gf", "ff", "pd", "sd"];
 
 const TE_KINDS = new Set<string>([
   "te.fracture.roll",
@@ -26,6 +27,9 @@ const TE_KINDS = new Set<string>([
   "te.expedition",
   "te.thunders_edge.place",
   "te.visionaria.respond",
+  "te.breakthrough",
+  "te.breach",
+  "te.plot",
 ]);
 
 export function isThundersEdgeKind(d: Decision): d is ThundersEdgeDecision {
@@ -42,7 +46,7 @@ export function lockedToOther(optionId: string, faction: string | null | undefin
 
 /** The commit / dismiss button of a TE prompt ("Done Resolving", "Done Galvanizing Units", "Delete These Buttons"). */
 function doneOption(d: Decision): Option<any> | undefined {
-  return (d.options as Option<any>[]).find((o) => !o.disabled && o.value === null && /^deleteButtons(_|$)/.test(o.handler));
+  return (d.options as Option<any>[]).find((o) => !o.disabled && o.value === null && /^deleteButtons(_|~|$)/.test(o.handler));
 }
 
 /** null: a TE decision we leave alone (legacy may still look at it). Only call for isThundersEdgeKind(d). */
@@ -94,6 +98,13 @@ export function chooseThundersEdge(d: ThundersEdgeDecision, state: GameState | n
       return pick(systems[0] ?? typed[0], "Thunder's Edge: system near my forces");
     }
 
+    case "te.breakthrough":
+      return chooseTeBreakthrough(d, { state, self, live });
+    case "te.breach":
+      return chooseTeBreach(d, { state, self, live });
+    case "te.plot":
+      return chooseTePlot(d, { state, self, live });
+
     case "te.visionaria.respond": {
       const owner = d.window?.subject?.owner === me;
       const choice = owner ? "end_turn_after_all" : "decline";
@@ -118,7 +129,7 @@ function presence(state: GameState | null, self: PlayerState | undefined, positi
   let n = 0;
   for (const h of tile.holders) {
     for (const u of h.units) if (u.owner === self.faction) n += u.count;
-    if (self.planets.includes(h.name)) n += 2;
+    if (h.name !== "space" && self.planets.includes(h.name)) n += 2;
   }
   return n;
 }

@@ -1,0 +1,32 @@
+{
+  "name": "agendas-planet-manual",
+  "description": "Senate Sanctuary (Elect Planet law) resolved manually: Resolve it Manually -> pick owner Naaz (tiedPlanets_agendaResolution_) -> pick Rokha.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:senate_sanctuary force:true"
+  ],
+  "steps": [
+    {
+      "press": "autoresolve_manual",
+      "as": "nekro"
+    },
+    {
+      "press": "tiedPlanets_agendaResolution_naaz",
+      "as": "nekro"
+    },
+    {
+      "press": "agendaResolution_rokha",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
