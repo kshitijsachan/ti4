@@ -289,7 +289,9 @@ export function normalizeSave(text: string, o: NormalizeOpts = {}): string[] {
       // The game's stored values ("key,value" entries joined by ':'): compared one by one.
       for (const [sk, sv] of storedValues(v)) {
         if (VOLATILE_STORED_KEYS.some((r) => r.test(sk)) || extra.has(`stored.${sk}`)) continue;
-        out.push(`stored.${fix(sk)} ${fix(sv)}`);
+        // Agenda double-press guard (agendaRes<round><n> = outcome + the agenda's random discard handle).
+        const val = !o.keepHandles && /^agendaRes\d+$/.test(sk) ? sv.replace(/\d{1,4}$/, "#") : sv;
+        out.push(`stored.${fix(sk)} ${fix(val)}`);
       }
       continue;
     }
