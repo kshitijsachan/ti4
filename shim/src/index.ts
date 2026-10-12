@@ -249,7 +249,8 @@ function proxyWebSocket(req: import("node:http").IncomingMessage, socket: import
 server.listen(PORT, () => {
   startLagMonitor();
   log.info(`shim listening on :${PORT} (data ${DATA_DIR})`);
-  log.info(`bot token: ${store.state.bot_token}`);
+  // Never log the token itself (shim.log / docker logs are shared): enough to tell which one is in use.
+  log.info(`bot token: …${String(store.state.bot_token ?? "").slice(-4)} (masked)`);
   log.info(`bot user id: ${store.state.bot_id}, guild id: ${store.state.guild_id}`);
   log.info(`admin link: ${PUBLIC_URL || INTERNAL_URL}/admin?key=${store.state.admin_token}`);
 });
