@@ -118,6 +118,8 @@ function turnLabel(o: TurnOpt, tactic: number | undefined): string {
       return v.abilities ? "End turn (abilities first)" : "End turn";
     case "end_turn_when_followed":
       return "End turn when all have followed";
+    case "another_action":
+      return v.sources?.length ? `Take another action (${v.sources.join(", ")})` : "Take another action";
   }
 }
 
@@ -156,7 +158,8 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     if (waits.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow`;
     return turnLabel(o, me?.commandTokens.tactic);
   };
-  const variant = (o: TurnOpt) => (o.value!.action === "pass" || o.value!.action === "end_turn" ? "light" : "filled");
+  const variant = (o: TurnOpt) =>
+    o.value!.action === "pass" || o.value!.action === "end_turn" || o.value!.action === "another_action" ? "light" : "filled";
   return (
     <div className={classes.panel}>
       {owed.length > 0 && <span className={classes.heading}>Follow {owed.map((f) => f.name).join(" and ")} first: the next turn waits on your answer.</span>}
@@ -310,6 +313,7 @@ export function TacticalConcludeView({ decision, answer }: RendererProps<Tactica
     const v = o.value!;
     if (v.action === "produce") return `Produce in ${v.position} (${v.production} production)`;
     if (v.action === "rift") return "Roll for gravity rift";
+    if (v.endTurn) return "Conclude & end turn";
     return v.frontierExplore ? "Conclude (explores the frontier)" : "Conclude tactical action";
   };
   return (

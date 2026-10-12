@@ -1,0 +1,44 @@
+{
+  "name": "tactical-undo-activate",
+  "description": "pbd28@54: deepwrought activates 209 (tactic token spent, tactical.move opens), then presses the UNDO shown on the movement prompt (ultimateUndo_N, a back extra on the typed decision). Undo must restore the save before the activation: the tactic token back in the pool, 209 without deepwrought's token, the activation prompt open again.",
+  "base": {
+    "recording": "pbd28",
+    "index": 54
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.activate",
+        "option": "ringTile_209"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "option": "ultimateUndo"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 2500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": {
+      "kind": "tactical.activate",
+      "as": "deepwrought",
+      "open": true
+    },
+    "state": [
+      {
+        "path": "players[faction=deepwrought].commandTokens.tactic",
+        "eq": 3
+      }
+    ]
+  }
+}
