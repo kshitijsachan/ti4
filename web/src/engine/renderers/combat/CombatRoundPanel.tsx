@@ -90,7 +90,10 @@ export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<C
   const spaceFight = holder === "space" && (combat?.fronts.find((f) => f.holder === "space")?.sides.filter((x) => x.units.length > 0).length ?? 0) > 1;
   const rolls = options
     .filter((o): o is Option<CombatRollValue> => o.value?.action === "roll")
-    .filter((o) => !(spaceFight && o.value?.rollType === "bombardment"));
+    .filter((o) => !(spaceFight && o.value?.rollType === "bombardment"))
+    /* A ground prompt lists every planet of the system: only those where both sides still have ground forces (pbd203:
+     * "Vega Minor" was offered with nobody there). */
+    .filter((o) => o.value?.rollType !== "combat" || o.value.holder === "space" || !combat || fightOn(combat, String(o.value.holder)));
   // A temporary modifier (Supercharge) belongs to its owner and may be used whoever rolls next.
   const others = options.filter((o) => o.value?.action !== "roll" && (o.value?.action !== "temp_mod" || !o.owner?.userId || o.owner.userId === self?.userId));
   const blocked = !!w && !mine;
@@ -108,6 +111,8 @@ export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<C
       <p className={classes.status}>
         {mine ? <strong>Your roll.</strong> : w && self && w.responded.includes(self.userId) ? "You have rolled." : ""}
         {names.length > 0 && <span className={classes.warn}> Waiting for {names.join(", ")}.</span>}
+        {/* The engine holds the next round back: hits still owed, or anti-fighter barrage first (pbd203). */}
+        {typeof w?.subject.waitingFor === "string" && <span className={classes.warn}> Not yet: {w.subject.waitingFor}.</span>}
       </p>
       <div className={classes.actions}>
         {rolls.map((o) => (
@@ -124,4 +129,8 @@ export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<C
       </div>
     </div>
   );
+}
+
+function fightOn(combat: CombatState, holder: string): boolean {
+  return (combat.fronts.find((f) => f.holder === holder)?.sides.filter((x) => x.units.length > 0).length ?? 0) > 1;
 }

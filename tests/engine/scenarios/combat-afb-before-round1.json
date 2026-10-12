@@ -1,0 +1,11 @@
+{
+  "name": "combat-afb-before-round1",
+  "description": "ANTI-FIGHTER BARRAGE before space combat round 1 (pbd203: a bot rolled round 1, then barrage). 306: mentak's destroyer can barrage muaat's 2 fighters; round 1 is refused by the engine until mentak has rolled barrage (legacy fork: no press).",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [ "/add_units tile_name:306 unit_names:\"2 ff\" faction_or_color:muaat", "/combat start_combat tile_name:306" ],
+  "steps": [
+    { "wait": 3000 },
+    { "press": "combatRoll_306_space", "as": "mentak", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}
