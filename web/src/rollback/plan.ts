@@ -48,11 +48,41 @@ const CLOSER_GAP_MS = 3000;
 /** A recorded flow matches saves made around when it ran (the browser's clock and the bot's can differ a little). */
 const FLOW_CLOCK_MS = 15 * 60_000;
 
+/** The press that activates a system, and the presses that only lead up to it (Tactical Action, a ring menu). */
+const ACTIVATE = /^ringTile_/;
+const LEADS_TO_ACTIVATE = /^(tacticalAction(?!Build)|ring_|getTilesThisFarAway_)/;
+/** How far apart the presses of one activation may be (the map presses them back to back; a player by hand, slower). */
+const ACTIVATE_GAP_MS = 5 * 60_000;
+
+/** Whether `point` is the press that activated a system. */
+export const isActivation = (point: UndoPoint) => ACTIVATE.test(pointButtonId(point));
+
+/**
+ * An activation at `points[i]` and the Tactical Action / ring presses of mine right before it: one action for undo,
+ * so one Undo gives the tactic token back and returns to the turn menu.
+ */
+function activationSpan(points: readonly UndoPoint[], i: number, me: Me): { first: number; summary?: string } | undefined {
+  if (!isActivation(points[i])) return undefined;
+  let first = i;
+  for (let j = i + 1; j < points.length - 1; j++) {
+    const p = points[j];
+    if (isRollback(p) || !isMine(p, me) || !LEADS_TO_ACTIVATE.test(pointButtonId(p))) break;
+    if (points[j - 1].savedAt - p.savedAt > ACTIVATE_GAP_MS) break;
+    first = j;
+    if (/^tacticalAction/.test(pointButtonId(p))) break;
+  }
+  if (first === i) return undefined;
+  const words = pressedWords(points[i].label)?.trim();
+  return { first, summary: words ? `Activated ${words}` : "Activated a system" };
+}
+
 /**
  * My action at `points[i]` as the saves it spans (newest first): the press there plus the earlier presses of the same
  * web flow, consecutive and mine. Returns the index of its first press and what the flow did.
  */
 export function actionSpan(points: readonly UndoPoint[], i: number, me: Me, flows: readonly Flow[] = []): { first: number; summary?: string } {
+  const activation = activationSpan(points, i, me);
+  if (activation) return activation;
   const id = pointButtonId(points[i]);
   const savedAt = points[i].savedAt;
   const flow = id ? [...flows].reverse().find((f) => f.ids.includes(id) && Math.abs(f.at - savedAt) < FLOW_CLOCK_MS) : undefined;

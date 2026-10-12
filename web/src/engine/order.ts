@@ -228,10 +228,14 @@ export function orderDecisions(
   /* A setup choice the table waits on (my starting technology): mine to answer now, never an optional offer, even
      when the engine still has it as a table prompt (live pbd283: captured before my faction was known). */
   const requiredSetup = (d: Decision) => requiredSetupChoice(d, state, selfId);
+  /* Imperial's "score a public" list once nothing on it scores (I scored one, or meet none): finished, so it never
+     takes the panel back from what I'm doing (it stays under "Available now"). */
+  const finishedImperial = (d: Decision) => d.kind === "status.score" && d.scope === "player" && !publicScorable(d, state, selfId);
   const background = (d: Decision) =>
     !requiredSetup(d) &&
     (openToAll(d) ||
     lateSecretList(d) ||
+    finishedImperial(d) ||
     finishedCard(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options)));
   /* Background prompts pile up (a new copy per round / per thread): one entry per title, the newest. Someone else's
      payment or production left open at the table is not on offer to me. */
@@ -348,6 +352,18 @@ export function primaryPartMissing(d: Decision): boolean {
 function politicsPlacement(value: unknown): boolean {
   const a = (value as { action?: string } | null)?.action;
   return a === "top" || a === "bottom" || a === "discard";
+}
+
+type PublicScoreValue = { action?: string; objective?: string; eligible?: string[] } | null;
+
+/** Whether a score list has a public objective I meet and have not scored yet. */
+export function publicScorable(d: Decision, state: GameState | null | undefined, selfId: string | undefined): boolean {
+  if (!selfId) return true;
+  return d.options.some((o) => {
+    const v = o.value as PublicScoreValue;
+    if (!v || o.disabled || v.action !== "score_public" || !v.objective) return false;
+    return !!v.eligible?.includes(selfId) && !state?.publicObjectives?.[v.objective]?.includes(selfId);
+  });
 }
 
 type SecretValue = { met?: boolean | null; phase?: string } | null;

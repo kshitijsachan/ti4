@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { undoViaEngine } from "./engine";
+import { undoMyActivation } from "@/rollback/useUndoPoints";
 import { IconMinus, IconPlus, IconX } from "@tabler/icons-react";
 import cx from "clsx";
 import type { PlayConnection } from "@/discord";
@@ -502,7 +503,13 @@ export function MovePanel({
           onClick={() =>
             void run(async () => {
               setBusy("Undoing…");
-              if (!(await undoViaEngine("tactical.move", { conn, gameName }))) throw new Error("There is nothing to undo here.");
+              const who = conn.store.getState().me;
+              const whole = await undoMyActivation(gameName, {
+                id: who?.id,
+                names: [who?.global_name ?? "", who?.username ?? ""],
+              }).catch(() => false);
+              if (!whole && !(await undoViaEngine("tactical.move", { conn, gameName })))
+                throw new Error("There is nothing to undo here.");
               resetPlans();
             })
           }

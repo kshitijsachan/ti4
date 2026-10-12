@@ -188,3 +188,15 @@ void test("a roll-back (game.rewound) drops answers in flight; a prompt re-opene
   assert.deepEqual(ids(v), ["a"]);
   assert.equal(v.decisions.a.revision, 1);
 });
+
+void test("a 'did not answer' failure clears once the server is back (snapshot); real refusals stay", () => {
+  let v = run(subscribeView(EMPTY_VIEW, G), snap(10, [dec("a", 5), dec("b", 6)]));
+  v = startAnswer(v, "a", "n1", "a-a");
+  v = settleAnswer(v, "a", "n1", "The game server did not answer.");
+  v = startAnswer(v, "b", "n2", "b-a");
+  v = settleAnswer(v, "b", "n2", "Not enough influence.");
+  assert.equal(v.errors.a, "The game server did not answer.");
+  v = run(v, snap(12, [dec("a", 5), dec("b", 6)]));
+  assert.equal(v.errors.a, undefined);
+  assert.equal(v.errors.b, "Not enough influence.");
+});
