@@ -14,6 +14,7 @@
 //     steps:   [ { answer: { kind: "strategy_card.pick", option: "regex on option id/label", value: { strategyCard: 3 } }, as },
 //                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command } ],
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ] } }
+//   A step may carry "refused": "<regex>": the engine must refuse it with a matching error (legacy fork presses as usual).
 //   "as": "seat1".."seat8" | a faction | a user id (default seat1). Strings may use ${seat1}…${seat8}, ${fork},
 //   ${faction:xxcha} (that faction's user id), ${color:red}.
 //
@@ -213,7 +214,15 @@ class Runner {
   /** Runs one step; returns {ok, error?, detail}. */
   async step(st) {
     const since = latestUndo(this.fork.game);
-    const r = await this.perform(this.via === "press" && st.legacy ? st.legacy : [st]);
+    let r = await this.perform(this.via === "press" && st.legacy ? st.legacy : [st]);
+    // "refused": "<regex>" — the engine must refuse this answer with a matching error (the legacy fork just presses:
+    // the original handler refuses in its own way, and --diff compares the outcome).
+    if (st.refused && this.via === "engine") {
+      const re = new RegExp(st.refused, "i");
+      r = r.refused && re.test(r.error ?? "")
+        ? { ok: true, detail: `refused as expected: ${r.error}` }
+        : { ok: false, error: `expected the engine to refuse (/${st.refused}/), got ${r.ok ? `ok ${r.detail ?? ""}` : r.error}` };
+    }
     const s = await this.settle(since);
     return { ...r, saves: s.saves };
   }
@@ -273,7 +282,13 @@ class Runner {
   carrying(customId, user) {
     const c = this.fork.clients.get(user);
     let best = null;
-    for (const msgs of c?.messages.values() ?? []) for (const m of msgs.values()) if (controlsOf(m.components).some((x) => x.id === customId) && (!best || BigInt(m.id) > BigInt(best.id))) best = m;
+    // Only this fork's channels: a seat also sees the other fork of a --diff run (its newer prompt would be clicked,
+    // so the legacy press landed on the engine fork).
+    const ours = new RegExp(`(^|-)${this.fork.game}(-|$)`);
+    for (const [chId, msgs] of c?.messages ?? []) {
+      if (!ours.test(String(c.channels.get(chId)?.name ?? ""))) continue;
+      for (const m of msgs.values()) if (controlsOf(m.components).some((x) => x.id === customId) && (!best || BigInt(m.id) > BigInt(best.id))) best = m;
+    }
     return best;
   }
 

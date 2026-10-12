@@ -1,0 +1,18 @@
+{
+  "name": "fuzz-leadership-once",
+  "description": "Fuzz pbd114 / recording pbd50 (botbeta re-pressed it 6x): the Leadership holder resolves the primary once per play. Second press of 'Spend & Gain Command Tokens' is refused by the engine (StrategyCardResolveKind) and by the handler (legacy). Tokens gained on the first panel stay; no second panel.",
+  "base": { "recording": "pbd50", "index": 76 },
+  "trigger": { "press": "leadershipGenerateCCButtons", "as": "bastion" },
+  "steps": [
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc" }, "as": "bastion" },
+    { "press": "leadershipGenerateCCButtons", "as": "bastion", "refused": "already resolved" }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "players[faction=bastion].commandTokens.tactic", "eq": 4 },
+      { "path": "players[faction=bastion].commandTokens.fleet", "eq": 3 },
+      { "path": "players[faction=bastion].commandTokens.strategy", "eq": 2 }
+    ]
+  }
+}

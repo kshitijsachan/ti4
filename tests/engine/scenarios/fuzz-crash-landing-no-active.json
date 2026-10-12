@@ -1,0 +1,7 @@
+{
+  "name": "fuzz-crash-landing-no-active",
+  "description": "Fuzz pbd118: Crash Landing (FFCC_<f>_crashLandingStart) with no active system NPE'd in TeHelperActionCards.crashLandingStart. Base pbd50 save 76 (action phase, no active system): the press must succeed without an error and change nothing.",
+  "base": { "recording": "pbd50", "index": 76 },
+  "trigger": { "press": "FFCC_bastion_crashLandingStart", "as": "bastion" },
+  "expect": { "invariants": true }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "fuzz-ended-game",
+  "description": "Fuzz pbd114 (ended 21:42, then 12 autopilot saves): engine answers in an ended game are refused. Engine only (no --diff: the legacy button path is not gated).",
+  "base": { "recording": "pbd50", "index": 76 },
+  "setup": ["/game end confirm:YES publish:false archive_channels:false rematch:false"],
+  "steps": [{ "press": "leadershipGenerateCCButtons", "as": "bastion", "refused": "ended" }],
+  "expect": {
+    "state": [{ "path": "players[faction=bastion].commandTokens.tactic", "eq": 3 }]
+  }
+}

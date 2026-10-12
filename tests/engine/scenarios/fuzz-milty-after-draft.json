@@ -1,0 +1,13 @@
+{
+  "name": "fuzz-milty-after-draft",
+  "description": "Fuzz pbd118: a leftover Milty draft button (milty_slice_*) pressed during player setup re-ran the draft finish and reset starting techs. Base: pbd28 in playerSetup after Deepwrought took Antimass Deflectors + Gravity Drive; the press must change nothing.",
+  "base": { "recording": "pbd28", "index": 22 },
+  "trigger": { "press": "milty_slice_A", "as": "seat1" },
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "players[faction=deepwrought].techs", "includes": "amd" },
+      { "path": "players[faction=deepwrought].techs", "includes": "gd" }
+    ]
+  }
+}

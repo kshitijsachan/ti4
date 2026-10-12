@@ -1,0 +1,21 @@
+{
+  "name": "fuzz-cc-cap",
+  "description": "Fuzz pbd114 (mentak 17) / pbd103 (winnu 23): with 16 command tokens in play (none on the board, 10/3/3 in pools) a Leadership gain is refused: engine command_tokens.adjust validate, legacy increase_*_cc handler.",
+  "base": { "recording": "pbd50", "index": 76 },
+  "setup": [
+    "/remove_all_cc confirm:YES",
+    "/player stats tactical_cc:10 fleet_cc:3 strategy_cc:3 faction_or_color:bastion"
+  ],
+  "trigger": { "press": "leadershipGenerateCCButtons", "as": "bastion" },
+  "steps": [
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc" }, "as": "bastion", "refused": "reinforcements" },
+    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc" }, "as": "bastion", "refused": "reinforcements" }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      { "path": "players[faction=bastion].commandTokens.tactic", "eq": 10 },
+      { "path": "players[faction=bastion].commandTokens.fleet", "eq": 3 }
+    ]
+  }
+}
