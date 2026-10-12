@@ -62,6 +62,10 @@ const lobby = new Lobby(hub, clients);
 // Seats flagged `autopilot` are played by the shim itself (solo testing).
 lobby.autopilot = new Autopilot(hub, clients, BOT_API);
 lobby.autopilot.engine = engine;
+// A roll-back (undo / rewind): the autopilots forget the game's history and look again (engine/rewind.ts).
+engine?.onEvent((e) => {
+  if (e.type === "game.rewound") lobby.autopilot?.rewound(e.game, "event");
+});
 // One-click solo test games (autopilot opponents, set up as the human).
 lobby.solo = new SoloGames(hub, clients, lobby, BOT_API);
 void lobby.solo.resumeStewards();

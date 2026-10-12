@@ -243,7 +243,7 @@ prompt) override `classifies` so they never claim other areas' messages.
 
 ### 3.5 Stream, versioning, consistency
 
-* One global `seq` orders all events (`decision.opened|updated|closed`, `state.changed`). Registry listeners run
+* One global `seq` orders all events (`decision.opened|updated|closed`, `state.changed`, `game.rewound`). Registry listeners run
   under the registry lock, so the stream is strictly ordered.
 * `GET /api/public/selfhost/engine/stream?after=<seq>[&game=]` (SSE, Bot token, `Last-Event-ID` honoured): backlog
   from a 5,000-event ring, then live, 15 s pings. If `after` fell out of the ring: a `reset` event → re-read
@@ -267,6 +267,18 @@ prompt) override `classifies` so they never claim other areas' messages.
   undo and rewind, before the restored prompt is re-posted): every open decision whose message was **posted**
   (`createdAt` = message snowflake time, kept across edits) ≥ restored save + 1.5 s — the same rule as
   `UndoService.retirePrompts`.
+  Then (every roll-back): window answers the engine recorded after the restored save are forgotten
+  (`WindowResponses.forgetSince`), a **`game.rewound`** event (`stateVersion` = restored save time, `decision` null)
+  tells clients to drop what they remember about the game's decisions, and 4 s later `GameRewind` brings back the
+  restored state's prompts: open decisions are re-read against it, and every decision an **undone** action closed
+  (closed after the restored save, posted before it, not last pressed by the restored action itself — per-game close
+  journal in `DecisionRegistry`) is re-captured from its message, or its prompt is posted again when the message is
+  gone or lost its buttons (unless an identical prompt is open in that channel, e.g. the bot's own saved-buttons
+  re-post). Re-captured prompts keep their id (`d<message id>`) at revision 1. Live pbd252: rewinding while a bot
+  was mid tactical action left its move prompt deleted and the game waiting on that bot. Clients:
+  the shim's autopilots forget the game (`shim/src/engine/rewind.ts`: per-decision caps, presses, give-ups, plans —
+  an interrupted tactical action resumes from the restored step with the same goal), also on the bot's roll-back
+  notice ("Rolled back to save `N`…" / "⏪ …") when no event comes; browsers get the event and a fresh snapshot.
 
 ### 3.6 Flags
 

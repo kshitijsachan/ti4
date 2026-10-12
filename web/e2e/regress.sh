@@ -1,6 +1,7 @@
 #!/bin/bash
 # Integrator regression: wait for a quiet bot, run setup-flow.mjs (solo game → strategy phase, every player has a
-# starting technology), and on success record the commit as last known good in /home/user/run/LAST_GOOD.
+# starting technology) and rewind.mjs (rewind past a bot's action: a bot acts again within 30 s), and on success
+# record the commit as last known good in /home/user/run/LAST_GOOD.
 # Usage: web/e2e/regress.sh <seatToken> <tag> [baseUrl=http://127.0.0.1:8090]
 set -u
 token=$1; tag=$2; base=${3:-http://127.0.0.1:8090}
@@ -25,8 +26,19 @@ done
 start=$(date +%H:%M:%S)
 startLine=$(wc -l < "$log")  # by line, not time: the log spans midnight
 commit=${BUILT:-$(git -C "$here" rev-parse --short HEAD)}  # the commit the prod build was made from
-node "$here/setup-flow.mjs" "$base" "$token" "$out" "$tag"
-rc=$?
+flowlog=$(mktemp)
+node "$here/setup-flow.mjs" "$base" "$token" "$out" "$tag" | tee "$flowlog"
+rc=${PIPESTATUS[0]}
+# Rewind, then the bots go on (rewind.mjs): rewind the fresh game to just before a bot's action (in the strategy
+# phase, across the phase boundary once the action phase began) and require a bot to act again within 30 s.
+game=$(grep -o '"game":"[a-z]*[0-9]*"' "$flowlog" | tail -1 | cut -d'"' -f4)
+rm -f "$flowlog"
+if [ $rc = 0 ] && [ -n "$game" ]; then
+  node "$here/rewind.mjs" "$base" "$token" "$game"
+  rrc=$?
+  # 2 = nothing rewindable (no bot action among the last saves): not a regression.
+  [ $rrc = 1 ] && { echo "[regress] rewind check FAILED in $game: bots did not resume after a rewind"; rc=1; }
+fi
 if [ $rc = 0 ]; then
   echo "$commit $(date -u +%Y-%m-%dT%H:%M:%SZ) tag=$tag" > /home/user/run/LAST_GOOD
   echo "[regress] PASS at $commit (LAST_GOOD updated)"

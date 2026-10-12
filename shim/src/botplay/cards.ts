@@ -2,6 +2,7 @@ import { playerOf, type Board, type PlayerView } from "./board.js";
 import { BuildJob, payStep, type JobResult } from "./production.js";
 import { baseId, lockIs, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
+import { forgetGameKeys, type GameScope } from "../engine/rewind.js";
 import { promptForMe, Steps } from "./steps.js";
 import { dockSystems, hasMyCC, spendable } from "./strategy.js";
 import { nextTech, researchable, TECH_PREFERENCE, typeLabelOf } from "./techs.js";
@@ -408,6 +409,12 @@ export class CardPlanner {
   private handled = new Set<string>();
 
   constructor(private seat: Seat) {}
+
+  /** The game was rolled back: its jobs worked toward a state that is gone. */
+  rewound(scope: GameScope) {
+    this.jobs.delete(scope.game);
+    forgetGameKeys([this.handled], scope);
+  }
 
   owns(game: string, p: Prompt): boolean {
     if ((this.jobs.get(game) ?? []).some((j) => j.owns(p))) return true;

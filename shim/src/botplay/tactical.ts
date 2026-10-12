@@ -97,6 +97,11 @@ export class TacticalExecutor {
     return !!this.plan && this.plan.game === game;
   }
 
+  /** The game was rolled back: the plan's progress (stage, presses) describes undone steps. */
+  rewound(game: string) {
+    if (this.plan?.game === game) this.plan = null;
+  }
+
   private setStage(stage: Stage) {
     if (!this.plan) return;
     this.plan.stage = stage;

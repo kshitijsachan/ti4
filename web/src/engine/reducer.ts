@@ -47,6 +47,8 @@ function newerState(cur: GameState | null, incoming: GameState): GameState {
 function applyEvent(view: EngineView, e: EngineEvent): EngineView {
   if (e.game !== view.game || e.seq <= view.seq) return view;
   if (e.type === "state.changed") return { ...view, seq: e.seq };
+  // A roll-back: answers in flight were for a state that is gone (a fresh snapshot follows from the shim).
+  if (e.type === "game.rewound") return { ...view, seq: e.seq, pending: {}, errors: {} };
   const decisions = { ...view.decisions };
   const held = decisions[e.decision.id];
   if (e.type === "decision.closed") delete decisions[e.decision.id];

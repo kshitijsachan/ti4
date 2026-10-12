@@ -505,7 +505,13 @@ export interface AnswerResult {
 export type EngineEvent =
   | { seq: number; type: "decision.opened" | "decision.updated"; game: string; stateVersion: number; decision: Decision; reason: null }
   | { seq: number; type: "decision.closed"; game: string; stateVersion: number; decision: Decision; reason: "deleted" | "no_options" | "replaced" | string }
-  | { seq: number; type: "state.changed"; game: string; stateVersion: number; decision: null; reason: null };
+  | { seq: number; type: "state.changed"; game: string; stateVersion: number; decision: null; reason: null }
+  /**
+   * The game was rolled back (UNDO button, /game undo, web undo / rewind) to the state saved at `stateVersion`:
+   * decisions asked after it are closed, the restored state's prompts re-open (often under their old ids, revision 1).
+   * Clients drop what they remember about the game's decisions and re-read them (shim/src/engine/rewind.ts).
+   */
+  | { seq: number; type: "game.rewound"; game: string; stateVersion: number; decision: null; reason: string };
 
 /** Sent instead of a backlog when `after` is older than the server's buffer: re-snapshot, continue from seq. */
 export interface ResetEvent {
