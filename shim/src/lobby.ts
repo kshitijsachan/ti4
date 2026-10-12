@@ -106,6 +106,27 @@ export class Lobby {
       return sendJson(res, 200, names.map((n) => this.createSeat(n.slice(0, 32), body.autopilot === true)));
     }
 
+    /**
+     * Ends a game as one of its players (admin only): {game, user_id?}. For abandoned test games whose players have no
+     * seat link (bots). The bot's own `/game end` (no publish, archive channels), so its archive path runs.
+     */
+    if (method === "POST" && path === "/admin/end-game") {
+      if (!this.isAdmin(query, body)) return discordError(res, 403, 0, "bad key");
+      const game = String(body.game ?? "").toLowerCase();
+      const ch = Object.values(this.store.state.channels).find((c) => c.name === `${game}-actions`);
+      if (!game || !ch) return discordError(res, 404, 0, "no such game");
+      const userId = String(body.user_id ?? "");
+      if (!userId || !this.store.state.users[userId]) return discordError(res, 400, 0, "user_id: a player of that game");
+      const result = await this.clients.commandAs(userId, ch.id, "game", [
+        { type: 1, name: "end", options: [
+          { type: 3, name: "confirm", value: "YES" },
+          { type: 5, name: "publish", value: false },
+          { type: 5, name: "archive_channels", value: true },
+        ] },
+      ]);
+      return sendJson(res, result === "ok" ? 200 : 502, { game, user_id: userId, result });
+    }
+
     /** Hands a seat to the shim's autopilot (or back): {user_id, enabled}. */
     if (method === "POST" && path === "/admin/autopilot") {
       if (!this.isAdmin(query, body)) return discordError(res, 403, 0, "bad key");
