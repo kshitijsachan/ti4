@@ -53,16 +53,30 @@ clients.engine = new EngineFanout(engine, process.env.TI4_ENGINE_WEB === "1");
 // Ended games' channels leave the guild's channel count (archive category; the web keeps their history).
 hub.ensureArchiveCategory();
 // Then attachment retention (retention.ts): superseded map / Milty renders, ended games' files but the final map.
-const sweepArchive = () =>
-  hub
-    .sweepEndedGames(BOT_API)
-    .then((n) => n && log.info(`archived ${n} channels of ended games`))
-    .catch(() => {})
-    .then(() => hub.retention.sweep())
-    .then((r) => r.files && log.info(`attachment retention: removed ${r.files} files, ${(r.bytes / 1e6).toFixed(0)} MB (${JSON.stringify(r.byReason)})`))
-    .catch((e) => log.warn(`attachment retention failed: ${e}`));
-setTimeout(sweepArchive, 120_000);
-setInterval(sweepArchive, 6 * 3600_000);
+// The sweep asks the bot for each game's phase; at startup the bot restarts too (deploys) and may not answer yet (live
+// 21:51: the only startup pass ran 17 s before the bot was up, every fetch failed, pbd303/pbd346 stayed archived for
+// 6 h). So a pass the bot did not fully answer is retried every 2 min (at most 30 times) before the 6-hourly rhythm.
+const sweepArchive = async (retriesLeft = 0): Promise<void> => {
+  try {
+    const r = await hub.sweepEndedGames(BOT_API);
+    if (r.archived || r.restored) log.info(`archive sweep: archived ${r.archived}, restored ${r.restored} channels (restored = games un-ended by a rewind)`);
+    if (r.unreachable && retriesLeft > 0) {
+      log.info(`archive sweep: the bot did not answer for ${r.unreachable} games; again in 2 min`);
+      setTimeout(() => void sweepArchive(retriesLeft - 1), 120_000);
+      return; // attachment retention follows the complete pass
+    }
+  } catch {
+    /* next sweep */
+  }
+  try {
+    const r = await hub.retention.sweep();
+    if (r.files) log.info(`attachment retention: removed ${r.files} files, ${(r.bytes / 1e6).toFixed(0)} MB (${JSON.stringify(r.byReason)})`);
+  } catch (e) {
+    log.warn(`attachment retention failed: ${e}`);
+  }
+};
+setTimeout(() => void sweepArchive(30), 120_000);
+setInterval(() => void sweepArchive(3), 6 * 3600_000);
 // Threads created before mention auto-join existed: replay it over stored messages (idempotent).
 for (const list of Object.values(store.state.messages)) for (const m of list) hub.autoJoinMentioned(m);
 const lobby = new Lobby(hub, clients);

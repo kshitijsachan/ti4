@@ -345,11 +345,14 @@ export class Hub {
    * (a rewind past its End Game) gets its channels back (unarchiveGameChannels), so the sweep never re-archives a
    * game that is live again. Non-game channels in the archive category are archived. Keeps the guild under
    * Discord's 500-channel limit for good (live 10:05: "481 / 500 channels", no new game could be created).
-   * Returns the count of channels archived or restored.
+   * Returns the channels archived and restored, and how many games the bot could not answer for (down, restarting,
+   * 5xx: the caller retries the sweep until that is 0).
    */
-  async sweepEndedGames(botApi: string): Promise<number> {
+  async sweepEndedGames(botApi: string): Promise<{ archived: number; restored: number; unreachable: number }> {
     const cat = this.ensureArchiveCategory();
     let n = 0;
+    let restored = 0;
+    let unreachable = 0;
     const games = new Map<string, Json[]>();
     for (const ch of Object.values(this.store.state.channels)) {
       if ([1, 4, 10, 11, 12].includes(ch.type)) continue;
@@ -365,12 +368,15 @@ export class Hub {
     for (const [game, chans] of games) {
       try {
         const res = await fetch(`${botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(5000) });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          if (res.status >= 500) unreachable++;
+          continue;
+        }
         const data = (await res.json()) as Json;
         const phase = data?.gameState?.phase;
         if (!phase) continue;
         if (phase !== "finished") {
-          if (chans.some((c) => c._archived || c.parent_id === cat.id)) n += this.unarchiveGameChannels(game, chans);
+          if (chans.some((c) => c._archived || c.parent_id === cat.id)) restored += this.unarchiveGameChannels(game, chans);
           continue;
         }
         for (const ch of chans) {
@@ -385,10 +391,10 @@ export class Hub {
           n++;
         }
       } catch {
-        /* the bot is busy or restarting: next sweep */
+        unreachable++; // the bot is busy or restarting: the caller sweeps again
       }
     }
-    return n;
+    return { archived: n, restored, unreachable };
   }
 
   /** Whether a channel is parented to the archive category. */
