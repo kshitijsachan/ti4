@@ -220,9 +220,14 @@ export function orderDecisions(
   const staleStep = (d: Decision) => TACTICAL_STEP.test(d.kind) && !!state?.activePlayer && !myTurn;
   /* The secret list left open past the status phase: on offer (it never takes the head), until nothing on it scores. */
   const lateSecretList = (d: Decision) => d.kind === "status.score_secret" && !!state && !state.status;
+  /* My played card with nothing left to press (Trade resolves when played; every part of the checklist done): only
+     "request all resolve now" is left, so it goes behind "Available now" and never takes the panel from my turn. */
+  const finishedCard = (d: Decision) =>
+    d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction && !primaryOpen(d);
   const background = (d: Decision) =>
     openToAll(d) ||
-    lateSecretList(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+    lateSecretList(d) ||
+    finishedCard(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options));
   /* Background prompts pile up (a new copy per round / per thread): one entry per title, the newest. Someone else's
      payment or production left open at the table is not on offer to me. */
   const newestByTitle = new Map<string, Decision>();
@@ -246,9 +251,7 @@ export function orderDecisions(
     /* A step of a strategy card's primary (place a structure, choose a system…): before the card's own panel. */
     if (d.kind.startsWith("strategy_card.") && !d.window && !IN_ADVANCE_KINDS.has(d.kind) && d.kind !== "strategy_card.pick") return 1.4;
     /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */
-    /* …unless it has nothing left for me to press (Trade's primary resolves when played; every part done). */
-    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction)
-      return primaryStarted(d) || !primaryOpen(d) ? 4.6 : 1.5;
+    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryStarted(d) ? 4.6 : 1.5;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
     /* (Not the turn menu: it reopens after everything, and waits behind what the action just started.) */
     if (nextStep(d) && d.kind !== "turn.action" && d.kind !== "trade.offer") return 1;

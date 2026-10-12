@@ -94,7 +94,19 @@ void test("my played card with nothing left to press waits behind my turn menu",
     options: [opt("ra", { who: "holder", action: "request_all", part: null, primaryParts: [] }), opt("f", { who: "others", action: "follow", part: null, primaryParts: [] })],
   });
   const r = orderDecisions([trade, dec("turn.action")], 0, undefined, state());
-  assert.deepEqual(kinds(r), ["turn.action", "strategy_card.resolve"]);
+  assert.deepEqual(kinds(r), ["turn.action"]);
+  assert.ok(r.offers.some((d) => d.id === trade.id), "nothing to press: behind Available now");
+
+  /* pbd273: Politics with every part done must not take the panel (e.g. mid tactical action, no turn menu open). */
+  const doneParts = ["speaker", "agendas", "action_cards"];
+  const politicsDone = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: { strategyCard: 3, name: "Politics", holder: "arborec", primaryDone: doneParts } } as unknown as Decision["window"],
+    options: [opt("ac2", { who: "anyone", action: "draw_action_cards", part: "action_cards", primaryParts: doneParts }), opt("ra2", { who: "holder", action: "request_all", part: null, primaryParts: doneParts })],
+  });
+  const r3 = orderDecisions([politicsDone], 0, undefined, state());
+  assert.deepEqual(kinds(r3), []);
+  assert.ok(r3.offers.some((d) => d.id === politicsDone.id));
 
   const pol = { strategyCard: 3, name: "Politics", holder: "arborec", primaryDone: [] };
   const parts = ["speaker", "action_cards", "agendas"];
