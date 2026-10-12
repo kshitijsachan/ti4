@@ -295,3 +295,31 @@ test("pbd147: setup.player — start once, then official free faction / free col
   const speaker = setupStep("speaker", [{ userId: ME, speaker: true }, { userId: ME, speaker: false }]);
   assert.equal(chooseTyped(speaker, unseated, ME, { history: [], open: [], all: [speaker] })?.option?.value.speaker, false);
 });
+
+// ---- live gaps 01:28–01:32
+
+test("pbd60: a bombardment opener after its ground combat rolled rounds is stale", () => {
+  const d = decision("units.remove", [opt("getDamageButtons_308_bombardment", "Assign Hits", { action: "open", tile: "308", assignType: "bombardment" }), opt("ultimateUndo_143", "UNDO")]);
+  const after = combatState([{ holder: "andeara", mine: 2, theirs: 0 }]);
+  (after.combat!.fronts[0].sides[1] as { roundsRolled: number }).roundsRolled = 5;
+  assert.equal(staleForBot(d, after, ME), true);
+  assert.equal(chooseFallback(d, after, ME), null);
+  const before = combatState([{ holder: "andeara", mine: 2, theirs: 1 }]);
+  before.combat!.fronts[0].sides.forEach((s) => ((s as { roundsRolled: number }).roundsRolled = 0));
+  assert.equal(staleForBot(d, before, ME), false, "bombardment before the ground combat is owed");
+  const remove = decision("units.remove", [opt("getDamageButtons_308_remove", "Remove Units", { action: "open", tile: "308", assignType: "remove" })]);
+  assert.equal(staleForBot(remove, after, ME), false, "fleet-pool reminders are the desk's, never stale");
+});
+
+test("pbd175: the Keleres preset once we play a flavour is stale; during the draft we pre-select a free one", () => {
+  const preset = (contested: boolean[]) =>
+    decision(
+      "setup.keleres_flavor",
+      ["mentak", "xxcha", "argent"].map((f, i) => opt(`draftPresetKeleres_${f}`, f, { flavor: f, faction: `keleres${f[0]}`, preset: true, contested: contested[i], homePosition: null, speaker: null })),
+    );
+  const seated = { ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: "keleresa" } : p)) } as unknown as GameState;
+  assert.equal(staleForBot(preset([false, false, false]), seated, ME), true);
+  const drafting = { ...unseated, setup: { stage: "draft", waitingOn: [], players: [] } } as unknown as GameState;
+  assert.equal(staleForBot(preset([true, false, false]), drafting, ME), false);
+  assert.equal(chooseTyped(preset([true, false, false]), drafting, ME, { history: [], open: [], all: [] })?.option?.id, "draftPresetKeleres_xxcha");
+});

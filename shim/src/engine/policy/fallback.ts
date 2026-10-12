@@ -286,7 +286,8 @@ export function fallbackDue(d: Decision, me: string, opts: { waitedMs?: number; 
 /**
  * A decision that still lists this seat but that the game no longer waits on (the engine has not closed it yet):
  * - turn.action targeted at us while another player is active (pbd86: "Pass" refused, "It is not your turn");
- * - "Setup a Player" once we are seated;
+ * - "Setup a Player" once we are seated; the draft-time Keleres preset once we play a flavour;
+ * - a bombardment / barrage hits opener once its fight has rolled a round;
  * - a combat roll window whose fight is over or is not the combat on the board (pbd60: rounds of a finished space
  *   combat stayed open with us "eligible"; the fallback pressed "Check Combat Action Cards" / rolled them).
  * Neither the fallback nor the watchdog acts on it. Needs the state; without one nothing is stale.
@@ -297,6 +298,24 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
   // "Setup a Player" stays up after it is pressed: once we are seated it asks nothing of us (pbd147).
   if (d.kind === "setup.player" && d.options.every((o) => !o.value || (o.value as { step?: string }).step === "start")) {
     return !!state.players.find((p) => p.userId === me)?.faction;
+  }
+  // The draft-time Keleres preset once we play a flavour (pbd175: still open in setup, reported as a stall).
+  if (d.kind === "setup.keleres_flavor" && d.options.some((o) => (o.value as { preset?: boolean } | null)?.preset)) {
+    const f: string = state.players.find((p) => p.userId === me)?.faction ?? "";
+    return f.startsWith("keleres") && f !== "keleres";
+  }
+  // Hits taken before a fight (bombardment before ground combat, anti-fighter barrage before space combat) are past
+  // once that fight has rolled a round in the system (pbd60: a bombardment opener re-pressed every minute after a
+  // 6-round ground combat). Same rule as the bot's UnitsRemoveKind.obsolete.
+  if (d.kind === "units.remove") {
+    const openers = d.options.filter((o) => (o.value as { action?: string } | null)?.action === "open").map((o) => o.value as { tile: string; assignType: string });
+    if (!openers.length || openers.some((v) => v.assignType !== "bombardment" && v.assignType !== "afb")) return false;
+    return openers.every((v) => {
+      const combat = state.combat;
+      if (!combat || combat.tile !== v.tile) return false;
+      const space = v.assignType === "afb";
+      return combat.fronts.some((f) => (f.holder === "space") === space && f.sides.some((side) => side.roundsRolled > 0));
+    });
   }
   if (d.kind === "combat.round") {
     const w = d.window;
