@@ -5,7 +5,7 @@
   "trigger": { "press": "announceARetreat", "as": "mentak" },
   "steps": [
     { "press": "retreat_306", "as": "mentak" },
-    { "answer": { "kind": "combat.retreat", "option": "/retreatUnitsFrom_306_307/" }, "as": "mentak" }
+    { "answer": { "kind": "combat.retreat", "option": "retreatUnitsFrom_306_307" }, "as": "mentak" }
   ],
   "expect": { "invariants": true }
 }
