@@ -9,7 +9,7 @@
 //
 // A scenario (see tests/engine/BACKTEST.md for the full format):
 //   { name, description,
-//     base:    { recording: "pbd75", index: 640 } | { game: "pbd113", index?: 50 } | { save: "path.txt" } | "fresh6p",
+//     base:    { recording: "pbd75", index: 640 } | { game: "pbd113", index?: 50 } | { save: "path.txt", next?: "path.txt" } | "fresh6p",
 //     setup:   [ "/tech add tech:gd faction_or_color:${seat1}", { command: "ac draw_specific_ac", options: {...}, as: "seat1" } ],
 //     trigger: { press: "<custom id>", as } | { command: "/…" } | { answer: {...} },
 //     steps:   [ { answer: { kind: "strategy_card.pick", option: "regex on option id/label", value: { strategyCard: 3 } }, as },
@@ -177,7 +177,11 @@ function baseSave(base) {
     const nf = base.index == null ? null : undoFile(base.game, base.index + 1);
     return { text: readFileSync(f, "utf8"), from: `${base.game}@${base.index ?? "live"}`, next: nf && existsSync(nf) ? readFileSync(nf, "utf8") : undefined };
   }
-  if (base.save) return { text: readFileSync(base.save, "utf8"), from: base.save };
+  if (base.save) {
+    // A path, or a file under tests/engine/scenarios/ (saves/…): pinned copies of saves that undo pruning would drop.
+    const at = (p) => (existsSync(p) ? p : join(SCEN_DIR, p));
+    return { text: readFileSync(at(base.save), "utf8"), from: base.save, next: base.next ? readFileSync(at(base.next), "utf8") : undefined };
+  }
   throw new Error(`bad base ${JSON.stringify(base)}`);
 }
 

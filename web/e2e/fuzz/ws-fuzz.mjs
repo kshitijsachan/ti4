@@ -76,6 +76,7 @@ const tr = () => trace.slice(-12).map((t) => `#${t.step} ${t.what}${t.result ? `
 
 // ---- connection ----
 const answered = new Map(); // decision id -> {revision, seq, at, optionId}
+const needsInputAt = new Map(); // decision id -> when an answer of it opened a form (status needs_input)
 let undoAt = 0;
 const client = new ShimClient(seat.token, { game, label: "ws-fuzz", engine: true });
 client.onReopen = (e) => {
@@ -83,6 +84,13 @@ client.onReopen = (e) => {
   const closed = client.closedIds.get(e.decision.id);
   if (!a || !closed || e.type !== "decision.opened") return;
   if (undoAt > a.at || e.decision.kind === "legacy") return;
+  // A form's id is f<message id>-<user>: pressing its button again (needs_input) opens a new form under the same id
+  // (fuzz pbd312: "Edit round summary" pressed after its form was submitted). Not a reopened answer.
+  if (e.decision.kind === "input.form") {
+    const id = e.decision.id;
+    const parent = `d${id.slice(1, id.lastIndexOf("-"))}`;
+    if ((needsInputAt.get(parent) ?? 0) > a.at) return;
+  }
   rec.record({
     kind: "engine:answered-decision-reopened",
     severity: "warn",
@@ -199,6 +207,7 @@ async function engineAnswer(d, a, label) {
   const r = f.t === "engine" ? f.result : { ok: false, status: f.t };
   entry.result = `${r.status}${r.error ? `: ${String(r.error).slice(0, 120)}` : ""} (${Date.now() - t0} ms${r.path ? `, ${r.path}` : ""})`;
   say(`#${step} ${entry.what} -> ${entry.result}`);
+  if (r.status === "needs_input") needsInputAt.set(d.id, Date.now());
   return r;
 }
 
