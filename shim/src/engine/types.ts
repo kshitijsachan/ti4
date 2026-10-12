@@ -489,6 +489,19 @@ export function answersOutsideWindow(d: Decision, userId: UserId, state: GameSta
   return !!holder && !!me?.faction && me.faction === holder;
 }
 
+/**
+ * The player already followed this played strategy card (spent the token): the window counts them as responded, yet
+ * they may still press the card's secondary (the original code allows "Spend A Strategy Token", then "Draw 2 Action
+ * Cards" / "Ready Planets" / "Research"; the engine's KindSpec.answersOutsideWindow agrees). Not "waiting on me".
+ */
+export function followedPlayedCard(d: Decision, userId: UserId, state: GameState | null): boolean {
+  if (d.kind !== "strategy_card.resolve" || !d.window) return false;
+  const sc = d.window.subject?.strategyCard;
+  const me = state?.players.find((p) => p.userId === userId);
+  const card = state?.strategyCards?.find((c) => c.number === sc);
+  return !!me?.faction && !!card?.reactions?.some((r) => r.faction === me.faction && r.status === "followed");
+}
+
 /** The options of `d` this user may press (per-option owner on mixed-owner menus; all options otherwise). */
 export function optionsFor<D extends Decision>(d: D, userId: UserId): D["options"] {
   return d.options.filter((o) => !o.owner?.userId || o.owner.userId === userId) as D["options"];

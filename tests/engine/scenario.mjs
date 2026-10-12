@@ -14,6 +14,7 @@
 //     steps:   [ { answer: { kind: "strategy_card.pick", option: "regex on option id/label", value: { strategyCard: 3 } }, as },
 //                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command } ],
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ] } }
+//   A step with "refused": true expects the engine to refuse it (the legacy fork must still end in the same state).
 //   "as": "seat1".."seat8" | a faction | a user id (default seat1). Strings may use ${seat1}…${seat8}, ${fork},
 //   ${faction:xxcha} (that faction's user id), ${color:red}.
 //
@@ -283,6 +284,12 @@ class Runner {
     return loadSave(this.fork, this.save(), identityMap(this.fork), { customId, label: st.label ?? customId, faction, channelId: this.fork.actionsId, watcher: user });
   }
 
+  /** The holder of a played strategy card answers its primary outside the follow window (shim types.ts answersOutsideWindow). */
+  answersOutsideWindow(d, user) {
+    if (d.kind !== "strategy_card.resolve" || !d.window?.subject?.holder) return false;
+    return players(this.fork).find((p) => p.userId === user)?.kv.get("faction") === d.window.subject.holder;
+  }
+
   /** {kind, option?, value?, payload?, values?, inputs?, action?, body?} */
   async findDecision(spec, user, timeoutMs = 8000) {
     const kind = spec.kind instanceof RegExp ? spec.kind : spec.kind?.startsWith("/") ? new RegExp(spec.kind.slice(1, -1)) : spec.kind;
@@ -290,7 +297,7 @@ class Runner {
     while (true) {
       const ds = (await openDecisions(this.fork.game))
         .filter((d) => !kind || (typeof kind === "string" ? d.kind === kind : kind.test(d.kind)))
-        .filter((d) => (d.scope === "table" ? !d.window || d.window.eligible?.includes(user) : !d.target?.userId || d.target.userId === user))
+        .filter((d) => (d.scope === "table" ? !d.window || d.window.eligible?.includes(user) || this.answersOutsideWindow(d, user) : !d.target?.userId || d.target.userId === user))
         .sort((a, b) => b.seq - a.seq);
       if (ds.length) return ds;
       if (Date.now() > end) return [];
@@ -451,7 +458,11 @@ for (const { phase, st } of all) {
   const status = res.map((x) => `${x.via}:${x.ok ? "ok" : x.refused ? "REFUSED" : "ERR"}${x.saves != null ? `(${x.saves} saves)` : ""}`).join(" ");
   if (!quiet || res.some((x) => !x.ok) || diffs?.length) console.log(`${String(n).padStart(3)} ${phase.padEnd(7)} ${short(desc, 70).padEnd(70)} ${status}${diffs ? (diffs.length ? ` DIFF ${diffs.length}` : " same") : ""}`);
   for (const x of res) {
-    if (!x.ok) fail(`${phase} ${n} (${x.via}): ${x.error}`);
+    // "refused": true — the engine is expected to refuse this answer (stricter than the original code, which must then
+    // have left the same state: the --diff check below still compares both forks).
+    if (st.refused && x.via === "engine") {
+      if (!x.refused) fail(`${phase} ${n} (${x.via}): expected the engine to refuse, it answered`);
+    } else if (!x.ok) fail(`${phase} ${n} (${x.via}): ${x.error}`);
     for (const v of x.invariants) fail(`${phase} ${n} (${x.via}) invariant ${v}`);
   }
   if (diffs?.length) for (const d of diffs.slice(0, 6)) console.log(`        ${d.key}${d.orderOnly ? " (order)" : ""}: legacy ${short(d.expected, 60)}  |  engine ${short(d.actual, 60)}`);
