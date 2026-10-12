@@ -1,7 +1,11 @@
 {
   "name": "te-breakthroughs",
   "description": "TE breakthroughs (te.breakthrough) on pbd104 r1: Muaat Stellar Genesis (placeAvernus_<pos>), Firmament The Sowing (theSowingAddTg_<n>), L1Z1X Fealty Uplink (fealtyUplink_<planet>), Titans Slumberstate Computing (selectPlayerToSleeper -> addSleeperViaBt_<faction>)",
-  "base": { "recording": "pbd104", "index": 44, "repost": false },
+  "base": {
+    "recording": "pbd104",
+    "index": 44,
+    "repost": false
+  },
   "setup": [
     "/breakthrough unlock breakthrough:muaatbt faction_or_color:muaat",
     "/breakthrough unlock breakthrough:firmamentbt faction_or_color:firmament",
@@ -9,14 +13,41 @@
     "/breakthrough unlock breakthrough:titansbt faction_or_color:titans",
     "/player stats trade_goods:4 faction_or_color:firmament"
   ],
-  "trigger": { "press": "FFCC_firmament_theSowingAddTg_2", "as": "firmament" },
+  "trigger": {
+    "press": "FFCC_firmament_theSowingAddTg_2",
+    "as": "firmament"
+  },
   "steps": [
-    { "press": "FFCC_l1z1x_fealtyUplink_0.0.0", "as": "l1z1x" },
-    { "press": "selectPlayerToSleeper", "as": "titans" },
-    { "answer": { "kind": "te.breakthrough", "option": "^addSleeperViaBt_xxcha$" }, "as": "titans" }
+    {
+      "answer": {
+        "kind": "te.breakthrough",
+        "option": "placeAvernus_303$"
+      },
+      "as": "muaat"
+    },
+    {
+      "press": "FFCC_l1z1x_fealtyUplink_0.0.0",
+      "as": "l1z1x"
+    },
+    {
+      "press": "selectPlayerToSleeper",
+      "as": "titans"
+    },
+    {
+      "answer": {
+        "kind": "te.breakthrough",
+        "option": "^addSleeperViaBt_xxcha$"
+      },
+      "as": "titans"
+    }
   ],
   "expect": {
     "invariants": true,
-    "save": [ { "key": "player[firmament].trade_goods", "eq": "2" } ]
+    "save": [
+      {
+        "key": "player[firmament].trade_goods",
+        "eq": "2"
+      }
+    ]
   }
 }

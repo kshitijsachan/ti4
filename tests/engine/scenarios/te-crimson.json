@@ -7,7 +7,8 @@
     "repost": false
   },
   "setup": [
-    "/player turn_start faction_or_color:crimson"
+    "/player turn_start faction_or_color:crimson",
+    "/add_units tile_name:210 unit_names:\"cruiser\" faction_or_color:crimson"
   ],
   "trigger": {
     "press": "exhaustAgent_crimsonagent_crimson",
@@ -24,28 +25,35 @@
     {
       "answer": {
         "kind": "leader.use",
-        "option": "redcreussAgentPart2_"
+        "option": "redcreussAgentPart2_tr_210$"
       },
       "as": "crimson"
     },
     {
-      "press": "FFCC_crimson_placeBreach_210_destroyer",
+      "answer": {
+        "kind": "leader.use",
+        "option": "."
+      },
       "as": "crimson"
     },
     {
-      "press": "FFCC_crimson_flipBreach_210",
+      "press": "FFCC_crimson_placeBreach_212_destroyer",
       "as": "crimson"
     },
     {
-      "press": "FFCC_crimson_removeBreach_210",
+      "press": "FFCC_crimson_flipBreach_212",
       "as": "crimson"
     },
     {
-      "press": "FFCC_crimson_placeBreach_210_destroyer",
+      "press": "FFCC_crimson_removeBreach_212",
       "as": "crimson"
     },
     {
-      "press": "statusRemoveBreach_210",
+      "press": "FFCC_crimson_placeBreach_212_destroyer",
+      "as": "crimson"
+    },
+    {
+      "press": "statusRemoveBreach_212",
       "as": "crimson"
     },
     {
