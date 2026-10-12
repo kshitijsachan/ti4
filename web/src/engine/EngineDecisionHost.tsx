@@ -109,9 +109,17 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   /* While the map answers the move / land step (its own panel on the board), that step is the map's, not the popup's. */
   const movement = useMovementUI();
   const mapKind = movement.step === "move" ? "tactical.move" : movement.step === "land" ? "tactical.land" : null;
+  /* …and while it does, my own played card's panel stays out of the way: the tactical action is what I am doing. */
+  const myFaction = state?.players.find((p) => p.self)?.faction;
   const queue = useMemo(
-    () => ordered.queue.filter((d) => !(drafting && BOARD_KINDS.has(d.kind)) && d.kind !== mapKind),
-    [drafting, ordered.queue, mapKind],
+    () =>
+      ordered.queue.filter(
+        (d) =>
+          !(drafting && BOARD_KINDS.has(d.kind)) &&
+          d.kind !== mapKind &&
+          !(mapKind && d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction),
+      ),
+    [drafting, ordered.queue, mapKind, myFaction],
   );
   const offers = ordered.offers;
 
