@@ -9,7 +9,7 @@ import type { Seat, SeatEngine } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
 import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
-import { chooseTyped, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
+import { chooseTyped, ENGINE_GRACE_MS, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
@@ -480,6 +480,8 @@ class SeatPilot {
   private lastPressed: string | null = null;
   /** Per game: how many draft picks we had when we last pressed a draft button, and when. */
   private miltyPress = new Map<string, { picks: number; at: number }>();
+  /** When our current draft turn began (per the fresh draft; key = how many picks we had), per game. */
+  private miltyTurn = new Map<string, { key: string; at: number }>();
   private startingTechChecked = new Map<string, { ok: boolean; at: number }>();
   /** Our faction per game as last read from the bot (only to log changes; faction() always asks the bot's records). */
   private factions = new Map<string, string>();
@@ -1237,6 +1239,17 @@ class SeatPilot {
     return !myRounds.has(current);
   }
 
+  /**
+   * The engine is live and the draft is typed: this board message, or any open draft.milty.pick of the game (a board
+   * re-posted or split over several messages is still the engine's), whatever its current target.
+   */
+  private async typedDraftBoard(game: string, messageId: string): Promise<boolean> {
+    const engine = this.mgr.engine;
+    if (!engine?.isLive) return false;
+    const open = await engine.openDecisions(game);
+    return !!open?.some((d) => (d.source.messageId === messageId && d.kind.startsWith("draft.milty.")) || d.kind === "draft.milty.pick");
+  }
+
   /** Milty draft: when it is our pick, the first option of a category we have not drafted yet. */
   private async milty(m: StoredMessage, controls: Control[], game: string): Promise<Choice | null> {
     // With the engine up, drafting is typed (draft.milty.pick in engineStep): the engine validates turn, category and
@@ -1248,7 +1261,20 @@ class SeatPilot {
     // Always read the draft fresh: a stale copy makes us miss our turn until the next poll.
     const draft = await this.mgr.draft(game, 0);
     if (draft?.status === "drafting") this.draftingSeenAt = Date.now();
-    if (!draft || draft.status !== "drafting" || String(draft.currentPlayer) !== this.userId) return null;
+    if (!draft || draft.status !== "drafting" || String(draft.currentPlayer) !== this.userId) {
+      this.miltyTurn.delete(game);
+      return null;
+    }
+    // Our turn per the fresh draft, but the engine mirror (decision target / state.draft.currentPlayer) can lag behind
+    // it for a few seconds: engineOwns then says "another player's prompt" / "no engine answer" and we pressed the
+    // board here (live pbd158: "The Firmament", Naalu, Last Bastion… pressed legacy instead of draft.milty.pick). While
+    // the board is a typed draft decision the engine path picks once it catches up; only if it has not done so
+    // ENGINE_GRACE_MS into our turn does the legacy press below run (engine path broken).
+    const turnKey = `${draft.players?.find((p: Json) => String(p.userId) === this.userId)?.picks?.length ?? 0}`;
+    const turn = this.miltyTurn.get(game);
+    if (!turn || turn.key !== turnKey) this.miltyTurn.set(game, { key: turnKey, at: Date.now() });
+    const turnAge = Date.now() - (this.miltyTurn.get(game)?.at ?? Date.now());
+    if (turnAge < ENGINE_GRACE_MS && (await this.typedDraftBoard(game, m.id))) return null;
     const mine = (draft.players ?? []).find((p: Json) => String(p.userId) === this.userId);
     const have = new Set<string>((mine?.picks ?? []).map((p: Json) => (p.type === "speakerOrder" ? "order" : p.type)));
     // Our last pick is still on its way (the draft says it is our turn until the bot records it): pressing again on a

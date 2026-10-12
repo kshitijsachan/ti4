@@ -93,6 +93,11 @@ expect("not without a combat in state", pick(round([]), state({ fronts: [] })), 
 expect("auto-assigns hits owed to me", pick(hits(ME, 2), fight(1, 1)), "FFCC_letnev_autoAssignSpaceHits_201_2");
 expect("never another's hits", pick(hits(OPP, 2), fight(1, 1)), null);
 expect("never zero hits", pick(hits(ME, 0), fight(1, 1)), null);
+// Shields Holding cancelled 2 of 3 hits (engine value: hits 1, promptHits 3, cancelled 2): "Cancel a Hit", never auto.
+const shielded = hits(ME, 3);
+(shielded.options[0].value as Record<string, unknown>).hits = 1;
+Object.assign(shielded.options[0].value as Record<string, unknown>, { promptHits: 3, cancelled: 2 });
+expect("Shields Holding: cancels a hit instead of auto-assigning", pick(shielded, fight(1, 1)), "FFCC_letnev_cancelSpaceHits_201_3");
 
 const afb = round([], "afb", [opt("combatRoll_201_space_afb", { action: "roll", tile: "201", holder: "space", rollType: "afb" })]);
 expect("afb once", pick(afb, fight(0, 0)), "combatRoll_201_space_afb");

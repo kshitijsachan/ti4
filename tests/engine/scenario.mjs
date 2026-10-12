@@ -433,7 +433,7 @@ async function checkExpect(run, expect) {
     }
   }
   if (expect.save?.length) {
-    const lines = normalizeSave(run.save(), { forkGame: run.fork.game, origGame: "fork" });
+    const lines = normalizeSave(run.save(), { forkGame: run.fork.game, origGame: "fork", keepEngineOnly: true });
     for (const e of expect.save) {
       const key = interp(e.key, run.ctx);
       const line = lines.find((l) => l.startsWith(`${key} `) || l === key);

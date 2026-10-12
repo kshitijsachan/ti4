@@ -223,6 +223,12 @@ export const VOLATILE_GAME_KEYS = new Set([
  * engineExploreLog: the engine-int bot's explore/relic history for clients (ExploreLog, written by hooks in
  * ExploreService/RelicHelper on every path) — recordings made before it existed never carry it.
  * engineCombatLedger: the engine's persisted roll ledger (CombatSupport: once-per-activation space cannon / barrage). */
+/**
+ * Stored values only the engine path writes (KindSpec.beforeAnswer via EngineBookkeeping: the primary parts a holder
+ * resolved, ButtonHelperSCs.primaryDone). The legacy path never records them, so a --diff ignores them.
+ */
+export const ENGINE_ONLY_STORED_KEYS = [/^scPrimaryDone\d+$/];
+
 export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^engineCombatLedger$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/, /NothingMessage$/];
 
 /** The game's stored values: `check_reacts_info k1,v1:k2,v2:...` (see Game.getStoredValue). */
@@ -263,6 +269,8 @@ export type NormalizeOpts = {
   forkGame?: string;
   origGame?: string;
   extraVolatile?: string[];
+  /** keep engine-only bookkeeping (ENGINE_ONLY_STORED_KEYS): for scenario expectations, never for legacy/engine diffs */
+  keepEngineOnly?: boolean;
 };
 
 /**
@@ -289,6 +297,7 @@ export function normalizeSave(text: string, o: NormalizeOpts = {}): string[] {
       // The game's stored values ("key,value" entries joined by ':'): compared one by one.
       for (const [sk, sv] of storedValues(v)) {
         if (VOLATILE_STORED_KEYS.some((r) => r.test(sk)) || extra.has(`stored.${sk}`)) continue;
+        if (!o.keepEngineOnly && ENGINE_ONLY_STORED_KEYS.some((r) => r.test(sk))) continue;
         // Agenda double-press guard (agendaRes<round><n> = outcome + the agenda's random discard handle).
         const val = !o.keepHandles && /^agendaRes\d+$/.test(sk) ? sv.replace(/\d{1,4}$/, "#") : sv;
         out.push(`stored.${fix(sk)} ${fix(val)}`);
