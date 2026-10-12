@@ -41,15 +41,24 @@
       "as": "ralnel",
       "legacy": [
         {
-          "press": "spend_mez_restech",
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_mez_restech"
+          },
           "as": "ralnel"
         },
         {
-          "press": "spend_rep_restech",
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_rep_restech"
+          },
           "as": "ralnel"
         },
         {
-          "press": "deleteButtons_technology",
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
           "as": "ralnel"
         }
       ]

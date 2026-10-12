@@ -1,0 +1,31 @@
+{
+  "name": "relic-book-of-latvinia",
+  "description": "Book of Latvinia: component action purge (BookOfLatviniaService.purgeBookOfLatvinia).",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "bookoflatvinia",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "press": "FFCC_ralnel_componentActionRes_relic_bookoflatvinia",
+      "as": "ralnel"
+    },
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

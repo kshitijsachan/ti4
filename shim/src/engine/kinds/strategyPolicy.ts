@@ -11,6 +11,7 @@
  *    edit-in-place panel is not answered again until the engine re-captured it (revision moved).
  */
 import { researchable, TECH_PREFERENCE } from "../../botplay/techs.js";
+import { overSupply } from "../policy/fallback.js";
 import type { Decision, GameState, Option, PlayerState } from "../types.js";
 import type {
   ConstructionBuild,
@@ -75,7 +76,7 @@ export function chooseStrategy(d: Decision, state: GameState | null, me: string,
     case "strategy_card.politics_agenda":
       return agenda(d as PoliticsAgenda);
     case "strategy_card.construction_place":
-      return constructionPlace(d as ConstructionPlace);
+      return constructionPlace(d as ConstructionPlace, state, me);
     case "strategy_card.construction_build":
       return constructionBuild(d as ConstructionBuild);
     case "command_tokens.adjust":
@@ -95,7 +96,7 @@ function resolveCard(d: StrategyCardResolve, state: GameState | null, self: Play
   // The thread copy carries the same buttons: answer the main message when it is open too.
   if (any.copy && ctx.open.some((x) => x.kind === "strategy_card.resolve" && x.id !== d.id && x.options.some((o) => o.value && !o.value.copy && o.value.strategyCard === sc))) return null;
   const holder = self.strategyCards.includes(sc) || any.holder === self.faction;
-  if (holder) return holderPart(d, opts, self, ctx);
+  if (holder) return holderPart(d, opts, self, ctx, state);
   // A follower answers the card once: decline, or press the secondary directly (it spends the token itself).
   const status = d.window?.responses?.[me] ?? state?.strategyCards.find((c) => c.number === sc)?.reactions.find((r) => r.faction === self.faction)?.status;
   if (ctx.history.length || (status && status !== "pending")) return null;
@@ -124,7 +125,7 @@ function resolveCard(d: StrategyCardResolve, state: GameState | null, self: Play
 }
 
 /** The holder: the next primary part not yet pressed on this message, in the card's checklist order. */
-function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["options"][number]["value"]>[], self: PlayerState, ctx: PolicyCtx): StrategyChoice | null {
+function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["options"][number]["value"]>[], self: PlayerState, ctx: PolicyCtx, state: GameState | null = null): StrategyChoice | null {
   const v = opts[0].value!;
   const mine = opts.filter((o) => o.value!.who !== "others");
   // This seat's presses (in memory) or the engine's record (survives a shim restart: live pbd114 re-resolved every
@@ -134,6 +135,7 @@ function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["op
   const pressed = (part: PrimaryPart) => Math.max(done(part), ctx.history.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length);
   // Wait for the sub-prompt a previous part opened (a system to choose, a planet for a structure).
   if (ctx.open.some((x) => x.kind === "strategy_card.diplomacy_system" || x.kind === "strategy_card.construction_place" || x.kind === "strategy_card.construction_build")) return null;
+  if (ctx.open.some((x) => x.target?.userId === self.userId && isWarfareStep(x))) return null;
   const needed: Record<string, number> = {};
   for (const p of v.primaryParts) needed[p] = (needed[p] ?? 0) + 1;
   const holdsMecatol = self.planets.some((p) => /^(mr|mrte)$/i.test(p));
@@ -144,11 +146,17 @@ function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["op
       // Space dock first when there is room to build one away from home, then a PDS (the second structure is
       // always a PDS).
       const first = pressed("structure") === 0;
-      const want = first && self.planets.length >= 4 ? "spacedock" : "pds";
+      // Never past the unit supply (live pbd171: Hacan got a 4th space dock; the bot re-posted the plastic-limit
+      // warning). Without a board we cannot count: PDS only.
+      const room = { spacedock: !!state && !overSupply("spacedock", state, self.userId), pds: !overSupply("pds", state, self.userId) };
+      const want = first && self.planets.length >= 4 && room.spacedock ? "spacedock" : "pds";
       candidates = candidates.filter((o) => o.value!.unit === want).concat(candidates.filter((o) => o.value!.unit === "pds"));
+      candidates = candidates.filter((o) => room[o.value!.unit as "spacedock" | "pds"] ?? true);
     }
     if (part === "imperial") candidates = candidates.filter((o) => (holdsMecatol ? o.value!.action === "score_imperial" : o.value!.action === "draw_secret"));
-    if (part === "warfare_primary") continue; // removing a command token from the board is not planned yet
+    // Warfare primary (pok6warfare: remove a token + redistribute; te6warfare: a tactical action): its follow-ups are
+    // choose.system remove_cc / choose.confirm warfare / command_tokens.adjust / tactical.* (components + strategy
+    // policies and the planner).
     const pick = candidates[0];
     if (pick) return { option: pick, why: `${v.name} primary: ${part}${needed[part] > 1 ? ` ${pressed(part) + 1}/${needed[part]}` : ""}` };
     // Parts answered by other prompts (Politics speaker / agendas) or not offered here: skip them.
@@ -198,10 +206,11 @@ function agenda(d: PoliticsAgenda): StrategyChoice | null {
   return top && v && v.action !== "draw" ? { option: top, why: `Politics: ${v.agenda ?? "agenda"} on top` } : null;
 }
 
-function constructionPlace(d: ConstructionPlace): StrategyChoice | null {
+function constructionPlace(d: ConstructionPlace, state: GameState | null, me: string): StrategyChoice | null {
   const opts = live(d).filter((o) => o.value);
   if (!opts.length) return null;
   const unit = opts[0].value!.unit;
+  if (overSupply(unit, state, me)) return null; // never past the unit supply (pbd171)
   const score = (o: (typeof opts)[number]) => {
     const v = o.value!;
     if (unit === "spacedock") return (v.home ? -50 : 0) - v.spaceDock * 100 + v.resources * 2 + v.influence;
@@ -212,6 +221,15 @@ function constructionPlace(d: ConstructionPlace): StrategyChoice | null {
 }
 
 type Pools = { tactic: number; fleet: number; strategy: number };
+/** A follow-up of the Warfare primary (or any token panel / tactical step) still open for us. */
+export function isWarfareStep(x: Decision): boolean {
+  if (x.kind === "command_tokens.adjust" || x.kind.startsWith("tactical.")) return true;
+  return x.options.some((o) => {
+    const v = o.value as { source?: string } | null;
+    return (x.kind === "choose.confirm" && v?.source === "warfare") || (x.kind === "choose.system" && v?.source === "remove_cc");
+  });
+}
+
 const sum = (p: Pools | null | undefined) => (p ? p.tactic + p.fleet + p.strategy : 0);
 const isPools = (x: unknown): x is Pools => !!x && typeof (x as Pools).tactic === "number" && typeof (x as Pools).fleet === "number";
 
@@ -225,6 +243,7 @@ function commandTokens(d: Decision, state: GameState | null, self: PlayerState |
   const opts = (d.options as Option<any>[]).filter((o) => !o.disabled && !o.needsInput);
   // Done Gaining Command Tokens is deleteButtons_leadership~ccgain (the bot's DoneRole tag).
   const done = opts.find((o) => o.handler.replace(/~\w+$/, "") === "deleteButtons_leadership");
+  if (!done && self) return redistributeTokens(d, opts, state, self, me, ctx);
   if (!done || !self) return null;
   const isGain = (o?: Option<any>) => !!o?.value && (o.value.action === "gain" || (o.value.action === "adjust" && o.value.delta === 1));
   const acc = d.progress?.accumulated;
@@ -242,6 +261,43 @@ function commandTokens(d: Decision, state: GameState | null, self: PlayerState |
     if (o) return { option: o, why: `Leadership: gain a ${o.value.pool} token (${gained + 1}/${allowance})` };
   }
   return { option: done, why: `Leadership: done, gained ${gained} command tokens` };
+}
+
+/** Most presses on one redistribute panel (each press is one revision; a full move is two presses). */
+const REDISTRIBUTE_MAX_PRESSES = 8;
+
+/**
+ * The redistribute panel outside the status phase ("Done Redistributing Command Tokens" = deleteButtons~ccredist;
+ * opened from a Warfare offer, choose.confirm source warfare): Warfare (pok6warfare, our card, our turn) gains back
+ * the token its primary removed from the board (net +1 against the pools the panel opened with), into the tactic
+ * pool; then tokens move strategy (keep 1) → tactic, else fleet (keep 3) → tactic, while tactic < 2; then Done. Thunder's
+ * Edge Warfare gains nothing (it only redistributes). The status-phase panel is the status policy's (payload).
+ */
+export function redistributeTokens(d: Decision, opts: Option<any>[], state: GameState | null, self: PlayerState, me: string, ctx: PolicyCtx): StrategyChoice | null {
+  const done = opts.find((o) => /^deleteButtons/.test(o.handler) && /~ccredist$/.test(o.handler));
+  if (!done || d.progress?.required?.status) return null;
+  const acc = d.progress?.accumulated;
+  const current: Pools = isPools(acc) ? acc : self.commandTokens;
+  const origRaw = d.progress?.required?.original;
+  const original = isPools(origRaw) ? origRaw : null;
+  const warfare = state?.strategyCards.find((c) => c.card === "pok6warfare" && c.played && c.holder === me);
+  const allowance = warfare && state?.activePlayer === me ? 1 : 0;
+  const gained = original ? sum(current) - sum(original) : 0;
+  const reinforcements = Number(d.progress?.required?.reinforcements ?? Infinity);
+  const adjust = (pool: keyof Pools, delta: 1 | -1) => opts.find((o) => o.value?.action === "adjust" && o.value.pool === pool && o.value.delta === delta);
+  if (ctx.history.length < REDISTRIBUTE_MAX_PRESSES) {
+    // A token owed (Warfare's returned token, or the second half of a move): into tactic.
+    if (gained < allowance && reinforcements > 0) {
+      const o = adjust("tactic", 1);
+      if (o) return { option: o, why: gained < 0 ? "redistribute: move a token into the tactic pool" : "Warfare: gain back the removed token (tactic)" };
+    }
+    if (gained >= allowance && current.tactic < 2) {
+      const donor: keyof Pools | null = current.strategy > 1 ? "strategy" : current.fleet > 3 ? "fleet" : null;
+      const o = donor && adjust(donor, -1);
+      if (o) return { option: o, why: `redistribute: take a ${donor} token for the tactic pool (tactic ${current.tactic} < 2)` };
+    }
+  }
+  return { option: done, why: `redistribute: done (${current.tactic}/${current.fleet}/${current.strategy})` };
 }
 
 // ---------------------------------------------------------------- technology (Technology primary)

@@ -9,6 +9,9 @@ import { EngineTactical, TACTICAL_KINDS } from "./tacticalEngine.js";
 import type { Decision } from "../engine/types.js";
 import { passOption } from "../engine/policy/turn.js";
 
+/** How long an unplanned tactical.activate waits before the planner adopts it (the policy that opened it moves on). */
+const ACTIVATE_GRACE_MS = 5000;
+
 /*
  * The planner of one autopilot seat: takes the decisions the rule table cannot (tactical actions, strategy card
  * primaries, scoring) and runs them through the bot's buttons. It gets the first look at every tick; whatever it
@@ -16,8 +19,14 @@ import { passOption } from "../engine/policy/turn.js";
  */
 export class Brain {
   private tactical: TacticalExecutor;
-  /** The same tactical action driven by typed engine decisions (preferred when the engine is up). */
-  private engineTactical: EngineTactical | null;
+  /** The same tactical action driven by typed engine decisions (preferred when the engine is up); made on first use. */
+  private engineTacticalFor: EngineTactical | null = null;
+  private get engineTactical(): EngineTactical | null {
+    const engine = this.seat.engine;
+    if (!engine) return null;
+    this.engineTacticalFor ??= new EngineTactical(this.seat, engine);
+    return this.engineTacticalFor;
+  }
   private cards: CardPlanner;
   private violations: ViolationDesk;
   /** Per game, the newest prompt when our last tactical action ended. */
@@ -27,7 +36,6 @@ export class Brain {
 
   constructor(private seat: Seat) {
     this.tactical = new TacticalExecutor(seat);
-    this.engineTactical = seat.engine ? new EngineTactical(seat, seat.engine) : null;
     this.cards = new CardPlanner(seat);
     this.violations = new ViolationDesk(seat);
   }
@@ -73,6 +81,10 @@ export class Brain {
       const menu = EngineTactical.turnMenu(decisions);
       if (menu) return this.engineTurn(game, menu);
     }
+    // The engine is reachable: turn menus and tactical steps are typed (turn.action, tactical.*) and run above
+    // (engineTurn / engineRecover / the turn policy). The button path below is the engine-off fallback only (live
+    // pbd158: after the turn policy passed, the button path started a Tactical Action on the old turn message).
+    if (decisions && this.engineTactical) return false;
     const prompts = this.seat.prompts(game);
     // A tactical action under way that we do not have a plan for (e.g. after a restart): finish it.
     const retired = this.retired.get(game);
@@ -127,12 +139,22 @@ export class Brain {
 
   /** A tactical decision of ours left half done (e.g. after a restart) while it is our turn: finish it. */
   private async engineRecover(game: string, decisions: Decision[]): Promise<boolean> {
-    const stray = decisions.filter((d) => d.target?.userId === this.seat.userId && TACTICAL_KINDS.has(d.kind) && d.kind !== "tactical.activate");
+    const mine = decisions.filter((d) => d.target?.userId === this.seat.userId && TACTICAL_KINDS.has(d.kind));
+    // A system to activate that no plan of ours asked for: a tactical action started outside the turn menu (Thunder's
+    // Edge Warfare's "Perform Tactical Action", answered by the components policy): plan it like a turn's action.
+    const activate = !EngineTactical.turnMenu(decisions) ? mine.find((d) => d.kind === "tactical.activate") : undefined;
+    const stray = activate ? [activate] : mine.filter((d) => d.kind !== "tactical.activate");
     const age = stray.length ? Date.now() - Math.max(...stray.map((d) => d.createdAt)) : 0;
-    if (!stray.length || age < 20000 || age > 600000) return false;
+    if (!stray.length || age < (activate ? ACTIVATE_GRACE_MS : 20000) || age > 600000) return false;
     const board = await this.seat.board(game, true);
     const me = board ? playerOf(board, this.seat.userId) : undefined;
     if (!board || !me || board.activePlayer !== me.color || board.phase !== "action") return false;
+    if (activate) {
+      const goal = chooseGoal(board, me);
+      this.seat.log(`planning a tactical action started outside the turn menu in ${game}: ${goal.kind === "pass" ? "no job, activate a system with a space dock" : goal.why}`);
+      this.engineTactical!.adopt(game, goal.kind === "pass" ? null : goal);
+      return this.engineTactical!.tick(board, decisions);
+    }
     this.seat.log(`taking over a tactical action left half done in ${game} (engine)`);
     this.engineTactical!.recover(game);
     return this.engineTactical!.tick(board, decisions);

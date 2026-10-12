@@ -1,0 +1,56 @@
+{
+  "name": "explore-distant-suns",
+  "description": "Distant Suns (Naaz): Naaz gains Wellon with a mech there, explores it, accepts Distant Suns (draw 2) and picks the first card (resolve_explore_..._distantSuns, explore.card_pick).",
+  "base": {
+    "recording": "pbd113",
+    "index": 384,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "planet add",
+      "options": {
+        "planet": "wellon",
+        "faction_or_color": "naaz"
+      }
+    },
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "204",
+        "unit_names": "mech wellon",
+        "faction_or_color": "naaz"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "command": "explore planet",
+      "options": {
+        "planet": "wellon",
+        "faction_or_color": "naaz"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "distant_suns_accept_wellon"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "resolve_explore_"
+      },
+      "as": "naaz"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

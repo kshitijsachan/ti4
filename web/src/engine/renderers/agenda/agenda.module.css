@@ -154,3 +154,12 @@
   font-size: 12px;
   color: var(--play-ink-muted);
 }
+
+.cardText {
+  flex-basis: 100%;
+  display: block;
+  margin-top: 4px;
+  color: var(--play-ink);
+  font-size: 12px;
+  line-height: 1.4;
+}

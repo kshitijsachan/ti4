@@ -6,7 +6,10 @@
  *    look for that; leaders/relics/PNs are not planned).
  *  - relic.use: Crown of Emphidia is purged for the point (Maw of Worlds is not: it exhausts every planet);
  *    Prophet's Tears draws an action card; exhaust/use effects that help us are used; peeking at decks is declined.
- *  - choose.confirm: yes (Silver Flame: take the point); choose.planet: Stellar Converter on someone else's planet, Nano-Forge on one of ours, else first;
+ *  - choose.confirm: yes (Silver Flame: take the point; Minister of Peace; Ixthian Artifact roll as speaker), except
+ *    Imperial Arbiter (keep our strategy card), the debt reminder (no payment: deals go through trades) and free
+ *    follows (Mahact agent / Scepter of Emelpar: the strategy policy follows on the card); Warfare: the Thunder's
+ *    Edge tactical action first, else open the redistribute panel; choose.planet: Stellar Converter on someone else's planet, Nano-Forge on one of ours, else first;
  *    choose.player: someone other than us; choose.card/system/unit: the first offered; JR-XS455-O: a PDS, else
  *    the trade good.
  *  - tech.step: free gains are taken (Graviton / Bio-Stims / Magen / Dacxive offers, Bio-Stims readies a planet
@@ -61,6 +64,22 @@ export function chooseComponents(d: ComponentsDecision, state: GameState | null,
       if (t[0]?.value!.source === "jrxs455o") {
         return pick(t.find((o) => o.value!.choice === "pds") ?? t.find((o) => o.value!.choice === "tg") ?? t[0], "JR-XS455-O: a PDS, else a trade good") ?? decline("none");
       }
+      if (t[0]?.value!.source === "imperialarbiter") {
+        return pick(t.find((o) => o.value!.confirm === false), "Imperial Arbiter: keep our strategy card") ?? decline("Imperial Arbiter: keep our strategy card");
+      }
+      if (t[0]?.value!.source === "pay_debt") return decline("debt reminder: no payment now");
+      // Warfare: start Thunder's Edge Warfare's tactical action (the planner takes over tactical.activate); a lone
+      // redistribute offer opens the token panel, which the strategy policy finishes (it may press Done at once).
+      if (t[0]?.value!.source === "warfare") {
+        return (
+          pick(t.find((o) => o.value!.choice === "tactical"), "Warfare: perform the tactical action") ??
+          pick(t.find((o) => o.value!.choice === "redistribute"), "Warfare: redistribute command tokens") ??
+          decline("Warfare")
+        );
+      }
+      // Following without a token (Mahact agent / Scepter of Emelpar / Cognitive Parallax Engine): the strategy policy
+      // decides follows on the card itself; keep the agent / relic / technology.
+      if (FREE_FOLLOW.has(t[0]?.value!.source ?? "")) return decline("keep it: the strategy policy follows on the card");
       return (
         pick(t.find((o) => o.value!.confirm && o.value!.choice === "Point"), "take the point") ??
         pick(t.find((o) => o.value!.confirm), `use ${t[0]?.value?.source ?? ""}`) ??
@@ -113,6 +132,9 @@ function relicUse(t: Live<RelicUse["options"][number]["value"]>, pick: Pick): Co
     pick(t.find((o) => o.value!.effect === "exhaust" || o.value!.effect === "use"), `use ${t.find((o) => o.value!.effect === "exhaust" || o.value!.effect === "use")?.value?.relic ?? "relic"}`)
   );
 }
+
+/** choose.confirm sources that follow a played strategy card without a strategy token. */
+const FREE_FOLLOW = new Set(["mahactagent", "scepter_of_emelpar", "cognitive_parallax_engine"]);
 
 /** Exhaust offers worth taking with no planning: free effects. */
 const FREE_EXHAUSTS = new Set(["gls", "bs"]);

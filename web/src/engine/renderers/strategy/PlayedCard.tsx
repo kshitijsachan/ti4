@@ -56,7 +56,7 @@ export function PlayedCard({ decision, state, answer }: RendererProps<StrategyCa
       <Title sc={sc} sub={`Played by ${playerName(state, first.holder)}`}>
         {first.name}
       </Title>
-      {isHolder ? <Primary opts={opts} parts={first.primaryParts} pressed={pressed} onPick={pick} /> : <Follow opts={opts} status={reaction?.status ?? "pending"} reason={reaction?.cantFollowReason ?? null} onPick={pick} />}
+      {isHolder ? <Primary opts={opts} parts={first.primaryParts} pressed={pressed} done={serverDone(decision)} onPick={pick} /> : <Follow opts={opts} status={reaction?.status ?? "pending"} reason={reaction?.cantFollowReason ?? null} onPick={pick} />}
       {card && card.reactions.length > 0 && (
         <div className={classes.reactions}>
           {card.reactions.map((r) => (
@@ -71,10 +71,22 @@ export function PlayedCard({ decision, state, answer }: RendererProps<StrategyCa
   );
 }
 
+/** The primary parts the engine has recorded as done (window subject `primaryDone`). */
+function serverDone(d: StrategyCardResolve): string[] {
+  const v = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
 /** Every part of the primary, in order; a part stays listed (ticked) once pressed so none is skipped. */
-function Primary({ opts, parts, pressed, onPick }: { opts: Opt[]; parts: PrimaryPart[]; pressed: string[]; onPick: (id: string) => void }) {
+function Primary({ opts, parts, pressed, done, onPick }: { opts: Opt[]; parts: PrimaryPart[]; pressed: string[]; done: string[]; onPick: (id: string) => void }) {
   const mine = opts.filter((o) => o.value!.who !== "others");
-  const doneCount = (part: PrimaryPart) => pressed.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length;
+  /* What the engine reports done (survives reload), else what I pressed on this page. */
+  const doneCount = (part: PrimaryPart) =>
+    Math.max(
+      done.filter((p) => p === part).length,
+      pressed.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length,
+    );
+  const pressedCount = (id: string) => pressed.filter((p) => p === id).length;
   const seen = new Map<PrimaryPart, number>();
   const checklist = parts.map((part) => {
     const n = (seen.get(part) ?? 0) + 1;
@@ -96,7 +108,7 @@ function Primary({ opts, parts, pressed, onPick }: { opts: Opt[]; parts: Primary
         {mine.map((o) => (
           <Choice key={o.id} option={o} onPick={onPick} quiet={o.value!.action === "request_all"}>
             {o.label}
-            {o.value!.part && doneCount(o.value!.part) > 0 && <Meta>pressed ×{doneCount(o.value!.part)}</Meta>}
+            {pressedCount(o.id) > 0 && <Meta>pressed ×{pressedCount(o.id)}</Meta>}
           </Choice>
         ))}
       </div>

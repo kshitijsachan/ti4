@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
 import { Tooltip, UnstyledButton } from "@mantine/core";
-import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEyeOff, IconMap, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEye, IconEyeOff, IconLoader2, IconMap, IconX } from "@tabler/icons-react";
 import cx from "clsx";
 import { useDecisionFocus, useWaitingOnMe } from "@/decisions/model/focus";
+import { useMovementUI } from "@/mapactions/store";
 import { useReserveRect } from "@/state/reservedArea";
 import type { Decision, GameState } from "./contract";
 import { forgetClosedDrafts } from "./draftState";
@@ -15,11 +16,33 @@ import { EngineOutcomeToast } from "./ui/OutcomeToast";
 
 export { decisionTitle };
 
+/** Decisions the draft board answers itself (through the engine) while it is on screen. */
+const BOARD_KINDS = new Set(["draft.milty.pick", "draft.milty.info"]);
+
 type Props = {
   gameName: string;
   placement?: "fixed" | "contained";
   rightInset?: number;
 };
+
+/** How long my turn may show no prompt at all before the popup says the engine is catching up. */
+const STALL_MS = 10000;
+
+/**
+ * My action-phase turn with nothing to answer (the engine lost its prompts, e.g. right after a bot restart): true
+ * after STALL_MS, so the player sees why there is no panel instead of a bare "Your turn".
+ */
+function useTurnStalled(state: GameState | null, empty: boolean): boolean {
+  const mine = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
+  const waiting = empty && mine && /^action/i.test(state?.phase ?? "");
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    if (!waiting) return setStalled(false);
+    const t = window.setTimeout(() => setStalled(true), STALL_MS);
+    return () => window.clearTimeout(t);
+  }, [waiting]);
+  return stalled;
+}
 
 /** The system a decision is about, for the map highlight. */
 function decisionPosition(d: Decision | undefined, state: GameState | null): string | null {
@@ -50,7 +73,21 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
   const hidden = useEngine((s) => s.hidden);
   const answer = useEngineAnswer();
-  const { queue, offers } = useMemo(() => orderDecisions(decisions, answeredAtSeq, hidden, state), [decisions, answeredAtSeq, hidden, state]);
+  const answeredKind = useEngine((s) => s.lastAnswer?.decision.kind ?? null);
+  const ordered = useMemo(
+    () => orderDecisions(decisions, answeredAtSeq, hidden, state, answeredKind),
+    [decisions, answeredAtSeq, hidden, state, answeredKind],
+  );
+  /* While the draft runs, the draft board (the table's takeover) is where picks are made: no popup on top of it. */
+  const drafting = state?.draft?.status === "drafting";
+  /* While the map answers the move / land step (its own panel on the board), that step is the map's, not the popup's. */
+  const movement = useMovementUI();
+  const mapKind = movement.step === "move" ? "tactical.move" : movement.step === "land" ? "tactical.land" : null;
+  const queue = useMemo(
+    () => ordered.queue.filter((d) => !(drafting && BOARD_KINDS.has(d.kind)) && d.kind !== mapKind),
+    [drafting, ordered.queue, mapKind],
+  );
+  const offers = ordered.offers;
 
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [offerId, setOfferId] = useState<string | null>(null);
@@ -68,11 +105,12 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const shown = openOffer ?? queue.find((d) => d.id === jumpId) ?? queue[0];
   const more = queue.filter((d) => d.id !== shown?.id).length;
   const collapsed = !!shown && collapsedId === shown.id && !errors[shown.id];
+  const stalled = useTurnStalled(state, !shown && queue.length === 0);
 
   /* The header's "Your move" pill: what is really waiting on me (background prompts never count). */
   const publishWaiting = useWaitingOnMe((s) => s.set);
-  const firstTitle = queue[0] ? decisionTitle(queue[0], state) : null;
-  useEffect(() => publishWaiting(queue.length, firstTitle), [publishWaiting, queue.length, firstTitle]);
+  const firstTitle = ordered.queue[0] ? decisionTitle(ordered.queue[0], state) : null;
+  useEffect(() => publishWaiting(ordered.queue.length, firstTitle), [publishWaiting, ordered.queue.length, firstTitle]);
   useEffect(() => () => publishWaiting(0, null), [publishWaiting]);
 
   /* Half-made selections of decisions that closed are forgotten (only once the stream is live: not mid-reload). */
@@ -101,7 +139,17 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
     return () => window.removeEventListener("keydown", onKey);
   }, [queueOpen, offerList, openOffer, shown]);
 
-  const offerPill = offers.length > 0 && (
+  /* Prompts I hid that are still open: one page-wide control brings them all back. */
+  const hiddenOpen = decisions.filter((d) => hidden.has(d.id)).length;
+  const unhidePill = hiddenOpen > 0 && (
+    <Tooltip label="Show the prompts you hid again" position="right">
+      <UnstyledButton className={classes.unhidePill} onClick={() => engineStore.getState().unhideAll()} data-engine-hidden={hiddenOpen}>
+        <IconEye size={14} />
+        {hiddenOpen} hidden · Show
+      </UnstyledButton>
+    </Tooltip>
+  );
+  const offerPill = (offers.length > 0 || unhidePill) && (
     <div ref={offersRef} className={classes.offers}>
       {offerList && (
         <div className={classes.offerList} role="menu" aria-label="Available now">
@@ -120,6 +168,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
           ))}
         </div>
       )}
+      {offers.length > 0 && (
       <UnstyledButton
         className={classes.offerPill}
         onClick={() => (offers.length === 1 ? setOfferId(offerId ? null : offers[0].id) : setOfferList((v) => !v))}
@@ -129,14 +178,22 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
         <IconBolt size={14} />
         Available now{offers.length > 1 ? ` · ${offers.length}` : ""}
       </UnstyledButton>
+      )}
+      {unhidePill}
     </div>
   );
 
   if (!shown) {
     return (
       <>
-        {offerPill && (
+        {(offerPill || stalled) && (
           <PopupLayer contained={placement === "contained"} rightInset={rightInset}>
+            {stalled && (
+              <div className={classes.stalled} role="status" data-engine-stalled>
+                <IconLoader2 size={14} className={classes.spin} />
+                It's your turn, but the game engine has not offered your options yet — reconnecting…
+              </div>
+            )}
             {offerPill}
           </PopupLayer>
         )}

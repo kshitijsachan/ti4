@@ -48,6 +48,21 @@ assert.equal(pick(base("tech.step", [opt("r", { source: "research", step: "resea
 assert.equal(pick(base("tech.step", [opt("s", { source: "sr", step: "system", tile: "101" }), opt("s2", { source: "sr", step: "system", tile: "102" })])), "s");
 assert.equal(pick(base("tech.step", [opt("e", { source: "entropicscar", step: "gain", tech: "lgf" }), opt("no", null)])), "no");
 assert.equal(pick(base("choose.confirm", [opt("sd", { source: "jrxs455o", confirm: true, choice: "sd" }), opt("pds", { source: "jrxs455o", confirm: true, choice: "pds" }), opt("tg", { source: "jrxs455o", confirm: true, choice: "tg" })])), "pds");
+// Agenda follow-ups (untyped-sweep): Arbiter declined (either decline shape), debt reminder declined, Minister of Peace /
+// Ixthian roll used, Checks and Balances / Colonial Redistribution go to another player, Minister of War removes a token.
+assert.equal(pick(base("choose.confirm", [opt("startArbiter", { source: "imperialarbiter", confirm: true }), opt("declineArbiter", { source: "imperialarbiter", confirm: false })])), "declineArbiter");
+assert.equal(pick(base("choose.confirm", [opt("startArbiter", { source: "imperialarbiter", confirm: true }), opt("deleteButtons", null)])), "deleteButtons");
+assert.equal(pick(base("choose.confirm", [opt("tg", { source: "pay_debt", confirm: true, choice: "tg", faction: "sol", amount: 1 }), opt("deleteButtons", null)])), "deleteButtons");
+assert.equal(pick(base("choose.confirm", [opt("ministerOfPeace", { source: "minister_peace", confirm: true })])), "ministerOfPeace");
+assert.equal(pick(base("choose.confirm", [opt("rollIxthian", { source: "ixthian_artifact", confirm: true })])), "rollIxthian");
+assert.equal(pick(base("choose.player", [opt("me", { source: "checks_and_balances", faction: "hacan", strategyCard: 2 }), opt("x", { source: "checks_and_balances", faction: "sol", strategyCard: 2 })], { target: { userId: "u1", faction: "hacan", color: "yellow", resolvedBy: "mention" } })), "x");
+assert.equal(pick(base("choose.player", [opt("c", { source: "colonial_redistribution", faction: "sol", planet: "rokha" })])), "c");
+assert.equal(pick(base("choose.system", [opt("a", { source: "remove_cc", choice: "ministerOfWar", tile: "101", faction: "hacan" }), opt("b", { source: "remove_cc", choice: "ministerOfWar", tile: "202", faction: "hacan" })])), "a");
+assert.equal(pick(base("choose.confirm", [opt("m", { source: "mahactagent", confirm: true, strategyCard: 6 }), opt("deleteButtons", null)])), "deleteButtons");
+assert.equal(pick(base("choose.unit", [opt("c", { source: "cavalry", unit: "cruiser" }), opt("d", { source: "cavalry", unit: "carrier", damaged: "damaged" })])), "c");
+assert.equal(pick(base("choose.unit", [opt("r", { source: "refit", unit: "mech", tile: "313", holder: "jord", planet: "jord" })])), "r");
+assert.equal(pick(base("choose.confirm", [opt("redistributeCCButtons_", { source: "warfare", confirm: true, choice: "redistribute" }), opt("beginTacticalTeWarfare", { source: "warfare", confirm: true, choice: "tactical" })])), "beginTacticalTeWarfare");
+assert.equal(pick(base("choose.confirm", [opt("redistributeCCButtons_", { source: "warfare", confirm: true, choice: "redistribute" })])), "redistributeCCButtons_");
 // Always answers when only untyped options remain; never answers someone else's prompt.
 assert.equal(pick(base("choose.system", [opt("deleteButtons", null)])), "deleteButtons");
 assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card" })], { target: { userId: "u2", faction: "sol", color: "red", resolvedBy: "owner_prefix" } })), undefined);

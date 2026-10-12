@@ -9,7 +9,7 @@ import type { Seat, SeatEngine } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
 import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
-import { chooseTyped, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
+import { chooseTyped, ENGINE_GRACE_MS, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
@@ -96,6 +96,8 @@ type Rule = {
    * in the next action phase ends that round on the spot.
    */
   phase?: RegExp;
+  /** Controls this rule never presses (full custom id). */
+  notId?: RegExp;
   /** Only while it is this seat's turn (the bot's active player) and the planner runs no action (brain.busy). */
   myTurn?: boolean;
 };
@@ -222,6 +224,9 @@ const RULES: Rule[] = [
     label: /^(done|confirm|ready|no\b|decline|skip|pass\b|not following|end turn|continue|finish|none|no thanks)/i,
     score: 30,
     typed: true,
+    // Never the turn buttons ("Pass (+1 ability)", "End Turn"): their own rules check our turn and that no action is
+    // under way (live pbd158 04:12: this catch-all passed mid tactical action, with the production bill half paid).
+    notId: /^FFCC_[^_]+_(turnEnd|endOfTurnAbilities|passForRound|passingAbilities|tacticalAction|componentAction|strategicAction_\d+)$/,
     why: "decline / move on",
   },
 ];
@@ -276,6 +281,8 @@ const MAX_RETRIES = 3;
 const STALL_MS = 60000;
 /** Our action-phase turn buttons. */
 const TURN_ID = /^FFCC_[^_]+_(tacticalAction|componentAction|turnEnd|endOfTurnAbilities|passForRound|strategicAction_\d+)$/;
+/** An untyped prompt pinging only us that nothing answered for this long gets its first control (see consider). */
+const UNTYPED_STALL_MS = 120_000;
 /** The same button on the same message: at most this many presses per seat (see pressCount). */
 const MAX_SAME_PRESS = 3;
 const BUSY_TEXT = /hasn't finished processing the last task/i;
@@ -480,6 +487,8 @@ class SeatPilot {
   private lastPressed: string | null = null;
   /** Per game: how many draft picks we had when we last pressed a draft button, and when. */
   private miltyPress = new Map<string, { picks: number; at: number }>();
+  /** When our current draft turn began (per the fresh draft; key = how many picks we had), per game. */
+  private miltyTurn = new Map<string, { key: string; at: number }>();
   private startingTechChecked = new Map<string, { ok: boolean; at: number }>();
   /** Our faction per game as last read from the bot (only to log changes; faction() always asks the bot's records). */
   private factions = new Map<string, string>();
@@ -1001,12 +1010,27 @@ class SeatPilot {
         if (phase && !rule.phase.test(phase)) continue;
       }
       if (rule.myTurn && ((await this.midAction(game)) || !(await this.myTurn(game)))) continue;
-      let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true));
+      let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true) && !rule.notId?.test(c.custom_id));
       if (rule.distinct) hits = hits.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= 600000);
       if (!hits.length) continue;
       if (rule.rank) hits = [...hits].sort((a, b) => rule.rank!(a) - rule.rank!(b));
       const control = rule.last ? hits[hits.length - 1] : hits[0];
       return { msg: m, control, score: rule.score, why: rule.why };
+    }
+    // Last resort for a prompt only we are pinged on that nothing answered for UNTYPED_STALL_MS (no rule, not strongly
+    // ours, the engine does not own it): an untyped prompt must never stall a game on a bot (pbd188: Checks and
+    // Balances' "give this card to…" picker). Its first control we may press; logged as an ERROR so it gets typed.
+    if (!ctx.strong && mentionsMe && !mentionsOther && !lockedOther && !answered && !TAKE_BACK_TEXT.test(content)
+        && Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp) > UNTYPED_STALL_MS
+        && !(owned ?? (await this.mgr.engineOwns(game, m.id, me)))) {
+      const first = controls.find((c) => !OPTIONAL_LABEL.test(c.label) && !OPTIONAL_ID.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")));
+      if (first) {
+        if (!this.untypedLogged.has(m.id)) {
+          this.untypedLogged.add(m.id);
+          log.error(`autopilot ${this.name}: untyped prompt stalled on us in #${ch.name} for ${Math.round((Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp)) / 1000)}s; pressing its first control "${first.label}" [${first.custom_id.replace(/^FFCC_[^_]+_/, "")}] (type this handler)`);
+        }
+        return { msg: m, control: first, score: 9, why: "untyped prompt stalled on us: first control" };
+      }
     }
     // Only for prompts clearly addressed to us: never one for another player, or locked to another faction.
     if (!ctx.strong || mentionsOther || lockedOther || answered || TAKE_BACK_TEXT.test(content)) return null;
@@ -1237,6 +1261,17 @@ class SeatPilot {
     return !myRounds.has(current);
   }
 
+  /**
+   * The engine is live and the draft is typed: this board message, or any open draft.milty.pick of the game (a board
+   * re-posted or split over several messages is still the engine's), whatever its current target.
+   */
+  private async typedDraftBoard(game: string, messageId: string): Promise<boolean> {
+    const engine = this.mgr.engine;
+    if (!engine?.isLive) return false;
+    const open = await engine.openDecisions(game);
+    return !!open?.some((d) => (d.source.messageId === messageId && d.kind.startsWith("draft.milty.")) || d.kind === "draft.milty.pick");
+  }
+
   /** Milty draft: when it is our pick, the first option of a category we have not drafted yet. */
   private async milty(m: StoredMessage, controls: Control[], game: string): Promise<Choice | null> {
     // With the engine up, drafting is typed (draft.milty.pick in engineStep): the engine validates turn, category and
@@ -1248,7 +1283,20 @@ class SeatPilot {
     // Always read the draft fresh: a stale copy makes us miss our turn until the next poll.
     const draft = await this.mgr.draft(game, 0);
     if (draft?.status === "drafting") this.draftingSeenAt = Date.now();
-    if (!draft || draft.status !== "drafting" || String(draft.currentPlayer) !== this.userId) return null;
+    if (!draft || draft.status !== "drafting" || String(draft.currentPlayer) !== this.userId) {
+      this.miltyTurn.delete(game);
+      return null;
+    }
+    // Our turn per the fresh draft, but the engine mirror (decision target / state.draft.currentPlayer) can lag behind
+    // it for a few seconds: engineOwns then says "another player's prompt" / "no engine answer" and we pressed the
+    // board here (live pbd158: "The Firmament", Naalu, Last Bastion… pressed legacy instead of draft.milty.pick). While
+    // the board is a typed draft decision the engine path picks once it catches up; only if it has not done so
+    // ENGINE_GRACE_MS into our turn does the legacy press below run (engine path broken).
+    const turnKey = `${draft.players?.find((p: Json) => String(p.userId) === this.userId)?.picks?.length ?? 0}`;
+    const turn = this.miltyTurn.get(game);
+    if (!turn || turn.key !== turnKey) this.miltyTurn.set(game, { key: turnKey, at: Date.now() });
+    const turnAge = Date.now() - (this.miltyTurn.get(game)?.at ?? Date.now());
+    if (turnAge < ENGINE_GRACE_MS && (await this.typedDraftBoard(game, m.id))) return null;
     const mine = (draft.players ?? []).find((p: Json) => String(p.userId) === this.userId);
     const have = new Set<string>((mine?.picks ?? []).map((p: Json) => (p.type === "speakerOrder" ? "order" : p.type)));
     // Our last pick is still on its way (the draft says it is our turn until the bot records it): pressing again on a
@@ -1435,6 +1483,8 @@ class SeatPilot {
   private engineTried = new Set<string>();
   /** Prompts whose "last resort" candidate was logged (once each). */
   private lastResortLogged = new Set<string>();
+  /** Untyped prompts pressed by the stall last resort (logged once each). */
+  private untypedLogged = new Set<string>();
   /** Answers this seat sent per decision id (capped at ENGINE_MAX_ANSWERS). */
   private engineAttempts = new Map<string, number>();
   /** Answers this seat sent per decision id, never reset (capped at ENGINE_LIFETIME_ANSWERS). */
@@ -1572,7 +1622,7 @@ class SeatPilot {
         // out: one answer per option per seat. Every decision gets at most ENGINE_MAX_ANSWERS answers from this seat
         // (live pbd36: a press that never registered in the window was re-sent 142 times).
         const windowed = d.scope === "table" || !!d.window;
-        const what = pick.option ? pick.option.id : JSON.stringify(pick.payload);
+        const what = pick.option ? (pick.act ? `${pick.act.action}:${JSON.stringify(pick.act.body)}` : pick.option.id) : JSON.stringify(pick.payload);
         const key = windowed ? `${d.id}#${done?.options.length ?? 0}|${what}` : `${d.id}@${d.revision}#${done?.options.length ?? 0}|${what}`;
         if (this.engineTried.has(key)) continue;
         const attempts = (this.engineAttempts.get(d.id) ?? 0) + 1;
@@ -1594,7 +1644,11 @@ class SeatPilot {
         const req = pick.payload
           ? { payload: pick.payload, expectedSeq: d.seq, requestId, userId: this.userId }
           : { optionId: pick.option?.id, expectedSeq: d.seq, requestId, userId: this.userId };
-        const r = await this.mgr.serial(() => engine.answer(game, d.id, req));
+        // A kind's direct action (a combat plan for bombardment hits) instead of an answer.
+        const act = pick.option ? pick.act : undefined;
+        const r = act
+          ? await this.mgr.serial(() => engine.act(game, d.id, act.action, { ...act.body, expectedSeq: d.seq, userId: this.userId }))
+          : await this.mgr.serial(() => engine.answer(game, d.id, req));
         if (!r) return false;
         const line = `autopilot ${this.name}: engine ${d.kind} "${pick.option?.label ?? "payload"}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`;
         // Fallback answers are logged loudly: each one is a kind that wants a specific policy.
@@ -1713,7 +1767,15 @@ class SeatPilot {
         }
       },
       log: (text) => log.info(`autopilot ${self.name}: ${text}`),
-      engine: this.mgr.engine ? this.seatEngine(this.mgr.engine) : undefined,
+      // Read on use: pilots are created by the Autopilot constructor (sync), before index.ts assigns mgr.engine, so a
+      // value captured here was undefined for every seat seated at startup — the planner never took the typed
+      // tactical path (no "engine turn.action (tactical action…)" since 20:17 on 2026-10-11) and ran on buttons.
+      get engine() {
+        const engine = self.mgr.engine;
+        if (!engine) return undefined;
+        if (self.seatEngineFor?.client !== engine) self.seatEngineFor = { client: engine, api: self.seatEngine(engine) };
+        return self.seatEngineFor.api;
+      },
       engineOwns: (game, messageId) => self.mgr.engineOwns(game, messageId, self.userId),
       engineProduce: async (game, messageId, build) => {
         const engine = self.mgr.engine;
@@ -1728,6 +1790,8 @@ class SeatPilot {
       },
     };
   }
+
+  private seatEngineFor?: { client: EngineClient; api: SeatEngine };
 
   /** The planner's typed engine access as this seat (answers go through the same serial queue as presses). */
   private seatEngine(engine: EngineClient): SeatEngine {

@@ -2,8 +2,8 @@
  * Autopilot trade policy over typed engine data (pure). Used by chooseTyped (answering trade.offer and
  * trade.force_replenish) and by botplay/trade.ts (proposing N-1 washes through the trade.propose action).
  *
- * - Neighbours only: a partner must be in GameState.trade.mayTransactWith (neighbours; anyone in the agenda phase;
- *   Guild Ships / Trade Convoys / space stations / Age of Commerce).
+ * - Neighbours only: a partner must be in GameState.trade.mayTransactWith (action phase: neighbours or
+ *   Guild Ships / Trade Convoys / space stations / Age of Commerce; anyone outside the action phase).
  * - Accept anything fair: every TG or commodity counts 1 (commodities become TG on arrival); when we send
  *   commodities we accept being 1 behind (the N-1 wash). Never give away promissory notes, action cards, relics,
  *   fragments or debt. Dark Pact (Empyrean) adds the +1 TG it pays to a full-value commodity gift.
@@ -72,6 +72,11 @@ export function washDeal(me: TradeSelf, cp: TradeCounterparty, state: GameState 
     return { give: { tg: n - 1 }, receive: { commodities: n }, text: `their ${n} commodities for ${n - 1} of our TG` };
   }
   return null;
+}
+
+/** Phases a bot proposes washes in: the action phase only (pbd161: offers during status/agenda were noise). */
+export function proposesTradesIn(phase: string | null | undefined): boolean {
+  return /^action/i.test(phase ?? "");
 }
 
 export function mayTransact(trade: TradeState | null | undefined, faction: FactionId): boolean {

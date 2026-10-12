@@ -65,6 +65,18 @@ export function passOption<V extends { action?: unknown; abilities?: unknown }>(
 /** Decisions of an action under way: while one of ours is open, the turn is not over and nothing new starts. */
 const IN_FLIGHT =
   /^(tactical\.|production\.|payment\.spend$|combat\.|explore\.|relic\.|units\.)/;
+/**
+ * Follow-ups of a Warfare primary (remove a token, the redistribute offer / panel, Thunder's Edge Warfare's "perform
+ * the tactical action"): the strategic action is not over until they are answered.
+ */
+function warfareStep(x: Decision): boolean {
+  if (x.kind === "command_tokens.adjust") return true;
+  return x.options.some((o) => {
+    const v = o.value as { source?: string } | null;
+    return (x.kind === "choose.confirm" && v?.source === "warfare") || (x.kind === "choose.system" && v?.source === "remove_cc");
+  });
+}
+
 /** An in-flight decision older than this is a leftover (the watchdog's fallback closes it), not this turn's action. */
 const IN_FLIGHT_MAX_AGE_MS = 10 * 60_000;
 
@@ -80,7 +92,7 @@ export function actionInFlight(
 ): string | null {
   const mine = open.find(
     (x) =>
-      IN_FLIGHT.test(x.kind) &&
+      (IN_FLIGHT.test(x.kind) || warfareStep(x)) &&
       (x.target?.userId === me ||
         (!!x.window &&
           x.window.eligible.includes(me) &&

@@ -1,3 +1,4 @@
+import { planetName } from "../tactical/names";
 import { useMemo } from "react";
 import { UnstyledButton } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
@@ -104,7 +105,7 @@ export function PaymentRenderer({ decision, state, answer, pendingOptionId }: Ar
           {planets.map((p) => (
             <UnstyledButton key={p.planet} role="checkbox" aria-checked={chosen.has(p.planet)} className={classes.tile} onClick={() => toggle(p.planet)} disabled={busy}>
               <span className={classes.check}>{chosen.has(p.planet) && <IconCheck size={12} />}</span>
-              <span className={classes.grow}>{p.planet}</span>
+              <span className={classes.grow}>{planetName(p.planet)}</span>
               <span className={inf ? classes.inf : classes.res}>{valueOf(p, inf)}</span>
             </UnstyledButton>
           ))}

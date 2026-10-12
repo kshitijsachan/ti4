@@ -38,7 +38,13 @@ export function useEngineLink(gameName: string) {
         if (v.game === gameName && v.status === "connecting") engineStore.getState().apply({ t: "engine", type: "unavailable", game: gameName });
       }, SUBSCRIBE_TIMEOUT_MS);
     };
-    const offFrames = conn.onEngineFrame((frame) => engineStore.getState().apply(frame));
+    const offFrames = conn.onEngineFrame((frame) => {
+      /* A reaction window's decision is re-issued whenever someone else answers it: an answer sent against the
+         previous revision comes back "stale". Re-send it once against the current one if the option is still there. */
+      if (frame.type === "answer" && !frame.result.ok && frame.result.status === "stale" && frame.nonce && retryStale(conn, frame.nonce)) return;
+      if (frame.type === "answer" && frame.nonce) sent.delete(frame.nonce);
+      engineStore.getState().apply(frame);
+    });
     const offHello = conn.onHelloFrame(subscribe);
     const retry = window.setInterval(() => {
       const v = engineStore.getState().view;
@@ -103,8 +109,36 @@ export function useEngineAnswer() {
     });
     if (!nonce) return store.answerFailed(decision.id, "", "Not connected to the game server — reconnecting.");
     store.answerStarted(decision.id, nonce, key);
+    sent.set(nonce, { decisionId: decision.id, answer: a, retried: false });
     window.setTimeout(() => engineStore.getState().answerFailed(decision.id, nonce, "No response from the game server."), ANSWER_TIMEOUT_MS);
   };
+}
+
+type Sent = { decisionId: string; answer: AnswerPayload; retried: boolean };
+/** Answers in flight from this page, by nonce (for the one stale retry). */
+const sent = new Map<string, Sent>();
+
+function retryStale(conn: ReturnType<typeof usePlayConnection>, nonce: string): boolean {
+  const req = sent.get(nonce);
+  sent.delete(nonce);
+  if (!req || req.retried) return false;
+  const view = engineStore.getState().view;
+  const fresh = view.decisions[req.decisionId];
+  const a = req.answer;
+  if (!fresh || (a.optionId && !fresh.options.some((o) => o.id === a.optionId && !o.disabled))) return false;
+  const again = conn.send({
+    op: "answer",
+    game: fresh.game,
+    decisionId: fresh.id,
+    ...a,
+    expectedSeq: fresh.seq,
+    requestId: `${fresh.id}:${fresh.revision ?? fresh.seq}:${a.action ?? a.optionId ?? "payload"}:${hashOf(a)}:retry`,
+  });
+  if (!again) return false;
+  engineStore.getState().answerStarted(fresh.id, again, a.action ?? a.optionId ?? "payload");
+  sent.set(again, { ...req, retried: true });
+  window.setTimeout(() => engineStore.getState().answerFailed(fresh.id, again, "No response from the game server."), ANSWER_TIMEOUT_MS);
+  return true;
 }
 
 /** Short stable hash of a structured answer, so a retry is idempotent but a different ballot is a new request. */

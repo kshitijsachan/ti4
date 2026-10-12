@@ -72,6 +72,7 @@ const SETTING_TITLE: Record<string, string> = {
   expansion: "Which expansion is this game using?",
   base_game: "Base game",
   game_modes: "Alternate game modes",
+  game_options: "Display options",
   draft_start: "Start the draft",
   draft_settings: "Draft settings",
 };

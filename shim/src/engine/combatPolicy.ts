@@ -6,18 +6,18 @@
  * to roll, from the round trackers), never ahead of its opponent and never while it still owes hits; barrage and
  * space cannon once per prompt; it never bombards, retreats or cancels hits.
  */
-import type { CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
+import type { CombatUnitPickValue, CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
 import type { Decision, GameState, Option } from "./types.js";
 import { chooseCombatAutomate, chooseCombatModifier } from "./policy/units.js";
 
-export type CombatChoice = { option: Option<any>; why: string };
+export type CombatChoice = { option: Option<any>; why: string; act?: { action: string; body: Record<string, unknown> } };
 
 const isCombat = (d: Decision): d is CombatDecision => d.kind.startsWith("combat.");
 
 /** Dummy / NPC seats' copies of a button act as that seat (dummyPlayerSpoof<faction>_): never ours. */
 const forDummy = (o: Option<any>) => o.id.includes("dummyPlayerSpoof");
 
-export function chooseCombat(d: Decision, state: GameState | null, me: string, open: Decision[] = []): CombatChoice | null {
+export function chooseCombat(d: Decision, state: GameState | null, me: string, open: Decision[] = [], history: string[] = []): CombatChoice | null {
   if (!isCombat(d)) return null;
   switch (d.kind) {
     case "combat.round":
@@ -27,7 +27,7 @@ export function chooseCombat(d: Decision, state: GameState | null, me: string, o
     case "combat.assign_units":
       // pickUnit only where hits are owed (progress): a removal list without progress that is over the limits is the
       // unit-limit desk's; pickUnit's "nothing owed: Done" there closed it before any removal (pbd114 loop).
-      return finishMenu(d, me) ?? closeRemovalList(d, state, me) ?? (d.progress ? pickUnit(d, me) : null);
+      return finishMenu(d, me) ?? closeRemovalList(d, state, me) ?? (d.progress ? pickUnit(d, me) : bombardmentMenu(d, me, open, history));
     case "combat.bombard":
       return bombardDone(d, me);
     case "combat.retreat":
@@ -106,8 +106,95 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
 function autoAssign(d: CombatHits, me: string): CombatChoice | null {
   if (d.scope !== "player" || d.target?.userId !== me) return null;
   const auto = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "auto");
-  if (!auto || auto.value?.action !== "auto" || auto.value.hits <= 0) return null;
+  if (!auto) return bombardmentPlan(d);
+  if (auto.value?.action !== "auto") return null;
+  // Shields Holding cancelled some of the prompt's hits: the engine refuses "auto" (it would assign all of them); take
+  // the cancels off with "Cancel a Hit" (each press re-posts the prompt one hit lower), as a person would.
+  if ((auto.value.cancelled ?? 0) > 0) {
+    const cancel = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "cancel" && o.value.hits > 0);
+    return cancel ? { option: cancel, why: `combat: Shields Holding cancelled ${auto.value.cancelled} hit(s); cancel a hit` } : null;
+  }
+  if (auto.value.hits <= 0) return null;
   return { option: auto, why: `combat: auto-assign ${auto.value.hits} ${auto.value.source} hit(s) owed` };
+}
+
+/**
+ * BOMBARDMENT hits (no auto option: the manual option carries hits, planet and units): one combat plan. Mechs (or any
+ * unit that can) sustain first, each sustain cancelling `sustainCancels` hits; then the cheapest units are destroyed,
+ * already damaged ones first. Unknown hits: left alone.
+ */
+export function bombardmentPlan(d: CombatHits): CombatChoice | null {
+  const manual = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "assign_manual" && o.value.assignType === "bombardment");
+  const v = manual?.value;
+  if (!manual || !v || v.action !== "assign_manual" || typeof v.hits !== "number" || v.hits <= 0 || !v.units?.length) return null;
+  const cancels = v.sustainCancels ?? 1;
+  let left = v.hits;
+  const plan: { holder: string; unit: string; damaged: boolean; action: "sustain" | "destroy"; count: number }[] = [];
+  const sustained = new Map<string, number>();
+  for (const u of v.units) {
+    const fresh = u.count - u.damaged;
+    if (!u.sustain || fresh <= 0 || left <= 0) continue;
+    const n = Math.min(fresh, Math.ceil(left / cancels));
+    plan.push({ holder: u.holder, unit: u.unit, damaged: false, action: "sustain", count: n });
+    sustained.set(`${u.holder}/${u.unit}`, n);
+    left -= n * cancels;
+  }
+  const byCost = [...v.units].sort((a, b) => cost(a.unit) - cost(b.unit));
+  for (const u of byCost) {
+    if (left <= 0) break;
+    const damaged = Math.min(u.damaged, left);
+    if (damaged > 0) {
+      plan.push({ holder: u.holder, unit: u.unit, damaged: true, action: "destroy", count: damaged });
+      left -= damaged;
+    }
+    const fresh = u.count - u.damaged - (sustained.get(`${u.holder}/${u.unit}`) ?? 0);
+    const n = Math.min(Math.max(0, fresh), left);
+    if (n > 0) {
+      plan.push({ holder: u.holder, unit: u.unit, damaged: false, action: "destroy", count: n });
+      left -= n;
+    }
+  }
+  const text = plan.map((e) => `${e.action} ${e.count} ${e.unit}${e.damaged ? " (damaged)" : ""}`).join(", ");
+  return { option: manual, act: { action: "combat-plan", body: { plan } }, why: `bombardment: ${v.hits} hit(s) on ${v.holder ?? "the planet"}: ${text || "nothing left to hit"}` };
+}
+
+/**
+ * The per-unit menu opened from a BOMBARDMENT hits prompt carries no progress (hits unknown to the menu): live pbd60 /
+ * pbd161, the fallback closed it with "Done" without removing anything and the opener asked again every minute.
+ * While the hits prompt (combat.hits with the hits owed) is open for us, its combat plan assigns them: hold. Without
+ * it, walk the plan for the hits we know (else 1: an opener is only posted for at least one hit), one unit per press
+ * (presses so far = our answers on this menu), then Done.
+ */
+function bombardmentMenu(d: CombatAssignUnits, me: string, open: Decision[], history: string[]): CombatChoice | null {
+  if (d.target?.userId !== me || d.progress) return null;
+  const opts = d.options.filter((o) => !o.disabled && !forDummy(o) && o.value);
+  const done = opts.find((o) => o.value!.action === "done");
+  if (!done || done.value!.assignType !== "bombardment") return null;
+  const tile = opts.map((o) => (o.value && "tile" in o.value ? o.value.tile : null)).find((t): t is string => !!t);
+  const hitsPrompt = open.find(
+    (x): x is CombatHits =>
+      x.kind === "combat.hits" &&
+      x.target?.userId === me &&
+      (x as CombatHits).options.some((o) => o.value?.action === "assign_manual" && o.value.assignType === "bombardment" && o.value.tile === tile && typeof o.value.hits === "number"),
+  );
+  if (hitsPrompt && !history.length) return null;
+  const units = opts.filter((o) => o.value!.action === "sustain" || o.value!.action === "destroy") as Option<Extract<CombatUnitPickValue, { unit: string }>>[];
+  const manual = hitsPrompt?.options.find((o) => o.value?.action === "assign_manual")?.value as { hits?: number; sustainCancels?: 1 | 2 } | undefined;
+  const hits = manual?.hits ?? 1;
+  const cancels = manual?.sustainCancels ?? 1;
+  // Our presses so far on this menu: sustains cancel `cancels` hits each, removals one.
+  const pressed = history.map((id) => opts.find((o) => o.id === id)?.value).filter((v): v is Extract<CombatUnitPickValue, { unit: string }> => !!v && "unit" in v);
+  const assigned = pressed.reduce((n, v) => n + (v.action === "sustain" ? cancels : 1) * v.count, 0);
+  if (assigned < hits) {
+    const ground = units.filter((o) => o.value!.unit === "gf" || o.value!.unit === "mf");
+    const sustain = ground.find((o) => o.value!.action === "sustain" && !o.value!.damaged && !history.includes(o.id));
+    const destroy = ground
+      .filter((o) => o.value!.action === "destroy" && o.value!.count === 1)
+      .sort((a, b) => Number(b.value!.damaged) - Number(a.value!.damaged) || cost(a.value!.unit) - cost(b.value!.unit))[0];
+    const pick = sustain ?? destroy;
+    if (pick) return { option: pick, why: `bombardment: ${pick.value!.action} ${pick.value!.unit} on ${pick.value!.holder} (${assigned + 1}/${hits} hit(s)${manual ? "" : ", count unknown"})` };
+  }
+  return { option: done, why: `bombardment: ${assigned} hit(s) assigned; done` };
 }
 
 /** A manual menu addressed to us (only if someone opened it): close it once the engine says the hits are assigned. */

@@ -25,6 +25,10 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import LandingPage from "./pages/LandingPage";
 import { isMobileDevice } from "./utils/isTouchDevice";
+import { engineOverride } from "./engine/flag";
+
+/* Remember a ?engine=1 / ?engine=0 now, before a redirect (/ → /play) drops it from the address bar. */
+engineOverride();
 
 const queryClient = new QueryClient();
 

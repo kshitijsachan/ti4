@@ -32,10 +32,30 @@ export type ChooseSystem = DecisionBase<
     /** Tile id from the tile data (Star Charts: a tile still to be placed). */
     tileId?: TileId;
     tileName?: string | null;
+    /** source "remove_cc" (remove one of your command tokens): what it is for ("ministerOfWar", "unexpected", ...). */
+    choice?: string;
+    /** remove_cc: the command token's owner. */
+    faction?: FactionId;
   }
 >;
 
-export type ChoosePlayer = DecisionBase<"choose.player", ChooseBase & { faction: FactionId; color?: string | null }>;
+export type ChoosePlayer = DecisionBase<
+  "choose.player",
+  ChooseBase & {
+    faction: FactionId;
+    color?: string | null;
+    /**
+     * checks_and_balances: the strategy card the chosen player gets. imperialarbiter (a direct swap): the chosen
+     * player's card, swapped for ours (strategyCard2); absent on the "pick the player first" option.
+     */
+    strategyCard?: number | null;
+    strategyCard2?: number | null;
+    /** colonial_redistribution: the planet the chosen player gets 1 infantry on. */
+    planet?: PlanetId;
+    planetName?: string;
+    tile?: TilePosition | null;
+  }
+>;
 
 export type ChooseUnit = DecisionBase<
   "choose.unit",
@@ -49,6 +69,8 @@ export type ChooseUnit = DecisionBase<
     /** remove_unit_type: the units' owner color; destroy: "destroy" when the removal destroys. */
     color?: string;
     destroy?: string;
+    /** cavalry: "damaged" when the chosen copy is damaged. */
+    damaged?: string;
   }
 >;
 
@@ -68,12 +90,22 @@ export type ChooseCard = DecisionBase<
     faction2?: FactionId;
     choice?: string;
     step?: number;
+    /** return_play_area_pn (cardType "promissory_note"): the note's name; faction = its owner. */
+    cardName?: string;
   }
 >;
 
 export type ChooseConfirm = DecisionBase<
   "choose.confirm",
-  ChooseBase & { confirm: boolean; choice?: string }
+  ChooseBase & {
+    confirm: boolean;
+    choice?: string;
+    /** mahactagent / scepter_of_emelpar / cognitive_parallax_engine: the played card followed without a token. */
+    strategyCard?: number;
+    /** pay_debt (choice comm | tg | debt): the creditor and how many. */
+    faction?: FactionId;
+    amount?: number;
+  }
 >;
 
 export type ChooseDecision =

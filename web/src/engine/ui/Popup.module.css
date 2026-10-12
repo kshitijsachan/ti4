@@ -382,11 +382,31 @@
   border-color: rgba(var(--play-yellow), 0.85);
 }
 
+.unhidePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
+  background: var(--details-card-bg, #0b1020);
+  color: var(--play-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.unhidePill:hover {
+  color: var(--play-ink-bright);
+}
+
 .offerList {
   display: flex;
   flex-direction: column;
   min-width: 220px;
   max-width: 340px;
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 4px;
   border-radius: 8px;
   border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
@@ -395,6 +415,7 @@
 }
 
 .offerItem {
+  flex-shrink: 0;
   padding: 7px 10px;
   border-radius: 5px;
   color: var(--play-ink);
@@ -432,6 +453,9 @@
   flex-direction: column;
   min-width: 240px;
   max-width: 320px;
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 4px;
   border-radius: 8px;
   border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
@@ -440,6 +464,7 @@
 }
 
 .queueItem {
+  flex-shrink: 0;
   padding: 6px 9px;
   border-radius: 5px;
   color: var(--play-ink);
@@ -474,4 +499,33 @@
 .peekBtn:hover {
   background: var(--play-hover-strong);
   color: var(--play-ink-bright);
+}
+
+.stalled {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 360px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: var(--details-card-border, 1px solid rgba(148, 163, 184, 0.22));
+  background: var(--details-card-bg, #0b1020);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--play-ink);
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.spin {
+  flex-shrink: 0;
+  animation: engineSpin 1.2s linear infinite;
+}
+
+@keyframes engineSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }

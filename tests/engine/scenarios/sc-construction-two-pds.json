@@ -1,0 +1,47 @@
+{
+ "name": "sc-construction-two-pds",
+ "description": "Walk pbd158 regression: the Construction holder places a PDS, then presses construction_pds again for the second structure; the second press must open a strategy_card.construction_place prompt and the window's primaryDone must list both structures. Fails on bot 540542c (primaryDone lost: the handler saved its own copy of the game); passes with walk-fixes (EngineBookkeeping).",
+ "base": {
+  "recording": "pbd105",
+  "index": 152
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^construction_pds$"
+   },
+   "as": "naalu"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.construction_place",
+    "option": "place_pds_"
+   },
+   "as": "naalu"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^construction_pds$"
+   },
+   "as": "naalu"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.construction_place",
+    "option": "place_pds_"
+   },
+   "as": "naalu"
+  }
+ ],
+ "expect": {
+  "invariants": true,
+  "save": [
+   {
+    "key": "stored.scPrimaryDone4",
+    "eq": "structure,structure"
+   }
+  ]
+ }
+}

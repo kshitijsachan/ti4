@@ -30,8 +30,15 @@ export function subscribeView(view: EngineView, game: string): EngineView {
   return { ...EMPTY_VIEW, game, status: "connecting" };
 }
 
+/** The table's neutral seat (Dicecord, faction "neutral") holds neutral units only: it is not a player anywhere in the UI. */
+export function withoutNeutral(state: GameState): GameState {
+  if (!state.players.some((p) => p.faction === "neutral")) return state;
+  return { ...state, players: state.players.filter((p) => p.faction !== "neutral") };
+}
+
 /** A state snapshot replaces ours unless it is older (fetched before one we already hold). */
-function newerState(cur: GameState | null, next: GameState): GameState {
+function newerState(cur: GameState | null, incoming: GameState): GameState {
+  const next = withoutNeutral(incoming);
   if (!cur || cur.game !== next.game) return next;
   if (next.seq >= cur.seq || next.stateVersion > cur.stateVersion) return next;
   return cur;
@@ -80,7 +87,7 @@ export function reduce(view: EngineView, frame: EngineFrame): EngineView {
         ...view,
         status: "live",
         seq: frame.seq,
-        state: frame.state,
+        state: withoutNeutral(frame.state),
         decisions: Object.fromEntries(frame.decisions.map((d) => [d.id, d])),
       });
     case "events":

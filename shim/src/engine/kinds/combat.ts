@@ -47,6 +47,13 @@ export type CombatHitsValue =
       units: HittableUnit[];
       /** Hits one SUSTAIN DAMAGE cancels (2 with Non-Euclidean Shielding). */
       sustainCancels: 1 | 2;
+      /**
+       * Set once Shields Holding cancelled hits after the prompt was posted (re-read on every state change): hits is
+       * then what is left, promptHits what the buttons ask for. The engine refuses this option then — answer with a
+       * combat plan for `hits`, or "Cancel a Hit".
+       */
+      cancelled?: number;
+      promptHits?: number;
     }
   | { action: "cancel"; tile: TilePosition; holder: HolderName; source: HitSource; hits: number }
   | {

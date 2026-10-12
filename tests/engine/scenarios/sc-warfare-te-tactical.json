@@ -1,0 +1,38 @@
+{
+  "name": "sc-warfare-te-tactical",
+  "description": "Thunder's Edge Warfare primary by Mahact (pbd28 r1): the primary posts the Redistribute / Perform Tactical Action offer (choose.confirm source warfare); Mahact redistributes (fleet -> tactic on the command_tokens.adjust panel, then Done Redistributing), then starts the Warfare tactical action, which opens tactical.activate. Kind regexes also accept legacy so the scenario runs on a bot without the warfare rules.",
+  "base": {
+    "recording": "pbd28",
+    "index": 78
+  },
+  "steps": [
+    {
+      "answer": { "kind": "strategy_card.resolve", "option": "^primaryOfTeWarfare$" },
+      "as": "mahact"
+    },
+    {
+      "answer": { "kind": "/^(choose\\.confirm|legacy)$/", "option": "redistributeCCButtons" },
+      "as": "mahact"
+    },
+    {
+      "answer": { "kind": "command_tokens.adjust", "option": "decrease_fleet_cc" },
+      "as": "mahact"
+    },
+    {
+      "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc" },
+      "as": "mahact"
+    },
+    {
+      "answer": { "kind": "command_tokens.adjust", "option": "deleteButtons" },
+      "as": "mahact"
+    },
+    {
+      "answer": { "kind": "/^(choose\\.confirm|legacy)$/", "option": "beginTacticalTeWarfare" },
+      "as": "mahact"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": { "kind": "tactical.activate", "as": "mahact", "open": true }
+  }
+}

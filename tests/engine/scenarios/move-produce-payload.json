@@ -34,13 +34,25 @@
           "press": "FFCC_ralnel_place_carrier_307"
         },
         {
+          "wait": 1500
+        },
+        {
           "press": "FFCC_ralnel_place_2gf_mez"
+        },
+        {
+          "wait": 1500
         },
         {
           "press": "FFCC_ralnel_place_infantry_mez"
         },
         {
+          "wait": 1500
+        },
+        {
           "press": "FFCC_ralnel_place_destroyer_307"
+        },
+        {
+          "wait": 1500
         },
         {
           "press": "FFCC_ralnel_deleteButtons_tacticalAction_307"
@@ -50,10 +62,11 @@
   ],
   "expect": {
     "invariants": true,
-    "decision": {
-      "kind": "payment.spend",
-      "as": "ralnel",
-      "open": true
-    }
+    "save": [
+      {
+        "key": "player[ralnel].produced_units",
+        "match": "dd_307_space,1"
+      }
+    ]
   }
 }

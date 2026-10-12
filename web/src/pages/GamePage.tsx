@@ -10,7 +10,7 @@ import { findGame } from "@/play/games";
 import { useAttention } from "@/play/attention";
 import { useTurn, useTurnAlerts } from "@/play/turn";
 import { GameScreen } from "@/board/GameScreen";
-import { engineTurn, useEngineState, useMyQueue } from "@/engine";
+import { engineTurn, useEngineDraftPick, useEngineMode, useEngineState, useMyQueue } from "@/engine";
 import { SetupScreen } from "@/board/SetupScreen";
 import classes from "./GamePage.module.css";
 
@@ -69,6 +69,8 @@ function useDraftStatus(gameName: string, hasBoard: boolean) {
 function Draft({ gameName }: { gameName: string }) {
   const me = usePlay((s) => s.me);
   const press = usePressButton();
+  const engineMode = useEngineMode(gameName);
+  const engineDraftPick = useEngineDraftPick();
   const actionsId = usePlay((s) => findGame(s.channels, gameName)?.actions.id);
   const lastAction = usePlay((s) =>
     actionsId
@@ -86,7 +88,9 @@ function Draft({ gameName }: { gameName: string }) {
         botBase="/bot"
         refreshSignal={lastAction}
         onPick={(customId, channelId, messageId) =>
-          press(channelId, messageId, customId)
+          engineMode === "engine"
+            ? engineDraftPick(customId)
+            : press(channelId, messageId, customId)
         }
       />
     </div>

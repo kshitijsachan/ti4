@@ -23,6 +23,7 @@ for i in $(seq 1 60); do
 done
 
 start=$(date +%H:%M:%S)
+startLine=$(wc -l < "$log")  # by line, not time: the log spans midnight
 commit=${BUILT:-$(git -C "$here" rev-parse --short HEAD)}  # the commit the prod build was made from
 node "$here/setup-flow.mjs" "$base" "$token" "$out" "$tag"
 rc=$?
@@ -32,6 +33,6 @@ if [ $rc = 0 ]; then
   exit 0
 fi
 echo "[regress] FAIL rc=$rc at $commit — bot exceptions since $start:"
-awk -v s="$start" '$1 >= s && /\[bot-log\]/ && /(Exception|ERROR|Error:)/' "$log" | grep -v http-errors | tail -15 | cut -c1-300
+tail -n +"$((startLine + 1))" "$log" | awk '/\[bot-log\]/ && /(Exception|ERROR|Error:)/' | grep -v http-errors | tail -15 | cut -c1-300
 grep -nE "Exception|^\s+at ti4\." /home/user/run/bot.log | tail -15 | cut -c1-300
 exit $rc

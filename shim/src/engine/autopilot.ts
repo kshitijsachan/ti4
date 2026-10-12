@@ -31,8 +31,11 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
  * command tokens). option may accompany a payload (it names the option the payload belongs to, for logs).
  */
 export type TypedChoice =
-  | { option: Option<any>; payload?: Record<string, unknown>; why: string }
-  | { option?: undefined; payload: Record<string, unknown>; why: string };
+  | { option: Option<any>; payload?: Record<string, unknown>; act?: TypedAct; why: string }
+  | { option?: undefined; payload: Record<string, unknown>; act?: undefined; why: string };
+
+/** A kind's direct action instead of an answer (POST …/decisions/{id}/{action}, e.g. "combat-plan"). */
+export type TypedAct = { action: string; body: Record<string, unknown> };
 
 /**
  * The bot's answer to a typed decision: the area's specific policy, else (for a decision that waits on this seat and
@@ -68,7 +71,7 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
 function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx): TypedChoice | null {
   const all = ctx.all;
   // Combat (G4): ctx.open = this seat's other open decisions (no next roll while hits are owed).
-  if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, ctx.open);
+  if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, ctx.open, ctx.history);
   // Affordances (ui.*: never answered), preferences (defaults) and select-only prompts (c12).
   const perpetual = choosePerpetual(d, state, me);
   if (perpetual !== undefined) return perpetual;
@@ -184,11 +187,17 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
 export const ENGINE_GRACE_MS = 90_000;
 /**
  * A message the engine has not (yet) captured as a decision: the bot posts it to the shim before the engine stream
- * carries its decision, and the autopilot looks at the table every ~1 s. Legacy paths leave such a message alone for
- * this long, so they never win the race against the typed decision (live: "Not Following", "Pass", the status
+ * carries its decision, and the autopilot looks at the table every ~1 s; a menu edited in place keeps its first
+ * snowflake. Legacy paths leave such a message alone for this long, so they never win the race against the typed decision (live: "Not Following", "Pass", the status
  * homework and scoring prompts were pressed by the rule table / planner moments before the engine answered them).
  */
-export const ENGINE_SETTLE_MS = 15_000;
+export const ENGINE_SETTLE_MS = 45_000;
+/**
+ * Kinds that ask the table through a window: once the window is gone (everyone answered, the step moved on) a
+ * decision still listed is a leftover the game does not wait on (live pbd184 03:20: the status homework's window
+ * closed and six bots pressed "Ready For Strategy Phase" / "Redistribute…" again through the rule table / planner).
+ */
+const WINDOW_KINDS = new Set(["status.score", "status.homework", "strategy_card.resolve", "action_card.sabotage"]);
 
 export type EngineOwnership = { owned: boolean; why: string };
 
@@ -223,13 +232,19 @@ export function engineOwnership(
   if (d.kind === "legacy") return { owned: false, why: "untyped" };
   if (d.window?.responded.includes(me)) return { owned: true, why: "answered already" };
   if (d.scope === "player" && !d.window && d.target?.userId !== me) return { owned: false, why: "another player's prompt" };
+  if (d.scope === "table" && !d.window && WINDOW_KINDS.has(d.kind)) return { owned: true, why: "its window is closed" };
   const age = now - d.createdAt;
   if (age >= ENGINE_GRACE_MS) return { owned: false, why: `typed, but still open after ${Math.round(age / 1000)}s` };
-  if (d.window && !awaits(d, me) && !answersOutsideWindow(d, me, state)) return { owned: true, why: "not asked in this window" };
+  const outside = !!d.window && !awaits(d, me);
+  if (outside && !answersOutsideWindow(d, me, state)) return { owned: true, why: "not asked in this window" };
   if (staleForBot(d, state, me)) return { owned: true, why: "stale for this seat" };
   const mine = open.filter((x) => x.id !== d.id && x.target?.userId === me);
   const pick = chooseTyped(d, state, me, { history: [], open: mine, all: open, waitedMs: age, force: true });
-  return pick ? { owned: true, why: pick.why } : { owned: false, why: "no engine answer" };
+  if (pick) return { owned: true, why: pick.why };
+  // The holder of a played strategy card with nothing left to resolve (live pbd158: the engine researched the
+  // Technology primary, then the planner pressed "Get a Technology" on the same card again).
+  if (outside) return { owned: true, why: "answered outside the window; nothing left" };
+  return { owned: false, why: "no engine answer" };
 }
 
 const DISCORD_EPOCH = 1420070400000;
