@@ -45,9 +45,11 @@ export function chooseSetup(d: Decision, state: GameState | null, me: string, hi
     case "draft.milty.pick":
       return draftPick(state, me, live);
     case "setup.keleres_flavor": {
-      // The preset during the draft is optional; the flavour prompt after the draft blocks our setup: answer it.
-      if (live.some((o) => o.value.preset)) return null;
-      const pick = live.find((o) => !o.value.contested) ?? live[0];
+      // The preset during the draft is optional but waited on by the watchdog: pre-select the first flavour nobody
+      // else holds (pbd175); once we play a flavour it is stale (fallback.staleForBot). After the draft the flavour
+      // prompt blocks our setup: answer it.
+      const pick = live.find((o) => !o.value.contested) ?? (live.some((o) => o.value.preset) ? undefined : live[0]);
+      if (!pick) return null;
       return { option: pick, why: `setup: Keleres flavour ${pick.value.flavor}` };
     }
     case "setup.keleres_tech": {

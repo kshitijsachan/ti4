@@ -873,7 +873,13 @@ class SeatPilot {
         ? ours.find((c) => /^deleteButtons/i.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) && LAST_RESORT_LABEL.test(c.label.trim()) && !this.pressed.has(`${m.id}:${c.custom_id}`))
         : undefined;
       if (decline && (this.pressCount.get(`${m.id}:${decline.custom_id}`) ?? 0) < MAX_SAME_PRESS && !(await this.mgr.engineOwns(game, m.id, me))) {
-        log.warn(`autopilot ${this.name}: last resort in #${ch.name}: nothing else we may press on "${content.slice(0, 60).replace(/\s+/g, " ")}"; pressing "${decline.label}"`);
+        // Once per prompt: it is only a candidate (a pass ranks every prompt; live pbd114 after the 01:27 restart logged
+        // 29 copies of one stale removal list in 2 s, while the bot was still starting up and nothing was pressed).
+        if (!this.lastResortLogged.has(m.id)) {
+          this.lastResortLogged.add(m.id);
+          if (this.lastResortLogged.size > 2000) this.lastResortLogged.clear();
+          log.warn(`autopilot ${this.name}: last resort in #${ch.name}: nothing else we may press on "${content.slice(0, 60).replace(/\s+/g, " ")}"; pressing "${decline.label}"`);
+        }
         return { msg: m, control: decline, score: 20, why: "last resort: decline / done" };
       }
       // Say so (once) when a prompt that is certainly ours offers nothing we may press: a likely stall.
@@ -1383,6 +1389,8 @@ class SeatPilot {
 
   /** Engine answers already sent (decision id | option id): each is tried once; afterwards the heuristics take over. */
   private engineTried = new Set<string>();
+  /** Prompts whose "last resort" candidate was logged (once each). */
+  private lastResortLogged = new Set<string>();
   /** Answers this seat sent per decision id (capped at ENGINE_MAX_ANSWERS). */
   private engineAttempts = new Map<string, number>();
   /** Per decision id: the options this seat answered successfully (in order) and the revision of the last one. */
