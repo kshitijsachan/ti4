@@ -452,10 +452,16 @@ export class CardPlanner {
       // policies; the legacy jobs below only take a prompt the engine path does not own (engine off or unreachable,
       // untyped, or left alone past the grace period) — never both.
       if (await this.seat.engineOwns?.(game, String(p.m.id))) continue;
-      if (await this.primary(game, faction, p)) return true;
-      if (await this.follow(game, faction, p)) return true;
-      if (await this.scoring(game, faction, p)) return true;
-      if (await this.statusTokens(game, p)) return true;
+      // Engine live: strategy card primaries / follows, status scoring and token gain are typed kinds with their own
+      // policies (strategyPolicy.ts, policy/status.ts); these button jobs are the engine-off fallback only (live
+      // 06:06–07:06: "Get a Technology" / "Replenish Commodities" / "Spend & Gain" re-pressed on cards the engine had
+      // already resolved, whose decisions had closed).
+      if (!this.seat.engineLive?.()) {
+        if (await this.primary(game, faction, p)) return true;
+        if (await this.follow(game, faction, p)) return true;
+        if (await this.scoring(game, faction, p)) return true;
+        if (await this.statusTokens(game, p)) return true;
+      }
       if (await this.vote(game, faction, p)) return true;
     }
     return false;

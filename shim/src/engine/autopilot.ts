@@ -186,13 +186,6 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
 /** How long a typed decision the engine can answer belongs to the engine path before the legacy rules may help. */
 export const ENGINE_GRACE_MS = 90_000;
 /**
- * A message the engine has not (yet) captured as a decision: the bot posts it to the shim before the engine stream
- * carries its decision, and the autopilot looks at the table every ~1 s; a menu edited in place keeps its first
- * snowflake. Legacy paths leave such a message alone for this long, so they never win the race against the typed decision (live: "Not Following", "Pass", the status
- * homework and scoring prompts were pressed by the rule table / planner moments before the engine answered them).
- */
-export const ENGINE_SETTLE_MS = 45_000;
-/**
  * Kinds that ask the table through a window: once the window is gone (everyone answered, the step moved on) a
  * decision still listed is a leftover the game does not wait on (live pbd184 03:20: the status homework's window
  * closed and six bots pressed "Ready For Strategy Phase" / "Redistribute…" again through the rule table / planner).
@@ -203,19 +196,24 @@ export type EngineOwnership = { owned: boolean; why: string };
 
 /**
  * Whether the typed engine path owns a message for `me`, so the legacy rules / planner jobs / last resort must not
- * press it (pure; Autopilot.engineOwns feeds it the live mirror). Only meaningful while the engine stream is live —
- * the caller answers false when it is not, so with the engine off the legacy paths play exactly as before.
+ * press it (pure; Autopilot.engineOwns feeds it the live mirror). Only meaningful while the engine stream is live and
+ * the game's decisions are readable — the caller answers false otherwise, so with the engine off (or down, or
+ * restarting) the legacy paths play exactly as before.
  *
- * - no decision for the message: owned while the message is younger than ENGINE_SETTLE_MS (its decision may not have
- *   reached the mirror yet), then free (untyped prompt, or a decision already closed);
+ * - no open decision for the message: owned. The bot captures every message with buttons (untyped ones as
+ *   "legacy"), so a message without one is either still on its way to the mirror or closed — answered, superseded,
+ *   its window over — and its buttons are leftovers the game does not wait on (live 06:06–07:06: "Not Following" on
+ *   an old card in the status phase, "Get a Technology" on a card whose primary the engine had resolved, "Pass" on a
+ *   left-over pass menu);
  * - "legacy" (untyped): free;
- * - a window `me` already answered: owned — there is nothing left for this seat to press, and a legacy press would
- *   answer twice (live: "Not Following", "Ready For Strategy Phase", "No Public Objective Scored" pressed again);
- * - another player's prompt: free (the legacy paths have their own owner checks);
- * - for ENGINE_GRACE_MS from its creation: a window `me` is not asked in (and does not answer outside it) is owned
- *   (nobody waits on us); otherwise owned while the engine has an answer for it — the specific policy, or the last-resort fallback the
- *   watchdog forces (a policy that holds its answer on purpose, e.g. the turn planner's grace, still owns it); free
- *   when no engine answer exists at all (optional offers). After the grace: free (the engine path failed to move it).
+ * - ui.* (undo / optional / info affordances): owned — bots never press them (live: "Edit Summaries" as the rule
+ *   table's "only option");
+ * - a window `me` already answered, or a window kind whose window is closed: owned (a legacy press answers twice);
+ * - for ENGINE_GRACE_MS from its creation: another player's prompt (the engine says whose it is: e.g. the speaker's
+ *   "Reveal Stage 1") and a window `me` is not asked in are owned; otherwise owned while the engine has an answer for
+ *   it — the specific policy, or the last-resort fallback the watchdog forces (a policy that holds its answer on
+ *   purpose still owns it); free when no engine answer exists at all (optional offers). After the grace: free (the
+ *   engine path failed to move it; the legacy rules may help).
  */
 export function engineOwnership(
   d: Decision | undefined,
@@ -225,16 +223,15 @@ export function engineOwnership(
   open: Decision[],
   now: number,
 ): EngineOwnership {
-  if (!d) {
-    const age = now - snowflakeMs(messageId);
-    return age < ENGINE_SETTLE_MS ? { owned: true, why: `not captured yet (${Math.round(age / 1000)}s old)` } : { owned: false, why: "no typed decision" };
-  }
+  void messageId;
+  if (!d) return { owned: true, why: "no open decision (not captured yet, or closed)" };
   if (d.kind === "legacy") return { owned: false, why: "untyped" };
+  if (d.kind.startsWith("ui.")) return { owned: true, why: "an affordance bots never press" };
   if (d.window?.responded.includes(me)) return { owned: true, why: "answered already" };
-  if (d.scope === "player" && !d.window && d.target?.userId !== me) return { owned: false, why: "another player's prompt" };
   if (d.scope === "table" && !d.window && WINDOW_KINDS.has(d.kind)) return { owned: true, why: "its window is closed" };
   const age = now - d.createdAt;
   if (age >= ENGINE_GRACE_MS) return { owned: false, why: `typed, but still open after ${Math.round(age / 1000)}s` };
+  if (d.scope === "player" && !d.window && d.target?.userId !== me) return { owned: true, why: "another player's prompt" };
   const outside = !!d.window && !awaits(d, me);
   if (outside && !answersOutsideWindow(d, me, state)) return { owned: true, why: "not asked in this window" };
   if (staleForBot(d, state, me)) return { owned: true, why: "stale for this seat" };
@@ -247,11 +244,3 @@ export function engineOwnership(
   return { owned: false, why: "no engine answer" };
 }
 
-const DISCORD_EPOCH = 1420070400000;
-function snowflakeMs(id: string): number {
-  try {
-    return Number(BigInt(id) >> 22n) + DISCORD_EPOCH;
-  } catch {
-    return 0;
-  }
-}

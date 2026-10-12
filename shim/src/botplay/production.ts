@@ -106,6 +106,16 @@ export async function payStep(
   pressed: Map<string, string>,
   costOverride?: number,
 ): Promise<"pressed" | "done" | "wait"> {
+  // Typed engine path: the whole bill in one answer (the engine's payment policy plans it); a custom target
+  // (costOverride: Leadership's optional influence, a scoring bill) stays with the buttons.
+  if (costOverride === undefined && seat.enginePay && !pressed.has(`engine-paid:${bill.m.id}`)) {
+    const typed = await seat.enginePay(board.game, String(bill.m.id));
+    if (typed === undefined) {
+      pressed.set(`engine-paid:${bill.m.id}`, "1");
+      return "done";
+    }
+    if (typeof typed === "string") seat.log(`engine refused the payment (${typed}); paying with buttons instead`);
+  }
   const content = String(bill.m.content ?? "");
   // The bot edits the bill as planets are spent ("… preceding build cost 4 resources"): remember the first reading.
   const costKey = `cost:${bill.m.id}`;
