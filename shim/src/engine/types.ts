@@ -539,6 +539,7 @@ export type EngineEvent =
    * The game was rolled back (UNDO button, /game undo, web undo / rewind) to the state saved at `stateVersion`:
    * decisions asked after it are closed, the restored state's prompts re-open (often under their old ids, revision 1).
    * Clients drop what they remember about the game's decisions and re-read them (shim/src/engine/rewind.ts).
+   * reason "rewound" when it happens, then "restored" once the restored state's prompts are back (GameRewind).
    */
   | { seq: number; type: "game.rewound"; game: string; stateVersion: number; decision: null; reason: string };
 

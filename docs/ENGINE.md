@@ -267,18 +267,22 @@ prompt) override `classifies` so they never claim other areas' messages.
   undo and rewind, before the restored prompt is re-posted): every open decision whose message was **posted**
   (`createdAt` = message snowflake time, kept across edits) ≥ restored save + 1.5 s — the same rule as
   `UndoService.retirePrompts`.
-  Then (every roll-back): window answers the engine recorded after the restored save are forgotten
-  (`WindowResponses.forgetSince`), a **`game.rewound`** event (`stateVersion` = restored save time, `decision` null)
-  tells clients to drop what they remember about the game's decisions, and 4 s later `GameRewind` brings back the
-  restored state's prompts: open decisions are re-read against it, and every decision an **undone** action closed
-  (closed after the restored save, posted before it, not last pressed by the restored action itself — per-game close
-  journal in `DecisionRegistry`) is re-captured from its message, or its prompt is posted again when the message is
-  gone or lost its buttons (unless an identical prompt is open in that channel, e.g. the bot's own saved-buttons
-  re-post). Re-captured prompts keep their id (`d<message id>`) at revision 1. Live pbd252: rewinding while a bot
-  was mid tactical action left its move prompt deleted and the game waiting on that bot. Clients:
-  the shim's autopilots forget the game (`shim/src/engine/rewind.ts`: per-decision caps, presses, give-ups, plans —
-  an interrupted tactical action resumes from the restored step with the same goal), also on the bot's roll-back
-  notice ("Rolled back to save `N`…" / "⏪ …") when no event comes; browsers get the event and a fresh snapshot.
+  The boundary is the restored save + 1.5 s, or the first press after the save in that game when sooner (bots press
+  again within a second: live pbd273); undone prompts also lose their buttons. Then (every roll-back): window answers
+  the engine recorded after the boundary are forgotten (`WindowResponses.forgetSince`), a **`game.rewound`** event
+  (`stateVersion` = restored save time, `decision` null, reason `rewound`) tells clients to drop what they remember
+  about the game, and 3 s later `GameRewind` puts every prompt back **as it was at the restored save**, from the
+  registry's per-game prompt history (`DecisionRegistry.Version`: each open / changed / closed version, timestamped):
+  open decisions are re-read against the restored state; each message an undone action changed (posted before the
+  boundary, not last pressed by the restored action itself) is re-captured if it shows its step at the boundary,
+  else its buttons are removed and that step is posted again; prompts posted since the roll-back that repeat another
+  step of such a message (the saved-buttons re-post of an older step, a start-of-turn menu mid-action) are retired.
+  Then a second `game.rewound` with reason `restored`. Live pbd252 (move prompt gone, game stuck) and pbd273 (the
+  turn message's undone move step re-posted next to a fresh turn menu: two activations in one turn). Clients: the
+  shim's autopilots forget the game (`shim/src/engine/rewind.ts`: caps, presses, give-ups, plans) and leave it alone
+  until `restored` (≤ 12 s); an interrupted tactical action resumes from the restored step with the same goal, and no
+  new action starts while one of the seat's tactical steps is open. Fallback signal without the event: the bot's
+  roll-back notice ("Rolled back to save `N`…" / "⏪ …"). Browsers get the events and fresh snapshots.
 
 ### 3.6 Flags
 

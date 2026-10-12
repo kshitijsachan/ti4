@@ -11,7 +11,7 @@ import { TradeDesk } from "./botplay/trade.js";
 import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
 import { chooseTyped, ENGINE_GRACE_MS, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
-import { forgetGameKeys, isRollbackNotice, newRewind, type GameScope } from "./engine/rewind.js";
+import { forgetGameKeys, isRollbackNotice, newRewind, REWIND_SETTLE_MS, type GameScope } from "./engine/rewind.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { planPayment, productionPayload } from "./engine/policy/production.js";
@@ -380,14 +380,35 @@ export class Autopilot {
   }
 
   private lastRewind = new Map<string, { at: number; via: "event" | "notice" }>();
+  /** game -> until when the autopilots leave it alone after a roll-back (see rewound). */
+  private settling = new Map<string, number>();
+
+  /** The game was rolled back moments ago and its prompts are still being restored: nobody acts in it. */
+  isSettling(game: string): boolean {
+    const until = this.settling.get(game);
+    if (until === undefined) return false;
+    if (Date.now() < until) return true;
+    this.settling.delete(game);
+    return false;
+  }
 
   /**
    * A game was rolled back (engine/rewind.ts): every seat forgets what it remembers about the game's prompts and
    * decisions (answers sent, caps, give-ups, plans, watchdog clocks) and looks again at once. `via`: the engine's
    * game.rewound event, or the bot's roll-back notice (fallback for bots without the event / engine off).
    */
-  rewound(game: string, via: "event" | "notice") {
+  rewound(game: string, via: "event" | "notice", reason = "rewound") {
+    // The engine put the restored state's prompts back (GameRewind): play on.
+    if (reason === "restored") {
+      if (!this.settling.delete(game)) return;
+      log.info(`autopilot: ${game}: the restored prompts are in place; playing on`);
+      for (const pilot of this.pilots.values()) pilot.wake();
+      return;
+    }
     if (!newRewind(this.lastRewind, game, via)) return;
+    // Nobody acts in the game until its prompts are restored (old turn menus, re-posts of other steps would start a
+    // second action: live pbd273), at most REWIND_SETTLE_MS (bots without the "restored" event).
+    this.settling.set(game, Date.now() + REWIND_SETTLE_MS);
     this.states.delete(game);
     this.drafts.delete(game);
     this.webFactions.delete(game);
@@ -621,6 +642,11 @@ class SeatPilot {
     if (this.timer) clearTimeout(this.timer);
     this.conn.close();
     log.info(`autopilot ${this.name}: stopped`);
+  }
+
+  /** Look again soon (a game's restored prompts are in place). */
+  wake() {
+    this.schedule();
   }
 
   /** The game was rolled back (Autopilot.rewound): forget everything about it, then look again. */
@@ -1931,6 +1957,7 @@ class SeatPilot {
       if (!last || Date.now() - Date.parse(last.timestamp) > 3600000) continue;
       const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
       if (await this.mgr.ended(game)) continue;
+      if (this.mgr.isSettling(game)) continue;
       out.push(game);
     }
     return out;

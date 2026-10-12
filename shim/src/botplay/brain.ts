@@ -7,7 +7,7 @@ import { CardPlanner } from "./cards.js";
 import { ViolationDesk } from "./violations.js";
 import { EngineTactical, TACTICAL_KINDS } from "./tacticalEngine.js";
 import type { Decision } from "../engine/types.js";
-import { passOption } from "../engine/policy/turn.js";
+import { actionInFlight, passOption } from "../engine/policy/turn.js";
 import { forgetGameKeys, type GameScope } from "../engine/rewind.js";
 
 /** How long an unplanned tactical.activate waits before the planner adopts it (the policy that opened it moves on). */
@@ -93,7 +93,9 @@ export class Brain {
     if (decisions && this.engineTactical && (await this.engineRecover(game, decisions))) return true;
     if (decisions && this.engineTactical) {
       const menu = EngineTactical.turnMenu(decisions);
-      if (menu) return this.engineTurn(game, menu);
+      // Never a second action while one of ours is open (a roll-back can leave the restored step and a start-of-turn
+      // menu up together: live pbd273, two systems activated in one turn); engineRecover picks that action up.
+      if (menu && !actionInFlight(this.seat.userId, decisions)) return this.engineTurn(game, menu);
     }
     // The engine is reachable: turn menus and tactical steps are typed (turn.action, tactical.*) and run above
     // (engineTurn / engineRecover / the turn policy). The button path below is the engine-off fallback only (live
@@ -155,8 +157,9 @@ export class Brain {
   private async engineRecover(game: string, decisions: Decision[]): Promise<boolean> {
     const mine = decisions.filter((d) => d.target?.userId === this.seat.userId && TACTICAL_KINDS.has(d.kind));
     // A system to activate that no plan of ours asked for: a tactical action started outside the turn menu (Thunder's
-    // Edge Warfare's "Perform Tactical Action", answered by the components policy): plan it like a turn's action.
-    const activate = !EngineTactical.turnMenu(decisions) ? mine.find((d) => d.kind === "tactical.activate") : undefined;
+    // Edge Warfare's "Perform Tactical Action", answered by the components policy), or the restored step of an action
+    // a roll-back interrupted (the turn menu may be up too): plan it like a turn's action.
+    const activate = mine.find((d) => d.kind === "tactical.activate");
     const stray = activate ? [activate] : mine.filter((d) => d.kind !== "tactical.activate");
     const age = stray.length ? Date.now() - Math.max(...stray.map((d) => d.createdAt)) : 0;
     // A roll-back interrupted our action: its restored step is ours to pick up at once (with the same goal).
