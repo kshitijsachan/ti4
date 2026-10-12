@@ -880,6 +880,43 @@ check("pbd171: after the action, end the turn at once", () => {
   assert.equal(pick(f, at(f, { activePlayer: "someone else" }), 0), null);
 });
 
+// Strategy-card follows hold the turn (engine ScFollowGate, user report: "following things like Leadership doesn't
+// block"): the bot played Leadership and a human seat has not answered. The engine refuses end_turn (its value lists
+// waitingFor); the bot presses "End Turn When All Have Reacted" once, then waits (no refused End Turn, no watchdog
+// fallback); once the window closes (waitingFor empty) it ends the turn as before.
+check("sc follow window: a bot never ends its turn while its card waits on followers", () => {
+  const f = clone(LIVE.pbd171);
+  const wait = [{ strategyCard: 1, name: "Leadership", factions: ["sol"], userIds: ["human-1"] }];
+  const end = f.decision.options[0];
+  end.value = { action: "end_turn", abilities: false, waitingFor: wait };
+  const defer = {
+    ...clone(end),
+    id: "FFCC_firmament_endTurnWhenAllReactedTo_1",
+    label: "End Turn When All Have Reacted",
+    handler: "endTurnWhenAllReactedTo_1",
+    value: { action: "end_turn_when_followed", strategyCard: 1, waitingFor: wait },
+  };
+  f.decision.options.push(defer);
+  const me = owner(f);
+  const choose = (d: Decision, history: string[] = [], force = false) =>
+    chooseTyped(d, f.state, me, { ...ctx(d, force ? 600_000 : 0, force), history })?.option?.id ?? null;
+  assert.equal(choose(f.decision), defer.id, "defer the end while Leadership waits on a follower");
+  assert.equal(choose(f.decision, [defer.id]), null, "pressed once: wait");
+  // The button left the menu (upstream deletes it): nothing on the menu is ours to press; the watchdog stays out.
+  const held = clone(f.decision);
+  held.options = held.options.filter((o) => o.id !== defer.id);
+  assert.equal(staleForBot(held, f.state, me), true);
+  assert.equal(choose(held, [], true), null);
+  assert.equal(chooseFallback(held, f.state, me), null);
+  // The fallback never presses the refused end; with the defer option it presses that.
+  assert.equal(chooseFallback(f.decision, f.state, me)?.option.id, defer.id);
+  // The human answered: waitingFor is empty again, the bot ends its turn at once.
+  const free = clone(held);
+  free.options[0].value = { action: "end_turn", abilities: false, waitingFor: [] };
+  assert.equal(staleForBot(free, f.state, me), false);
+  assert.equal(choose(free), "FFCC_firmament_turnEnd");
+});
+
 // pbd181 02:13-02:14 (live): Bot Kappa 5 (nomad) activated 210, moved and landed; its tactical.move / tactical.conclude
 // prompts were still open when the turn menu passed "after 13 s" (02:14:01). State: /state of pbd181 at 02:30 with
 // the turn put back on Kappa; decision ids / options from shim.log + bot.log.

@@ -302,6 +302,19 @@ renderers in `web/src/engine/renderers/<area>/`). One owner per kind; overlaps a
 | INFRA-3 | `input.form` (forms opened by `needsInput` buttons) | — |
 | c12 perpetual | `ui.{undo_affordance,optional,info_menu}` (affordances: **not** decisions — `awaits()` false, never "mine", bots ignore; still answerable on click), `player.preference` (bots answer defaults; web background), `choose.select` (select-only fallback, answer via `inputs`) | — |
 
+**Strategy-card follows hold the turn (ScFollowGate).** Rules: after a strategy card is played every other player
+follows or declines it before the next turn begins. On the self-hosted server (default on; off with env
+`TI4_SC_FOLLOW_BLOCK=off` or the game's stored value `scFollowBlock=off`) the active player's end turn / pass is
+refused while a card they played this turn still has players who have not answered (auto-declines at play count as
+answers; humans are never auto-declined): `turn.action` validate ("Waiting for X (faction) to follow Leadership…") and
+a ButtonProcessor hook for button presses. `turn.action` end_turn / pass values carry `waitingFor`
+[{strategyCard, name, factions, userIds}]; the upstream "End Turn When All Have Reacted" button is typed as
+`{action: "end_turn_when_followed", strategyCard}` (the game ends the turn itself once the last player answered);
+`strategyCards[].blocksTurn` says which card holds the turn. Bots press end_turn_when_followed, then wait (turnStale);
+the web puts an owed follow at the head of the queue, greys out the turn menu until it is answered, and names who is
+still pending (header + End turn label + "Remind them" = Request All Resolve Now). Scenarios: `sc-follow-blocks-turn`,
+`sc-follow-two-humans`.
+
 **Affordances and obsolete prompts (c12).** A message made only of undo buttons (`drawSpecificSO_`, `removePreset_`,
 `retrieveAgenda_`, `eraseMyVote`, …), optional actions (round summary, objective pre-score queue, agenda help menu,
 dismiss-only) or an info menu carrying action shortcuts is typed `ui.*` with value `{action, undoes, ref, shortcut?}`:
