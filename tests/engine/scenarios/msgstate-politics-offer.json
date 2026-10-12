@@ -1,6 +1,6 @@
 {
  "name": "msgstate-politics-offer",
- "description": "Politics played from the card (pbd108 r?, Empyrean): the play records its secondary ids as one offer (ScOffer), so 'already drew' is kept by the play, not by the Discord message. Muaat draws, presses Draw again (no second draw), Empyrean (holder) draws, Bastion draws then declines. (Declining after drawing: the engine refuses on purpose, legacy accepts \u2014 same end state.)",
+ "description": "Politics played from the card (pbd108, Empyrean): the play records its secondary ids as one offer (ScOffer), so 'already drew' is kept by the play, not by the Discord message. Muaat draws, presses Draw again (no second draw), Empyrean (holder) draws, Bastion draws. (Declining after drawing is left out: the engine refuses it on purpose, while legacy accepts it and clears the player's used flag, so the saves differ by design; see sc-politics.)",
  "base": {
   "recording": "pbd108",
   "index": 80
@@ -25,11 +25,6 @@
   {
    "press": "sc_ac_draw",
    "as": "bastion"
-  },
-  {
-   "press": "sc_no_follow_3",
-   "as": "bastion",
-   "refused": true
   }
  ],
  "expect": {
