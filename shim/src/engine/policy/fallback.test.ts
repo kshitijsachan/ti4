@@ -354,13 +354,18 @@ test("pbd175: the Keleres preset once we play a flavour is stale; during the dra
   assert.equal(chooseTyped(preset([true, false, false]), drafting, ME, { history: [], open: [], all: [] })?.option?.id, "draftPresetKeleres_xxcha");
 });
 
-test("pbd31: Winnu agent 'use on' buttons once our agent is exhausted are stale (no 783 presses)", () => {
-  const agent = (target: string) => opt(`exhaustAgent_winnuagent_${target}`, target, { leader: "winnuagent", leaderType: "agent", faction: "winnu", step: "exhaustAgent", action: "target", optional: true, target, args: [target] });
-  const d = decision("leader.use", [agent("hacan"), agent("yin"), agent("crimson")]);
-  const withLeader = (status: string) => ({ ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: "winnu", leaders: [status] } : p)) }) as unknown as GameState;
-  assert.equal(staleForBot(d, withLeader("winnuagent:exhausted"), ME), true);
-  assert.equal(chooseFallback(d, withLeader("winnuagent:exhausted"), ME), null);
-  assert.equal(staleForBot(d, withLeader("winnuagent"), ME), false);
+test("pbd181: a tactical action's prompts outside our action-phase turn are stale", () => {
+  const conclude = decision("tactical.conclude", [opt("FFCC_sol_doneWithTacticalAction", "Conclude Tactical Action", { action: "conclude" })]);
+  const move = decision("tactical.move", [opt("FFCC_sol_concludeMove_210", "Done moving", { op: "done" })]);
+  const status = { ...state, phase: "status" } as unknown as GameState;
+  const theirTurn = { ...state, activePlayer: OTHER } as unknown as GameState;
+  const passed = { ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, passed: true } : p)) } as unknown as GameState;
+  for (const [name, st] of [["status phase", status], ["another player's turn", theirTurn], ["we passed", passed]] as const) {
+    assert.equal(staleForBot(conclude, st, ME), true, `conclude: ${name}`);
+    assert.equal(chooseFallback(move, st, ME), null, `move: ${name}`);
+  }
+  assert.equal(staleForBot(conclude, state, ME), false, "our own turn");
+  assert.equal(chooseFallback(conclude, state, ME)?.option.id, "FFCC_sol_doneWithTacticalAction");
 });
 
 test("pbd160: a declared secret objective's list is never re-pressed (stale; action-phase / unjudged secrets never claimed)", () => {
@@ -380,4 +385,13 @@ test("pbd160: a declared secret objective's list is never re-pressed (stale; act
   assert.equal(staleForBot(d, status(null), ME), false);
   assert.equal(chooseFallback(d, status(null), ME), null);
   assert.equal(chooseFallback(d, state, ME), null);
+});
+
+test("pbd31: Winnu agent 'use on' buttons once our agent is exhausted are stale (no 783 presses)", () => {
+  const agent = (target: string) => opt(`exhaustAgent_winnuagent_${target}`, target, { leader: "winnuagent", leaderType: "agent", faction: "winnu", step: "exhaustAgent", action: "target", optional: true, target, args: [target] });
+  const d = decision("leader.use", [agent("hacan"), agent("yin"), agent("crimson")]);
+  const withLeader = (status: string) => ({ ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: "winnu", leaders: [status] } : p)) }) as unknown as GameState;
+  assert.equal(staleForBot(d, withLeader("winnuagent:exhausted"), ME), true);
+  assert.equal(chooseFallback(d, withLeader("winnuagent:exhausted"), ME), null);
+  assert.equal(staleForBot(d, withLeader("winnuagent"), ME), false);
 });

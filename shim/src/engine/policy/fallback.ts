@@ -299,6 +299,13 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
   // Turn menus: only during our own action-phase turn (policy/turn.ts; without a state, never).
   if (d.kind === "turn.action") return turnStale(d, state, me);
   if (!state) return false;
+  // The tactical action's own prompts (move / land / conclude / activate / rift) belong to the active player's turn: a
+  // copy left over after the turn ended (status phase, another player active, we passed) waits on nobody (live
+  // pbd181 02:11: "Conclude Tactical Action" / "Done moving" from the previous round pressed during the status phase).
+  if (d.kind.startsWith("tactical.")) {
+    if (state.phase !== "action" || state.activePlayer !== me) return true;
+    return !!state.players.find((p) => p.userId === me)?.passed;
+  }
   // "Setup a Player" stays up after it is pressed: once we are seated it asks nothing of us (pbd147).
   // Manual player setup needs a map ("After setting up the map, you may use this button"): on a fresh game the
   // steward (solo.ts: expansion → Milty draft) is still choosing how to set up, and the bots must not race it (live
