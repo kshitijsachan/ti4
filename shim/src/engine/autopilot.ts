@@ -17,7 +17,7 @@ import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
 import { chooseComponents, isComponentsKind } from "./policy/components.js";
-import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
+import { chooseCappedBuild, chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
 import { TECH_PREFERENCE } from "../botplay/techs.js";
 import { chooseFallback, fallbackDue, mayPress, staleForBot } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
@@ -186,7 +186,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "production.produce":
       // What to build is the planner's call (botplay BuildJob sends it as one production payload); a build opened
       // from the Modify Units menu builds nothing.
-      return chooseManualBuild(d, me);
+      return chooseManualBuild(d, me) ?? chooseCappedBuild(d, state, me);
     default:
       return null;
   }
