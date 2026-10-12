@@ -144,6 +144,7 @@ export function decisionEyebrow(d: Decision): string | null {
 }
 
 const COMBAT = /^combat\./;
+const AGENDA_BLOCKING = new Set(["action_card.sabotage", "agenda.when", "agenda.after", "agenda.vote", "agenda.vote_step", "agenda.tiebreak", "agenda.resolve"]);
 /** Table-wide steps that move the phase on: after my own homework, so I'm not asked to start the next phase first. */
 const PHASE_STEP = new Set(["status.advance", "setup.deal_secrets", "setup.reveal_objectives", "status.reveal_objective", "agenda.next"]);
 const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/;
@@ -187,6 +188,8 @@ export function orderDecisions(
   const rank = (d: Decision) => {
     /* A combat under way is fought before anything else, even what my last answer opened (landing waits on it). */
     if (COMBAT.test(d.kind)) return 0;
+    /* The agenda windows hold up the whole table: answered before anything else of mine. */
+    if (AGENDA_BLOCKING.has(d.kind)) return 0.5;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
     if (nextStep(d)) return 1;
     /* Untyped prompts come last: the engine can't tell a live one from a leftover the game never closed. */
@@ -194,7 +197,8 @@ export function orderDecisions(
     /* My turn: the table waits on it, so it goes before follows and other answer-any-time windows (after what is
        already under way for me, like a payment). */
     if (d.kind === "turn.action") return myTurn ? 4.4 : 6;
-    if (myTurn && d.window) return 4.5;
+    /* Reaction windows (follow a strategy card…) after my own prompts: the work under way for me comes first. */
+    if (d.window) return 4.5;
     if (PHASE_STEP.has(d.kind)) return homework ? 5 : 4;
     if (d.kind === "trade.offer") return 3;
     return 4;

@@ -1,3 +1,4 @@
+import { getAgendaData } from "@/entities/lookup/agendas";
 import type { StrategyCardPick } from "../../../../../shim/src/engine/types";
 import type {
   ConstructionPlace,
@@ -155,9 +156,11 @@ export function AgendaView({ decision, answer }: RendererProps<PoliticsAgenda>) 
   }
   const v = opts[0]?.value;
   const agenda = v && v.action !== "draw" ? v.agenda : null;
+  const card = agenda ? getAgendaData(agenda) : undefined;
   return (
     <div className={classes.panel}>
-      <Title sub={agenda ?? undefined}>Politics: place this agenda</Title>
+      <Title sub={card ? `${card.name} (${card.type})` : (agenda ?? undefined)}>Politics: place this agenda</Title>
+      {card && <p className={classes.meta}>{[card.target, card.text1, card.text2].filter(Boolean).join(" ")}</p>}
       <div className={classes.choices}>
         {opts.map((o) => (
           <Choice key={o.id} option={o} onPick={answer} quiet={o.value!.action === "discard"}>
