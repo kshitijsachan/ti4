@@ -61,6 +61,9 @@
       "as": "ralnel"
     },
     {
+      "command": "/player stats commodities:2 faction_or_color:ralnel"
+    },
+    {
       "command": "/explore use explore_card_id:ms1 faction_or_color:ralnel"
     },
     {
