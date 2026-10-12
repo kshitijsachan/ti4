@@ -22,7 +22,9 @@ import type { GameState, Option, PlayerState } from "../types.js";
 
 export type ExploreChoice = { option: Option<any>; why: string };
 
-const live = <T>(opts: Option<T>[]) => opts.filter((o) => !o.disabled && !o.needsInput);
+/** Answerable options: not disabled, no form, and not marked unavailable by the engine (a cost the seat cannot pay). */
+const live = <T>(opts: Option<T>[]) =>
+  opts.filter((o) => !o.disabled && !o.needsInput && !(o.value as { unavailable?: string | null } | null)?.unavailable);
 
 function fragments(self: PlayerState | undefined): FragmentCounts {
   const c: FragmentCounts = { cultural: 0, industrial: 0, hazardous: 0, frontier: 0 };

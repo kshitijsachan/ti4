@@ -13,7 +13,7 @@ import type {
 } from "../../../../../shim/src/engine/kinds/explore";
 import type { Option } from "../../../../../shim/src/engine/types";
 import classes from "./explore.module.css";
-import { isLive, latestExplore, traitLabel, type RendererProps } from "./types";
+import { isLive, latestExplore, traitLabel, unavailableReason, type RendererProps } from "./types";
 
 const TRAIT_CLASS: Record<string, string | undefined> = {
   cultural: classes.cultural,
@@ -31,18 +31,26 @@ type ButtonProps = {
   children: ReactNode;
 };
 
+/**
+ * One option. A costed option the player cannot pay right now (value.unavailable, re-read by the engine on every
+ * state change) stays visible, greyed out, with the reason; it enables by itself once the resource arrives.
+ */
 function Choice({ option, pendingOptionId, answer, className, disabled, children }: ButtonProps) {
   const pending = pendingOptionId === option.id;
+  const reason = unavailableReason(option);
   return (
     <UnstyledButton
       className={cx(classes.option, className)}
-      disabled={!isLive(option) || !!pendingOptionId || disabled}
+      disabled={!isLive(option) || !!pendingOptionId || disabled || !!reason}
       data-pending={pending || undefined}
+      data-unavailable={reason ? true : undefined}
       aria-busy={pending}
+      title={reason ?? undefined}
       onClick={() => answer(option.id)}
     >
       {pending && <Loader size={12} color="currentColor" />}
       <span>{children}</span>
+      {reason && <span className={classes.reason}>{reason}</span>}
     </UnstyledButton>
   );
 }

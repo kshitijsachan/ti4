@@ -10,6 +10,12 @@ export type RendererProps<D> = {
 
 export const isLive = <V,>(o: Option<V>) => !o.disabled && !o.needsInput;
 
+/** Why a costed option cannot be chosen right now (engine value.unavailable), or null when it can. */
+export const unavailableReason = <V,>(o: Option<V>): string | null => {
+  const r = (o.value as { unavailable?: unknown } | null | undefined)?.unavailable;
+  return typeof r === "string" && r ? r : null;
+};
+
 const TRAIT_LABEL: Record<string, string> = {
   cultural: "Cultural",
   industrial: "Industrial",
