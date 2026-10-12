@@ -3,6 +3,8 @@ import { create } from "zustand";
 import { usePlay } from "@/discord";
 import { getToken } from "@/play/session";
 import { fetchUndoPoints, postRewind, postUndo } from "./api";
+import { readFlows } from "./flows";
+import { isActivation, planUndo, type Me } from "./plan";
 import type { RewindResponse, UndoPointsResponse } from "./types";
 
 type GameEntry = { data?: UndoPointsResponse; error?: string; loading: boolean; fetchedAt: number };
@@ -95,4 +97,19 @@ export function useUndoPoints(gameName: string) {
   }, [gameName, refresh]);
 
   return { data: entry?.data, error: entry?.error, loading: !entry?.data && (entry?.loading ?? true) };
+}
+
+/**
+ * Undoes my latest activation as a whole (Tactical Action, ring menu and system presses: the tactic token comes back
+ * and the turn menu re-opens). False when my latest action is not an activation, so the caller undoes one step.
+ */
+export async function undoMyActivation(game: string, me: Me): Promise<boolean> {
+  const store = useUndoStore.getState();
+  await store.refresh(game);
+  const data = useUndoStore.getState().games[game]?.data;
+  if (!data) return false;
+  const plan = planUndo(data.points, me, readFlows());
+  if (plan.kind !== "flow" || !isActivation(plan.point)) return false;
+  await store.rewind(game, plan.target.index);
+  return true;
 }

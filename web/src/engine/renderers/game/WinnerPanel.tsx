@@ -14,10 +14,12 @@ type Props = {
   view: GameOverView;
   answer: (d: GameEnd, choice: string | AnswerPayload) => void;
   pendingOptionId?: string | null;
+  /** End / rematch through `/game end` when the end-of-game prompt was dismissed. */
+  endByCommand?: (rematch: boolean) => void;
 };
 
 /** The winner screen's body: who won, the final standings, and End Game / Rematch. */
-export function WinnerPanel({ view, answer, pendingOptionId }: Props) {
+export function WinnerPanel({ view, answer, pendingOptionId, endByCommand }: Props) {
   const target = view.victoryPointsToWin;
   return (
     <div className={classes.root} data-engine-game-over={view.finish}>
@@ -61,7 +63,7 @@ export function WinnerPanel({ view, answer, pendingOptionId }: Props) {
           </li>
         ))}
       </ol>
-      <EndActions prompt={view.endPrompt} finish={view.finish} answer={answer} pendingOptionId={pendingOptionId} />
+      <EndActions prompt={view.endPrompt} finish={view.finish} answer={answer} pendingOptionId={pendingOptionId} endByCommand={endByCommand} />
     </div>
   );
 }

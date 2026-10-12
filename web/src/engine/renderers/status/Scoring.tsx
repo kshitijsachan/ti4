@@ -31,7 +31,15 @@ function PublicRow({ o, uid, scored, answer }: { o: Option<ScoreValue>; uid: str
       type="button"
       className={`${classes.objective} ${v.stage === 2 ? classes.stage2 : classes.stage1}`}
       disabled={!meets || o.disabled}
-      title={scored ? "You already scored this objective." : undefined}
+      title={
+        scored
+          ? "You already scored this objective."
+          : !meets
+            ? v.threshold > 0
+              ? `Not met: ${Math.min(progress, v.threshold)} of ${v.threshold}`
+              : "You don't meet this objective."
+            : undefined
+      }
       onClick={() => answer(o.id)}
     >
       <span className={classes.name}>{objectiveName(v.objective)}</span>

@@ -495,6 +495,16 @@ export function MapActionsLayer({
   })();
 
   const chipRect = chip ? rects[chip.position] : undefined;
+  /* Systems a click answers right now (a system/planet decision): lit at rest, not only under the cursor. */
+  const pickTargets = useMemo(
+    () => [
+      ...new Set([
+        ...Object.keys(engineTargets ?? {}),
+        ...Object.keys(pick?.byPosition ?? {}),
+      ]),
+    ],
+    [engineTargets, pick],
+  );
   /* While the player works a chip or the unit picker, the map's own hover cards stay out of the way. */
   const interacting = !!chip || (moving && !!picker);
   useEffect(() => {
@@ -566,6 +576,11 @@ export function MapActionsLayer({
             color={me?.color}
             bonuses={bonuses}
           />
+        )}
+        {pickTargets.map((pos) =>
+          rects[pos] && pos !== chip?.position ? (
+            <HexMark key={`t-${pos}`} rect={rects[pos]} className={classes.hexPickable} />
+          ) : null,
         )}
         {chip && chipRect && (
           <HexMark rect={chipRect} className={classes.hexConfirm} />
