@@ -15,16 +15,16 @@ const UNITS = [
 ];
 const name = (owner?: Parameters<typeof pickUnitModel>[2]) => pickUnitModel(UNITS, "gf", owner)?.name;
 
-test("Xxcha without Infantry II research lands Infantry I (playtest 3, pbd203)", () => {
+void test("Xxcha without Infantry II research lands Infantry I (playtest 3, pbd203)", () => {
   assert.equal(name({ faction: "xxcha", techs: ["gd", "amd"] }), "Infantry I");
 });
-test("Infantry II only with inf2", () => {
+void test("Infantry II only with inf2", () => {
   assert.equal(name({ faction: "xxcha", techs: ["inf2"] }), "Infantry II");
 });
-test("faction unit, upgraded by its own tech", () => {
+void test("faction unit, upgraded by its own tech", () => {
   assert.equal(name({ faction: "sol", techs: [] }), "Spec Ops I");
   assert.equal(name({ faction: "sol", techs: ["so2"] }), "Spec Ops II");
 });
-test("no owner: base generic unit", () => {
+void test("no owner: base generic unit", () => {
   assert.equal(name(undefined), "Infantry I");
 });
