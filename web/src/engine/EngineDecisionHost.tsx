@@ -15,6 +15,9 @@ import { EngineOutcomeToast } from "./ui/OutcomeToast";
 
 export { decisionTitle };
 
+/** Decisions the draft board answers itself (through the engine) while it is on screen. */
+const BOARD_KINDS = new Set(["draft.milty.pick", "draft.milty.info"]);
+
 type Props = {
   gameName: string;
   placement?: "fixed" | "contained";
@@ -50,7 +53,11 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
   const hidden = useEngine((s) => s.hidden);
   const answer = useEngineAnswer();
-  const { queue, offers } = useMemo(() => orderDecisions(decisions, answeredAtSeq, hidden, state), [decisions, answeredAtSeq, hidden, state]);
+  const ordered = useMemo(() => orderDecisions(decisions, answeredAtSeq, hidden, state), [decisions, answeredAtSeq, hidden, state]);
+  /* While the draft runs, the draft board (the table's takeover) is where picks are made: no popup on top of it. */
+  const drafting = state?.draft?.status === "drafting";
+  const queue = useMemo(() => (drafting ? ordered.queue.filter((d) => !BOARD_KINDS.has(d.kind)) : ordered.queue), [drafting, ordered.queue]);
+  const offers = ordered.offers;
 
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [offerId, setOfferId] = useState<string | null>(null);
@@ -71,8 +78,8 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
 
   /* The header's "Your move" pill: what is really waiting on me (background prompts never count). */
   const publishWaiting = useWaitingOnMe((s) => s.set);
-  const firstTitle = queue[0] ? decisionTitle(queue[0], state) : null;
-  useEffect(() => publishWaiting(queue.length, firstTitle), [publishWaiting, queue.length, firstTitle]);
+  const firstTitle = ordered.queue[0] ? decisionTitle(ordered.queue[0], state) : null;
+  useEffect(() => publishWaiting(ordered.queue.length, firstTitle), [publishWaiting, ordered.queue.length, firstTitle]);
   useEffect(() => () => publishWaiting(0, null), [publishWaiting]);
 
   /* Half-made selections of decisions that closed are forgotten (only once the stream is live: not mid-reload). */
