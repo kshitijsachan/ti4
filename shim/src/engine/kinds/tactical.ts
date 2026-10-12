@@ -20,14 +20,22 @@ import type {
 // ---------------------------------------------------------------- turn.action
 
 /** Action-phase turn menu (also "end turn or do another action", pass / end-of-turn ability menus). */
+/**
+ * A played strategy card that still waits on followers and so holds the turn (engine ScFollowGate): the engine
+ * refuses end_turn / pass until every listed player followed or declined it.
+ */
+export type FollowWait = { strategyCard: StrategyCardNumber; name: string; factions: FactionId[]; userIds: UserId[] };
+
 export type TurnActionValue =
   | { action: "tactical"; tacticTokens: number | null }
   | { action: "component" }
   | { action: "strategic"; strategyCard: StrategyCardNumber }
-  /** abilities: opens the "pass with abilities" menu instead of passing now. */
-  | { action: "pass"; abilities: boolean }
+  /** abilities: opens the "pass with abilities" menu instead of passing now. waitingFor: see FollowWait. */
+  | { action: "pass"; abilities: boolean; waitingFor?: FollowWait[] }
   /** abilities: opens the end-of-turn abilities menu (it carries a final end_turn with abilities=false). */
-  | { action: "end_turn"; abilities: boolean };
+  | { action: "end_turn"; abilities: boolean; waitingFor?: FollowWait[] }
+  /** "End Turn When All Have Reacted": the turn ends by itself once every player answered the card's follow window. */
+  | { action: "end_turn_when_followed"; strategyCard: StrategyCardNumber; waitingFor?: FollowWait[] };
 export type TurnAction = DecisionBase<"turn.action", TurnActionValue>;
 
 // ---------------------------------------------------------------- tactical.activate

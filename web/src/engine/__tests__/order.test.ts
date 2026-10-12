@@ -113,3 +113,33 @@ void test("politics: the draw prompt drops once the agendas are drawn; placement
   assert.equal(r.queue.filter((d) => d.kind === "strategy_card.politics_agenda").length, 1);
   assert.equal(r.queue[0].id, top.id);
 });
+
+void test("a strategy card I owe a follow on heads the queue, before my turn menu and trade offers", () => {
+  const followWin = { kind: "strategy_card", eligible: [ME], responded: [], responses: { [ME]: "pending" }, subject: { strategyCard: 1, holder: "sol" } } as unknown as Decision["window"];
+  const follow = dec("strategy_card.resolve", { scope: "table", window: followWin });
+  const turn = dec("turn.action");
+  const trade = dec("trade.offer");
+  const r = orderDecisions([turn, trade, follow], 0, undefined, state());
+  assert.deepEqual(kinds(r), ["strategy_card.resolve", "turn.action", "trade.offer"]);
+  /* Answered (responded): it no longer leads; my turn menu does. */
+  const done = dec("strategy_card.resolve", { scope: "table", window: { ...followWin!, responded: [ME] } as Decision["window"] });
+  assert.deepEqual(kinds(orderDecisions([turn, done], 0, undefined, state())), ["turn.action", "strategy_card.resolve"]);
+  /* My own card's panel (primary already resolved) is not a follow I owe. */
+  const own = dec("strategy_card.resolve", { scope: "table", window: { ...followWin!, subject: { strategyCard: 1, holder: "arborec", primaryDone: ["tokens"] } } as Decision["window"] });
+  assert.equal(orderDecisions([turn, own], 0, undefined, state()).queue[0].kind, "turn.action");
+});
+
+void test("follow helpers: what I owe, and who holds the turn", async () => {
+  const { followsOwed, followHolds, followHeader } = await import("../follows");
+  const s = state({
+    activePlayer: "u2",
+    strategyCards: [
+      { number: 1, holder: "u2", tradeGoods: 0, played: true, name: "Leadership", card: "pok1leadership", holderFaction: "sol", blocksTurn: true,
+        reactions: [{ faction: "sol", status: "holder", canFollow: false, cantFollowReason: null }, { faction: "arborec", status: "pending", canFollow: true, cantFollowReason: null }] },
+    ] as unknown as GameState["strategyCards"],
+  });
+  assert.deepEqual(followsOwed(s, ME).map((o) => o.name), ["Leadership"]);
+  assert.deepEqual(followHolds(s)[0].pending.map((p) => p.userName), ["Me"]);
+  assert.deepEqual(followHeader(s, ME), { mine: "follow Leadership", others: null });
+  assert.deepEqual(followHeader(s, "u2"), { mine: null, others: "Waiting for Me to follow Leadership" });
+});

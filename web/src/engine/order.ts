@@ -3,6 +3,7 @@ import { openToAll } from "./reducer";
 import { factionName } from "./names";
 import { nothingToDecide, setupOnly } from "./optionKinds";
 import { readDecisionState } from "./draftState";
+import { owesFollow } from "./follows";
 
 /** Plain-words titles per kind; `legacy` (untyped) prompts take a title from their own text. */
 const TITLES: Record<string, string> = {
@@ -168,7 +169,7 @@ const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/
 
 /**
  * My decisions in the order to answer them (head first), and the background ones behind "Available now":
- * 0. combat, 1. the next step of what I just answered (pay after build, gain after pay), 3. trade offers to me,
+ * 0. combat (then agenda windows, then a strategy card I owe a follow on: the table waits on it), 1. the next step of what I just answered (pay after build, gain after pay), 3. trade offers to me,
  * 4. everything else oldest first (on my turn: then my turn menu, then reaction windows like follows), 5. table steps that move the phase on (after my
  * homework), 6. the turn menu when it is not my turn, 7. untyped prompts (often leftovers). Perpetual action-card
  * panels go behind "Available now"; prompts I hid are left out.
@@ -239,6 +240,9 @@ export function orderDecisions(
     if (COMBAT.test(d.kind)) return 0;
     /* The agenda windows hold up the whole table: answered before anything else of mine. */
     if (AGENDA_BLOCKING.has(d.kind)) return 0.5;
+    /* A strategy card I still owe a follow / decline on: the next turn cannot begin until I answer (rules), so it
+       heads the queue, before my own turn menu. */
+    if (owesFollow(d, selfId, myFaction)) return 0.8;
     /* A step of a strategy card's primary (place a structure, choose a system…): before the card's own panel. */
     if (d.kind.startsWith("strategy_card.") && !d.window && !IN_ADVANCE_KINDS.has(d.kind) && d.kind !== "strategy_card.pick") return 1.4;
     /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */

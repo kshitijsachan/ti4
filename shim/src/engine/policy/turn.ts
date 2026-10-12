@@ -3,6 +3,9 @@
  *
  * Whenever it is a bot's turn it promptly takes a sensible action or passes:
  *   1. "End turn or do another action" (an end_turn option): end the turn (a bot takes one action per turn).
+ *      While the strategy card we played this turn still waits on followers (end_turn value waitingFor, engine
+ *      ScFollowGate: the engine refuses the end), press "End Turn When All Have Reacted" (end_turn_when_followed: the
+ *      game ends our turn once the last player answered); without that option, wait (never press a refused end).
  *   2. The strategy card is unplayed and playable (a strategic option): play it. Passing is illegal before it is
  *      played, and the planner's tactical action can wait a turn.
  *   3. The pass menu (only pass options left, e.g. after "Pass (+N abilities)"): finish passing.
@@ -16,7 +19,7 @@
  * player is active, or after we passed (pbd42: "Pass (+3 abilities)" pressed every minute in the status phase, "The action phase is
  * over"; pbd160: "It is not your turn"). Never passes while we hold a strategy card that is not played yet.
  */
-import type { TurnAction, TurnActionValue } from "../kinds/tactical.js";
+import type { FollowWait, TurnAction, TurnActionValue } from "../kinds/tactical.js";
 import type { Decision, GameState, Option } from "../types.js";
 
 /** How long the start-of-turn menu belongs to the planner before the policy passes for it. */
@@ -42,7 +45,20 @@ export function turnStale(
   if (!state) return true;
   if (state.phase !== "action" || state.activePlayer !== me) return true;
   // Passed: no more turns this round (a menu still listed for us is left over).
-  return !!state.players.find((p) => p.userId === me)?.passed;
+  if (state.players.find((p) => p.userId === me)?.passed) return true;
+  // Our card's follow window holds the turn and "End Turn When All Have Reacted" is gone (pressed) or not offered:
+  // the game waits on the other players, not on us; nothing on this menu may be pressed (the engine refuses the end).
+  const opts = d.options as Option<TurnActionValue>[];
+  return followWaits(opts).length > 0 && !opts.some((o) => !o.disabled && o.value?.action === "end_turn_when_followed");
+}
+
+/** The follow windows holding the turn, as the menu's end_turn / pass options report them (empty: the turn may end). */
+export function followWaits(opts: Option<TurnActionValue>[]): FollowWait[] {
+  for (const o of opts) {
+    const v = o.value;
+    if (v && (v.action === "end_turn" || v.action === "pass") && v.waitingFor?.length) return v.waitingFor;
+  }
+  return [];
 }
 
 /** Strategy cards `me` holds that are not played yet (rules: each must be played before passing). */
@@ -112,6 +128,8 @@ export function chooseTurnAction(
     force?: boolean;
     open?: Decision[];
     now?: number;
+    /** Options of this decision we already answered (autopilot ctx.history). */
+    history?: string[];
   } = {},
 ): Choice | null {
   if (turnStale(d, state, me)) return null;
@@ -120,6 +138,15 @@ export function chooseTurnAction(
   if (actionInFlight(me, timing.open ?? [], timing.now)) return null;
   const opts = live(d);
   const end = opts.filter((o) => o.value!.action === "end_turn");
+  const waits = followWaits(opts);
+  if (waits.length && (end.length || opts.some((o) => o.value!.action === "pass"))) {
+    const who = waits.map((w) => `${w.name}: ${w.factions.join(", ")}`).join("; ");
+    const defer = opts.find((o) => o.value!.action === "end_turn_when_followed");
+    // Pressed once: the button leaves the menu (the game now ends the turn itself); until then nothing else to do.
+    if (defer && !(timing.history ?? []).includes(defer.id))
+      return { option: defer, why: `follows outstanding (${who}): end turn when all have reacted` };
+    return null;
+  }
   if (end.length) {
     const pick =
       end.find((o) => o.value!.action === "end_turn" && !o.value!.abilities) ??
