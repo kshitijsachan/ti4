@@ -223,11 +223,16 @@ export function engineOwnership(
   if (d.scope === "player" && !d.window && d.target?.userId !== me) return { owned: false, why: "another player's prompt" };
   const age = now - d.createdAt;
   if (age >= ENGINE_GRACE_MS) return { owned: false, why: `typed, but still open after ${Math.round(age / 1000)}s` };
-  if (d.window && !awaits(d, me) && !answersOutsideWindow(d, me, state)) return { owned: true, why: "not asked in this window" };
+  const outside = !!d.window && !awaits(d, me);
+  if (outside && !answersOutsideWindow(d, me, state)) return { owned: true, why: "not asked in this window" };
   if (staleForBot(d, state, me)) return { owned: true, why: "stale for this seat" };
   const mine = open.filter((x) => x.id !== d.id && x.target?.userId === me);
   const pick = chooseTyped(d, state, me, { history: [], open: mine, all: open, waitedMs: age, force: true });
-  return pick ? { owned: true, why: pick.why } : { owned: false, why: "no engine answer" };
+  if (pick) return { owned: true, why: pick.why };
+  // The holder of a played strategy card with nothing left to resolve (live pbd158: the engine researched the
+  // Technology primary, then the planner pressed "Get a Technology" on the same card again).
+  if (outside) return { owned: true, why: "answered outside the window; nothing left" };
+  return { owned: false, why: "no engine answer" };
 }
 
 const DISCORD_EPOCH = 1420070400000;

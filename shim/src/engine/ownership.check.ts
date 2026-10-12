@@ -59,6 +59,15 @@ assert.equal(chooseTyped(sc([]), state(), ME)?.option?.id, "sc_no_follow_7");
 assert.equal(owns(sc([], [OTHER])).owned, true, "not asked (pre-declined): nobody waits on us");
 assert.equal(owns(sc([]), state(), "m1").why.includes("not following"), true);
 
+// ---- the holder's own card, primary resolved (live pbd158: the planner pressed "Get a Technology" again after the
+// engine had researched): not awaited by the followers' window, nothing left for the engine → still not legacy's
+const holderSt = state({ players: [player(ME, "sol", { strategyCards: [7] }), player(OTHER, "hacan")] } as Partial<GameState>);
+const held = dec("strategy_card.resolve", [opt("acquireATechWithSC_first", { ...scValue("research"), holder: "sol", who: "holder", part: "research" }, "Get a Technology")], {
+  scope: "table", target: null, window: { ...scWindow([], [OTHER]), subject: { strategyCard: 7, holder: "sol", primaryDone: ["research"] } },
+});
+assert.equal(chooseTyped(held, holderSt, ME, { history: [], open: [], all: [held], force: true }), null);
+assert.equal(owns(held, holderSt).owned, true);
+
 // ---- "Pass": the start-of-turn menu while the turn policy holds it for the planner (TURN_PLANNER_GRACE_MS)
 const turn = (createdAt = NOW - 2_000) =>
   dec("turn.action", [

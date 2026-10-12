@@ -1659,7 +1659,15 @@ class SeatPilot {
         }
       },
       log: (text) => log.info(`autopilot ${self.name}: ${text}`),
-      engine: this.mgr.engine ? this.seatEngine(this.mgr.engine) : undefined,
+      // Read on use: pilots are created by the Autopilot constructor (sync), before index.ts assigns mgr.engine, so a
+      // value captured here was undefined for every seat seated at startup — the planner never took the typed
+      // tactical path (no "engine turn.action (tactical action…)" since 20:17 on 2026-10-11) and ran on buttons.
+      get engine() {
+        const engine = self.mgr.engine;
+        if (!engine) return undefined;
+        if (self.seatEngineFor?.client !== engine) self.seatEngineFor = { client: engine, api: self.seatEngine(engine) };
+        return self.seatEngineFor.api;
+      },
       engineOwns: (game, messageId) => self.mgr.engineOwns(game, messageId, self.userId),
       engineProduce: async (game, messageId, build) => {
         const engine = self.mgr.engine;
@@ -1674,6 +1682,8 @@ class SeatPilot {
       },
     };
   }
+
+  private seatEngineFor?: { client: EngineClient; api: SeatEngine };
 
   /** The planner's typed engine access as this seat (answers go through the same serial queue as presses). */
   private seatEngine(engine: EngineClient): SeatEngine {
