@@ -221,8 +221,9 @@ export const VOLATILE_GAME_KEYS = new Set([
 /** Stored values that only steer where the bot posts or when it pings, and per-message bookkeeping keyed by a Discord
  * message id ("<message id>SCReacts" etc.: who reacted to which post; the follows themselves are in followed_sc).
  * engineExploreLog: the engine-int bot's explore/relic history for clients (ExploreLog, written by hooks in
- * ExploreService/RelicHelper on every path) — recordings made before it existed never carry it. */
-export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/];
+ * ExploreService/RelicHelper on every path) — recordings made before it existed never carry it.
+ * engineCombatLedger: the engine's persisted roll ledger (CombatSupport: once-per-activation space cannon / barrage). */
+export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^engineCombatLedger$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/];
 
 /** The game's stored values: `check_reacts_info k1,v1:k2,v2:...` (see Game.getStoredValue). */
 export function storedValues(v: string): Map<string, string> {
@@ -288,7 +289,9 @@ export function normalizeSave(text: string, o: NormalizeOpts = {}): string[] {
       // The game's stored values ("key,value" entries joined by ':'): compared one by one.
       for (const [sk, sv] of storedValues(v)) {
         if (VOLATILE_STORED_KEYS.some((r) => r.test(sk)) || extra.has(`stored.${sk}`)) continue;
-        out.push(`stored.${fix(sk)} ${fix(sv)}`);
+        // Agenda double-press guard (agendaRes<round><n> = outcome + the agenda's random discard handle).
+        const val = !o.keepHandles && /^agendaRes\d+$/.test(sk) ? sv.replace(/\d{1,4}$/, "#") : sv;
+        out.push(`stored.${fix(sk)} ${fix(val)}`);
       }
       continue;
     }

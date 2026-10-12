@@ -1,0 +1,24 @@
+{
+  "name": "agendas-covert-for",
+  "description": "Covert Legislation resolved For (the hidden agenda's outcome).",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:covert force:true"
+  ],
+  "steps": [
+    {
+      "press": "agendaResolution_for",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

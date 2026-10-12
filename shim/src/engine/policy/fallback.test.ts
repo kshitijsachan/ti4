@@ -51,7 +51,7 @@ const state = {
     { userId: OTHER, faction: "xxcha", color: "green", self: false, real: true, techs: [], planets: [], exhaustedPlanets: [], strategyCards: [], commandTokens: { tactic: 3, fleet: 3, strategy: 2 }, tg: 0, commodities: 0, commoditiesMax: 4, secretObjectiveCount: 1, secretsScored: {}, hand: null, relics: [], fragments: [], leaders: [], promissoryNotesInPlayArea: [] },
   ],
   strategyCards: [],
-  tiles: [],
+  tiles: [{ position: "000", tileId: "18", holders: [] }],
   publicObjectives: {},
   laws: [],
   draft: null,
@@ -82,6 +82,20 @@ for (const kind of Object.keys(KIND_CLASS) as DecisionKind[]) {
       const d = decision(kind, [opt("submit", "Submit", null, { needsInput: true }), opt("cancel", "Cancel")]);
       const pick = chooseTyped(d, state, ME, { history: [], open: [], all: [d], force: true });
       assert.equal(pick?.option?.id, "cancel");
+      return;
+    }
+    if (kind === "turn.action") {
+      // Turn menus: only turn options (end turn / strategy card / pass), never "Proceed" (policy/turn.ts).
+      const d = decision(kind, [opt("ultimateUndo_12", "UNDO"), opt("FFCC_sol_tacticalAction", "Tactical Action (3)", { action: "tactical", tacticTokens: 3 }), opt("FFCC_sol_passingAbilities", "Pass (+1 ability)", { action: "pass", abilities: true })]);
+      const pick = chooseTyped(d, state, ME, { history: [], open: [], all: [d], waitedMs: FALLBACK_FORCE_MS, force: true });
+      assert.equal(pick?.option?.id, "FFCC_sol_passingAbilities");
+      return;
+    }
+    if (kind === "status.score_secret") {
+      // Only a secret the engine says we meet (pbd160 below for the rest).
+      const d = decision(kind, [opt("so_score_hand_1", "(1) Become a Martyr", { handle: 1, secretObjective: "bam", phase: "action", points: 1, met: null }), opt("so_score_hand_2", "(2) Control the Region", { handle: 2, secretObjective: "ctr", phase: "status", points: 1, met: true })]);
+      const pick = chooseTyped(d, state, ME, { history: [], open: [], all: [d], waitedMs: FALLBACK_FORCE_MS, force: true });
+      assert.equal(pick?.option?.id, "so_score_hand_2");
       return;
     }
     const d = sample(kind);
@@ -281,7 +295,11 @@ const setupStep = (step: string, values: Record<string, unknown>[]) =>
     "setup.player",
     values.map((v, i) => opt(`setupStep_${i}`, String(v.faction ?? v.color ?? v.userId ?? step), { step, userId: null, faction: null, color: null, position: null, speaker: null, page: null, ...v })),
   );
-const unseated = { ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: null, color: null } : p)) } as unknown as GameState;
+const unseated = {
+  ...state,
+  tiles: [{ position: "000", tileId: "18", holders: [] }],
+  players: state.players.map((p) => (p.userId === ME ? { ...p, faction: null, color: null } : p)),
+} as unknown as GameState;
 
 test("pbd147: setup.player — start once, then official free faction / free colour / no speaker", () => {
   const start = setupStep("start", [{}]);
@@ -294,4 +312,86 @@ test("pbd147: setup.player — start once, then official free faction / free col
   assert.equal(chooseTyped(color, unseated, ME, { history: [], open: [], all: [color] })?.option?.value.color, "forest");
   const speaker = setupStep("speaker", [{ userId: ME, speaker: true }, { userId: ME, speaker: false }]);
   assert.equal(chooseTyped(speaker, unseated, ME, { history: [], open: [], all: [speaker] })?.option?.value.speaker, false);
+});
+
+test("pbd182: no manual setup before a map exists (the steward's Milty path), and seats spread their choices", () => {
+  const start = setupStep("start", [{}]);
+  const fresh = { ...unseated, tiles: [] } as unknown as GameState;
+  assert.equal(staleForBot(start, fresh, ME), true);
+  assert.equal(chooseTyped(start, fresh, ME, { history: [], open: [], all: [start], force: true }), null);
+  const blank = { ...unseated, players: unseated.players.map((p) => ({ ...p, faction: null, color: null })) } as unknown as GameState;
+  const offer = (who: string) => setupStep("faction", ["arborec", "argent", "letnev"].map((f) => ({ userId: who, faction: f })));
+  const mine = chooseTyped(offer(ME), blank, ME, { history: [], open: [], all: [] })?.option?.value.faction;
+  const theirs = chooseTyped(offer(OTHER), blank, OTHER, { history: [], open: [], all: [] })?.option?.value.faction;
+  assert.notEqual(mine, theirs);
+});
+
+// ---- live gaps 01:28–01:32
+
+test("pbd60: a bombardment opener after its ground combat rolled rounds is stale", () => {
+  const d = decision("units.remove", [opt("getDamageButtons_308_bombardment", "Assign Hits", { action: "open", tile: "308", assignType: "bombardment" }), opt("ultimateUndo_143", "UNDO")]);
+  const after = combatState([{ holder: "andeara", mine: 2, theirs: 0 }]);
+  (after.combat!.fronts[0].sides[1] as { roundsRolled: number }).roundsRolled = 5;
+  assert.equal(staleForBot(d, after, ME), true);
+  assert.equal(chooseFallback(d, after, ME), null);
+  const before = combatState([{ holder: "andeara", mine: 2, theirs: 1 }]);
+  before.combat!.fronts[0].sides.forEach((s) => ((s as { roundsRolled: number }).roundsRolled = 0));
+  assert.equal(staleForBot(d, before, ME), false, "bombardment before the ground combat is owed");
+  const remove = decision("units.remove", [opt("getDamageButtons_308_remove", "Remove Units", { action: "open", tile: "308", assignType: "remove" })]);
+  assert.equal(staleForBot(remove, after, ME), false, "fleet-pool reminders are the desk's, never stale");
+});
+
+test("pbd175: the Keleres preset once we play a flavour is stale; during the draft we pre-select a free one", () => {
+  const preset = (contested: boolean[]) =>
+    decision(
+      "setup.keleres_flavor",
+      ["mentak", "xxcha", "argent"].map((f, i) => opt(`draftPresetKeleres_${f}`, f, { flavor: f, faction: `keleres${f[0]}`, preset: true, contested: contested[i], homePosition: null, speaker: null })),
+    );
+  const seated = { ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: "keleresa" } : p)) } as unknown as GameState;
+  assert.equal(staleForBot(preset([false, false, false]), seated, ME), true);
+  const drafting = { ...unseated, setup: { stage: "draft", waitingOn: [], players: [] } } as unknown as GameState;
+  assert.equal(staleForBot(preset([true, false, false]), drafting, ME), false);
+  assert.equal(chooseTyped(preset([true, false, false]), drafting, ME, { history: [], open: [], all: [] })?.option?.id, "draftPresetKeleres_xxcha");
+});
+
+test("pbd181: a tactical action's prompts outside our action-phase turn are stale", () => {
+  const conclude = decision("tactical.conclude", [opt("FFCC_sol_doneWithTacticalAction", "Conclude Tactical Action", { action: "conclude" })]);
+  const move = decision("tactical.move", [opt("FFCC_sol_concludeMove_210", "Done moving", { op: "done" })]);
+  const status = { ...state, phase: "status" } as unknown as GameState;
+  const theirTurn = { ...state, activePlayer: OTHER } as unknown as GameState;
+  const passed = { ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, passed: true } : p)) } as unknown as GameState;
+  for (const [name, st] of [["status phase", status], ["another player's turn", theirTurn], ["we passed", passed]] as const) {
+    assert.equal(staleForBot(conclude, st, ME), true, `conclude: ${name}`);
+    assert.equal(chooseFallback(move, st, ME), null, `move: ${name}`);
+  }
+  assert.equal(staleForBot(conclude, state, ME), false, "our own turn");
+  assert.equal(chooseFallback(conclude, state, ME)?.option.id, "FFCC_sol_doneWithTacticalAction");
+});
+
+test("pbd160: a declared secret objective's list is never re-pressed (stale; action-phase / unjudged secrets never claimed)", () => {
+  // The stall dump (shim.log 01:08:00, Bot Beta), target re-pointed at ME.
+  const d = decision("status.score_secret", [opt("so_score_hand_326", "(326) Become a Martyr", { handle: 326, secretObjective: "bam", phase: "action", points: 1, progress: 0, threshold: 0, met: null })], {
+    id: "d1559008824533319680",
+    prompt: "Please choose the secret objective you wish to score.",
+    target: { userId: ME, faction: "naalu", color: "watermelon", resolvedBy: "interaction_user" },
+    source: { channelId: "1558996814319976448", messageId: "1559008824533319680", customIdPrefix: "so_", ephemeral: true },
+  });
+  const status = (secretScored: string | null) =>
+    ({ ...state, phase: "statusScoring", status: { round: 2, step: "scoring", players: { [ME]: { publicScored: "none", secretScored } } } }) as unknown as GameState;
+  assert.equal(staleForBot(d, status("none"), ME), true);
+  assert.equal(staleForBot(d, status("bam"), ME), true);
+  assert.equal(chooseTyped(d, status("none"), ME, { history: [], open: [], all: [d], force: true }), null);
+  // Undeclared: still nothing to press (an action-phase secret, and the engine cannot judge it).
+  assert.equal(staleForBot(d, status(null), ME), false);
+  assert.equal(chooseFallback(d, status(null), ME), null);
+  assert.equal(chooseFallback(d, state, ME), null);
+});
+
+test("pbd31: Winnu agent 'use on' buttons once our agent is exhausted are stale (no 783 presses)", () => {
+  const agent = (target: string) => opt(`exhaustAgent_winnuagent_${target}`, target, { leader: "winnuagent", leaderType: "agent", faction: "winnu", step: "exhaustAgent", action: "target", optional: true, target, args: [target] });
+  const d = decision("leader.use", [agent("hacan"), agent("yin"), agent("crimson")]);
+  const withLeader = (status: string) => ({ ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: "winnu", leaders: [status] } : p)) }) as unknown as GameState;
+  assert.equal(staleForBot(d, withLeader("winnuagent:exhausted"), ME), true);
+  assert.equal(chooseFallback(d, withLeader("winnuagent:exhausted"), ME), null);
+  assert.equal(staleForBot(d, withLeader("winnuagent"), ME), false);
 });
