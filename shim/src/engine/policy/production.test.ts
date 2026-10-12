@@ -45,7 +45,7 @@ test("already counted spend is subtracted; nothing due → empty payment", () =>
 
 test("commodities only with the Keleres agent", () => {
   const vals = [planet("a", 1), { source: "tg", amount: 1 } as PaymentValue, { source: "commodities", amount: 1 } as PaymentValue];
-  assert.equal(planPayment(payment(vals, 3, 3), state(0, [], 5), "u"), null);
+  assert.deepEqual(planPayment(payment(vals, 3, 3), state(0, [], 5), "u")?.payload, { planets: ["a"] }); // no agent: commodities never spent
   const p = planPayment(payment(vals, 3, 3, { keleresAgent: true } as Partial<PaymentValue>), state(0, [], 5), "u");
   assert.equal(p?.payload.commodities, 2);
 });
@@ -55,8 +55,24 @@ test("Sarween is used when offered", () => {
   assert.deepEqual(planPayment(d, state(0), "u")?.payload, { planets: ["a"], sarween: true });
 });
 
-test("cannot cover → null (the engine refuses underpay)", () => {
-  assert.equal(planPayment(payment([planet("a", 1)], 5, 5), state(0), "u"), null);
+test("cannot cover → spend everything offered (the engine lets Done finish)", () => {
+  assert.deepEqual(planPayment(payment([planet("a", 1)], 5, 5), state(0), "u")?.payload, { planets: ["a"] });
+});
+
+test("production payment with nothing left to spend (Reset / Sarween / Done only)", () => {
+  const sarween: PaymentValue = { source: "discount", discount: "sarween" };
+  assert.deepEqual(planPayment(payment([{ action: "reset" }, sarween], 3, 3), state(0), "u")?.payload, { planets: [], sarween: true });
+  assert.deepEqual(planPayment(payment([{ action: "reset" }], null, null), state(0), "u")?.payload, { planets: [] });
+  // Unknown cost with something to spend stays the planner's.
+  assert.equal(planPayment(payment([planet("a", 2)], null, null), state(0), "u"), null);
+});
+
+test("plain planets before tech-skip planets, trade goods last", () => {
+  const skip: PaymentValue = { source: "planet", planet: "s" as PlanetId, resources: 2, influence: 0, techSpecialties: ["warfare"], legendary: false };
+  const d = payment([skip, planet("p", 2), { source: "tg", amount: 1 }], 2, 2);
+  assert.deepEqual(planPayment(d, state(3), "u")?.payload, { planets: ["p"] });
+  const big = payment([planet("a", 3), { source: "tg", amount: 1 }], 1, 1);
+  assert.deepEqual(planPayment(big, state(3), "u")?.payload, { planets: ["a"] });
 });
 
 test("production payload groups units, ground forces on a planet", () => {
