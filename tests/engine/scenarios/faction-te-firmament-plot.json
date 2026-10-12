@@ -1,0 +1,10 @@
+{
+  "name": "faction-te-firmament-plot",
+  "description": "Firmament Plots Within Plots (te.plot, live pbd161): the cards-info plot panel (addFactionTokenToPlot_<plot>, panel=true, background) opens the faction picker addFactionTokenToPlot_<plot>_<faction>; one puppet added per picker answer, the panel stays",
+  "base": { "recording": "pbd116", "index": 42, "repost": false },
+  "trigger": { "press": "addFactionTokenToPlot_seethe", "as": "firmament" },
+  "steps": [
+    { "press": "addFactionTokenToPlot_seethe_hacan", "as": "firmament" }
+  ],
+  "expect": { "invariants": true }
+}
