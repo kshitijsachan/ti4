@@ -2,7 +2,7 @@
  * Status phase + scoring decision kinds (G7). Mirrors bot ti4.selfhost.engine.kinds.Status*Kind,
  * CommandTokensAdjustKind, ImperialScoreKind (action_card.discard is typed in kinds/cards.ts) and EngineModels.StatusState.
  */
-import type { DecisionBaseOf, UserId } from "../types.js";
+import type { DecisionBaseOf, PublicObjectiveId, SecretObjectiveId, UserId } from "../types.js";
 
 export interface CommandTokenPools {
   tactic: number;
@@ -25,8 +25,8 @@ export interface StatusState {
 
 export interface PlayerStatus {
   /** Objective id scored this round, "none" when declined, null while undecided. */
-  publicScored: string | null;
-  secretScored: string | null;
+  publicScored: PublicObjectiveId | "none" | null;
+  secretScored: SecretObjectiveId | "none" | null;
   /** Pools before this round's gain. */
   tokensBase: CommandTokenPools;
   /** Tokens this status phase gives (2 + Versatile / Hyper Metabolism / … − Malevolency). */
@@ -41,7 +41,7 @@ export interface PlayerStatus {
   ready: boolean;
   actionCardLimit: number;
   /** Only for the viewer (null for others): status-phase secrets in hand the engine knows are met now. */
-  scorableSecrets: string[] | null;
+  scorableSecrets: SecretObjectiveId[] | null;
 }
 
 /**
@@ -53,7 +53,7 @@ export type StatusScore = DecisionBaseOf<
   "status.score",
   | {
       action: "score_public";
-      objective: string;
+      objective: PublicObjectiveId;
       number: number;
       stage: 1 | 2 | null;
       points: number;
@@ -74,7 +74,7 @@ export type StatusScoreSecret = DecisionBaseOf<
   "status.score_secret",
   {
     handle: number;
-    secretObjective: string | null;
+    secretObjective: SecretObjectiveId | null;
     phase: "status" | "action" | "agenda" | string | null;
     points: number;
     progress?: number;

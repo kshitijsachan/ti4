@@ -3,7 +3,7 @@
  * bundled), so the guards and the payment suggestion mirror shim/src/engine/kinds/production.ts and
  * shim/src/engine/policy/production.ts (the bot policy): keep them in step.
  */
-import type { GameState } from "../../../../../shim/src/engine/types";
+import type { GameState, PlanetId } from "../../../../../shim/src/engine/types";
 import type {
   PaymentDoneValue,
   PaymentPayload,
@@ -62,7 +62,7 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
   const commHeld = hasComm && done.keleresAgent ? (self?.commodities ?? 0) : 0;
   const tgv = Math.max(1, done.tgValue);
 
-  let best: { set: string[]; tg: number; comm: number; score: number } | null = null;
+  let best: { set: PlanetId[]; tg: number; comm: number; score: number } | null = null;
   if (due <= 0) best = { set: [], tg: 0, comm: 0, score: 0 };
   for (let tg = 0; tg <= Math.min(tgHeld, Math.ceil(due / tgv)) && due > 0; tg++) {
     for (let comm = 0; comm <= Math.min(commHeld, Math.ceil(due / tgv)); comm++) {
@@ -75,7 +75,7 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
       }
       for (let mask = 1; mask < 1 << planets.length; mask++) {
         let t = 0;
-        const set: string[] = [];
+        const set: PlanetId[] = [];
         for (let i = 0; i < planets.length; i++)
           if (mask & (1 << i)) {
             t += planets[i].v;

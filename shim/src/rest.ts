@@ -37,6 +37,8 @@ export class Rest {
       if (!m) continue;
       const body = method === "GET" || method === "DELETE" ? { json: {}, files: [] } : await readBody(req);
       const params = m.slice(1).map(decodeURIComponent);
+      // Anything but a message / interaction / reaction write may change who sees what: drop cached canView answers.
+      if (method !== "GET" && !/\/(messages|interactions|reactions|webhooks|typing)(\/|$)/.test(path)) this.store.invalidateViews();
       try {
         await r.handler({ req, res, params, query, body });
       } catch (e) {
@@ -578,7 +580,7 @@ export class Rest {
       delete ch.permission_overwrites;
       delete ch.position;
       ch.recipients = [this.store.userJson(rid)];
-      this.store.scheduleSave();
+      this.store.scheduleSave(ch.id);
       this.hub.channelCreate(ch);
       sendJson(res, 200, ch);
     });

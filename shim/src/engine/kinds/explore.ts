@@ -2,7 +2,18 @@
  * Exploration + relic decision kinds (G9). Mirrors bot ti4.selfhost.engine.kinds.Explore*Kind / Relic*Kind.
  * Ids only for logic (card ids, planet ids, tile positions); *Name / *Text fields come from the card data for display.
  */
-import type { DecisionBase } from "../types.js";
+import type {
+  DecisionBase,
+  ExploreCardId,
+  FactionId,
+  LeaderId,
+  PlanetId,
+  RelicFragmentId,
+  RelicId,
+  TileId,
+  TilePosition,
+  UserId,
+} from "../types.js";
 
 export type ExploreTrait = "cultural" | "industrial" | "hazardous" | "frontier";
 
@@ -10,10 +21,10 @@ export type ExploreTrait = "cultural" | "industrial" | "hazardous" | "frontier";
 export type ExplorePlanet = DecisionBase<
   "explore.planet",
   {
-    planet: string;
+    planet: PlanetId;
     planetName: string;
-    tile: string | null;
-    trait: ExploreTrait | string;
+    tile: TilePosition | null;
+    trait: ExploreTrait;
     /** "filler" normal, "dsdihmy" Impressment Programs (exhausts the planet), "scanlink" Lanefir flagship. */
     via: string;
     /** Bentor breakthrough: explore the frontier deck instead. */
@@ -24,9 +35,9 @@ export type ExplorePlanet = DecisionBase<
 >;
 
 export interface ExploreCardInfo {
-  card: string;
+  card: ExploreCardId;
   cardName?: string;
-  cardType?: ExploreTrait | string | null;
+  cardType?: ExploreTrait | null;
   /** "fragment" | "attach" | "token" | "instant" | "relic" | ... (card data). */
   resolution?: string | null;
   cardText?: string;
@@ -36,11 +47,11 @@ export interface ExploreCardInfo {
 export type ExploreCardPick = DecisionBase<
   "explore.card_pick",
   ExploreCardInfo & {
-    planet: string | null;
+    planet: PlanetId | null;
     planetName?: string;
-    tile: string | null;
+    tile: TilePosition | null;
     /** Voidsailors: the card that goes back to the deck if this one is chosen. */
-    rejected: string | null;
+    rejected: ExploreCardId | null;
     variant: "distantSuns" | "voidsailors" | string | null;
   }
 >;
@@ -48,7 +59,7 @@ export type ExploreCardPick = DecisionBase<
 /** Choose a system whose frontier token to explore (Empyrean hero, Exploration Probe, Circlet of the Void). */
 export type ExploreFrontier = DecisionBase<
   "explore.frontier",
-  { tile: string; tileId: string | null; source: "empyrean_hero" | "probe_or_circlet" }
+  { tile: TilePosition; tileId: TileId | null; source: "empyrean_hero" | "probe_or_circlet" }
 >;
 
 export type ExploreOutcomeEffect =
@@ -81,16 +92,16 @@ export type ExploreOutcome = DecisionBase<
     card?: string;
     /** "mech_present" (nothing lost), "remove_infantry", "commodity_or_tg". */
     cost?: "mech_present" | "remove_infantry" | "commodity_or_tg";
-    planet?: string | null;
+    planet?: PlanetId | null;
     planetName?: string;
-    tile?: string | null;
+    tile?: TilePosition | null;
     units?: string | null;
-    leader?: string | null;
+    leader?: LeaderId | null;
     side?: "alpha" | "beta";
     amount?: number;
     /** deep_mining | distant_suns (ability offered instead of / on top of an explore). */
     ability?: string;
-    trait?: string;
+    trait?: ExploreTrait;
   }
 >;
 
@@ -111,7 +122,7 @@ export type RelicFragments = DecisionBase<
     action: "purge" | "draw";
     trait?: ExploreTrait | null;
     count?: number;
-    fragment?: string;
+    fragment?: RelicFragmentId;
     supermassive?: boolean;
     /** A New Edifice: the "draw" explores 3 planets instead. */
     explore?: boolean;
@@ -129,24 +140,24 @@ export type ExploreDecision = ExplorePlanet | ExploreCardPick | ExploreFrontier 
 
 export interface ExploreEvent {
   round: number;
-  userId: string;
-  faction: string | null;
+  userId: UserId;
+  faction: FactionId | null;
   /** "explore" (card = exploration card id) or "relic" (card = relic id). */
   type: "explore" | "relic";
-  card: string;
+  card: ExploreCardId | RelicId;
   name: string | null;
-  trait: string | null;
+  trait: ExploreTrait | null;
   resolution: string | null;
   text: string | null;
   /** null for a frontier token explore. */
-  planet: string | null;
+  planet: PlanetId | null;
   planetName: string | null;
-  tile: string | null;
+  tile: TilePosition | null;
   at: number;
 }
 
 export interface ExplorationState {
-  decks: Record<ExploreTrait, { deck: number; discard: string[] }>;
+  decks: Record<ExploreTrait, { deck: number; discard: ExploreCardId[] }>;
   relicDeck: number;
   /** Oldest first, last 15. Fog of war: only the viewer's own. */
   recent: ExploreEvent[];

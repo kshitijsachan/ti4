@@ -2,14 +2,23 @@
  * G8 — action cards and promissory notes. Mirrors bot ti4/selfhost/engine/kinds/{ActionCard*,PromissoryNote*}Kind.java.
  * Ids only (card ids, numeric hand handles, factions, planet ids, tile positions); never labels.
  */
-import type { DecisionBase, FactionId } from "../types.js";
+import type {
+  ActionCardId,
+  DecisionBase,
+  FactionId,
+  PlanetId,
+  PromissoryNoteId,
+  StrategyCardNumber,
+  TechId,
+  TilePosition,
+} from "../types.js";
 
 /** Hand tray (cards-info thread) and the action/combat subsets: play the card with this hand handle. */
 export type ActionCardPlay = DecisionBase<
   "action_card.play",
   {
     handle: number;
-    actionCard: string;
+    actionCard: ActionCardId;
     /** The card's timing window as the engine words it ("Action", "After you activate a system", ...). */
     window: string | null;
   }
@@ -26,7 +35,7 @@ export type ActionCardSabotage = DecisionBase<
     /** cancel = cancel the card; pass = "No Sabotage"; wait = the player's own "pause timer" (legacy only). */
     action: "cancel" | "pass" | "wait";
     via: "ac" | "empy" | "tf" | "xxcha" | null;
-    actionCard: string | null;
+    actionCard: ActionCardId | null;
     cardName: string | null;
     /** Faction that played the card. */
     playedBy: FactionId | null;
@@ -37,7 +46,7 @@ export type ActionCardDiscard = DecisionBase<
   "action_card.discard",
   {
     handle: number;
-    actionCard: string;
+    actionCard: ActionCardId;
     /** "" plain, "stall" = discard as your action, "redraw" = draw a replacement, "retain", "arvaxicommander". */
     mode: string;
     /** As of capture; compare handLimit with the live PlayerState.actionCardCount. */
@@ -59,11 +68,11 @@ export type ActionCardTarget = DecisionBase<
   {
     step: string;
     player?: FactionId;
-    planet?: string;
+    planet?: PlanetId;
     /** Tile position. */
-    system?: string;
+    system?: TilePosition;
     holder?: "space";
-    strategyCard?: number;
+    strategyCard?: StrategyCardNumber;
   }
 >;
 
@@ -71,7 +80,7 @@ export type ActionCardTarget = DecisionBase<
 export type PromissoryNotePlay = DecisionBase<
   "promissory_note.play",
   {
-    promissoryNote: string;
+    promissoryNote: PromissoryNoteId;
     /** Faction owning the note. */
     owner: FactionId | null;
     /** Goes to the player's play area (Alliance, Support for the Throne, ...) instead of back to the owner. */
@@ -79,7 +88,7 @@ export type PromissoryNotePlay = DecisionBase<
     /** false for Black Market Forgery played as a component action. */
     fromHand: boolean;
     /** Research Agreement: the technology gained. */
-    tech?: string;
+    tech?: TechId;
   }
 >;
 
