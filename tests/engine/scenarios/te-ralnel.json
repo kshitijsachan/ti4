@@ -1,0 +1,68 @@
+{
+  "name": "te-ralnel",
+  "description": "Ral Nel (TE): agent Kan Kip Rel (exhaustAgent_ralnelagent -> handleRalNelAgent_<ac> -> handleRalNelAgentPt2_<ac>_<faction>), Nanomachines (nanomachines_actionCard / _repair), Data Skimmer (dataSkimmer_page0)",
+  "base": {
+    "recording": "pbd105",
+    "index": 165,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "sabo1",
+        "faction_or_color": "ralnel"
+      }
+    },
+    "/tech add tech:nanomachines faction_or_color:ralnel",
+    "/breakthrough unlock breakthrough:ralnelbt faction_or_color:ralnel"
+  ],
+  "trigger": {
+    "press": "exhaustAgent_ralnelagent",
+    "as": "ralnel"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "leader.use",
+        "option": "^handleRalNelAgent_strategize2$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "leader.use",
+        "option": "^handleRalNelAgentPt2_strategize2_crimson$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "FFCC_ralnel_nanomachines_repair",
+      "as": "ralnel"
+    },
+    {
+      "press": "FFCC_ralnel_nanomachines_actionCard",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "action_card.discard",
+        "option": "redraw$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "FFCC_ralnel_dataSkimmer_page0",
+      "as": "ralnel"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[ralnel].leaders",
+        "match": "ralnelagent"
+      }
+    ]
+  }
+}
