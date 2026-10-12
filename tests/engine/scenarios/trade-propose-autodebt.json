@@ -1,0 +1,59 @@
+{
+  "name": "trade-propose-autodebt",
+  "description": "pbd23 r5 agenda phase: Muaat holds 2 of Nomad's debt tokens; Nomad (auto debt clearance on, the default) offers Muaat 3 TG. The original builder adds 'Muaat clears 2 Nomad debt'; trade.propose must too (bot v-trade 2368137). Muaat accepts.",
+  "base": {
+    "recording": "pbd23",
+    "index": 583,
+    "repost": false
+  },
+  "setup": [
+    "/player send_debt debt_count:2 target_faction_or_color:muaat faction_or_color:nomad"
+  ],
+  "steps": [
+    {
+      "gameAction": "trade.propose",
+      "as": "nomad",
+      "body": {
+        "to": "muaat",
+        "give": {
+          "tg": 3
+        }
+      },
+      "legacy": [
+        {
+          "press": "offerToTransact_TGs_vapourwave_copper_3",
+          "as": "nomad"
+        },
+        {
+          "press": "sendOffer_copper",
+          "as": "nomad"
+        }
+      ]
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "trade.offer",
+        "value": {
+          "action": "accept",
+          "from": "nomad"
+        }
+      },
+      "as": "muaat"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[nomad].trade_goods",
+        "eq": "5"
+      }
+    ]
+  }
+}

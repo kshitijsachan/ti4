@@ -94,7 +94,7 @@ export type TradeState = {
   newTransactionModel: boolean;
   me: TradeSelf;
   partners: TradeCounterparty[];
-  /** Factions the viewer may transact with now: neighbours, anyone in the agenda phase, or an ability that allows it. */
+  /** Factions the viewer may transact with now: in the action phase neighbours (or an ability that allows it); anyone outside the action phase. */
   mayTransactWith: FactionId[];
   /** Open, current offers to the viewer. */
   incoming: OpenOffer[];
