@@ -48,6 +48,12 @@ export function forgetGameKeys(containers: Iterable<Map<string, unknown> | Set<s
   return n;
 }
 
+/**
+ * After a roll-back the autopilots leave the game alone until the engine says its prompts are restored (game.rewound
+ * with reason "restored", ~3 s), at most this long (bots that never send it, roll-back notices).
+ */
+export const REWIND_SETTLE_MS = 12_000;
+
 /** Signals of one roll-back arriving by both routes (event, then notice) count once. */
 export const REWIND_DEDUPE_MS = 20_000;
 

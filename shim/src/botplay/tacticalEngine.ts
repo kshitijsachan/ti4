@@ -150,6 +150,13 @@ export class EngineTactical {
       this.plan = null;
       return false;
     }
+    // No longer our turn (ended, or a roll-back went past it): the plan is over (live pbd273: it produced after its
+    // End Turn, during the next player's turn).
+    if (board && me && board.activePlayer && board.activePlayer !== me.color) {
+      this.seat.log(`engine plan dropped: it is no longer our turn in ${plan.game}`);
+      this.plan = null;
+      return false;
+    }
     if (Date.now() - plan.progressAt > STALL_MS) {
       this.seat.log(`engine plan stalled (no tactical step for ${STALL_MS / 1000}s); leaving it to the other policies`);
       this.plan = null;
