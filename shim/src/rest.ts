@@ -580,7 +580,7 @@ export class Rest {
       delete ch.permission_overwrites;
       delete ch.position;
       ch.recipients = [this.store.userJson(rid)];
-      this.store.scheduleSave();
+      this.store.scheduleSave(ch.id);
       this.hub.channelCreate(ch);
       sendJson(res, 200, ch);
     });

@@ -86,15 +86,13 @@ export class Hub {
     const parent = ch.parent_id ? this.store.channel(ch.parent_id) : undefined;
     const isLog = (c?: Json) => !!c && typeof c.name === "string" && c.name.startsWith("bot-log");
     if (ch.name === "slash-command-log" || ch.name === "button-log") {
-      const list = this.store.messages(ch.id);
-      if (list.length > 1000) list.splice(0, list.length - 1000);
+      this.store.trimMessages(ch.id, 1000);
       return;
     }
     if (!isLog(ch) && !isLog(parent)) return;
     const text = String(msg.content ?? "");
     if (isLog(parent) || /ERROR|WARNING|CRITICAL|Exception/.test(text)) log.warn(`[bot-log${isLog(parent) ? "/" + ch.name : ""}] ${text.slice(0, 6000)}`);
-    const list = this.store.messages(ch.id);
-    if (list.length > 1000) list.splice(0, list.length - 1000);
+    this.store.trimMessages(ch.id, 1000);
   }
 
   buildMessage(channelId: string, authorId: string, json: Json, attachments: Json[] = []): StoredMessage {
@@ -267,7 +265,7 @@ export class Hub {
     }
     if ("content" in json || "embeds" in json || "flags" in json) this.unfurl(msg);
     msg.edited_timestamp = new Date().toISOString();
-    this.store.scheduleSave();
+    this.store.scheduleSave(msg.channel_id, msg.id);
     if (!msg._ephemeral_for) this.gateway.dispatch("MESSAGE_UPDATE", stripPrivate(msg));
     for (const l of this.listeners) l.messageUpdate(msg);
   }
@@ -283,7 +281,7 @@ export class Hub {
   }
 
   touchMessage(msg: StoredMessage) {
-    this.store.scheduleSave();
+    this.store.scheduleSave(msg.channel_id, msg.id);
     for (const l of this.listeners) l.messageUpdate(msg);
   }
 
@@ -297,7 +295,7 @@ export class Hub {
 
   channelUpdate(ch: Json) {
     const isThread = [10, 11, 12].includes(ch.type);
-    this.store.scheduleSave();
+    this.store.scheduleSave(ch.id);
     this.gateway.dispatch(isThread ? "THREAD_UPDATE" : "CHANNEL_UPDATE", ch);
     for (const l of this.listeners) l.channelUpsert(ch);
   }
@@ -313,7 +311,7 @@ export class Hub {
     delete this.store.state.channels[ch.id];
     delete this.store.state.messages[ch.id];
     delete this.store.state.thread_members[ch.id];
-    this.store.scheduleSave();
+    this.store.scheduleSave(ch.id);
     this.gateway.dispatch(
       isThread ? "THREAD_DELETE" : "CHANNEL_DELETE",
       isThread ? { id: ch.id, guild_id: ch.guild_id, parent_id: ch.parent_id, type: ch.type } : ch,
@@ -332,7 +330,7 @@ export class Hub {
     this.store.invalidateViews();
     const ch = this.store.channel(threadId);
     if (ch) ch.member_count = list.length;
-    this.store.scheduleSave();
+    this.store.scheduleSave(threadId);
     this.gateway.dispatch("THREAD_MEMBERS_UPDATE", {
       id: threadId,
       guild_id: this.store.state.guild_id,
@@ -355,7 +353,7 @@ export class Hub {
     const i = list.indexOf(userId);
     if (i < 0) return;
     list.splice(i, 1);
-    this.store.scheduleSave();
+    this.store.scheduleSave(threadId);
     this.gateway.dispatch("THREAD_MEMBERS_UPDATE", {
       id: threadId,
       guild_id: this.store.state.guild_id,
