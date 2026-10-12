@@ -13,9 +13,11 @@
 //     setup:   [ "/tech add tech:gd faction_or_color:${seat1}", { command: "ac draw_specific_ac", options: {...}, as: "seat1" } ],
 //     trigger: { press: "<custom id>", as } | { command: "/…" } | { answer: {...} },
 //     steps:   [ { answer: { kind: "strategy_card.pick", option: "regex on option id/label", value: { strategyCard: 3 } }, as },
-//                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command } ],
+//                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command },
+//                { mark: "name" } (remember the latest save), { rewind: "name" | N } (the web rewind to a mark / N saves back) ],
 //     diffIgnore: [ "stored.violatedSystems" ]   (save keys --diff skips: game.<k> | stored.<k> | player.<k>)
-//     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ] } }
+//     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ],
+//                channels: { archived: true|false } } }
 //   A step may carry its own "expect" (same shape), checked right after it (e.g. a prompt closed mid-flow).
 //   A step with "refused": true expects the engine to refuse it (the legacy fork must still end in the same state).
 //   "as": "seat1".."seat8" | a faction | a user id (default seat1). Strings may use ${seat1}…${seat8}, ${fork},
@@ -30,7 +32,7 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, readGameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
+import { BOT_URL, ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, readGameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
 import { createFork, openFork, closeFork, clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
 import { loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
@@ -248,6 +250,23 @@ class Runner {
       const r = await c.command(this.fork.actionsId, name, options);
       return r.error ? { ok: false, error: `/${name}: ${r.error}` } : { ok: true, detail: `/${name}` };
     }
+    if (st.mark) {
+      // Remembers the fork's latest save under a name, for a later { rewind: name }.
+      (this.marks ??= {})[st.mark] = latestUndo(this.fork.game);
+      return { ok: true, detail: `mark ${st.mark} = save ${this.marks[st.mark]}` };
+    }
+    if (st.rewind != null) {
+      // The web's rewind (POST /api/game/<game>/rewind as a seat of the game) to a mark, or N saves back.
+      const index = typeof st.rewind === "number" ? latestUndo(this.fork.game) - st.rewind : this.marks?.[st.rewind];
+      if (index == null) return { ok: false, error: `rewind: no mark ${st.rewind}` };
+      const seat = this.fork.seats.find((x) => x.user_id === user) ?? this.fork.seats[0];
+      const r = await fetch(`${BOT_URL}/api/game/${this.fork.game}/rewind`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${seat.token}` },
+        body: JSON.stringify({ index }),
+      });
+      return r.ok ? { ok: true, detail: `rewind to ${index}` } : { ok: false, error: `rewind to ${index}: ${r.status} ${(await r.text()).slice(0, 200)}` };
+    }
     if (st.press) return this.press(interp(st.press, this.ctx), user, st);
     if (st.answer) return this.answerStep(st.answer, user);
     if (st.gameAction) {
@@ -444,6 +463,23 @@ async function checkExpect(run, expect) {
       const err = checkValue(line == null ? undefined : line.slice(key.length + 1), e);
       if (err) fails.push(`save ${e.key}: ${err}`);
     }
+  }
+  if (expect.channels) {
+    // { archived: true|false }: the fork's tabletalk / actions channels in the shim (archived = in the archive
+    // category and hidden from the bot, as after /game end archive_channels). Polled: the bot moves them 15 s after
+    // the end and the shim saves its store within 30 s.
+    const ids = ["table_talk_channel", "main_game_channel"].map((k) => run.fork.channels.get(k)).filter(Boolean);
+    const want = !!expect.channels.archived;
+    const archived = (ch) => !!ch?._archived || shimState().channels?.[ch?.parent_id]?.name === "The in-limbo PBD Archive";
+    let got;
+    for (const end = Date.now() + (expect.channels.withinMs ?? 75000); ; ) {
+      got = ids.map((id) => shimState().channels?.[id]);
+      if (got.every((ch) => ch && archived(ch) === want) || Date.now() > end) break;
+      await sleep(2000);
+    }
+    const bad = got.filter((ch) => !ch || archived(ch) !== want);
+    if (!ids.length || bad.length)
+      fails.push(`channels: expected ${want ? "archived" : "restored"}, got ${got.map((ch) => (ch ? `${ch.name} archived=${!!ch._archived} parent=${shimState().channels?.[ch.parent_id]?.name}` : "missing")).join("; ")}`);
   }
   if (expect.decision) {
     // { kind, as?, scope?: "player"|"table", open: true|false }

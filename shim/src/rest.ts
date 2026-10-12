@@ -209,10 +209,15 @@ export class Rest {
       for (const p of body.json as unknown as Json[]) {
         const ch = this.store.channel(p.id);
         if (!ch) continue;
+        const prevParent = ch.parent_id ?? null;
         if (p.position != null) ch.position = p.position;
         if (p.parent_id !== undefined) ch.parent_id = p.parent_id;
+        if (ch._archived) {
+          this.hub.restoreIfMovedOut(ch);
+          continue;
+        }
         this.hub.channelUpdate(ch);
-        this.hub.archiveIfMoved(ch);
+        this.hub.archiveIfMoved(ch, prevParent);
       }
     });
     this.on("GET", "/guilds/:g/roles", ({ res }) => sendJson(res, 200, Object.values(s().roles)));
@@ -308,6 +313,7 @@ export class Rest {
       if (!ch) return;
       const b = ctx.body.json;
       const before = JSON.stringify(ch);
+      const prevParent = ch.parent_id ?? null;
       for (const k of ["name", "topic", "position", "parent_id", "permission_overwrites", "nsfw", "rate_limit_per_user"]) {
         if (k in b) ch[k] = b[k];
       }
@@ -320,9 +326,15 @@ export class Rest {
       }
       // A no-op edit (the bot reopening a thread that is already open) changes nothing for players: only the bot hears
       // it back (its cache may be stale), so a bot repeating it cannot flood every open tab.
+      // An archived channel (an ended game's) moved out of the archive category is back for the bot: the bot
+      // restoring a game a rewind un-ended (CHANNEL_CREATE; it has no such channel to update).
+      if (ch._archived) {
+        if ("parent_id" in b) this.hub.restoreIfMovedOut(ch);
+        if (!ch._archived) return sendJson(ctx.res, 200, ch);
+      }
       if (JSON.stringify(ch) !== before) this.hub.channelUpdate(ch);
       else this.hub.channelEcho(ch);
-      if ("parent_id" in b) this.hub.archiveIfMoved(ch);
+      if ("parent_id" in b) this.hub.archiveIfMoved(ch, prevParent);
       sendJson(ctx.res, 200, ch);
     });
     this.on("DELETE", "/channels/:c", (ctx) => {
