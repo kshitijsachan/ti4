@@ -25,7 +25,9 @@ against a **fake Discord** that we host, and gives players a web client instead 
   - `/art/*` game art (tiles, units, tokens, cards) from the bot's resources: from `$ART_DIR` if set, else proxied
     to the bot's `/api/public/selfhost/art/**`. Links the bot posts to AsyncTI4's art CDNs are rewritten to `/art/`.
   - Serves the built web client (`web/dist`) for everything else (SPA fallback).
-  - State in `$SHIM_DATA/state.json` (+ `files/`, `emojis/`). Messages are stored Discord-shaped.
+  - State in `$SHIM_DATA/store/` (+ `files/`, `emojis/`), sharded per game so a save writes only what changed
+    (`shim/src/shards.ts`; a pre-shard `state.json` is migrated once on start and kept as `state.json.pre-shards`).
+    Messages are stored Discord-shaped. Tools read it with `shim/tools/read-state.mjs`.
   - `hub.ts` is the single place that mutates state and fans out to both the bot and browsers.
 - `web/` — fork of `AsyncTI4/ti4_web_new` (React 19 + Vite + Mantine), commit in `web/UPSTREAM_COMMIT`.
   It already renders the live map / player areas from the bot's game-state JSON. We add the play UI

@@ -7,7 +7,24 @@
  */
 import { log } from "../log.js";
 import { awaits } from "./types.js";
-import type { AnswerRequest, AnswerResult, Decision, DecisionsSnapshot, EngineEvent, GameState, TradeProposal, TradeProposeResult } from "./types.js";
+import type {
+  AnswerRequest,
+  AnswerResult,
+  Decision,
+  DecisionsSnapshot,
+  EngineEvent,
+  FactionId,
+  GameState,
+  TradeProposal,
+  TradeProposeResult,
+} from "./types.js";
+import { createValidator } from "./validate.js";
+
+/**
+ * Checks what crosses the boundary against the id unions (ids.ts) and logs drift once per id; never throws or
+ * rejects data. Off with NODE_ENV=production unless ENGINE_VALIDATE=1 (ENGINE_VALIDATE=0: off everywhere).
+ */
+export const contractValidator = createValidator((m) => log.warn(m));
 
 export class EngineClient {
   /** game → decision id → decision (only while the stream is live). */
@@ -48,6 +65,7 @@ export class EngineClient {
       const res = await fetch(this.url(`/${encodeURIComponent(game)}/state${q}`), { headers: this.headers(), signal: AbortSignal.timeout(8000) });
       if (!res.ok) return null;
       const state = (await res.json()) as GameState;
+      contractValidator.state(state, `state ${game}`);
       this.available = true;
       this.stateCache.set(key, { at: Date.now(), state });
       return state;
@@ -57,7 +75,7 @@ export class EngineClient {
   }
 
   /** Authoritative faction of a seat (null while undrafted or when the engine API is unavailable). */
-  async factionOf(game: string, userId: string): Promise<string | null> {
+  async factionOf(game: string, userId: string): Promise<FactionId | null> {
     const s = await this.state(game, undefined, 5000);
     let p = s?.players.find((x) => x.userId === userId);
     if (s && !p?.faction) p = (await this.state(game, undefined, 0))?.players.find((x) => x.userId === userId);
@@ -78,6 +96,7 @@ export class EngineClient {
       const res = await fetch(this.url(`/${encodeURIComponent(game)}/decisions`), { headers: this.headers(), signal: AbortSignal.timeout(8000) });
       if (!res.ok) return null;
       const snap = (await res.json()) as DecisionsSnapshot;
+      for (const d of snap.decisions ?? []) contractValidator.decision(d, `decisions ${game}`);
       this.available = true;
       if (!this.live || snap.seq > this.seq) return snap;
       const map = new Map(snap.decisions.map((d) => [d.id, d]));
@@ -133,7 +152,9 @@ export class EngineClient {
         signal: AbortSignal.timeout(60000),
       });
       if (res.status === 404 && !res.headers.get("content-type")?.includes("json")) return null;
-      return (await res.json()) as AnswerResult;
+      const result = (await res.json()) as AnswerResult;
+      for (const d of result.opened ?? []) contractValidator.decision(d, `answer ${game}`);
+      return result;
     } catch {
       return null;
     }
@@ -237,8 +258,13 @@ export class EngineClient {
         // a stuck emitter) — abort and resume from our seq (live fuzz: 85 s without events while the registry moved).
         const ctl = new AbortController();
         let lastData = Date.now();
+        let lastTick = Date.now();
         watchdog = setInterval(() => {
-          if (Date.now() - lastData > STREAM_SILENT_MS) {
+          const now = Date.now();
+          // Our own event loop was blocked (a late tick): the bytes may be waiting unread; don't call that silence.
+          if (now - lastTick > 7000) lastData = now;
+          lastTick = now;
+          if (now - lastData > STREAM_SILENT_MS) {
             log.warn(`engine stream silent for ${Math.round((Date.now() - lastData) / 1000)} s: reconnecting`);
             ctl.abort();
           }
@@ -291,6 +317,7 @@ export class EngineClient {
     if (name === "reset") return this.resetTo(json.seq);
     const e = json as EngineEvent;
     if (e.seq <= this.seq) return;
+    if (e.decision && e.type !== "decision.closed") contractValidator.decision(e.decision, `event ${e.game}`);
     this.seq = e.seq;
     this.ring.push(e);
     if (this.ring.length > RING_SIZE) this.ringFloor = this.ring.shift()!.seq;

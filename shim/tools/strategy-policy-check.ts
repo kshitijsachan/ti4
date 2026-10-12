@@ -96,7 +96,7 @@ function cardDecision(sc: number, card: string, holder: string, parts: string[],
 function walk(d: Decision, st: GameState, me: string, max = 6): string[] {
   const history: string[] = [];
   for (let i = 0; i < max; i++) {
-    const c = chooseTyped(d, st, me, { history, open: [] });
+    const c = chooseTyped(d, st, me, { history, open: [], all: [d] });
     if (!c) break;
     history.push(c.option.id);
   }
@@ -119,7 +119,7 @@ function walk(d: Decision, st: GameState, me: string, max = 6): string[] {
   check("Diplomacy follower: answers once (decline)", other.join(",") === "sc_no_follow_2", other.join(","));
   // Holder waits while the system prompt is open.
   const sys = { ...d, id: "d2", kind: "strategy_card.diplomacy_system" } as unknown as Decision;
-  const waiting = chooseTyped(d, st, "u1", { history: ["diploSystem"], open: [sys] });
+  const waiting = chooseTyped(d, st, "u1", { history: ["diploSystem"], open: [sys], all: [] });
   check("Diplomacy holder: waits for the system prompt before readying", waiting === null);
 }
 
@@ -180,17 +180,17 @@ function walk(d: Decision, st: GameState, me: string, max = 6): string[] {
       window: null,
       progress: { flow: "command_tokens", step: "adjust", accumulated: current, required: { status: false, original: { tactic: 3, fleet: 3, strategy: 2 } }, canCommit: true },
     }) as unknown as Decision;
-  const a = chooseTyped(panel({ tactic: 3, fleet: 3, strategy: 2 }, 1), st, "u1", { history: [], open: [] });
+  const a = chooseTyped(panel({ tactic: 3, fleet: 3, strategy: 2 }, 1), st, "u1", { history: [], open: [], all: [] });
   check("Leadership: first gain", /^increase_/.test(a?.option.id ?? ""), a?.option.id);
-  const stale = chooseTyped(panel({ tactic: 3, fleet: 3, strategy: 2 }, 1), st, "u1", { history: [a!.option.id], lastRevision: 1, open: [] });
+  const stale = chooseTyped(panel({ tactic: 3, fleet: 3, strategy: 2 }, 1), st, "u1", { history: [a!.option.id], lastRevision: 1, open: [], all: [] });
   check("Leadership: no second press on the same (stale) revision", stale === null);
-  const full = chooseTyped(panel({ tactic: 5, fleet: 3, strategy: 3 }, 4), st, "u1", { history: ["x", "y", "z"], lastRevision: 3, open: [] });
+  const full = chooseTyped(panel({ tactic: 5, fleet: 3, strategy: 3 }, 4), st, "u1", { history: ["x", "y", "z"], lastRevision: 3, open: [], all: [] });
   check("Leadership: 3 gained by pools → Done", full?.option.id === "deleteButtons_leadership", full?.option.id);
-  const replay = chooseTyped(panel({ tactic: 5, fleet: 3, strategy: 3 }, 4), st, "u1", { history: [], open: [] });
+  const replay = chooseTyped(panel({ tactic: 5, fleet: 3, strategy: 3 }, 4), st, "u1", { history: [], open: [], all: [] });
   check("Leadership: after a restart (no history) still Done, no extra gain", replay?.option.id === "deleteButtons_leadership", replay?.option.id);
   // Without the original pools (status-area kind omits them): one gain per answered revision, never more than 3.
   const noOrig = (rev: number) => ({ ...panel({ tactic: 3, fleet: 3, strategy: 2 }, rev), progress: null }) as unknown as Decision;
-  const g = chooseTyped(noOrig(5), st, "u1", { history: ["increase_tactic_cc", "increase_tactic_cc", "increase_tactic_cc"], lastRevision: 4, open: [] });
+  const g = chooseTyped(noOrig(5), st, "u1", { history: ["increase_tactic_cc", "increase_tactic_cc", "increase_tactic_cc"], lastRevision: 4, open: [], all: [] });
   check("Leadership (no original pools): 3 answered gains → Done", g?.option.id === "deleteButtons_leadership", g?.option.id);
 }
 

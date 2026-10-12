@@ -5,7 +5,7 @@
 import type { ComponentType } from "react";
 import { MiltyDraftInfoRenderer, MiltyDraftPickRenderer, MiltyDraftQueueRenderer } from "./Draft";
 import { KeleresFlavorRenderer, KeleresTechRenderer } from "./Keleres";
-import { GameSettingsRenderer, PlayerSetupRenderer, PreferenceRenderer } from "./Misc";
+import { GameSettingsRenderer, PlayerSetupRenderer } from "./Misc";
 import { DealSecretsRenderer, RevealObjectivesRenderer, SecretDiscardRenderer } from "./Secrets";
 import { TechChooseTypeRenderer, TechGainRenderer } from "./Tech";
 import type { RendererProps } from "./types";
@@ -20,7 +20,6 @@ export const renderers: Record<string, ComponentType<RendererProps<any>>> = {
   "setup.player": PlayerSetupRenderer,
   "setup.deal_secrets": DealSecretsRenderer,
   "setup.reveal_objectives": RevealObjectivesRenderer,
-  "setup.preference": PreferenceRenderer,
   "setup.game_settings": GameSettingsRenderer,
   "secret_objective.discard": SecretDiscardRenderer,
   "tech.gain": TechGainRenderer,

@@ -22,7 +22,6 @@ const SETUP_KINDS = new Set<string>([
   "tech.choose_type",
   "setup.deal_secrets",
   "setup.reveal_objectives",
-  "setup.preference",
   "setup.game_settings",
 ]);
 
@@ -60,8 +59,6 @@ export function chooseSetup(d: Decision, state: GameState | null, me: string): S
       if (!state.setup || !live.every((o) => o.value.free)) return null;
       return { option: live[0], why: live[0].value.techType ? "setup: first technology type" : "setup: get a starting technology" };
     }
-    case "setup.preference":
-      return preference(live);
     default:
       // draft.milty.queue / draft.milty.info / setup.player / setup.game_settings: people's or the steward's.
       return null;
@@ -103,9 +100,3 @@ export function othersStillSettingUp(state: GameState, me: string): SetupPlayer[
   );
 }
 
-/** Same answers as the legacy rule table: let the bot auto-pass secret scoring and Sabotage; auto-react on agendas. */
-function preference(live: Option<any>[]): SetupChoice | null {
-  const by = (pref: string, choice: string) => live.find((o) => o.value.preference === pref && o.value.choice === choice);
-  const pick = by("sandbag", "bot") ?? by("auto_pass_sabotage", "1") ?? by("agenda", "true");
-  return pick ? { option: pick, why: `preferences: ${pick.value.preference} = ${pick.value.choice}` } : null;
-}
