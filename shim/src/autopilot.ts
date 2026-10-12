@@ -14,6 +14,7 @@ import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
 import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
+import { actionInFlight } from "./engine/policy/turn.js";
 import type { Decision } from "./engine/types.js";
 
 /*
@@ -95,7 +96,7 @@ type Rule = {
    * in the next action phase ends that round on the spot.
    */
   phase?: RegExp;
-  /** Only while it is this seat's turn (the bot's active player). */
+  /** Only while it is this seat's turn (the bot's active player) and the planner runs no action (brain.busy). */
   myTurn?: boolean;
 };
 
@@ -163,7 +164,7 @@ const RULES: Rule[] = [
   // own the menu (engine off/down, untyped, or past its grace period).
   { id: /_turnEnd$/, score: 88, retry: true, typed: true, why: "end turn" },
   { id: /_endOfTurnAbilities$/, score: 87, retry: true, typed: true, why: "end turn" },
-  { id: /_strategicAction_\d+$/, score: 86, typed: true, why: "play strategy card" },
+  { id: /_strategicAction_\d+$/, score: 86, typed: true, myTurn: true, why: "play strategy card" },
   // Politics primary: someone must get the speaker token before the bot moves on.
   { id: /^sc_3_assign_speaker_to_/, score: 64, why: "Politics: assign the speaker token" },
   // Only in the action phase: a stale pass button pressed in the status phase passed again and, as the "last pass",
@@ -954,7 +955,7 @@ class SeatPilot {
         lost &&
         (!rule.phase || rule.phase.test(retryPhase)) &&
         (rule.retryIn ? rule.retryIn.test(retryPhase) : this.tableStalled(m, game) || (await this.myTurn(game))) &&
-        (!rule.myTurn || (await this.myTurn(game)))
+        (!rule.myTurn || (!(await this.midAction(game)) && (await this.myTurn(game))))
       ) {
         const again = unpressed.filter((c) => (this.pressed.has(`${m.id}:${c.custom_id}`) || (!mine && press)) && (rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id)));
         const techAlias = /(?:^|_)getTech_(.+?)__noPay/.exec(again[0]?.custom_id ?? "")?.[1];
@@ -999,7 +1000,7 @@ class SeatPilot {
         if (phase === undefined) phase = await this.mgr.phaseOf(game);
         if (phase && !rule.phase.test(phase)) continue;
       }
-      if (rule.myTurn && !(await this.myTurn(game))) continue;
+      if (rule.myTurn && ((await this.midAction(game)) || !(await this.myTurn(game)))) continue;
       let hits = controls.filter((c) => (rule.id ? rule.id.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id.test(c.custom_id) : true) && (rule.label ? rule.label.test(c.label.trim()) : true));
       if (rule.distinct) hits = hits.filter((c) => Date.now() - (this.recent.get(`${m.channel_id}:label:${c.label}`) ?? 0) >= 600000);
       if (!hits.length) continue;
@@ -1147,13 +1148,22 @@ class SeatPilot {
    * planner left it (brain.owns was asked before), and we pressed nothing on this message yet.
    */
   private async turnAgain(m: StoredMessage, ours: Control[], game: string): Promise<Choice | null> {
-    if (m._presses?.[this.userId] || [...this.pressed].some((k) => k.startsWith(`${m.id}:`))) return null;
+    if (m._presses?.[this.userId] || [...this.pressed].some((k) => k.startsWith(`${m.id}:`)) || (await this.midAction(game))) return null;
     const rank = (c: Control) => (/_strategicAction_\d+$/.test(c.custom_id) ? 0 : /_passForRound$/.test(c.custom_id) ? 1 : /_passingAbilities$/.test(c.custom_id) ? 2 : 9);
     const pick = ours.filter((c) => rank(c) < 9).sort((a, b) => rank(a) - rank(b))[0];
     if (!pick || (this.pressCount.get(`${m.id}:${pick.custom_id}`) ?? 0) >= MAX_SAME_PRESS) return null;
     if (!/^action/.test(String((await this.mgr.phaseOf(game)) ?? "")) || !(await this.myTurn(game))) return null;
     if (await this.mgr.engineOwns(game, m.id, this.userId)) return null;
     return { msg: m, control: pick, score: 86, why: rank(pick) === 0 ? "play strategy card (turn prompt re-posted)" : "pass (turn prompt re-posted)" };
+  }
+
+  /** An action of ours is under way: the planner's job, or (engine up) our open tactical / production / combat prompts. */
+  private async midAction(game: string): Promise<boolean> {
+    if (this.brain.busy(game)) return true;
+    const engine = this.mgr.engine;
+    if (!engine?.isLive) return false;
+    const open = ((await engine.openDecisions(game)) ?? []).filter((d) => d.target?.userId === this.userId || !!d.window);
+    return !!actionInFlight(this.userId, open);
   }
 
   private async myTurn(game: string) {
@@ -1524,6 +1534,12 @@ class SeatPilot {
         // Still listed but no longer waiting on us (another player's turn, a finished combat's roll window): no
         // answer, no watchdog clock (live: stale combat windows took every pass of Bot Beta's loop in pbd60).
         if (staleForBot(d, state, this.userId)) {
+          this.engineWaiting.delete(`${game}|${d.id}`);
+          continue;
+        }
+        // Our turn menu while an action of ours is under way (the planner's job, or its open tactical / production /
+        // combat prompts): nothing on it may be pressed yet, not even by the watchdog (pbd181: passed mid tactical).
+        if (d.kind === "turn.action" && (this.brain.busy(game) || actionInFlight(this.userId, mine.filter((x) => x.id !== d.id)))) {
           this.engineWaiting.delete(`${game}|${d.id}`);
           continue;
         }

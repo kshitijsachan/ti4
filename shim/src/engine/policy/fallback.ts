@@ -366,6 +366,8 @@ export function chooseFallback(d: Decision, state: GameState | null, me: string)
   if (staleForBot(d, state, me)) return null;
   // Turn menus: never start an unplanned tactical / component action, never pass with a strategy card unplayed.
   if (d.kind === "turn.action") {
+    // (No `open` here: chooseFallback has no view of our other decisions; the shim's engineStep skips turn menus while
+    // an action is in flight or the planner is busy.)
     const pick = fallbackCandidates(d, state, me).find((o) => {
       const action = o.value?.action;
       if (action === "end_turn" || action === "strategic") return true;

@@ -32,6 +32,11 @@ export class Brain {
     this.violations = new ViolationDesk(seat);
   }
 
+  /** The planner runs an action in this game (legacy or engine tactical job): the turn is not over. */
+  busy(game: string): boolean {
+    return this.tactical.owns(game) || !!this.engineTactical?.owns(game);
+  }
+
   /** Prompts the rule table must leave alone in this game (the planner presses them). */
   owns(game: string, p: Prompt): boolean {
     const planning = this.tactical.owns(game) || !!this.engineTactical?.owns(game);
