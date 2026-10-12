@@ -1,6 +1,6 @@
 {
   "name": "te-action-cards",
-  "description": "Thunder's Edge action cards played by Ral Nel on pbd105 r1 (action_card.play + the card's resolve prompt): Strategize, Brilliance, Pirate Contract, Mercenary Contract",
+  "description": "Thunder's Edge action cards played by Ral Nel on pbd105 r1 (/ac play, then the card's typed resolve prompt answered via engine vs pressed): Strategize, Brilliance, Pirate Contract, Mercenary Contract",
   "base": {
     "recording": "pbd105",
     "index": 165,
@@ -18,19 +18,14 @@
       }
     },
     {
+      "command": "ac play",
+      "options": {
+        "action_card_id": "strategize1",
+        "faction_or_color": "ralnel"
+      }
+    },
+    {
       "wait": 2500
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "strategize1"
-        }
-      },
-      "as": "ralnel"
-    },
-    {
-      "wait": 1500
     },
     {
       "answer": {
@@ -47,19 +42,14 @@
       }
     },
     {
+      "command": "ac play",
+      "options": {
+        "action_card_id": "brilliance",
+        "faction_or_color": "ralnel"
+      }
+    },
+    {
       "wait": 2500
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "brilliance"
-        }
-      },
-      "as": "ralnel"
-    },
-    {
-      "wait": 1500
     },
     {
       "answer": {
@@ -76,19 +66,14 @@
       }
     },
     {
+      "command": "ac play",
+      "options": {
+        "action_card_id": "piratecontract1",
+        "faction_or_color": "ralnel"
+      }
+    },
+    {
       "wait": 2500
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "piratecontract1"
-        }
-      },
-      "as": "ralnel"
-    },
-    {
-      "wait": 1500
     },
     {
       "answer": {
@@ -105,19 +90,14 @@
       }
     },
     {
+      "command": "ac play",
+      "options": {
+        "action_card_id": "mercenarycontract",
+        "faction_or_color": "ralnel"
+      }
+    },
+    {
       "wait": 2500
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "mercenarycontract"
-        }
-      },
-      "as": "ralnel"
-    },
-    {
-      "wait": 1500
     },
     {
       "answer": {
