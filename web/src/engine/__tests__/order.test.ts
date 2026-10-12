@@ -179,3 +179,42 @@ void test("Construction with only the optional second structure left waits behin
   });
   assert.deepEqual(kinds(orderDecisions([dec("turn.action"), c], 0, undefined, state())), ["turn.action", "strategy_card.resolve"]);
 });
+
+void test("pbd283: a finished Trade card (only Request All + untyped Transaction buttons) never takes focus, after Done Resolving or at turn start", () => {
+  const subject = { strategyCard: 5, name: "Trade", holder: "arborec", primaryDone: [] };
+  const trade = (rev: number) =>
+    dec("strategy_card.resolve", {
+      scope: "table",
+      revision: rev,
+      window: { ...win(["u2"]), subject } as unknown as Decision["window"],
+      options: [
+        opt("follow", { who: "others", action: "follow", part: null, primaryParts: [] }),
+        opt("decline", { who: "others", action: "decline", part: null, primaryParts: [] }),
+        opt("refresh", { who: "others", action: "replenish_free", part: null, primaryParts: [] }),
+        opt("ra", { who: "holder", action: "request_all", part: null, primaryParts: [] }),
+        opt("transaction", null),
+        opt("sendTg", null),
+      ],
+    });
+  /* Right after "Done resolving" (a fresh revision opened since my answer). */
+  const afterDone = orderDecisions([trade(2), dec("turn.action")], 0, undefined, state(), "strategy_card.resolve");
+  assert.deepEqual(kinds(afterDone), ["turn.action"]);
+  assert.ok(afterDone.offers.some((d) => d.kind === "strategy_card.resolve"));
+  /* My next turn starts: the turn menu, never the card. */
+  const turnStart = orderDecisions([trade(5), dec("turn.action")], null, undefined, state());
+  assert.deepEqual(kinds(turnStart), ["turn.action"]);
+});
+
+void test("any card whose checklist is all done stays out of the queue at turn start", () => {
+  const parts = ["score_public", "imperial"];
+  const imperial = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: { strategyCard: 8, name: "Imperial", holder: "arborec", primaryDone: ["score_public", "imperial"] } } as unknown as Decision["window"],
+    options: [
+      opt("sp", { who: "holder", action: "score_public", part: "score_public", primaryParts: parts }),
+      opt("si", { who: "holder", action: "score_imperial", part: "imperial", primaryParts: parts }),
+      opt("ra", { who: "holder", action: "request_all", part: null, primaryParts: parts }),
+    ],
+  });
+  assert.deepEqual(kinds(orderDecisions([imperial, dec("turn.action")], null, undefined, state())), ["turn.action"]);
+});
