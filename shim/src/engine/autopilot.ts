@@ -31,8 +31,11 @@ const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
  * command tokens). option may accompany a payload (it names the option the payload belongs to, for logs).
  */
 export type TypedChoice =
-  | { option: Option<any>; payload?: Record<string, unknown>; why: string }
-  | { option?: undefined; payload: Record<string, unknown>; why: string };
+  | { option: Option<any>; payload?: Record<string, unknown>; act?: TypedAct; why: string }
+  | { option?: undefined; payload: Record<string, unknown>; act?: undefined; why: string };
+
+/** A kind's direct action instead of an answer (POST …/decisions/{id}/{action}, e.g. "combat-plan"). */
+export type TypedAct = { action: string; body: Record<string, unknown> };
 
 /**
  * The bot's answer to a typed decision: the area's specific policy, else (for a decision that waits on this seat and
