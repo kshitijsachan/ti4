@@ -336,6 +336,10 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
     const leaders = state.players.find((p) => p.userId === me)?.leaders ?? [];
     return agents.every((v) => leaders.includes(`${v.leader}:exhausted` as never));
   }
+  // A milty board whose every pick is a category we already hold (live pbd223: our faction and speaker boards stayed
+  // open while we owed a slice, the watchdog pressed them, both refused "You already drafted…", the draft stalled).
+  // Not waiting on us; the shim re-snapshots the draft instead (autopilot draftResnapshot).
+  if (d.kind === "draft.milty.pick") return draftBoardStale(d, state, me);
   // The draft-time Keleres preset once we play a flavour (pbd175: still open in setup, reported as a stall).
   if (d.kind === "setup.keleres_flavor" && d.options.some((o) => (o.value as { preset?: boolean } | null)?.preset)) {
     const f: string = state.players.find((p) => p.userId === me)?.faction ?? "";
@@ -372,6 +376,39 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
     return front.sides.length < 2 || front.sides.some((side) => !side.units.length);
   }
   return false;
+}
+
+/** A draft.milty.pick board that offers us nothing we still need (or it is not our pick). */
+export function draftBoardStale(d: Decision, state: GameState, me: string): boolean {
+  const draft = state.draft;
+  if (!draft) return false;
+  if (draft.status !== "drafting" || draft.currentPlayer !== me) return true;
+  const mine = draft.players.find((p) => p.userId === me);
+  if (!mine) return false;
+  const held: Record<string, unknown> = { faction: mine.faction, slice: mine.slice, order: mine.speakerOrder };
+  return d.options.every((o) => {
+    const category = (o.value as { category?: string } | null)?.category;
+    return !category || held[category] != null;
+  });
+}
+
+/**
+ * The draft categories we still owe on our milty turn that no open draft.milty.pick decision offers (empty when it
+ * is not our pick, or every owed category has a board).
+ */
+export function draftBoardsMissing(open: Decision[], state: GameState | null, me: string): string[] {
+  const draft = state?.draft;
+  if (!draft || draft.status !== "drafting" || draft.currentPlayer !== me) return [];
+  const mine = draft.players.find((p) => p.userId === me);
+  if (!mine) return [];
+  const held: Record<string, unknown> = { faction: mine.faction, slice: mine.slice, order: mine.speakerOrder };
+  const owed = ["slice", "faction", "order"].filter((c) => held[c] == null);
+  const offered = new Set(
+    open
+      .filter((d) => d.kind === "draft.milty.pick")
+      .flatMap((d) => d.options.filter((o) => !o.disabled).map((o) => (o.value as { category?: string } | null)?.category)),
+  );
+  return owed.filter((c) => !offered.has(c));
 }
 
 /** The last-resort answer: a passive option, else the first legal non-destructive one; null when there is none. */

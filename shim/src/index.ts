@@ -49,6 +49,12 @@ const engine = process.env.TI4_ENGINE === "off" ? undefined : new EngineClient(B
 engine?.start();
 // Browsers get the same stream over their socket; TI4_ENGINE_WEB=1 makes the engine-driven UI their default.
 clients.engine = new EngineFanout(engine, process.env.TI4_ENGINE_WEB === "1");
+// Ended games' channels leave the guild's channel count (archive category; the web keeps their history).
+hub.ensureArchiveCategory();
+const sweepArchive = () =>
+  hub.sweepEndedGames(BOT_API).then((n) => n && log.info(`archived ${n} channels of ended games`)).catch(() => {});
+setTimeout(sweepArchive, 120_000);
+setInterval(sweepArchive, 6 * 3600_000);
 // Threads created before mention auto-join existed: replay it over stored messages (idempotent).
 for (const list of Object.values(store.state.messages)) for (const m of list) hub.autoJoinMentioned(m);
 const lobby = new Lobby(hub, clients);

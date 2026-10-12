@@ -184,7 +184,7 @@ export class Rest {
       sendJson(res, 200, g);
     });
     this.on("GET", "/guilds/:g/channels", ({ res }) =>
-      sendJson(res, 200, Object.values(s().channels).filter((c) => ![1, 10, 11, 12].includes(c.type))),
+      sendJson(res, 200, Object.values(s().channels).filter((c) => ![1, 10, 11, 12].includes(c.type) && !c._archived)),
     );
     this.on("GET", "/guilds/:g/threads/active", ({ res }) => {
       const threads = Object.values(s().channels).filter((c) => [10, 11, 12].includes(c.type) && !c.thread_metadata?.archived);
@@ -205,6 +205,7 @@ export class Rest {
         if (p.position != null) ch.position = p.position;
         if (p.parent_id !== undefined) ch.parent_id = p.parent_id;
         this.hub.channelUpdate(ch);
+        this.hub.archiveIfMoved(ch);
       }
     });
     this.on("GET", "/guilds/:g/roles", ({ res }) => sendJson(res, 200, Object.values(s().roles)));
@@ -314,6 +315,7 @@ export class Rest {
       // it back (its cache may be stale), so a bot repeating it cannot flood every open tab.
       if (JSON.stringify(ch) !== before) this.hub.channelUpdate(ch);
       else this.hub.channelEcho(ch);
+      if ("parent_id" in b) this.hub.archiveIfMoved(ch);
       sendJson(ctx.res, 200, ch);
     });
     this.on("DELETE", "/channels/:c", (ctx) => {

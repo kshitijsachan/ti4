@@ -366,6 +366,28 @@ export class Clients implements Listener {
     this.send(c, { t: "interaction_done", nonce: msg.nonce });
   }
 
+  /**
+   * Admin: runs a slash command as any guild user (no seat or browser needed), e.g. `/game end` for an abandoned test
+   * game whose players are all bots. Resolves with the bot's outcome (interaction_done error, or "ok").
+   */
+  commandAs(userId: string, channelId: string, name: string, options: Json[]): Promise<string> {
+    return new Promise((resolve) => {
+      const nonce = `admin-${Date.now()}`;
+      const timer = setTimeout(() => resolve("timeout"), 60000);
+      const ws = {
+        readyState: 1,
+        send: (raw: string) => {
+          const f = JSON.parse(raw);
+          if (f.t === "interaction_done" && f.nonce === nonce) {
+            clearTimeout(timer);
+            resolve(f.error ?? "ok");
+          }
+        },
+      } as unknown as WebSocket;
+      this.command({ ws, userId } as Client, { op: "command", nonce, channel_id: channelId, name, options });
+    });
+  }
+
   private command(c: Client, msg: Json) {
     if (!this.hub.gateway.botReady) {
       return this.send(c, { t: "interaction_done", nonce: msg.nonce, error: "The game server is still starting up. Try again in a moment." });

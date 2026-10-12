@@ -13,9 +13,9 @@ import { chooseTyped, ENGINE_GRACE_MS, engineOwnership, type TypedChoice } from 
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { planPayment, productionPayload } from "./engine/policy/production.js";
-import { chooseFallback, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
+import { chooseFallback, draftBoardsMissing, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
 import { actionInFlight } from "./engine/policy/turn.js";
-import type { Decision } from "./engine/types.js";
+import type { Decision, GameState as EngineState } from "./engine/types.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -114,6 +114,12 @@ const ENGINE_LIFETIME_ANSWERS = 24;
 /** The same answer refused this often on one decision is never sent again (one re-send after a refusal). */
 const ENGINE_MAX_REFUSALS = 2;
 /**
+ * Our milty pick with no board offering a category we owe (pbd223): after this grace (a board edit may be in flight)
+ * ask the engine to rebuild the game's decisions (re-captures the boards on screen), at most once per DRAFT_RESNAP_EVERY_MS.
+ */
+const DRAFT_RESNAP_GRACE_MS = 20_000;
+const DRAFT_RESNAP_EVERY_MS = 60_000;
+/**
  * The same answer accepted this many times on one decision in the same state (revision — any, for reaction windows —
  * and progress) while the decision stays open: the answer does nothing for the engine, so stop and report (live pbd31: the Winnu agent's
  * "Hacan" was accepted 783 times, each press re-running the agent; the lifetime cap resets with every restart).
@@ -136,15 +142,17 @@ const RULES: Rule[] = [
   { id: /^milty_slice_/, score: 92, why: "draft: first slice" },
   { id: /^milty_faction_/, score: 91, why: "draft: first faction" },
   { id: /^milty_order_/, score: 90, why: "draft: first speaker order" },
+  // typed (engine-off fallback only, like every rule marked typed): setup secrets (secret_objective.discard), starting
+  // technologies (tech.choose_type / tech.gain), agenda abstain / pre-pass (agenda.*) have engine policies.
   // Setup: keep the first secret objective, discard the other.
-  { id: /^discardSecret_/, score: 80, retry: true, retryIn: /^setup/, addressed: true, last: true, why: "setup: keep the first secret objective" },
+  { id: /^discardSecret_/, score: 80, typed: true, retry: true, retryIn: /^setup/, addressed: true, last: true, why: "setup: keep the first secret objective" },
   // Setup: Keleres picks its flavor once the draft is over (the player's own setup waits on it).
   { id: /^setupStep5_\d+_keleres[a-z]_/, score: 84, addressed: true, why: "setup: Keleres flavor" },
   // Setup: starting technology. Most factions get a list of their allowed techs (getTech_<alias>__noPay__comp, once
   // or twice); open choices come as "Get a Technology" → a tech type → a tech; Keleres asks once the others are done.
-  { id: /(^|_)acquireAFreeTech$/, score: 83, addressed: true, retry: true, retryIn: /^setup/, why: "setup: get a starting technology" },
-  { id: /(^|_)getAllTechOfType_/, score: 82, addressed: true, retry: true, retryIn: /^setup/, why: "setup: first technology type" },
-  { id: /(^|_)getTech_.+__noPay/, score: 81, addressed: true, retry: true, retryIn: /^setup/, distinct: true, why: "setup: first starting technology" },
+  { id: /(^|_)acquireAFreeTech$/, score: 83, typed: true, addressed: true, retry: true, retryIn: /^setup/, why: "setup: get a starting technology" },
+  { id: /(^|_)getAllTechOfType_/, score: 82, typed: true, addressed: true, retry: true, retryIn: /^setup/, why: "setup: first technology type" },
+  { id: /(^|_)getTech_.+__noPay/, score: 81, typed: true, addressed: true, retry: true, retryIn: /^setup/, distinct: true, why: "setup: first starting technology" },
   { id: /(^|_)getKeleresTechOptions$/, score: 60, addressed: true, why: "setup: Keleres technology options" },
   // Strategy phase.
   {
@@ -178,11 +186,11 @@ const RULES: Rule[] = [
   { id: /_passingAbilities$/, score: 84, typed: true, phase: /^action/, myTurn: true, why: "pass" },
   // Agenda: pre-abstain and pass on whens / afters / shenanigans when asked ahead of time, else abstain.
   { id: /^resolvePreassignment_Abstain On Agenda$/, score: 79, why: "agenda: pre-abstain" },
-  { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, why: "agenda: pre-pass on shenanigans" },
+  { id: /^resolvePreassignment_Pass On Shenanigans$/, score: 72, typed: true, why: "agenda: pre-pass on shenanigans" },
   { id: /^declineToQueueA(When|nAfter)$/, score: 72, why: "agenda: no whens / afters" },
-  { id: /resolveAgendaVote_0$/, score: 78, why: "agenda: abstain" },
+  { id: /resolveAgendaVote_0$/, score: 78, typed: true, why: "agenda: abstain" },
   { id: /^resolveAgendaVote_outcomeTie/, score: 74, retry: true, why: "agenda: speaker breaks the tie" },
-  { label: /^(?!pre-).*\babstain\b/i, score: 77, why: "agenda: abstain" },
+  { label: /^(?!pre-).*\babstain\b/i, score: 77, typed: true, why: "agenda: abstain" },
   // Combat: auto-assign hits, roll dice.
   { id: /^autoAssign/, score: 76, why: "combat: auto-assign hits" },
   // The same combat message offers the combat roll for every round, plus one-off rolls (anti-fighter barrage,
@@ -705,6 +713,12 @@ class SeatPilot {
   private lastPressIn = new Map<string, number>();
   /** Per stalled prompt (message id): how often we re-checked it, and when last. */
   private stallChecks = new Map<string, { n: number; at: number }>();
+  /**
+   * Stalled strategy-card picks the engine has no decision for at all (it closed the fresh pick as obsolete: live
+   * pbd229 / pbd223 / pbd188, "round N strategy active=<us>" for the rest of the game). engineOwns calls a message
+   * without a decision "owned" (a leftover), so the typed pick rule skipped it too; for these the rule presses it.
+   */
+  private orphanPicks = new Set<string>();
   private lastStallScan = 0;
 
   /**
@@ -744,6 +758,14 @@ class SeatPilot {
       log.info(`autopilot ${this.name}: re-checking stalled prompt "${String(m.content ?? "").slice(0, 80).replace(/\s+/g, " ")}" in #${ch.name} (waiting on us for ${Math.round((Date.now() - Date.parse(m.edited_timestamp ?? m.timestamp)) / 1000)}s)`);
       this.forgetFaction(game);
       this.forgetPrompt(m);
+      if (st.phase === "strategy" && this.mgr.engine?.isLive) {
+        const open = await this.mgr.engine.openDecisions(game);
+        if (open && !open.some((d) => d.source?.messageId === m.id)) {
+          if (this.orphanPicks.size > 500) this.orphanPicks.clear();
+          this.orphanPicks.add(m.id);
+          log.warn(`autopilot ${this.name}: the engine has no decision for our stalled strategy card pick in ${game}; the button rules answer it`);
+        }
+      }
       const choice = await this.consider(m, ch, game);
       if (choice) return { ...choice, why: `${choice.why}; re-checking stalled prompt` };
       log.info(`autopilot ${this.name}: the stalled prompt in #${ch.name} still has nothing for us to press (faction ${(await this.faction(game)) ?? "unknown"}; controls ${controlsOf(m.components).map((c) => c.custom_id).slice(0, 6).join(", ")})`);
@@ -963,7 +985,7 @@ class SeatPilot {
       if (rule.addressed && !ctx.addressed) continue;
       // (unpressed: a typed rule may still retry a lost press of its own, below.)
       if (rule.typed && rule.id && !unpressed.some((c) => rule.id!.test(c.custom_id.replace(/^FFCC_[^_]+_/, "")) || rule.id!.test(c.custom_id))) continue;
-      if (rule.typed && (owned ??= await this.mgr.engineOwns(game, m.id, me))) continue;
+      if (rule.typed && !this.orphanPicks.has(m.id) && (owned ??= await this.mgr.engineOwns(game, m.id, me))) continue;
       const retryPhase = rule.retry && lost ? String((await this.mgr.phaseOf(game)) ?? "") : "";
       if (
         rule.retry &&
@@ -1532,6 +1554,35 @@ class SeatPilot {
   private engineRefused = new Set<string>();
   /** Refusals per decision and answer ("<decision id>|<option id or payload>"); see ENGINE_MAX_REFUSALS. */
   private engineRefusals = new Map<string, number>();
+  /** Per game: our milty turn with a missing board — since when, last re-snapshot, how many (see draftResnapshot). */
+  private draftResnap = new Map<string, { since: number; at: number; n: number }>();
+
+  /**
+   * Our milty pick, but no open draft.milty.pick offers a category we still owe (the board's decision was closed while
+   * its message stayed up: pbd223 / pbd224): re-snapshot instead of waiting forever — rebuild re-captures the boards
+   * on screen (the bot's 2-min PromptRecovery sweep does the same; this is quicker and works on older bots).
+   */
+  private async draftResnapshot(game: string, open: Decision[], state: EngineState | null, now: number, urgent = false) {
+    const engine = this.mgr.engine;
+    const missing = draftBoardsMissing(open, state, this.userId);
+    if (!engine || !missing.length) {
+      this.draftResnap.delete(game);
+      return;
+    }
+    let r = this.draftResnap.get(game);
+    if (!r) {
+      r = { since: now, at: 0, n: 0 };
+      this.draftResnap.set(game, r);
+    }
+    if (urgent) r.since = Math.min(r.since, now - DRAFT_RESNAP_GRACE_MS);
+    if (now - r.since < DRAFT_RESNAP_GRACE_MS || now - r.at < DRAFT_RESNAP_EVERY_MS) return;
+    const how = "rebuild";
+    r.at = now;
+    r.n++;
+    const res = await engine.resnapshot(game, how);
+    log.warn(`autopilot ${this.name}: our milty pick in ${game} but no board offers our ${missing.join("/")}: engine ${how} -> ${res ? JSON.stringify(res) : "unavailable"}`);
+  }
+
   /** Watchdog: per `${game}|${decision id}` awaiting us, since when, last forced re-evaluation, error logged. */
   private engineWaiting = new Map<string, { since: number; forcedAt: number; errorAt: number; reported: number }>();
 
@@ -1611,6 +1662,7 @@ class SeatPilot {
       const holding = open.filter((d) => answersOutsideWindow(d, this.userId, state) && !own?.some((x) => x.id === d.id));
       const mine = [...(own ?? []), ...table, ...holding];
       this.watchdogSweep(game, mine);
+      if (state?.draft?.status === "drafting") await this.draftResnapshot(game, open, state, now);
       if (!mine.length) continue;
       for (const d of mine) {
         if (this.engineDead.has(d.id)) continue;
@@ -1689,6 +1741,16 @@ class SeatPilot {
         else log.info(line);
         // The decision is gone on the engine side (closed, or a stale copy the mirror still lists): stop answering it.
         if (r.status === "not_found" || (r.status === "stale" && /no longer open/i.test(r.error ?? ""))) this.engineDead.add(d.id);
+        if (!r.ok && r.status === "refused" && d.kind === "draft.milty.pick" && state?.draft?.status === "drafting" && state.draft.currentPlayer === this.userId) {
+          // Still our pick: a refusal means our view of the draft or its boards is behind. Re-read and re-snapshot
+          // instead of counting towards giving up (live pbd223: two refusals and the bot left the draft stalled).
+          // ENGINE_LIFETIME_ANSWERS still bounds how often this decision is answered.
+          for (const k of [...this.engineTried]) if (k.startsWith(`${d.id}@`) || k.startsWith(`${d.id}#`)) this.engineTried.delete(k);
+          this.engineAttempts.delete(d.id);
+          const fresh = await engine.state(game, this.userId, 0);
+          await this.draftResnapshot(game, (await engine.openDecisions(game)) ?? open, fresh, Date.now(), true);
+          continue;
+        }
         if (!r.ok && ["refused", "bad_option", "forbidden", "error", "unsupported"].includes(r.status)) {
           this.engineRefused.add(d.id);
           this.engineRefusals.set(refusalKey, (this.engineRefusals.get(refusalKey) ?? 0) + 1);

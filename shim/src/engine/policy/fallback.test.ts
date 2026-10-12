@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chooseTyped } from "../autopilot.js";
-import { chooseFallback, fallbackDue, FALLBACK_FORCE_MS, FALLBACK_GRACE_MS, KIND_CLASS, staleForBot } from "./fallback.js";
+import { chooseFallback, draftBoardsMissing, fallbackDue, FALLBACK_FORCE_MS, FALLBACK_GRACE_MS, KIND_CLASS, staleForBot } from "./fallback.js";
 import type { Decision, DecisionKind, GameState, Option, ReactionWindow } from "../types.js";
 
 const ME = "bot";
@@ -394,4 +394,48 @@ test("pbd31: Winnu agent 'use on' buttons once our agent is exhausted are stale 
   assert.equal(staleForBot(d, withLeader("winnuagent:exhausted"), ME), true);
   assert.equal(chooseFallback(d, withLeader("winnuagent:exhausted"), ME), null);
   assert.equal(staleForBot(d, withLeader("winnuagent"), ME), false);
+});
+
+test("pbd223: our milty turn owing a slice — faction / speaker boards are stale, the missing slice board is reported", () => {
+  const draft = {
+    type: "milty",
+    status: "drafting",
+    currentPlayer: ME,
+    order: [ME, OTHER],
+    players: [
+      { userId: ME, faction: "naaz", slice: null, speakerOrder: 1 },
+      { userId: OTHER, faction: "titans", slice: "C", speakerOrder: null },
+    ],
+    available: { slices: ["E", "F"], factions: ["hacan", "nomad"], speakerOrders: [5] },
+  };
+  const drafting = { ...state, phase: "miltydraft", draft } as unknown as GameState;
+  const board = (category: string, picks: string[]) =>
+    decision("draft.milty.pick", picks.map((p) => opt(`milty_${category}_${p}`, p, { category, pick: p })), { id: `d-${category}` });
+  const factions = board("faction", ["hacan", "nomad"]);
+  const orders = board("order", ["5"]);
+  const slices = board("slice", ["E", "F"]);
+  assert.equal(staleForBot(factions, drafting, ME), true);
+  assert.equal(staleForBot(orders, drafting, ME), true);
+  assert.equal(staleForBot(slices, drafting, ME), false);
+  assert.equal(chooseFallback(factions, drafting, ME), null);
+  assert.deepEqual(draftBoardsMissing([factions, orders], drafting, ME), ["slice"]);
+  assert.deepEqual(draftBoardsMissing([factions, orders, slices], drafting, ME), []);
+  assert.equal(chooseTyped(slices, drafting, ME, { history: [], open: [], all: [] })?.option?.id, "milty_slice_E");
+  // Someone else's pick: nothing is missing for us, and their boards are not ours to press.
+  const theirs = { ...drafting, draft: { ...draft, currentPlayer: OTHER } } as unknown as GameState;
+  assert.deepEqual(draftBoardsMissing([factions, orders], theirs, ME), []);
+  assert.equal(staleForBot(slices, theirs, ME), true);
+});
+
+test("pbd228: starting technologies during setup — preferred pick, owned ones skipped, even without value.starting", () => {
+  const tech = (t: string) => opt(`FFCC_sol_getTech_${t}__noPay__comp`, t, { tech: t, free: true, starting: false, flags: ["noPay", "comp"], type: "PROPULSION" });
+  const d = decision("tech.gain", [tech("zzz"), tech("amd"), tech("nm")]);
+  const setup = (owing: number, techs: string[] = []) =>
+    ({ ...state, round: 1, players: state.players.map((p) => (p.userId === ME ? { ...p, techs } : p)), setup: { stage: "player_setup", waitingOn: [ME], players: [{ userId: ME, faction: "sol", startingTechsNeeded: owing, secretObjectivesToDiscard: 0, keleresFlavorPending: false }] } }) as unknown as GameState;
+  const pick = chooseTyped(d, setup(1), ME, { history: [], open: [], all: [d] });
+  assert.ok(pick && !pick.why.startsWith("fallback"), pick?.why);
+  assert.notEqual(pick!.option!.value.tech, "zzz", "a preferred technology before an unknown one");
+  const again = chooseTyped(d, setup(1, [pick!.option!.value.tech]), ME, { history: [], open: [], all: [d] });
+  assert.notEqual(again?.option?.value.tech, pick!.option!.value.tech, "never one we own");
+  assert.equal(chooseTyped(d, setup(0), ME, { history: [], open: [], all: [d] }), null, "nothing owed: not a starting technology");
 });

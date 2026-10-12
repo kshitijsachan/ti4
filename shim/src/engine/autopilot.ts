@@ -18,6 +18,7 @@ import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
 import { chooseComponents, isComponentsKind } from "./policy/components.js";
 import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
+import { TECH_PREFERENCE } from "../botplay/techs.js";
 import { chooseFallback, fallbackDue, mayPress, staleForBot } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
 import { actionInFlight, chooseTurnAction } from "./policy/turn.js";
@@ -121,8 +122,16 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     }
     case "tech.gain": {
       // Only the free starting technology; paid research stays with the planner / rule table for now.
-      const opts = d.options.filter((o) => !o.disabled && o.value?.starting && !self?.techs.includes(o.value.tech));
-      if (opts[0]) return { option: opts[0], why: "setup: first starting technology not owned" };
+      // Starting technologies: value.starting, or (live pbd228: the flag missed, the legacy rule pressed instead) a free
+      // technology while setup says we still owe starting technologies. Our usual picks first (TECH_PREFERENCE, the
+      // planner's research path toward unit upgrades), else the first offered.
+      const owing = state?.setup?.players.find((p) => p.userId === me)?.startingTechsNeeded ?? 0;
+      const opts = d.options.filter((o) => !o.disabled && o.value && (o.value.starting || (o.value.free && owing > 0)) && !self?.techs.includes(o.value.tech));
+      if (opts.length) {
+        const rank = (t: string) => (TECH_PREFERENCE.indexOf(t) < 0 ? 99 : TECH_PREFERENCE.indexOf(t));
+        const pick = opts.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o.value!.tech) - rank(b.o.value!.tech) || a.i - b.i)[0].o;
+        return { option: pick, why: `setup: starting technology ${pick.value!.tech}${rank(pick.value!.tech) < 99 ? " (preferred)" : " (first offered)"}` };
+      }
       // Technology primary (our card, played): the free first technology. Paid research is not planned.
       const tech = state?.strategyCards.find((c) => c.card === "pok7technology" && c.played && c.holder === me);
       if (tech && self && ctx.history.length === 0) {
