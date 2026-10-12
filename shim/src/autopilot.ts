@@ -186,7 +186,9 @@ const RULES: Rule[] = [
   { id: /^rejectOffer_/, score: 74, why: "reject transaction" },
   // Reaction windows everyone answers.
   { id: /^sc_no_follow_\d+$/, score: 70, table: true, why: "strategy card: not following" },
-  { id: /^no_sabotage$/, score: 70, table: true, why: "no sabotage" },
+  // typed: the engine policy (policy/cards.ts) passes Sabotage windows; this rule only runs when the engine does not
+  // own the window (engine off/down, or the typed decision outlived its grace period). See engineOwns.
+  { id: /^no_sabotage$/, score: 70, table: true, typed: true, why: "no sabotage" },
   { id: /^no_when(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no whens" },
   { id: /^no_after(_persistent)?$/, score: 70, table: true, phase: /^agenda/, why: "agenda: no afters" },
   { id: /^po_no_scoring$/, score: 66, table: true, typed: true, again: true, phase: /^status/, why: "status: no public objective" },
@@ -366,6 +368,10 @@ export class Autopilot {
     const open = (await engine.openDecisions(game)) ?? [];
     const d = open.find((x) => x.source.messageId === messageId);
     if (!d || d.kind === "legacy") return false;
+    // A Sabotage window this seat already answered, or was auto-passed in (no Sabotage feasible: the bot itself adds
+    // that faction's reaction, MessageHelper.sendMessageToChannelWithEmbedsAndFactionReact): nothing left to press.
+    // Without this the legacy "no_sabotage" rule pressed No Sabotage on the engine's behalf (live pbd161, Shields Holding).
+    if (d.kind === "action_card.sabotage" && d.window?.responded.includes(userId)) return true;
     const state = await engine.state(game, userId, 2000);
     if (d.scope === "player" ? d.target?.userId !== userId : !!d.window && !awaits(d, userId)) {
       // Not awaited by the window, but ours to answer (the strategy card we played): still the engine's.

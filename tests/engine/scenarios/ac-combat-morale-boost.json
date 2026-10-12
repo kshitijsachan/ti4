@@ -1,0 +1,80 @@
+{
+  "name": "ac-combat-morale-boost",
+  "description": "Space combat at 308 (pbd60, mentak vs muaat): mentak plays Morale Boost from hand (action_card.play), the table passes on Sabotage (action_card.sabotage), mentak resolves the +1 temp combat modifier (applytempcombatmod__AC__mb1). Every other player holds a Sabotage so nobody is auto-passed.",
+  "base": {
+    "recording": "pbd60",
+    "index": 122
+  },
+  "setup": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "mb1",
+        "faction_or_color": "mentak"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "sabo2",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "sabo3",
+        "faction_or_color": "ghost"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "sabo4",
+        "faction_or_color": "crimson"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "mb1"
+        }
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "action_card.sabotage",
+        "option": "^no_sabotage$"
+      },
+      "as": "muaat"
+    },
+    {
+      "answer": {
+        "kind": "action_card.sabotage",
+        "option": "^no_sabotage$"
+      },
+      "as": "ghost"
+    },
+    {
+      "answer": {
+        "kind": "action_card.sabotage",
+        "option": "^no_sabotage$"
+      },
+      "as": "crimson"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "applytempcombatmod__action_cards__mb1"
+      },
+      "as": "mentak"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
