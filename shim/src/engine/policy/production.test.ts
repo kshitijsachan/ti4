@@ -1,7 +1,7 @@
 // Run: cd shim && npx tsx --test src/engine/policy/production.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planPayment, productionPayload } from "./production.js";
+import { chooseCappedBuild, planPayment, productionPayload } from "./production.js";
 import type { PaymentSpend, PaymentValue, ProductionProduce, ProductionValue } from "../kinds/production.js";
 import type { GameState, Option, PlanetId } from "../types.js";
 
@@ -85,6 +85,27 @@ test("production payload groups units, ground forces on a planet", () => {
   const d = { kind: "production.produce", options: places.map((v, i) => opt(`p${i}`, v)) } as unknown as ProductionProduce;
   assert.deepEqual(productionPayload(d, ["cv", "gf", "gf", "ws"]).units, [{ unit: "cv", count: 1 }, { unit: "gf", count: 2, holder: "lodor" }]);
   assert.deepEqual(productionPayload(d, []).units, []);
+});
+
+// User report: "for umbat, shouldn't it check that i only make 2 units?" — a capped production (Umbat: up to 2 units
+// each costing 4 or less) takes only what fits, and the bot builds within it when Umbat is used on it.
+test("capped production (Umbat): payload clipped, capped build for the bot", () => {
+  const places: ProductionValue[] = [
+    { unit: "dn", count: 1, holder: "space", tile: "304", cost: 4 },
+    { unit: "dd", count: 1, holder: "space", tile: "304", cost: 1 },
+    { unit: "ff", count: 2, holder: "space", tile: "304", cost: 0.5 },
+    { unit: "ws", count: 1, holder: "space", tile: "304", cost: 12 },
+    {
+      action: "done", context: "muaatagent", tile: "304", produced: {}, unitCount: 0, cost: 0, productionLimit: null,
+      limit: { maxUnits: 2, maxEachCost: 4, maxTotalCost: null, onlyUnit: null, source: "umbat", label: "Umbat: up to 2 units, each cost ≤4" },
+    },
+  ];
+  const d = { kind: "production.produce", target: { userId: "u" }, options: places.map((v, i) => opt(`p${i}`, v)) } as unknown as ProductionProduce;
+  assert.deepEqual(productionPayload(d, ["ws", "dn", "dn", "dd"]).units, [{ unit: "dn", count: 2 }]);
+  assert.deepEqual(productionPayload(d, ["dd", "ff", "ff"]).units, [{ unit: "dd", count: 1 }, { unit: "ff", count: 1 }]);
+  const pick = chooseCappedBuild(d, state(3), "u");
+  assert.deepEqual(pick?.payload, { units: [{ unit: "dd", count: 2 }] });
+  assert.equal(chooseCappedBuild(d, state(3), "someone else"), null);
 });
 
 // Live (pbd36 / pbd60 / pbd88 / pbd90 / pbd92 / pbd105): unpriced Leadership / Technology bills waited out the 60 s

@@ -1,0 +1,35 @@
+{
+  "name": "production-umbat-cap",
+  "description": "Umbat (Muaat agent): 'produce up to 2 units that each have a cost of 4 or less in a system that contains one of their war suns or flagship'. Muaat exhausts Umbat on itself at 304 (war sun there) and tries 3 units (2 dreadnoughts + 1 cruiser): both paths refuse the 3rd unit (bot handler: ephemeral refusal; engine: validate), then 2 dreadnoughts are produced and paid. War suns / flagships are never offered (cost > 4).",
+  "base": { "recording": "pbd104", "index": 44, "repost": false },
+  "setup": [
+    "/add_units tile_name:304 unit_names:\"warsun\" faction_or_color:muaat",
+    "/player stats trade_goods:10 strategy_cc:3 faction_or_color:muaat"
+  ],
+  "trigger": { "press": "getAgentSelection_muaatagent", "as": "muaat" },
+  "steps": [
+    { "press": "exhaustAgent_muaatagent_muaat", "as": "muaat" },
+    { "press": "umbatTile_304", "as": "muaat" },
+    {
+      "answer": { "kind": "production.produce", "payload": { "units": [ { "unit": "dreadnought", "count": 2 }, { "unit": "cruiser", "count": 1 } ] } },
+      "as": "muaat",
+      "refused": true,
+      "legacy": [
+        { "press": "FFCC_muaat_place_dreadnought_304" }, { "wait": 1500 },
+        { "press": "FFCC_muaat_place_dreadnought_304" }, { "wait": 1500 },
+        { "press": "FFCC_muaat_place_cruiser_304" }, { "wait": 1500 },
+        { "press": "FFCC_muaat_resetProducedThings" }, { "wait": 1500 }
+      ]
+    },
+    {
+      "answer": { "kind": "production.produce", "payload": { "units": [ { "unit": "dreadnought", "count": 2 } ] } },
+      "as": "muaat",
+      "legacy": [
+        { "press": "FFCC_muaat_place_dreadnought_304" }, { "wait": 1500 },
+        { "press": "FFCC_muaat_place_dreadnought_304" }, { "wait": 1500 },
+        { "press": "FFCC_muaat_deleteButtons_muaatagent_304" }
+      ]
+    }
+  ],
+  "expect": { "invariants": true, "save": [ { "key": "player[muaat].produced_units", "match": "dn_304_space,2" } ] }
+}

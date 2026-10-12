@@ -2,7 +2,7 @@ import { planetName } from "../tactical/names";
 import { UnstyledButton } from "@mantine/core";
 import type { HolderName, Option, TilePosition, UnitId } from "../../../../../shim/src/engine/types";
 import type { ProductionPayload, ProductionPlaceValue, ProductionProduce, ProductionValue } from "../../../../../shim/src/engine/kinds/production";
-import { isPlacement, isProductionDone } from "./model";
+import { capExcludes, capRoom, isPlacement, isProductionDone } from "./model";
 import { ExtraOptions, Stepper, type AreaRendererProps } from "./shared";
 import classes from "./production.module.css";
 import { useDecisionState } from "../../draftState";
@@ -55,7 +55,17 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
   const limit = done?.productionLimit ?? null;
   const picked = lines.reduce((n, l) => n + (counts[l.key] ?? 0), 0);
   const cost = Math.ceil(lines.reduce((n, l) => n + (counts[l.key] ?? 0) * (l.cost ?? 0), 0) + (done?.cost ?? 0));
-  const over = limit !== null && already + picked > limit;
+  // A capped production (Umbat, riders, Maximus, Availyn, Flaah Hyphae): the engine refuses anything past it.
+  const cap = done?.limit ?? null;
+  const pickedCost = lines.reduce((n, l) => n + (counts[l.key] ?? 0) * (l.cost ?? 0), 0);
+  const capUnits = already + picked;
+  const capSpent = (done?.cost ?? 0) + pickedCost;
+  const overCap =
+    !!cap &&
+    (capUnits > cap.maxUnits ||
+      (cap.maxTotalCost != null && capSpent > cap.maxTotalCost + 1e-6) ||
+      lines.some((l) => (counts[l.key] ?? 0) > 0 && capExcludes(cap, l.unit, l.cost) !== null));
+  const over = (limit !== null && already + picked > limit) || overCap;
   const room = limit === null ? 20 : Math.max(0, limit - already - picked);
   const extras = options.filter((o) => !o.value && !o.disabled);
 
@@ -73,23 +83,30 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
       <div className={classes.head}>
         <span className={classes.title}>Produce units{done?.tile ? ` in ${done.tile}` : ""}</span>
         <span className={classes.muted}>
+          {cap ? `${cap.label} · ${capUnits} / ${cap.maxUnits} · ` : ""}
           {limit === null ? "" : `Production ${already + picked} / ${limit} · `}cost {cost} resources
         </span>
       </div>
       <div className={classes.lines}>
-        {lines.map((l) => (
-          <Stepper
-            key={l.key}
-            label={`${UNIT_NAME[l.unit] ?? l.unit}${l.holder === "space" ? "" : ` on ${planetName(l.holder)}`}`}
-            value={counts[l.key] ?? 0}
-            max={(counts[l.key] ?? 0) + room}
-            onChange={(n) => setCounts((c) => ({ ...c, [l.key]: n }))}
-            hint={l.cost === null ? undefined : `${l.cost} each`}
-            disabled={busy}
-          />
-        ))}
+        {lines.map((l) => {
+          const n = counts[l.key] ?? 0;
+          const excluded = capExcludes(cap, l.unit, l.cost);
+          const fits = excluded ? 0 : Math.min(room, capRoom(cap, l.cost, capUnits, capSpent));
+          const each = l.cost === null ? undefined : `${l.cost} each`;
+          return (
+            <Stepper
+              key={l.key}
+              label={`${UNIT_NAME[l.unit] ?? l.unit}${l.holder === "space" ? "" : ` on ${planetName(l.holder)}`}`}
+              value={n}
+              max={excluded ? n : n + fits}
+              onChange={(v) => setCounts((c) => ({ ...c, [l.key]: v }))}
+              hint={excluded && cap ? `${cap.label.split(":")[0]}: ${excluded}` : each}
+              disabled={busy || (!!excluded && n === 0)}
+            />
+          );
+        })}
       </div>
-      {over && <span className={classes.short}>Over the production limit of {limit}.</span>}
+      {over && <span className={classes.short}>{overCap && cap ? `Over the cap — ${cap.label}.` : `Over the production limit of ${limit}.`}</span>}
       <ExtraOptions options={extras} answer={answer} busy={busy} />
       <div className={classes.row}>
         <UnstyledButton className={classes.link} onClick={() => commit([])} disabled={busy || !doneOpt}>
