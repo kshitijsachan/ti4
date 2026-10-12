@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { Breach, Breakthrough, Plot } from "./TeStepRenderers";
 import { Expedition, FractureIngress, FractureRoll, Galvanize, PlaceThundersEdge, Visionaria, type TeRendererProps } from "./TeRenderers";
 
 /** Thunder's Edge (G10) renderers by decision kind; wired by the engine renderer registry (import.meta.glob). */
@@ -10,4 +11,7 @@ export const renderers: Record<string, ComponentType<TeRendererProps<any>>> = {
   "te.expedition": Expedition,
   "te.thunders_edge.place": PlaceThundersEdge,
   "te.visionaria.respond": Visionaria,
+  "te.breakthrough": Breakthrough,
+  "te.breach": Breach,
+  "te.plot": Plot,
 };

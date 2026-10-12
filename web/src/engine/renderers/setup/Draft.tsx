@@ -24,7 +24,7 @@ function onBoard(state: GameState | null, category: Category, pick: string) {
   const a = state?.draft?.available;
   if (!a) return true;
   if (category === "slice") return a.slices.includes(pick);
-  if (category === "faction") return a.factions.includes(pick);
+  if (category === "faction") return a.factions.some((f) => f === pick);
   return a.speakerOrders.includes(Number(pick));
 }
 

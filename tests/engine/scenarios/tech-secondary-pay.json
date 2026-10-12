@@ -1,0 +1,60 @@
+{
+  "name": "tech-secondary-pay",
+  "description": "Technology secondary (pbd101 r1, Naalu played Technology): Mentak follows via the card's Get a Technology button, researches Scanlink Drone Network and pays with Moll Primus (4 resources) in one payment.spend payload.",
+  "base": {
+    "recording": "pbd101",
+    "index": 47
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "acquireATechWithSC_first"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "getTech_sdn"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "mollprimus"
+          ]
+        }
+      },
+      "as": "mentak",
+      "legacy": [
+        {
+          "press": "spend_mollprimus_restech",
+          "as": "mentak"
+        },
+        {
+          "press": "deleteButtons_technology",
+          "as": "mentak"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=mentak].techs",
+        "includes": "sdn"
+      }
+    ],
+    "save": [
+      {
+        "key": "player[mentak].strategy_cc",
+        "eq": "1"
+      }
+    ]
+  }
+}
