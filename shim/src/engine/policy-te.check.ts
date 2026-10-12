@@ -34,8 +34,12 @@ const otherRoll = base("te.fracture.roll", [opt("FFCC_jolnar_rollFracture_jolnar
 assert.equal(chooseTyped(otherRoll, state, ME), null);
 // Even if mis-targeted at us, an option locked to jolnar is never chosen.
 assert.equal(chooseTyped({ ...otherRoll, target: roll.target } as Decision, state, ME), null);
-// Weakly resolved (mention) prompts are left alone.
-assert.equal(chooseTyped({ ...roll, target: { ...roll.target!, resolvedBy: "mention" } } as Decision, state, ME), null);
+// pbd228: our own breakthrough's roll is rolled even when the target was resolved weakly (mention) or not at all
+// (an option locked to us); a weakly resolved roll of another faction's breakthrough never.
+assert.equal(chooseTyped({ ...roll, target: { ...roll.target!, resolvedBy: "mention" } } as Decision, state, ME)?.option.id, "FFCC_crimson_rollFracture_crimsonbt");
+assert.equal(chooseTyped({ ...roll, target: { userId: null, faction: null, color: null, resolvedBy: "none" } } as unknown as Decision, state, ME)?.option.id, "FFCC_crimson_rollFracture_crimsonbt");
+const unlockedOther = base("te.fracture.roll", [opt("rollFracture_jolnarbt", { breakthrough: "jolnarbt", spawn: false, canEnterPlay: true })], { target: { ...roll.target!, resolvedBy: "mention" } });
+assert.equal(chooseTyped(unlockedOther, state, ME), null);
 
 // Ingress: skip a tile that already has a token, prefer my planet's system; Done when this prompt's quota is placed.
 const ing = (remaining: number) =>
