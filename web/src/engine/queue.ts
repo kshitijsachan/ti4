@@ -150,6 +150,8 @@ export function decisionEyebrow(d: Decision): string | null {
 }
 
 const COMBAT = /^combat\./;
+/** Steps of one player's own action; window-less table copies of them are leftovers, not offers. */
+const NOT_MINE_AT_TABLE = new Set(["payment.spend", "production.produce", "command_tokens.adjust"]);
 const IN_ADVANCE_KINDS = new Set(["strategy_card.pre_decline", "strategy_card.queue_pick"]);
 const AGENDA_BLOCKING = new Set(["action_card.sabotage", "agenda.when", "agenda.after", "agenda.vote", "agenda.vote_step", "agenda.tiebreak", "agenda.resolve"]);
 /** Table-wide steps that move the phase on: after my own homework, so I'm not asked to start the next phase first. */
@@ -186,7 +188,9 @@ export function orderDecisions(
         !(d.kind === "legacy" && underWay && setupOnly(d.options)) &&
         !(d.kind === "strategy_card.resolve" && !actionPhase) &&
         !(d.kind === "setup.game_settings" && (underWay || !!state?.draft)) &&
-        !(d.kind === "status.score_secret" && secretDeclared),
+        !(d.kind === "status.score_secret" && secretDeclared) &&
+        /* A turn menu left open from my last turn: not mine while someone else is taking theirs. */
+        !(d.kind === "turn.action" && !!state?.activePlayer && !!selfId && state.activePlayer !== selfId),
     ),
   );
   const nextStep = (d: Decision) => answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2;
@@ -197,7 +201,16 @@ export function orderDecisions(
   const background = (d: Decision) => openToAll(d) || perpetual(d) || (d.kind === "legacy" && nothingToDecide(d.options));
   const myFaction = state?.players.find((p) => p.self)?.faction;
   const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
-  const offers = shown.filter(background);
+  /* Background prompts pile up (a new copy per round / per thread): one entry per title, the newest. Someone else's
+     payment or production left open at the table is not on offer to me. */
+  const newestByTitle = new Map<string, Decision>();
+  for (const d of shown.filter(background)) {
+    if (d.scope === "table" && NOT_MINE_AT_TABLE.has(d.kind)) continue;
+    const t = decisionTitle(d, state);
+    const cur = newestByTitle.get(t);
+    if (!cur || d.createdAt > cur.createdAt) newestByTitle.set(t, d);
+  }
+  const offers = [...newestByTitle.values()].sort((a, b) => a.createdAt - b.createdAt);
   const own = shown.filter((d) => !background(d));
   const homework = own.some((d) => HOMEWORK.test(d.kind) && !PHASE_STEP.has(d.kind));
   const rank = (d: Decision) => {
@@ -210,7 +223,8 @@ export function orderDecisions(
     /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */
     if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryStarted(d) ? 4.6 : 1.5;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
-    if (nextStep(d)) return 1;
+    /* (Not the turn menu: it reopens after everything, and waits behind what the action just started.) */
+    if (nextStep(d) && d.kind !== "turn.action") return 1;
     /* Untyped prompts come last: the engine can't tell a live one from a leftover the game never closed. */
     if (d.kind === "legacy") return 7;
     /* My turn: the table waits on it, so it goes before follows and other answer-any-time windows (after what is

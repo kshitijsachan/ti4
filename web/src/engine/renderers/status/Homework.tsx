@@ -110,7 +110,7 @@ export function StatusHomeworkRenderer({ decision, state, answer }: StatusRender
             {ready && (
               <Group>
                 <Button size="xs" variant={tokensSet ? "filled" : "default"} disabled={ready.disabled} onClick={() => answer(ready.id)}>
-                  Ready for the {next}
+                  {!tokensSet && (st?.tokenGain ?? 0) > 0 ? `Ready without taking my ${st?.tokenGain} new tokens` : `Ready for the ${next}`}
                 </Button>
               </Group>
             )}
