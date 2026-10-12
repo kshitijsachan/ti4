@@ -1,0 +1,22 @@
+{
+  "name": "setup-milty-slice-after-faction-order",
+  "description": "Live pbd223 stall (08:48): round 3 of a 5-player milty draft, Bot Zeta 6 (seat5) already holds a faction and speaker position and owes a slice. The slice board's decision was closed as obsolete mid-draft (a half-loaded MiltyDraftManager seen by a concurrent edit capture), so only the faction / speaker boards were open; the bot pressed those, both were refused ('You already drafted…'), and the draft never advanced. Here: seat4 takes speaker position 4, then seat5 must be able to take a slice through the engine, then seat3 a faction (the last seat's speaker position is auto-picked and the draft finishes).",
+  "base": { "game": "pbd223", "index": 18, "repost": false },
+  "setup": ["/milty show"],
+  "steps": [
+    { "answer": { "kind": "draft.milty.pick", "value": { "category": "order", "pick": "4" } }, "as": "seat4",
+      "legacy": [{ "press": "milty_order_4" }] },
+    { "answer": { "kind": "draft.milty.pick", "value": { "category": "slice", "pick": "E" } }, "as": "seat5",
+      "legacy": [{ "press": "milty_slice_E" }] },
+    { "answer": { "kind": "draft.milty.pick", "value": { "category": "faction", "pick": "hacan" } }, "as": "seat3",
+      "legacy": [{ "press": "milty_faction_hacan" }] },
+    { "wait": 3000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      { "key": "game.milty_draft_manager", "match": "naaz,E,1" },
+      { "key": "game.milty_draft_manager", "match": "hacan,B,2" }
+    ]
+  }
+}
