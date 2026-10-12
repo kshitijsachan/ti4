@@ -1,10 +1,10 @@
-import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { snowflake } from "./ids.js";
 import { imageSize, type UploadedFile } from "./http.js";
 import type { Gateway } from "./gateway.js";
 import type { Interaction, Json, Store, StoredMessage } from "./store.js";
 import { log } from "./log.js";
+import { Retention } from "./retention.js";
 
 /** Anything that wants to hear about state changes (the browser client server). */
 export type Listener = {
@@ -25,8 +25,12 @@ export type Listener = {
  */
 export class Hub {
   listeners: Listener[] = [];
+  /** Attachment retention: superseded renders and ended games' files go (retention.ts). */
+  readonly retention: Retention;
 
-  constructor(public store: Store, public gateway: Gateway, private publicUrl: () => string) {}
+  constructor(public store: Store, public gateway: Gateway, private publicUrl: () => string) {
+    this.retention = new Retention(() => this.store.state, this.store.dataDir);
+  }
 
   // ---- attachments ----
 
@@ -34,8 +38,7 @@ export class Hub {
     const id = snowflake();
     const safe = (meta.filename ?? file.filename ?? "file").replace(/[^A-Za-z0-9._-]/g, "_");
     const dir = join(this.store.dataDir, "files", id);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, safe), file.data);
+    this.retention.write(dir, safe, file.data);
     const url = `${this.publicUrl()}/attachments/${id}/${encodeURIComponent(safe)}`;
     const att: Json = {
       id,
@@ -240,6 +243,7 @@ export class Hub {
     this.autoJoinMentioned(msg);
     this.store.insertMessage(msg);
     this.mirrorBotLog(msg);
+    if (msg.attachments?.length) this.retention.onPost(msg);
     if (!msg._ephemeral_for) this.gateway.dispatch("MESSAGE_CREATE", stripPrivate(msg));
     for (const l of this.listeners) l.messageCreate(msg);
     const ch = this.store.channel(msg.channel_id);
@@ -254,7 +258,12 @@ export class Hub {
     if ("content" in json) msg.content = json.content ?? "";
     if ("components" in json) msg.components = normalizeComponents(json.components ?? []);
     const atts = this.resolveAttachments(json, files, msg.attachments ?? []);
-    if (atts) msg.attachments = atts;
+    if (atts) {
+      const before: Json[] = msg.attachments ?? [];
+      msg.attachments = atts;
+      this.retention.onEdit(before, atts);
+      if (atts.length) this.retention.onPost(msg);
+    }
     if ("embeds" in json) msg.embeds = this.normalizeEmbeds(json.embeds ?? [], msg.attachments ?? []);
     if ("flags" in json && json.flags != null) msg.flags = (json.flags & ~128) | (msg.flags & 64);
     else msg.flags = (msg.flags ?? 0) & ~128;
