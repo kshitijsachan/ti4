@@ -1,58 +1,68 @@
 {
   "name": "te-firmament-techs",
-  "description": "Firmament (TE) on pbd116 r1: Black Ops played by its holder (resolvePNPlay_blackops: 2 TG + CC buttons, plot picker for the Firmament), Neural Parasite (startNeuralParasite -> neuralParasiteS2_<f> -> resolveNeuralParasite_), Planesplitter (planesplitterStep1_ -> planesplitterStep2_)",
+  "description": "Firmament (TE) on pbd116 r1: Black Ops sent to Naalu resolves on arrival (2 TG + command_tokens.adjust for Naalu, te.plot panel for the Firmament -> addFactionTokenToPlot_<plot>_naalu), Neural Parasite start (startNeuralParasite; no target in range)",
   "base": {
     "recording": "pbd116",
     "index": 42,
     "repost": false
   },
   "setup": [
-    "/pn send promissory_note_id:blackops target_faction_or_color:naalu faction_or_color:firmament",
-    "/tech add tech:parasite-firm tech2:planesplitter-firm faction_or_color:firmament"
+    "/tech add tech:parasite-firm faction_or_color:firmament"
   ],
   "steps": [
     {
-      "press": "resolvePNPlay_blackops",
+      "command": "/pn send promissory_note_id:blackops target_faction_or_color:naalu faction_or_color:firmament"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_tactic_cc$"
+      },
       "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc$"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "deleteButtons~ccgain"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "te.plot",
+        "option": "^addFactionTokenToPlot_siphon$"
+      },
+      "as": "firmament"
+    },
+    {
+      "answer": {
+        "kind": "te.plot",
+        "option": "^addFactionTokenToPlot_siphon_naalu$"
+      },
+      "as": "firmament"
     },
     {
       "press": "FFCC_firmament_startNeuralParasite",
       "as": "firmament"
-    },
-    {
-      "answer": {
-        "kind": "/faction.ability|leader.use|legacy/",
-        "option": "neuralParasiteS2_"
-      },
-      "as": "firmament"
-    },
-    {
-      "answer": {
-        "kind": "/faction.ability|leader.use|legacy/",
-        "option": "resolveNeuralParasite_"
-      },
-      "as": "firmament"
-    },
-    {
-      "press": "FFCC_firmament_planesplitterStep1_page0",
-      "as": "firmament"
-    },
-    {
-      "answer": {
-        "kind": "/faction.ability|leader.use|legacy/",
-        "option": "planesplitterStep1_\\d"
-      },
-      "as": "firmament"
-    },
-    {
-      "answer": {
-        "kind": "/faction.ability|leader.use|legacy/",
-        "option": "planesplitterStep2_\\d"
-      },
-      "as": "firmament"
     }
   ],
   "expect": {
-    "invariants": true
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[naalu].trade_goods",
+        "eq": "2"
+      }
+    ]
   }
 }

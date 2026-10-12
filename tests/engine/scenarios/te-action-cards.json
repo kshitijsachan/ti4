@@ -18,6 +18,9 @@
       }
     },
     {
+      "wait": 2500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -42,6 +45,9 @@
         "ac_id": "brilliance",
         "faction_or_color": "ralnel"
       }
+    },
+    {
+      "wait": 2500
     },
     {
       "answer": {
@@ -70,6 +76,9 @@
       }
     },
     {
+      "wait": 2500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -94,6 +103,9 @@
         "ac_id": "mercenarycontract",
         "faction_or_color": "ralnel"
       }
+    },
+    {
+      "wait": 2500
     },
     {
       "answer": {
