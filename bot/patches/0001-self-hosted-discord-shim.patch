@@ -3715,10 +3715,10 @@ index 0000000..af23cf5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..5ff320a
+index 0000000..be9f2e1
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,651 @@
+@@ -0,0 +1,659 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -4127,6 +4127,13 @@ index 0000000..5ff320a
 +            "exhaustAgent_hacanagent", "getAgentSelection_saaragent");
 +
 +    /**
++     * Handlers that do not save (save = false) but start an action, not a view: "Use X Agent" (getAgentSelection_
++     * posts the agent's target picker; leader.use types it). Read-only for the undo log, not for capture: a message of
++     * them alone is a decision (the cards-info shortcut getAgentSelection_saaragent stays an INFO_COMPANION).
++     */
++    private static final List<String> ACTION_NOT_SAVED = List.of("getAgentSelection_");
++
++    /**
 +     * An info menu, not a decision: every option opens a read-only handler (save = false: info, decks, views,
 +     * preferences), one of {@link #INFO_ALONE}, or (with at least one read-only option) an {@link #INFO_COMPANIONS}.
 +     */
@@ -4149,7 +4156,8 @@ index 0000000..5ff320a
 +            }
 +            boolean readOnly;
 +            try {
-+                readOnly = ti4.discord.interactions.buttons.ButtonProcessor.isReadOnly(controls.get(i).customId);
++                readOnly = ti4.discord.interactions.buttons.ButtonProcessor.isReadOnly(controls.get(i).customId)
++                        && !ACTION_NOT_SAVED.stream().anyMatch(h::startsWith);
 +            } catch (Throwable t) {
 +                readOnly = false;
 +            }
@@ -4443,10 +4451,10 @@ index 0000000..0a37097
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionRebuild.java b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
 new file mode 100644
-index 0000000..7c1b296
+index 0000000..f99440d
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,173 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -4485,6 +4493,7 @@ index 0000000..7c1b296
 +    /** Games whose registry was rebuilt since startup; the startup pass skips them. */
 +    private static final Set<String> rebuilt = ConcurrentHashMap.newKeySet();
 +    private static volatile boolean startupDone;
++    private static final java.util.Map<String, Long> lastAttempt = new ConcurrentHashMap<>();
 +
 +    /**
 +     * Before the startup pass reaches a game (it takes a minute or more with ~80 live games), a reader would see an
@@ -4492,11 +4501,16 @@ index 0000000..7c1b296
 +     * read of a game rebuilds it on the spot.
 +     */
 +    public static void ensureRebuilt(String gameName) {
-+        if (startupDone || rebuilt.contains(gameName) || !JdaService.isReadyToReceiveCommands()) return;
++        if (rebuilt.contains(gameName) || !JdaService.isReadyToReceiveCommands()) return;
++        // Also after the startup pass: a game it skipped or could not read (a channel fetch timed out under load, live
++        // pbd159: 0 open decisions while its turn prompt was up) is rebuilt on its first read, at most once a minute.
++        Long last = lastAttempt.get(gameName);
++        if (last != null && System.currentTimeMillis() - last < 60_000) return;
 +        ManagedGame mg = GameManager.getManagedGame(gameName);
 +        if (mg == null || mg.isHasEnded()) return;
 +        synchronized (gameName.intern()) {
 +            if (rebuilt.contains(gameName)) return;
++            lastAttempt.put(gameName, System.currentTimeMillis());
 +            try {
 +                rebuild(mg.getGame());
 +                EngineMetrics.count("rebuild.on_demand");
@@ -4561,8 +4575,15 @@ index 0000000..7c1b296
 +            if (t.getName().startsWith(prefix)) add(channels, t.getId());
 +        }
 +        List<DataObject> messages = new ArrayList<>();
++        boolean complete = true;
 +        for (String ch : channels) {
-+            DataArray arr = fetch(ch);
++            DataArray arr;
++            try {
++                arr = fetch(ch);
++            } catch (Exception e) {
++                complete = false; // timed out under load: capture what we can, retry the game on its next read
++                continue;
++            }
 +            if (arr == null) continue;
 +            for (int i = 0; i < arr.length(); i++) {
 +                DataObject m = arr.getObject(i);
@@ -4580,7 +4601,8 @@ index 0000000..7c1b296
 +            EngineMetrics.count("rebuild.message");
 +            DecisionCapture.onMessage(m, null, game);
 +        }
-+        rebuilt.add(game.getName());
++        if (complete) rebuilt.add(game.getName());
++        else EngineMetrics.count("rebuild.incomplete");
 +        return DecisionRegistry.openDecisions(game.getName()).size();
 +    }
 +
@@ -10357,10 +10379,10 @@ index 0000000..4729a53
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardStepKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardStepKind.java
 new file mode 100644
-index 0000000..39d7411
+index 0000000..26b6a42
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardStepKind.java
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,132 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -10440,6 +10462,14 @@ index 0000000..39d7411
 +            "transferSingularity", "transposeStep2", "transposeStep3", "transposeStep4",
 +            "unexpectedSomeoneElse", "unravelStep2", "unravelStep3");
 +
++    /**
++     * Finish/cancel steps: a leading verb (endScuttle, cancelTacticalRetreat) or a camel-case word
++     * (defectorsShipsDone, resolveHiddenInitiativesNoSwap). Case-sensitive on purpose: a case-insensitive
++     * "end[A-Z]" / "done" also hit amendmentChooseObjective, espionageSendPN and ordainDiscardOne.
++     */
++    static final java.util.regex.Pattern DONE_STEP = java.util.regex.Pattern.compile(
++            "(?:end|finish|cancel|decline|done|noswap)(?:[A-Z0-9].*)?|.*(?:Done|Finish|Cancel|Decline|NoSwap|Noswap)(?:[A-Z0-9].*)?");
++
 +    @Override
 +    public String kind() {
 +        return "action_card.step";
@@ -10478,7 +10508,7 @@ index 0000000..39d7411
 +        String name = step.replaceAll("[_@]+$", "");
 +        v.put("step", name);
 +        v.put("actionCard", CardSteps.cardFor(ctx.game(), name));
-+        v.put("role", name.matches("(?i).*(done|finish|end[A-Z].*|cancel|noswap|decline).*") ? "done" : "choose");
++        v.put("role", DONE_STEP.matcher(name).matches() ? "done" : "choose");
 +        String rest = handlerId.substring(Math.min(handlerId.length(), step.length()));
 +        if (rest.startsWith("_") || rest.startsWith("@")) rest = rest.substring(1);
 +        CardSteps.typeTokens(ctx.game(), rest.replace('@', '_'), v);
@@ -11908,10 +11938,10 @@ index 0000000..fedaa27
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CardSteps.java b/src/main/java/ti4/selfhost/engine/kinds/CardSteps.java
 new file mode 100644
-index 0000000..b44cc48
+index 0000000..90f7d73
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CardSteps.java
-@@ -0,0 +1,393 @@
+@@ -0,0 +1,394 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -12259,15 +12289,16 @@ index 0000000..b44cc48
 +                v.put("damaged", true);
 +                continue;
 +            }
-+            // A planet id that is also a faction id (muaat, winnu, ...) on a step that targets a planet is the planet.
-+            boolean planetStep = PLANET_STEP.matcher(String.valueOf(v.get("step"))).find()
-+                    && (game.getPlanetsInfo().containsKey(tok) || Mapper.isValidPlanet(tok));
++            // A planet id that is also a faction id (muaat, winnu, ...) is the planet on a step that targets a planet,
++            // and after a player token (a home planet named like its faction, as in ActionCardTargetKind ids).
++            boolean planetToo = game.getPlanetsInfo().containsKey(tok) || Mapper.isValidPlanet(tok);
++            boolean planetStep = PLANET_STEP.matcher(String.valueOf(v.get("step"))).find() && planetToo;
 +            Player p = tok.length() > 2 && !planetStep ? game.getPlayerFromColorOrFaction(tok) : null;
-+            if (p != null) {
++            if (p != null && !(planetToo && !players.isEmpty())) {
 +                players.add(p.getFaction());
 +                continue;
 +            }
-+            if (game.getPlanetsInfo().containsKey(tok) || Mapper.isValidPlanet(tok)) {
++            if (planetToo) {
 +                if (!v.containsKey("planet")) v.put("planet", tok);
 +                else args.add(tok);
 +                continue;
@@ -13129,13 +13160,15 @@ index 0000000..4aebd9d
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
 new file mode 100644
-index 0000000..2dca243
+index 0000000..afee157
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,155 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
++import javax.annotation.Nullable;
++import ti4.game.Game;
 +import java.util.Map;
 +import ti4.game.Player;
 +import ti4.game.Tile;
@@ -13163,7 +13196,14 @@ index 0000000..2dca243
 +    @Override
 +    public boolean classifies(List<String> handlerIds) {
 +        for (String h : handlerIds) if (h != null && h.startsWith("autoAssign") && h.contains("Hits_")) return true;
++        // BOMBARDMENT hits (CombatRollService): the defender's prompt has only "Assign Hits" (pbd161: untyped, the
++        // hit was never assigned before the planet's infantry died in the ground combat).
++        for (String h : handlerIds) if (h != null && isBombardmentAssign(h)) return true;
 +        return false;
++    }
++
++    static boolean isBombardmentAssign(String h) {
++        return h.startsWith("getDamageButtons_") && h.endsWith("_bombardment");
 +    }
 +
 +    @Override
@@ -13177,6 +13217,7 @@ index 0000000..2dca243
 +    @Override
 +    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
 +        Map<String, Object> v = CombatSupport.value(handlerId, ctx.game());
++        if (v != null && isBombardmentAssign(handlerId)) return bombardment(v, ctx);
 +        if (v == null || !"auto".equals(v.get("action"))) return v;
 +        Player p = ctx.player();
 +        Object pos = v.get("tile");
@@ -13197,6 +13238,85 @@ index 0000000..2dca243
 +                (Integer) v.get("hits"),
 +                cancels);
 +        return v;
++    }
++
++    /**
++     * The BOMBARDMENT "Assign Hits" option: hits owed (the newest bombardment roll of this activation at that tile),
++     * the bombarded planet (bombardmentTarget of the active player) and the units there that may take them, so a client
++     * can answer with a combat plan (CombatPlanService) like any other hits prompt.
++     */
++    private static Map<String, Object> bombardment(Map<String, Object> v, CaptureContext ctx) {
++        Game game = ctx.game();
++        Player p = ctx.player();
++        String pos = (String) v.get("tile");
++        Tile tile = pos == null ? null : game.getTileByPosition(pos);
++        Integer hits = pos == null ? null : CombatSupport.bombardmentHits(game, pos);
++        String planet = bombardedPlanet(game, tile);
++        v.put("source", "ground");
++        v.put("holder", planet);
++        v.put("hits", hits);
++        if (p != null && tile != null && planet != null) {
++            v.put("units", CombatSupport.hittableUnits(game, p, tile, planet, "ground"));
++            int cancels = p.hasTech("nes") ? 2 : 1;
++            v.put("sustainCancels", cancels);
++            if (hits != null) CombatSupport.noteOwed(game, p, pos, planet, "ground", hits, cancels);
++        }
++        return v;
++    }
++
++    @Nullable
++    static String bombardedPlanet(Game game, @Nullable Tile tile) {
++        if (tile == null) return null;
++        Player active = game.getActivePlayer();
++        String planet = active == null ? "" : game.getStoredValue("bombardmentTarget" + active.getFaction());
++        if (planet != null && !planet.isBlank() && tile.getUnitHolders().containsKey(planet)) return planet;
++        for (var e : game.getStoredValueMap().entrySet()) {
++            if (!e.getKey().startsWith("bombardmentTarget")) continue;
++            if (tile.getUnitHolders().containsKey(e.getValue())) return e.getValue();
++        }
++        return null;
++    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
++    }
++
++    /**
++     * A BOMBARDMENT hits prompt is moot once its planet has no ground forces of the player hit, the ground combat there
++     * has begun, or another system is active (the original message is never removed).
++     */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        List<String> ids = ctx.handlerIds();
++        if (ids == null && ctx.messageId() != null) {
++            String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
++            ti4.selfhost.engine.EngineModels.Decision d = id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
++            if (d != null)
++                ids = d.options().stream()
++                        .map(o -> ti4.discord.interactions.routing.ComponentIdEnvelope.decode(o.id().split("#")[0]).handlerId())
++                        .toList();
++        }
++        if (ids == null) return false;
++        String bombard = null;
++        for (String h : ids) {
++            if (h == null) continue;
++            if (h.startsWith("autoAssign") && h.contains("Hits_")) return false; // regular hits prompts: unchanged
++            if (isBombardmentAssign(h)) bombard = h;
++        }
++        if (bombard == null) return false;
++        Game game = ctx.game();
++        String pos = bombard.substring("getDamageButtons_".length()).split("_")[0];
++        if (!pos.equals(game.getActiveSystem())) return true;
++        Tile tile = game.getTileByPosition(pos);
++        String planet = bombardedPlanet(game, tile);
++        if (tile == null || planet == null) return true;
++        Player p = ctx.player();
++        if (p != null && CombatSupport.hittableUnits(game, p, tile, planet, "ground").isEmpty()) return true;
++        for (Player x : game.getRealPlayersNNeutral())
++            if (CombatSupport.roundsRolled(game, x, pos, planet) > 0) return true;
++        ti4.selfhost.engine.EngineModels.Progress pr = CombatSupport.assignProgress(game, p);
++        return pr != null && pr.canCommit() && planet.equals(((Map<?, ?>) pr.required()).get("holder"));
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatModifierKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatModifierKind.java
@@ -13332,10 +13452,10 @@ index 0000000..0f7fb2e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java b/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java
 new file mode 100644
-index 0000000..1735372
+index 0000000..881aa15
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatPlanService.java
-@@ -0,0 +1,217 @@
+@@ -0,0 +1,219 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.HashMap;
@@ -13416,6 +13536,8 @@ index 0000000..1735372
 +        if (player == null) return fail("forbidden", "You are not a player of this game.");
 +        Option auto = find(d, o -> "auto".equals(o.get("action")));
 +        Option manual = find(d, o -> "assign_manual".equals(o.get("action")));
++        // BOMBARDMENT hits have no auto option: the manual option carries the hits owed (CombatHitsKind).
++        if (auto == null && manual != null && manual.value().get("hits") instanceof Number) auto = manual;
 +        if (auto == null || manual == null) return fail("unsupported", "No manual assignment on this prompt.");
 +        if (manual.disabled()) return fail("bad_option", "Manual assignment is disabled.");
 +        String err = validate(game, player, auto.value(), req.plan() == null ? List.of() : req.plan());
@@ -13738,10 +13860,10 @@ index 0000000..9b6da10
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
 new file mode 100644
-index 0000000..c47cb0e
+index 0000000..ee6a008
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
-@@ -0,0 +1,565 @@
+@@ -0,0 +1,695 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayDeque;
@@ -13949,38 +14071,64 @@ index 0000000..c47cb0e
 +    // ------------------------------------------------------------------ is the fight over? (combat.round obsolete)
 +
 +    /**
-+     * True when a combat-round prompt (its handler ids) can only roll combat rounds — no barrage, bombardment or
-+     * space cannon roll on it — and every fight it rolls for is over: fewer than two players still have units able to
-+     * fight in that holder (ships in space, ground forces on the planet). Such a prompt is a leftover of a finished
-+     * combat (pbd60 had 20); the other controls on it (retreat, repair, ready-for-dice) only matter during the fight.
++     * True when a combat roll prompt (its handler ids) is a leftover nobody can usefully answer any more:
++     * <ul>
++     *   <li>combat rolls on it: every fight it rolls for is over (fewer than two players with units able to fight in
++     *       that holder). A BOMBARDMENT roll on the same message does not keep it open: after the space combat the
++     *       landing prompt carries its own bombardment roll (pbd161: the round-1 space prompt stayed open, a bot kept
++     *       rolling "space combat" with no ships);</li>
++     *   <li>only space cannon offence on it: the activation it was posted for is over (other active system) or the space
++     *       combat there has started (space cannon offence precedes it);</li>
++     *   <li>only anti-fighter barrage on it: no space combat left in that system.</li>
++     * </ul>
++     * Prompts with only a bombardment or a space cannon defence roll stay open. pbd60 had 20 stale windows.
 +     */
 +    static boolean combatPromptOver(Game game, @Nullable List<String> handlerIds) {
 +        if (game == null || handlerIds == null) return false;
-+        boolean any = false;
++        List<String[]> combat = new ArrayList<>(); // [tile, holder]
++        boolean sco = false, afb = false, other = false;
++        String tilePos = null;
 +        for (String h : handlerIds) {
 +            if (h == null) continue;
 +            Matcher m = ROLL.matcher(h);
 +            if (!m.matches()) continue;
-+            if (m.group(1) != null || m.group(4) != null) return false; // barrage / bombardment / space cannon stay valid
-+            any = true;
-+            Tile tile = game.getTileByPosition(m.group(2));
-+            if (tile == null) continue;
-+            String holder = m.group(3);
-+            boolean space = "space".equals(holder);
-+            if (tile.getUnitHolders().get(holder) == null) continue;
-+            int sides = 0;
-+            for (Player p : game.getRealPlayersNNeutral()) {
-+                if (!hittableUnits(game, p, tile, holder, space ? "space" : "ground").isEmpty()) sides++;
++            tilePos = m.group(2);
++            String type = m.group(4) == null ? "combat" : m.group(4);
++            switch (type) {
++                case "combat" -> combat.add(new String[] {m.group(2), m.group(3)});
++                case "spacecannonoffence" -> sco = true;
++                case "afb" -> afb = true;
++                case "bombardment" -> {
++                    // judged with the combat rolls of the same message (or kept, when alone: see below)
++                }
++                default -> other = true; // space cannon defence
 +            }
-+            if (sides >= 2) return false;
 +        }
-+        return any;
++        if (tilePos == null || other) return false;
++        Tile tile = game.getTileByPosition(tilePos);
++        if (tile == null) return false;
++        if (!combat.isEmpty()) {
++            for (String[] c : combat) if (fightOn(game, game.getTileByPosition(c[0]), c[1])) return false;
++            return !sco || scoOver(game, tilePos);
++        }
++        if (sco) return scoOver(game, tilePos) && (!afb || !fightOn(game, tile, "space"));
++        if (afb) return !fightOn(game, tile, "space");
++        return false; // bombardment alone
++    }
++
++    /** Space cannon offence at this tile can no longer be fired: another system is active, or space combat began. */
++    private static boolean scoOver(Game game, String pos) {
++        String active = game.getActiveSystem();
++        if (active == null || !active.equals(pos)) return true;
++        for (Player p : game.getRealPlayersNNeutral())
++            if (roundsRolled(game, p, pos, "space") > 0) return true;
++        return false;
 +    }
 +
 +    // ------------------------------------------------------------------ roll windows (combat.round)
 +
 +    /** What a roll prompt offers: roll type → holder, its tile, when it was first seen. */
-+    record RollMessage(String tile, Map<String, String> types, long at) {}
++    record RollMessage(String tile, Map<String, String> types, List<String> combatHolders, long at) {}
 +
 +    private static final Map<String, RollMessage> ROLL_MSGS = new ConcurrentHashMap<>();
 +
@@ -13990,8 +14138,15 @@ index 0000000..c47cb0e
 +        RollMessage m = ROLL_MSGS.computeIfAbsent(
 +                messageId,
 +                k -> new RollMessage(
-+                        (String) rollValue.get("tile"), new ConcurrentHashMap<>(), System.currentTimeMillis()));
-+        m.types().putIfAbsent((String) rollValue.get("rollType"), String.valueOf(rollValue.get("holder")));
++                        (String) rollValue.get("tile"),
++                        new ConcurrentHashMap<>(),
++                        new java.util.concurrent.CopyOnWriteArrayList<>(),
++                        System.currentTimeMillis()));
++        String holder = String.valueOf(rollValue.get("holder"));
++        m.types().putIfAbsent((String) rollValue.get("rollType"), holder);
++        // A ground-combat prompt rolls for several planets (combatRoll_315_lirtaiv, combatRoll_315_bereg): keep them all.
++        if ("combat".equals(rollValue.get("rollType")) && !m.combatHolders().contains(holder))
++            m.combatHolders().add(holder);
 +    }
 +
 +    @Nullable
@@ -14011,6 +14166,14 @@ index 0000000..c47cb0e
 +        List<String> responded = new ArrayList<>();
 +        String combatHolder = m.types().get("combat");
 +        if (combatHolder != null) {
++            // The first planet whose fight is still on (pbd161: the window kept Lirta IV after that fight ended, so
++            // nobody was told to roll for Bereg).
++            for (String h : m.combatHolders()) {
++                if (fightOn(game, tile, h)) {
++                    combatHolder = h;
++                    break;
++                }
++            }
 +            if (fighters.size() < 2) return null;
 +            Map<String, Object> rounds = new LinkedHashMap<>();
 +            int min = Integer.MAX_VALUE;
@@ -14047,6 +14210,12 @@ index 0000000..c47cb0e
 +        }
 +        for (Player p : who) {
 +            eligible.add(p.getUserID());
++            // Once per activation, whichever copy of the prompt it was rolled from (the bot posts it in the actions
++            // channel and in the combat thread) and across restarts (pbd161: space cannon offence rolled 3x).
++            if (rolledThisActivation(game, p.getFaction(), type, m.tile())) {
++                responded.add(p.getUserID());
++                continue;
++            }
 +            for (CombatRoll r : rollsFor(game.getName())) {
 +                if (r.at() >= m.at() && type.equals(r.rollType()) && p.getFaction().equals(r.faction())) {
 +                    responded.add(p.getUserID());
@@ -14284,6 +14453,7 @@ index 0000000..c47cb0e
 +                q.addLast(r);
 +                while (q.size() > LOG_SIZE) q.removeFirst();
 +            }
++            ledgerAdd(game, r);
 +        } catch (Exception ignored) {
 +            // display aid only
 +        }
@@ -14305,6 +14475,88 @@ index 0000000..c47cb0e
 +            case SpaceCannonDefence -> "spacecannondefence";
 +            default -> "combat";
 +        };
++    }
++
++    // ------------------------------------------------------------------ persisted roll ledger
++
++    /**
++     * Rolls of the current game, persisted in the save (stored value, volatile for backtests) so "already rolled this
++     * activation" survives a restart and a second copy of the prompt. Entry: type|faction|tile|holder|round|active|hits|at
++     * where round is the game round and active the active player's faction when it was rolled.
++     */
++    static final String LEDGER = "engineCombatLedger";
++
++    private static final int LEDGER_SIZE = 30;
++
++    private static void ledgerAdd(Game game, CombatRoll r) {
++        try {
++            Player active = game.getActivePlayer();
++            String e = String.join(
++                    "|",
++                    r.rollType(),
++                    r.faction(),
++                    r.tile(),
++                    r.holder() == null ? "" : r.holder(),
++                    String.valueOf(game.getRound()),
++                    active == null ? "" : active.getFaction(),
++                    String.valueOf(r.hits()),
++                    String.valueOf(r.at()));
++            List<String> all = ledger(game);
++            all.add(e);
++            while (all.size() > LEDGER_SIZE) all.removeFirst();
++            game.setStoredValue(LEDGER, String.join(";", all));
++        } catch (Exception ignored) {
++            // bookkeeping only
++        }
++    }
++
++    private static List<String> ledger(Game game) {
++        String raw = game.getStoredValue(LEDGER);
++        if (raw == null || raw.isBlank()) return new ArrayList<>();
++        return new ArrayList<>(java.util.Arrays.asList(raw.split(";")));
++    }
++
++    /** The newest ledger entry of this activation (same round, same active player, same tile) matching type/faction. */
++    @Nullable
++    private static String[] thisActivation(Game game, @Nullable String faction, String type, String tile) {
++        Player active = game.getActivePlayer();
++        String act = active == null ? "" : active.getFaction();
++        String round = String.valueOf(game.getRound());
++        List<String> all = ledger(game);
++        for (int i = all.size() - 1; i >= 0; i--) {
++            String[] f = all.get(i).split("\\|", -1);
++            if (f.length < 8) continue;
++            if (!f[0].equals(type) || !f[2].equals(tile) || !f[4].equals(round) || !f[5].equals(act)) continue;
++            if (faction != null && !f[1].equals(faction)) continue;
++            return f;
++        }
++        return null;
++    }
++
++    static boolean rolledThisActivation(Game game, String faction, String type, String tile) {
++        return thisActivation(game, faction, type, tile) != null;
++    }
++
++    /** Hits of the newest BOMBARDMENT roll at this tile in this activation, or null. */
++    @Nullable
++    static Integer bombardmentHits(Game game, String tile) {
++        String[] f = thisActivation(game, null, "bombardment", tile);
++        try {
++            return f == null ? null : Integer.parseInt(f[6]);
++        } catch (NumberFormatException e) {
++            return null;
++        }
++    }
++
++    /** Two or more players still have units able to fight in this holder (ships in space, ground forces on a planet). */
++    static boolean fightOn(Game game, Tile tile, String holder) {
++        if (tile == null || holder == null || tile.getUnitHolders().get(holder) == null) return false;
++        boolean space = "space".equals(holder);
++        int sides = 0;
++        for (Player p : game.getRealPlayersNNeutral()) {
++            if (!hittableUnits(game, p, tile, holder, space ? "space" : "ground").isEmpty()) sides++;
++        }
++        return sides >= 2;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java b/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java
@@ -16318,10 +16570,10 @@ index 0000000..7e47f73
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/FactionStepsL1z1x.java b/src/main/java/ti4/selfhost/engine/kinds/FactionStepsL1z1x.java
 new file mode 100644
-index 0000000..96a9acb
+index 0000000..2b0ca62
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/FactionStepsL1z1x.java
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,31 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -16329,7 +16581,9 @@ index 0000000..96a9acb
 +/**
 + * L1Z1X Mindnet. Assimilate (ground combat on a planet with an enemy PDS / space dock: replace them with yours)
 + * assimilate_&lt;planet&gt; (sits on the combat controls; typed when a prompt carries it alone); Inheritance Systems
-+ * exhaustTech_is. Agent I48S: leader.use exhaustAgent_l1z1xagent_&lt;tile&gt;_&lt;planet&gt; (FactionStepsAgentPlanets); hero The
++ * exhaustTech_is. Agent I48S: leader.use exhaustAgent_l1z1xagent_&lt;tile&gt;_&lt;planet&gt; (FactionStepsAgentPlanets); on a
++ * player (exhaustAgent_l1z1xagent_&lt;faction&gt;) its follow-up "replace 1 infantry with 1 mech" is
++ * mitoMechPlacement_&lt;pos&gt;_&lt;holder&gt;_l1z1x (the Mitosis picker with reason l1z1x; Arborec types _mitosis); hero The
 + * Helmsman is a component action. Harrow (bombardment after each ground combat round), Cybernetic Enhancements,
 + * commander 2RAM, mech, flagship Inferno and Super-Dreadnought are passive or resolved by the combat / production
 + * areas.
@@ -16339,7 +16593,12 @@ index 0000000..96a9acb
 +
 +    private static final List<Rule> RULES = List.of(
 +            ability("ability", "assimilate", F, "use", true, "assimilate_(?<planet>.+)"),
-+            ability("tech", "is", F, "use", true, "exhaustTech_is"));
++            ability("tech", "is", F, "use", true, "exhaustTech_is"),
++            leader("l1z1xagent", "target", false, "mitoMechPlacement_(?<tile>[^_]+)_(?<holder>.+)_l1z1x")
++                    .extra((m, ctx, f) -> {
++                        if (!"space".equals(m.group("holder"))) f.put("planet", m.group("holder"));
++                        f.put("unit", "mf");
++                    }));
 +
 +    @Override
 +    protected List<Rule> rules() {
@@ -16553,17 +16812,17 @@ index 0000000..ec84d03
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/FactionStepsNaalu.java b/src/main/java/ti4/selfhost/engine/kinds/FactionStepsNaalu.java
 new file mode 100644
-index 0000000..6beab72
+index 0000000..6fb540c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/FactionStepsNaalu.java
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,30 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
 +
 +/**
 + * Naalu Collective. Hero The Oracle naaluHeroInitiation (status-phase reminder: play the hero) and its forced
-+ * promissory-note send naaluHeroSend_&lt;faction&gt;_&lt;pn&gt; (the same id also carries Malevolency / Concord sends);
++ * promissory-note send naaluHeroSend_&lt;faction&gt;_&lt;pn&gt; (a generic forced send, typed faction.ability forced_pn_send);
 + * commander M'aban naaluCommander ("Do Naalu Commander": look at neighbours' notes) → naaluCPN (view them). Agent:
 + * leader.use exhaustAgent_naaluagent (FactionStepsLeaders). Telepathic and Gift of Prescience (the "0" token, the
 + * note's play through promissory_note.play / agenda.preassign), Foresight (a combat.retreat option), mech and flagship
@@ -16574,7 +16833,11 @@ index 0000000..6beab72
 +
 +    private static final List<Rule> RULES = List.of(
 +            leader("naaluhero", "use", true, "naaluHeroInitiation"),
-+            leader("naaluhero", "target", false, "naaluHeroSend_(?<target>[^_]+)_(?<pn>.+)"),
++            // ButtonHelper.getForcedPNSendButtons: the generic "give <target> one of your promissory notes" picker. The
++            // Oracle uses it, and so do Mentak's commander, Malevolency, Concord, Betrayal, Visionaria, transactions…:
++            // typed as the forced send itself (target = the receiver), not as the Naalu hero (live: Mentak commander's
++            // picker showed "The Oracle").
++            ability("promissory", "forced_pn_send", null, "target", false, "naaluHeroSend_(?<target>[^_]+)_(?<pn>.+)"),
 +            leader("naalucommander", "use", true, "naaluCommander"),
 +            leader("naalucommander", "target", true, "naaluCPN"));
 +
@@ -17681,10 +17944,10 @@ index 0000000..d931638
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java b/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java
 new file mode 100644
-index 0000000..f840b33
+index 0000000..9face0b
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,132 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -17798,7 +18061,23 @@ index 0000000..f840b33
 +    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
-+        return ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game());
++        if (ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game())) return true;
++        // The draft-time preset once a Keleres seat plays its flavour: nothing left to pre-select (live pbd175: the
++        // preset stayed open after the draft and the seat's watchdog reported it as a stall).
++        java.util.List<String> ids = ctx.handlerIds();
++        if (ids == null && ctx.messageId() != null) {
++            String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
++            Decision d = id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
++            if (d != null) ids = d.options().stream()
++                    .map(o -> ti4.discord.interactions.routing.ComponentIdEnvelope.decode(o.id().split("#")[0]).handlerId())
++                    .toList();
++        }
++        if (ids == null || ctx.game() == null || ids.stream().noneMatch(h -> h != null && PRESET.matcher(h).matches())) return false;
++        for (Player p : ctx.game().getRealPlayers()) {
++            String f = p.getFaction();
++            if (f != null && f.startsWith("keleres") && !"keleres".equals(f)) return true;
++        }
++        return false;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java b/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java
@@ -24502,10 +24781,10 @@ index 0000000..8a56d90
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/UnitsRemoveKind.java b/src/main/java/ti4/selfhost/engine/kinds/UnitsRemoveKind.java
 new file mode 100644
-index 0000000..16dc479
+index 0000000..50aa159
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/UnitsRemoveKind.java
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,104 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -24551,6 +24830,54 @@ index 0000000..16dc479
 +    @Override
 +    public boolean matches(String h) {
 +        return h.startsWith("getDamageButtons_") || h.equals("deleteButtons");
++    }
++
++    /**
++     * Hits taken before a fight (bombardment before ground combat, anti-fighter barrage before space combat) are past
++     * once that fight has rolled a round in the opener's system: the opener can no longer be answered meaningfully
++     * (live pbd60: a bombardment opener from a ground combat fought 6 rounds was re-pressed by a bot every minute,
++     * each press opening an empty hit menu). Round hits ("combat") and fleet-pool removals stay.
++     */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        if (ctx.game() == null) return false;
++        List<String> ids = ctx.handlerIds();
++        if (ids == null && ctx.messageId() != null) {
++            String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
++            ti4.selfhost.engine.EngineModels.Decision d = id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
++            if (d != null) ids = d.options().stream()
++                    .map(o -> ti4.discord.interactions.routing.ComponentIdEnvelope.decode(o.id().split("#")[0]).handlerId())
++                    .toList();
++        }
++        if (ids == null) return false;
++        boolean any = false;
++        for (String h : ids) {
++            if (h == null || !h.startsWith("getDamageButtons_")) continue;
++            Matcher m = OPEN.matcher(h);
++            if (!m.matches()) continue;
++            String type = m.group(2);
++            if (!"bombardment".equals(type) && !"afb".equals(type)) return false;
++            if (!fightRolled(ctx.game(), m.group(1), "afb".equals(type))) return false;
++            any = true;
++        }
++        return any;
++    }
++
++    /** Whether a combat round was rolled in `pos`: in space, or (ground) on any planet of the system. */
++    static boolean fightRolled(ti4.game.Game game, String pos, boolean space) {
++        ti4.game.Tile tile = game.getTileByPosition(pos);
++        if (tile == null) return false;
++        for (String holder : tile.getUnitHolders().keySet()) {
++            if (space != "space".equals(holder)) continue;
++            for (ti4.game.Player p : game.getRealPlayersNNeutral())
++                if (CombatSupport.roundsRolled(game, p, pos, holder) > 0) return true;
++        }
++        return false;
++    }
++
++    @Override
++    public boolean dynamic() {
++        return true;
 +    }
 +
 +    @Override
