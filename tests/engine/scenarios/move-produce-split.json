@@ -1,16 +1,61 @@
 {
   "name": "move-produce-split",
   "description": "pbd19@319: ralnel produces at 307 (PRODUCTION 4). Engine: one production.produce payload (carrier, 3 infantry on Mez -> place_2gf_mez + place_infantry_mez); legacy: the same place_ presses and Done Producing Units. Then the payment prompt opens.",
-  "base": { "recording": "pbd19", "index": 319 },
+  "base": {
+    "recording": "pbd19",
+    "index": 319
+  },
   "steps": [
-    { "answer": { "kind": "production.produce", "payload": { "units": [
-        { "unit": "cv", "count": 1 },
-        { "unit": "infantry", "holder": "mez", "count": 3 } ] } },
+    {
+      "answer": {
+        "kind": "production.produce",
+        "payload": {
+          "units": [
+            {
+              "unit": "cv",
+              "count": 1
+            },
+            {
+              "unit": "infantry",
+              "holder": "mez",
+              "count": 3
+            }
+          ]
+        }
+      },
       "as": "ralnel",
-      "legacy": [ { "press": "FFCC_ralnel_place_carrier_307" },
-                  { "press": "FFCC_ralnel_place_2gf_mez" },
-                  { "press": "FFCC_ralnel_place_infantry_mez" },
-                  { "press": "FFCC_ralnel_deleteButtons_tacticalAction_307" } ] }
+      "legacy": [
+        {
+          "press": "FFCC_ralnel_place_carrier_307"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_ralnel_place_2gf_mez"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_ralnel_place_infantry_mez"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_ralnel_deleteButtons_tacticalAction_307"
+        }
+      ]
+    }
   ],
-  "expect": { "invariants": true, "save": [ { "key": "player[ralnel].produced_units", "match": "cv_307_space,1" } ] }
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[ralnel].produced_units",
+        "match": "cv_307_space,1"
+      }
+    ]
+  }
 }
