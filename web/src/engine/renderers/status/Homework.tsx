@@ -99,6 +99,15 @@ export function StatusHomeworkRenderer({ decision, state, answer }: StatusRender
             onConfirm={(pools) => answer({ optionId: tokens.id, payload: { ...pools } })}
           />
         )}
+        {/* No token editor (the engine typed the option without a payload, or the status facts are missing): the
+            original button, which opens the bot's own token panel. */}
+        {!isReady && tokens?.value?.action === "command_tokens" && !(st && tokens.value.payload) && (
+          <Group>
+            <Button size="xs" disabled={tokens.disabled} onClick={() => answer(tokens.id)}>
+              {tokens.label}
+            </Button>
+          </Group>
+        )}
       </div>
       <div className={classes.section}>
         <h4 className={classes.heading}>Ready</h4>
