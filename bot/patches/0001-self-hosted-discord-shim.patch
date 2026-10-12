@@ -4415,10 +4415,10 @@ index 0000000..8f3d5d0
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..56fe853
+index 0000000..800a670
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,731 @@
+@@ -0,0 +1,803 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -4584,6 +4584,9 @@ index 0000000..56fe853
 +        EngineMetrics.count("capture.message");
 +        String messageId = msg.getString("id");
 +        String channelId = msg.getString("channel_id", null);
++        // Captured during an interaction: the game it changes is not saved yet, whether this is a new message or an
++        // edit of an old one (whose id predates the save). See AHEAD.
++        boolean duringInteraction = interactionToken != null;
 +        if (interactionToken != null) {
 +            // An edit of the message the component is on (deferEdit + editOriginal, UPDATE_MESSAGE) is still that
 +            // message's prompt, not a reply to the presser: attributing it to the presser made a table-wide
@@ -4604,8 +4607,17 @@ index 0000000..56fe853
 +            EngineMetrics.count("capture.no_game");
 +            return;
 +        }
++        if (duringInteraction) {
++            if (AHEAD.size() > 2000) AHEAD.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue() > 600_000);
++            AHEAD.put(messageId, System.currentTimeMillis());
++        }
 +        Decision d = build(game, msg, controls, interactionToken);
 +        if (d != null) DecisionRegistry.open(d);
++        // The save may have landed while this capture read the older one: settle against it now, not at the next save.
++        if (AHEAD.containsKey(messageId)) {
++            Game now = cachedGame(game.getName());
++            if (now != null) Engine.settleAhead(now);
++        }
 +    }
 +
 +    /** Message → Decision for a known game; null when it equals the open revision. Pure apart from reading Game. */
@@ -4635,7 +4647,11 @@ index 0000000..56fe853
 +        // SC queue outside the strategy phase, manual player setup past setup…) is a leftover nobody is asked
 +        // anything by: close it like an info menu instead of reopening it as legacy (live: ~850 open "legacy"
 +        // decisions were such leftovers). Dynamic kinds close the same way once they go obsolete (Engine.retarget).
-+        if (spec != null && obsolete(spec, ctx)) {
++        // Captured ahead of its save (the interaction that posted the prompt has not saved yet, so `game` is the state
++        // before it): no capture-time verdict from that state. The prompt opens and is settled against the next save
++        // (Engine.retarget -> settle): obsolete, values, window and progress re-read there.
++        boolean ahead = spec != null && markIfAhead(game, messageId);
++        if (spec != null && !ahead && obsolete(spec, ctx)) {
 +            DecisionRegistry.closeByMessage(messageId, "obsolete");
 +            EngineMetrics.count("capture.obsolete");
 +            return null;
@@ -4907,7 +4923,54 @@ index 0000000..56fe853
 +        }
 +    }
 +
-+    private static boolean olderThan(String messageId, long ms) {
++    /**
++     * The message was posted more than ms ago (snowflake time). Capture reads the game from its last save
++     * (cachedGame), which lags behind a prompt the bot posts mid-interaction: a phase-based obsolete() rule must not
++     * close a fresh prompt on the strength of the previous phase (see FRESH_MS).
++     */
++    /**
++     * Prompts captured ahead of their save: message id -> post time. Capture reads the game from its last save
++     * (cachedGame), and a prompt posted mid-interaction is captured before that interaction saves, i.e. against the
++     * state before the action that posted it (live, one bug class: the homework token payload read before the phase
++     * flag, the Milty slice board against a half-loaded draft, the round-2 first SC pick closed as obsolete because the
++     * save still said statusHomework). Such a prompt is opened without a capture-time obsolete() verdict and settled
++     * on the first save at or after its post time (Engine.settleAhead), for every kind.
++     */
++    static final Map<String, Long> AHEAD = new ConcurrentHashMap<>();
++
++    /** Post time (ms) of a snowflake message id; -1 when not a snowflake. */
++    static long postTime(String messageId) {
++        try {
++            return (Long.parseUnsignedLong(messageId) >>> 22) + 1420070400000L;
++        } catch (Exception e) {
++            return -1;
++        }
++    }
++
++    /** True (and remembered) when the game read is a save older than the message: see AHEAD. */
++    static boolean markIfAhead(Game game, String messageId) {
++        Long marked = AHEAD.get(messageId);
++        if (marked != null && System.currentTimeMillis() - marked < 600_000 && game.getLastModifiedDate() < marked) {
++            EngineMetrics.count("capture.ahead_of_save");
++            return true;
++        }
++        if (marked != null) AHEAD.remove(messageId);
++        long at = postTime(messageId);
++        if (at <= 0 || game.getLastModifiedDate() >= at) return false;
++        if (AHEAD.size() > 2000) AHEAD.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue() > 600_000);
++        AHEAD.put(messageId, at);
++        EngineMetrics.count("capture.ahead_of_save");
++        return true;
++    }
++
++    /** The game is a save at or after the prompt's post time: it is settled (forgotten here) and true is returned. */
++    static boolean settles(String messageId, Game game) {
++        Long at = AHEAD.get(messageId);
++        if (at == null || game.getLastModifiedDate() < at) return false;
++        return AHEAD.remove(messageId) != null;
++    }
++
++    public static boolean olderThan(String messageId, long ms) {
 +        try {
 +            long at = (Long.parseUnsignedLong(messageId) >>> 22) + 1420070400000L;
 +            return System.currentTimeMillis() - at > ms;
@@ -4930,6 +4993,15 @@ index 0000000..56fe853
 +     * kinds add their own via obsolete(). Game phases: agenda* (agenda, agendaVoting, agendawaiting, agendaEnd),
 +     * status* (statusScoring, statusHomework), action, strategy.
 +     */
++    /**
++     * Younger than this, a prompt is "fresh": the game capture reads may still be the save before the interaction
++     * that posted it (live pbd223 / pbd229 / pbd188: the last "Ready For Strategy Phase" press starts the strategy
++     * phase and posts the first pick, while the saved game still says statusHomework, so StrategyCardPickKind.obsolete
++     * closed the pick at capture and the picker had nothing to answer until a restart rebuilt it). The state-change
++     * sweep (Engine.closeObsolete, on the live game) closes a fresh prompt that really is obsolete.
++     */
++    public static final long FRESH_MS = 60_000;
++
 +    static boolean phasePassed(String kind, KindSpec.CaptureContext ctx) {
 +        ti4.game.Game game = ctx.game();
 +        if (game == null) return false;
@@ -4937,7 +5009,7 @@ index 0000000..56fe853
 +        if (phase.isEmpty()) return false;
 +        // Never on a fresh prompt: the bot may post a phase's first prompt just before it records the new phase / active
 +        // player; these rules are for leftovers.
-+        if (!olderThan(ctx.messageId(), 60_000)) return false;
++        if (!olderThan(ctx.messageId(), FRESH_MS)) return false;
 +        if (AGENDA_PHASE_KINDS.contains(kind)) return !phase.startsWith("agenda");
 +        if (STATUS_PHASE_KINDS.contains(kind)) return !phase.startsWith("status");
 +        if (kind.startsWith("tactical.") || "turn.action".equals(kind)) {
@@ -5152,10 +5224,10 @@ index 0000000..56fe853
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionKinds.java b/src/main/java/ti4/selfhost/engine/DecisionKinds.java
 new file mode 100644
-index 0000000..0a37097
+index 0000000..53c264b
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionKinds.java
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,73 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -5208,6 +5280,14 @@ index 0000000..0a37097
 +                    + specs.stream().map(KindSpec::kind).toList());
 +            return specs;
 +        }
++    }
++
++    /** Tests: adds a kind (first in classification order) to the scanned ones. */
++    static synchronized void registerForTest(KindSpec k) {
++        List<KindSpec> s = new ArrayList<>(all());
++        s.removeIf(x -> x.kind().equals(k.kind()));
++        s.add(0, k);
++        specs = List.copyOf(s);
 +    }
 +
 +    public static KindSpec byKind(String kind) {
@@ -5611,10 +5691,10 @@ index 0000000..dcb3e09
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..70cec46
+index 0000000..7798d61
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,210 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -5716,9 +5796,38 @@ index 0000000..70cec46
 +        return n;
 +    }
 +
++    /**
++     * Settles the decisions captured ahead of their save (DecisionCapture.AHEAD) that this game state now covers:
++     * obsolete() is judged and window / progress / option values are re-read against it, for every kind. Called on
++     * each state change and right after such a capture (the save may already have landed).
++     */
++    static synchronized void settleAhead(Game game) {
++        if (DecisionCapture.AHEAD.isEmpty()) return;
++        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
++            if (!DecisionCapture.AHEAD.containsKey(d.source().messageId())) continue;
++            if (!DecisionCapture.settles(d.source().messageId(), game)) continue;
++            EngineMetrics.count("capture.settled");
++            KindSpec spec = DecisionKinds.byKind(d.kind());
++            if (spec == null) continue;
++            List<String> handlers = new ArrayList<>();
++            for (Option o : d.options()) if (o.handler() != null) handlers.add(o.handler());
++            Player p = d.target() == null || d.target().userId() == null ? null : game.getPlayer(d.target().userId());
++            KindSpec.CaptureContext ctx = new KindSpec.CaptureContext(
++                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(),
++                    d.target(), p, handlers);
++            if (DecisionCapture.obsolete(spec, ctx)) {
++                DecisionRegistry.close(d.id(), "obsolete");
++                EngineMetrics.count("settle.obsolete");
++                continue;
++            }
++            refresh(spec, d, ctx, game, spec.dynamic(), true, true);
++        }
++    }
++
 +    /** Kinds that are dynamic() get target / window / progress recomputed after each state change. */
 +    private static void retarget(Game game) {
 +        closeObsolete(game);
++        settleAhead(game);
 +        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
 +            KindSpec spec = DecisionKinds.byKind(d.kind());
 +            if (spec == null || !(spec.dynamic() || spec.dynamicValues())) continue;
@@ -5726,22 +5835,47 @@ index 0000000..70cec46
 +            KindSpec.CaptureContext ctx = new KindSpec.CaptureContext(
 +                    game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(),
 +                    d.target(), p);
++            refresh(spec, d, ctx, game, spec.dynamic(), spec.dynamicValues(), spec.dynamic());
++        }
++    }
++
++    /**
++     * Re-reads an open decision against game: target (retargets: only dynamic() kinds, whose target() takes the
++     * current target), window and progress (rewindows), option values (values).
++     */
++    private static void refresh(
++            KindSpec spec,
++            Decision d,
++            KindSpec.CaptureContext ctx,
++            Game game,
++            boolean retargets,
++            boolean values,
++            boolean rewindows) {
++        {
 +            Target t = d.target();
 +            ReactionWindow w = d.window();
 +            Progress pr = d.progress();
-+            if (spec.dynamic()) {
++            if (retargets) {
 +                t = spec.target(ctx, d.target());
 +                Player tp = t == null || t.userId() == null ? null : game.getPlayer(t.userId());
 +                ctx = new KindSpec.CaptureContext(
 +                        game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(), t,
 +                        tp);
-+                w = spec.window(ctx);
-+                if (spec.recordsResponses()) w = WindowResponses.merge(d.source().messageId(), w);
-+                pr = spec.progress(ctx);
 +            }
-+            List<Option> options = spec.dynamicValues() ? revalued(spec, d, ctx) : d.options();
++            if (rewindows) {
++                try {
++                    w = spec.window(ctx);
++                    if (spec.recordsResponses()) w = WindowResponses.merge(d.source().messageId(), w);
++                    pr = spec.progress(ctx);
++                } catch (Exception e) {
++                    BotLogger.error("engine: kind " + spec.kind() + " failed to re-read window/progress", e);
++                    w = d.window();
++                    pr = d.progress();
++                }
++            }
++            List<Option> options = values ? revalued(spec, d, ctx) : d.options();
 +            if (Objects.equals(t, d.target()) && Objects.equals(w, d.window()) && Objects.equals(pr, d.progress())
-+                    && options.equals(d.options())) continue;
++                    && options.equals(d.options())) return;
 +            DecisionRegistry.update(d.withDynamic(game.getLastModifiedDate(), t, w, pr).withOptions(options));
 +        }
 +    }
@@ -23161,10 +23295,10 @@ index 0000000..2588947
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java
 new file mode 100644
-index 0000000..7c657b4
+index 0000000..13529ca
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardPickKind.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,65 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -23208,9 +23342,12 @@ index 0000000..7c657b4
 +    /**
 +     * A pick prompt left open past the strategy phase (pbd105: a round-1 pick still open in the status phase) can only
 +     * be refused. Conservative: only the status / agenda phases count as past it (some abilities pick in the action phase).
++     * Never a fresh prompt (DecisionCapture.FRESH_MS): the first pick is posted before the strategy phase is saved.
 +     */
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
++        // A fresh pick is the strategy phase's first prompt: capture may still read the status-phase save (r3 stall).
++        if (ctx.messageId() != null && !ti4.selfhost.engine.DecisionCapture.olderThan(ctx.messageId(), ti4.selfhost.engine.DecisionCapture.FRESH_MS)) return false;
 +        String phase = ctx.game().getPhaseOfGame() == null ? "" : ctx.game().getPhaseOfGame();
 +        return phase.startsWith("status") || phase.startsWith("agenda");
 +    }
@@ -23275,10 +23412,10 @@ index 0000000..836bc73
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardQueuePickKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardQueuePickKind.java
 new file mode 100644
-index 0000000..c2054a1
+index 0000000..3d95df7
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardQueuePickKind.java
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,83 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -23345,7 +23482,10 @@ index 0000000..c2054a1
 +    public boolean obsolete(CaptureContext ctx) {
 +        Game game = ctx.game();
 +        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame();
-+        if (!phase.startsWith("strategy")) return true;
++        // Fresh: posted with the first pick at the start of the strategy phase, before that phase is saved (r3 stall).
++        if (!phase.startsWith("strategy"))
++            return ctx.messageId() == null
++                    || ti4.selfhost.engine.DecisionCapture.olderThan(ctx.messageId(), ti4.selfhost.engine.DecisionCapture.FRESH_MS);
 +        Player p = ctx.player();
 +        return p != null && p == game.getActivePlayer();
 +    }
@@ -30502,6 +30642,135 @@ index 0000000..d37effa
 +                .isEqualTo("sc_refresh");
 +        assertThat(ComponentIdEnvelope.decode("sc_refreshdeleteThisButton~o12").deleteButton())
 +                .isTrue();
++    }
++}
+diff --git a/src/test/java/ti4/selfhost/engine/CaptureAheadOfSaveTest.java b/src/test/java/ti4/selfhost/engine/CaptureAheadOfSaveTest.java
+new file mode 100644
+index 0000000..e7cc026
+--- /dev/null
++++ b/src/test/java/ti4/selfhost/engine/CaptureAheadOfSaveTest.java
+@@ -0,0 +1,123 @@
++package ti4.selfhost.engine;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import java.util.List;
++import java.util.Map;
++import net.dv8tion.jda.api.utils.data.DataArray;
++import net.dv8tion.jda.api.utils.data.DataObject;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++import ti4.game.Game;
++import ti4.selfhost.engine.EngineModels.Decision;
++
++/**
++ * One bug class, three live instances (homework tokens, Milty slice board, round-2 first SC pick): a prompt is captured
++ * before the interaction that posted it saves, so capture reads the state before that action. For any kind, such a
++ * prompt must not get a capture-time obsolete() verdict from the stale save, and its values must be re-read on the
++ * next save.
++ */
++class CaptureAheadOfSaveTest {
++
++    /** A kind that is obsolete in the status phase and whose option value is the current phase. */
++    static final class PhaseKind implements KindSpec {
++        @Override
++        public String kind() {
++            return "test.ahead_of_save";
++        }
++
++        @Override
++        public boolean matches(String handlerId) {
++            return handlerId != null && handlerId.startsWith("aheadOfSaveTest_");
++        }
++
++        @Override
++        public Map<String, Object> value(String handlerId, CaptureContext ctx) {
++            return Map.of("phase", String.valueOf(ctx.game().getPhaseOfGame()));
++        }
++
++        @Override
++        public boolean obsolete(CaptureContext ctx) {
++            return String.valueOf(ctx.game().getPhaseOfGame()).startsWith("status");
++        }
++    }
++
++    @BeforeAll
++    static void register() {
++        DecisionKinds.registerForTest(new PhaseKind());
++    }
++
++    private static long seq;
++
++    private static DataObject message(long postedAt) {
++        String id = Long.toUnsignedString(((postedAt - 1420070400000L) << 22) | (++seq & 0xFFF));
++        DataObject button = DataObject.empty()
++                .put("type", 2)
++                .put("custom_id", "aheadOfSaveTest_go")
++                .put("label", "Go")
++                .put("style", 1);
++        DataObject row = DataObject.empty().put("type", 1).put("components", DataArray.empty().add(button));
++        return DataObject.empty()
++                .put("id", id)
++                .put("channel_id", "c1")
++                .put("content", "pick")
++                .put("flags", 0)
++                .put("components", DataArray.empty().add(row));
++    }
++
++    private static Game game(String name, String phase, long savedAt) {
++        Game g = new Game();
++        g.setName(name);
++        g.setPhaseOfGame(phase);
++        g.setLastModifiedDate(savedAt);
++        return g;
++    }
++
++    private static Decision open(String game) {
++        List<Decision> open = DecisionRegistry.openDecisions(game);
++        return open.isEmpty() ? null : open.get(open.size() - 1);
++    }
++
++    @Test
++    void promptPostedAfterTheSaveIsNotClosedFromThatSaveAndIsReReadOnTheNextOne() {
++        long now = System.currentTimeMillis();
++        Game stale = game("ahead1", "statusHomework", now - 5_000);
++        Decision d = DecisionCaptureAccess.build(stale, message(now - 1_000), null);
++        assertThat(d).as("not closed as obsolete from the save before the posting action").isNotNull();
++        DecisionRegistry.open(d);
++
++        Game saved = game("ahead1", "strategy", now);
++        Engine.settleAhead(saved);
++        Decision settled = open("ahead1");
++        assertThat(settled).isNotNull();
++        assertThat(settled.options().getFirst().value()).containsEntry("phase", "strategy");
++        assertThat(DecisionCapture.AHEAD).doesNotContainKey(settled.source().messageId());
++    }
++
++    @Test
++    void promptThatIsObsoleteInTheSaveAfterItClosesOnSettle() {
++        long now = System.currentTimeMillis();
++        Decision d = DecisionCaptureAccess.build(game("ahead2", "action", now - 5_000), message(now - 1_000), null);
++        assertThat(d).isNotNull();
++        DecisionRegistry.open(d);
++        Engine.settleAhead(game("ahead2", "statusScoring", now));
++        assertThat(open("ahead2")).isNull();
++    }
++
++    @Test
++    void anOlderSaveDoesNotSettleIt() {
++        long now = System.currentTimeMillis();
++        Decision d = DecisionCaptureAccess.build(game("ahead3", "statusHomework", now - 5_000), message(now - 1_000), null);
++        DecisionRegistry.open(d);
++        Engine.settleAhead(game("ahead3", "statusHomework", now - 4_000));
++        assertThat(open("ahead3")).isNotNull();
++        assertThat(DecisionCapture.AHEAD).containsKey(d.source().messageId());
++    }
++
++    @Test
++    void promptPostedBeforeTheSaveIsStillJudgedAtCapture() {
++        long now = System.currentTimeMillis();
++        Decision d = DecisionCaptureAccess.build(game("ahead4", "statusHomework", now), message(now - 120_000), null);
++        assertThat(d).as("a leftover read against a newer save closes at capture, as before").isNull();
 +    }
 +}
 diff --git a/src/test/java/ti4/selfhost/engine/DecisionCaptureAccess.java b/src/test/java/ti4/selfhost/engine/DecisionCaptureAccess.java
