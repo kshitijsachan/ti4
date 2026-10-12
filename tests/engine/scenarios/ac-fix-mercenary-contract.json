@@ -1,0 +1,57 @@
+{
+  "name": "ac-fix-mercenary-contract",
+  "description": "audit-acs F3 (deliberate improvement): Mercenary Contract costs 2 trade goods. pbd105 r1, Ral Nel's turn: with 1 TG the play is refused (the original resolved it and left Ral Nel at -1 TG); with 2 TG it is played.",
+  "base": {
+    "recording": "pbd105",
+    "index": 165,
+    "repost": false
+  },
+  "setup": [
+    "/player turn_start faction_or_color:ralnel",
+    "/player stats tg:1 faction_or_color:ralnel"
+  ],
+  "steps": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "mercenarycontract",
+        "faction_or_color": "ralnel"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "mercenarycontract"
+        }
+      },
+      "as": "ralnel",
+      "refused": true
+    },
+    {
+      "command": "player stats",
+      "options": {
+        "tg": "2",
+        "faction_or_color": "ralnel"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "mercenarycontract"
+        }
+      },
+      "as": "ralnel"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=ralnel].tg",
+        "gte": 0
+      }
+    ]
+  }
+}

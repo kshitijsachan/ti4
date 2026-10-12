@@ -23,9 +23,14 @@ export function ActionCardPlay({ decision, state, answer, pendingOptionId }: Pro
               <span className={classes.rowName}>{acName(o.value!.actionCard)}</span>
               <span className={classes.meta}>{closed[o.value!.actionCard]?.replace(/_/g, "") ?? o.value!.window ?? acWindow(o.value!.actionCard)}</span>
             </div>
-            {!closed[o.value!.actionCard] && (
-              <AnswerButton option={o} label="Play" tone="go" pendingOptionId={pendingOptionId} onAnswer={answer} />
-            )}
+            {/* A closed window greys Play out (the reason is shown above); it is never hidden. */}
+            <AnswerButton
+              option={closed[o.value!.actionCard] ? { ...o, disabled: true } : o}
+              label="Play"
+              tone={closed[o.value!.actionCard] ? "plain" : "go"}
+              pendingOptionId={pendingOptionId}
+              onAnswer={answer}
+            />
           </div>
         ))}
       </div>

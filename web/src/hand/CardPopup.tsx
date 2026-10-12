@@ -131,7 +131,8 @@ export function CardPopup(props: Props) {
                 <button
                   key={action.id}
                   className={`${classes.action} ${classes[`tone_${action.tone === "go" && timing !== "now" ? "neutral" : action.tone}`]}`}
-                  disabled={sent?.busy}
+                  disabled={sent?.busy || action.disabled}
+                  style={action.disabled ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                   title={action.hint}
                   onClick={() => void perform(action)}
                 >

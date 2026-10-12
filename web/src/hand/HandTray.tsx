@@ -120,7 +120,7 @@ function cardTiming(card: HandCard, hand: HandState): Timing {
 
 function isPlayableNow(card: HandCard, hand: HandState) {
   const actions = actionsFor(card, hand);
-  if (!actions.some((a) => a.id === "play" || a.id === "score")) return false;
+  if (!actions.some((a) => (a.id === "play" || a.id === "score") && !a.disabled)) return false;
   return cardTiming(card, hand) === "now";
 }
 
@@ -349,7 +349,7 @@ function GroupFan({ group, hand, budget, onPick, onFold, newKeys }: GroupFanProp
         >
           {group.cards.map((card, i) => {
             const actions = actionsFor(card, hand);
-            const actionable = actions.some((a) => a.id === "play" || a.id === "score");
+            const actionable = actions.some((a) => (a.id === "play" || a.id === "score") && !a.disabled);
             const timing = cardTiming(card, hand);
             return (
               <button

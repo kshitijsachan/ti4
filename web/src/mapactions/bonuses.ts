@@ -82,7 +82,7 @@ export function useMoveBonuses(args: {
     const out: BonusOffer[] = [];
     if (!flankPlayed) {
       const card = hand.groups.flatMap((g) => g.cards).find((c) => c.kind === "ac" && c.name === FLANK);
-      const play = card && actionsFor(card, hand).find((a) => a.id === "play");
+      const play = card && actionsFor(card, hand).find((a) => a.id === "play" && !a.disabled);
       if (play)
         out.push({
           id: "flank",

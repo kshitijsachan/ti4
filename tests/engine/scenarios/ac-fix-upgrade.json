@@ -1,0 +1,67 @@
+{
+  "name": "ac-fix-upgrade",
+  "description": "audit-acs F2 (deliberate improvement): Upgrade needs 1 of your cruisers in the active system. pbd60 save 122, mentak active at 308: the cruiser is removed, Upgrade is refused (the original turned no cruiser into a dreadnought); the cruiser is put back, Upgrade is played and resolved (cruiser -> dreadnought).",
+  "base": {
+    "recording": "pbd60",
+    "index": 122
+  },
+  "setup": [
+    "/remove_units tile_name:308 unit_names:\"1 cruiser\" faction_or_color:mentak"
+  ],
+  "steps": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "upgrade",
+        "faction_or_color": "mentak"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "upgrade"
+        }
+      },
+      "as": "mentak",
+      "refused": true
+    },
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "308",
+        "unit_names": "1 cruiser",
+        "faction_or_color": "mentak"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "upgrade"
+        }
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(resolve|target)$/",
+        "option": "resolveUpgrade_308"
+      },
+      "as": "mentak"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "tiles[position=308].holders[name=space].units[unit=dn].count",
+        "eq": 3
+      },
+      {
+        "path": "tiles[position=308].holders[name=space].units[unit=ca]",
+        "exists": false
+      }
+    ]
+  }
+}

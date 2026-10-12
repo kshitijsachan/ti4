@@ -1,0 +1,205 @@
+{
+  "name": "ac-timing-legal-agenda",
+  "description": "Positive control for ActionCardTiming (audit-acs): AGENDA window cards played in the agenda phase (pbd72 r3, Conscription revealed, phase agendawaiting) must be ACCEPTED: when-cards (Diplomatic Pressure, Veto), after-cards (Imperial Rider, Sanction, Hack Election, Insider Information), Distinguished Councilor, Bribery, Confounding Legal Text, Deadly Plot. Played by Empyrean (3 cards in hand), each drawn right before it is played; nobody else is the active player (agenda phase).",
+  "base": {
+    "recording": "pbd72",
+    "index": 760,
+    "repost": false
+  },
+  "setup": [],
+  "steps": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "dp1",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "dp1"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "imp_rider",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "imp_rider"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "sanction",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "sanction"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "hack",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "hack"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "insider",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "insider"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "distinguished",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "distinguished"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "bribery",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "bribery"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "confounding",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "confounding"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "deadly_plot",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "deadly_plot"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "veto",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "veto"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
