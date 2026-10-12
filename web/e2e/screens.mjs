@@ -2,6 +2,7 @@
 // Usage: node e2e/screens.mjs [baseUrl=http://127.0.0.1:5173] [outDir=/home/user/run/screenshots/web]
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { readShimState } from "../../shim/tools/read-state.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(
@@ -12,9 +13,7 @@ const base = process.argv[2] ?? "http://127.0.0.1:5173";
 const out = process.argv[3] ?? "/home/user/run/screenshots/web";
 const game = process.env.GAME ?? "pbd1";
 const players = JSON.parse(readFileSync("/home/user/run/players.json", "utf8"));
-const state = JSON.parse(
-  readFileSync("/home/user/run/shim-data/state.json", "utf8"),
-);
+const state = readShimState("/home/user/run/shim-data");
 const token = players[0].token;
 
 const browser = await chromium

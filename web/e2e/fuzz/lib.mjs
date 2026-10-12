@@ -78,10 +78,16 @@ export async function getJson(url, init, tries = 1) {
   return null;
 }
 
-/** The shim's lobby admin key (state.json admin_token; the "admin link: …?key=" line of shim.log as a fallback). */
+/**
+ * The shim's lobby admin key (admin_token in store/global.json, or state.json before the sharded store; the
+ * "admin link: …?key=" line of shim.log as a fallback).
+ */
 export function adminKey() {
   try {
-    const m = /"admin_token"\s*:\s*"([^"]+)"/.exec(readFileSync("/home/user/run/shim-data/state.json", "utf8").slice(0, 4096));
+    const dir = "/home/user/run/shim-data";
+    // global.json is small (~1 MB): read it whole; state.json is not, so only its start is searched.
+    if (existsSync(`${dir}/store/global.json`)) return JSON.parse(readFileSync(`${dir}/store/global.json`, "utf8")).admin_token;
+    const m = /"admin_token"\s*:\s*"([^"]+)"/.exec(readFileSync(`${dir}/state.json`, "utf8").slice(0, 4096));
     if (m) return m[1];
   } catch {
     /* fall through */

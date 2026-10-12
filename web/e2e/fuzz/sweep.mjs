@@ -4,11 +4,12 @@
 // Usage: node sweep.mjs [--keep pbdA,pbdB] [--min-age 15] [--dry]
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { MAPS, SEATS_FILE, endGame, parseArgs } from "./lib.mjs";
+import { readShimState } from "../../../shim/tools/read-state.mjs";
 
 const args = parseArgs();
 const keep = new Set(String(args.keep ?? "").split(",").filter(Boolean));
 const seats = existsSync(SEATS_FILE) ? JSON.parse(readFileSync(SEATS_FILE, "utf8")) : [];
-const shimState = JSON.parse(readFileSync("/home/user/run/shim-data/state.json", "utf8"));
+const shimState = readShimState("/home/user/run/shim-data");
 const actionChannels = new Set(Object.values(shimState.channels ?? {}).map((c) => c.name).filter((n) => /-actions$/.test(n)));
 for (const f of readdirSync(MAPS)) {
   const game = f.replace(/\.txt$/, "");

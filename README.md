@@ -41,5 +41,5 @@ It then prints the **admin link**. Open it to create players and copy their link
   `https` (Caddy + Let's Encrypt), `tunnel` / `quicktunnel` (Cloudflare Tunnel).
 - Images: `deploy/bot.Dockerfile` fetches upstream AsyncTI4 at `bot/UPSTREAM_COMMIT`, applies `bot/patches`,
   builds it and bundles the art. `deploy/app.Dockerfile` builds the web client and the shim.
-- The bot reads its fake-Discord credentials from the shim's `state.json`, which is shared read-only through
+- The bot reads its fake-Discord credentials from the shim's `store/global.json`, which is shared read-only through
   the `shimdata` volume. Game data lives in the `pgdata`, `botstorage` and `shimdata` volumes.
