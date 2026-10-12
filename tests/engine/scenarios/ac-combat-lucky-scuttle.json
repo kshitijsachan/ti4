@@ -1,21 +1,82 @@
 {
   "name": "ac-combat-lucky-scuttle",
-  "description": "pbd60 save 122: mentak plays Lucky Shot (startToLuckyShotAUnit_0 -> luckyShotIn_308 -> luckyShotOn_308_*) and Scuttle (startToScuttleAUnit_0 -> scuttleIn_ -> scuttleOn_ -> endScuttle_). Follow-ups are untyped; answered as whatever decision carries them.",
-  "base": { "recording": "pbd60", "index": 122 },
+  "description": "pbd60 save 122: mentak plays Lucky Shot (startToLuckyShotAUnit_0 -> luckyShotIn_308 -> luckyShotOn_308_*) and Scuttle (startToScuttleAUnit_0 -> scuttleIn_ -> scuttleOn_ -> endScuttle_). Follow-ups are untyped; answered as whatever decision carries them. Lucky Shot offers no system here (mentak controls no planet at 308; same in legacy), so only its play and start step are checked.",
+  "base": {
+    "recording": "pbd60",
+    "index": 122
+  },
   "setup": [
-    { "command": "ac draw_specific_ac", "options": { "ac_id": "lucky", "faction_or_color": "mentak" } },
-    { "command": "ac draw_specific_ac", "options": { "ac_id": "scuttle", "faction_or_color": "mentak" } }
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "lucky",
+        "faction_or_color": "mentak"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "scuttle",
+        "faction_or_color": "mentak"
+      }
+    }
   ],
   "steps": [
-    { "answer": { "kind": "action_card.play", "value": { "actionCard": "lucky" } }, "as": "mentak" },
-    { "answer": { "kind": "action_card.resolve", "option": "startToLuckyShotAUnit_0" }, "as": "mentak" },
-    { "answer": { "kind": "/./", "option": "luckyShotIn_308" }, "as": "mentak" },
-    { "answer": { "kind": "/./", "option": "luckyShotOn_308_" }, "as": "mentak" },
-    { "answer": { "kind": "action_card.play", "value": { "actionCard": "scuttle" } }, "as": "mentak" },
-    { "answer": { "kind": "action_card.resolve", "option": "startToScuttleAUnit_0" }, "as": "mentak" },
-    { "answer": { "kind": "/./", "option": "scuttleIn_" }, "as": "mentak" },
-    { "answer": { "kind": "/./", "option": "scuttleOn_" }, "as": "mentak" },
-    { "answer": { "kind": "/./", "option": "endScuttle_" }, "as": "mentak" }
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "lucky"
+        }
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "startToLuckyShotAUnit_0"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "scuttle"
+        }
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "startToScuttleAUnit_0"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "scuttleIn_"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "scuttleOn_"
+      },
+      "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "endScuttle_"
+      },
+      "as": "mentak"
+    }
   ],
-  "expect": { "invariants": true }
+  "expect": {
+    "invariants": true
+  }
 }
