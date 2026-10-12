@@ -1,0 +1,25 @@
+{
+  "name": "te-faunus",
+  "description": "Faunus legendary (TE) on pbd104 r1: /planet legendary_exhaust_ability faunus -> faunusTake_<planet> (faction.ability)",
+  "base": {
+    "recording": "pbd104",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/planet add planet:faunus faction_or_color:letnev",
+    "/planet legendary_exhaust_ability planet:faunus faction_or_color:letnev"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "faunusTake_"
+      },
+      "as": "letnev"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
