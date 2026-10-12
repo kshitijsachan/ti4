@@ -2290,19 +2290,84 @@ index c8dcdf7..eec5076 100644
          // Ugly fix to update seen tiles data for fog since doing it in
          // MapGenerator/TileGenerator won't save changes anymore
 diff --git a/src/main/java/ti4/game/persistence/GameUndoService.java b/src/main/java/ti4/game/persistence/GameUndoService.java
-index d91d9d5..50e3842 100644
+index d91d9d5..f776d7a 100644
 --- a/src/main/java/ti4/game/persistence/GameUndoService.java
 +++ b/src/main/java/ti4/game/persistence/GameUndoService.java
-@@ -108,6 +108,9 @@ class GameUndoService {
+@@ -108,13 +108,25 @@ class GameUndoService {
                  replaceGameFileWithUndo(gameName, latestUndoIndex, currentGameFile.toPath());
                  return null;
              }
 +            if (ti4.selfhost.SelfHosted.isEnabled())
 +                ti4.spring.api.selfhost.UndoJournal.recordUndo(gameName, latestUndoIndex, undoIndex,
 +                        gameToUndo.getLastModifiedDate(), loadedGame.getLastModifiedDate());
++            // The roll-back is done once the undo copy is loaded: drop the undone saves now. Everything below only
++            // notifies (Discord/web) and must never fail the undo: a failure here used to return null after the
++            // undone saves were already deleted and the game file replaced, so callers (the web rewind) reported an
++            // error, skipped keeping the pre-rewind state and lost one save per attempt (e.g. a game whose channels
++            // were archived when it ended: getMainGameChannel() is null).
++            List<String> undoCommands = deleteUndoneSaves(gameToUndo, undoIndex, latestUndoIndex);
              GameWebStatePipeline.queue(loadedGame);
  
-             generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
+-            generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
+-            sendAnyChangedCardsInfo(gameToUndo, loadedGame);
+-            GameMessageManager.removeAfter(gameName, loadedGame.getLastModifiedDate());
+-
+-            sendUndoConfirmationMessage(gameToUndo, undoIndex, latestUndoIndex);
++            Game buttonsGame = Objects.requireNonNullElse(savedButtonsGame, gameToUndo);
++            notifySafely(gameToUndo, "re-post saved buttons", () -> generateSavedButtons(buttonsGame));
++            notifySafely(gameToUndo, "refresh cards info", () -> sendAnyChangedCardsInfo(gameToUndo, loadedGame));
++            notifySafely(gameToUndo, "trim message history",
++                    () -> GameMessageManager.removeAfter(gameName, loadedGame.getLastModifiedDate()));
++            if (undoCommands != null)
++                notifySafely(gameToUndo, "post undo log", () ->
++                        sendUndoConfirmationMessage(gameToUndo, undoIndex, latestUndoIndex, undoCommands));
+             return loadedGame;
+         } catch (Exception e) {
+             BotLogger.error(new LogOrigin(gameToUndo), "Error trying to undo: " + gameName, e);
+@@ -155,12 +167,22 @@ class GameUndoService {
+         return gameName + "_" + undoIndex + Constants.TXT;
+     }
+ 
+-    private static void sendUndoConfirmationMessage(Game gameToUndo, int undoIndex, int latestUndoIndex) {
++    /**
++     * Deletes the undo copies after {@code undoIndex} (they were undone) and returns their command texts for the undo
++     * log, newest first; null in fog-of-war games, which keep the undone copies and post no undo log (as before).
++     */
++    @Nullable
++    private static List<String> deleteUndoneSaves(Game gameToUndo, int undoIndex, int latestUndoIndex) {
+         if (gameToUndo.isFowMode()) {
+-            return;
++            return null;
++        }
++        Map<String, String> undoNamesToCommandText = Map.of();
++        try {
++            undoNamesToCommandText =
++                    GameUndoNameService.getUndoNamesToCommandText(gameToUndo, latestUndoIndex - undoIndex);
++        } catch (Exception e) {
++            BotLogger.error(new LogOrigin(gameToUndo), "Could not name the undone saves of " + gameToUndo.getName(), e);
+         }
+-        Map<String, String> undoNamesToCommandText =
+-                GameUndoNameService.getUndoNamesToCommandText(gameToUndo, latestUndoIndex - undoIndex);
+         List<String> undoCommands = new ArrayList<>();
+         for (int i = latestUndoIndex; i > undoIndex; i--) {
+             String fileName = getUndoFileName(gameToUndo.getName(), i);
+@@ -170,8 +192,15 @@ class GameUndoService {
+                 BotLogger.error(new LogOrigin(gameToUndo), "Failed to delete undo file: " + currentUndo);
+             }
+         }
++        return undoCommands;
++    }
+ 
+-        sendUndoConfirmationMessage(gameToUndo, undoIndex, latestUndoIndex, undoCommands);
++    private static void notifySafely(Game game, String what, Runnable task) {
++        try {
++            task.run();
++        } catch (Exception e) {
++            BotLogger.error(new LogOrigin(game), "Undo of " + game.getName() + " succeeded but could not " + what, e);
++        }
+     }
+ 
+     private static void sendUndoConfirmationMessage(
 diff --git a/src/main/java/ti4/helpers/ActionCardHelper.java b/src/main/java/ti4/helpers/ActionCardHelper.java
 index 88c72d8..7eb851f 100644
 --- a/src/main/java/ti4/helpers/ActionCardHelper.java
@@ -2397,7 +2462,7 @@ index 9b27bd5..cb00433 100644
                      + ", you would research a technology, but because of **Propagation**, you instead gain 3 command tokens."
                      + " Your current command tokens are " + player.getCCRepresentation()
 diff --git a/src/main/java/ti4/helpers/ButtonHelper.java b/src/main/java/ti4/helpers/ButtonHelper.java
-index d4c34fb..c4805cc 100644
+index d4c34fb..4600dcf 100644
 --- a/src/main/java/ti4/helpers/ButtonHelper.java
 +++ b/src/main/java/ti4/helpers/ButtonHelper.java
 @@ -131,6 +131,7 @@ import ti4.model.TechnologyModel.TechnologyType;
@@ -2611,7 +2676,7 @@ index d4c34fb..c4805cc 100644
      }
  
      public static void deleteButtonAndDeleteMessageIfEmpty(GenericInteractionCreateEvent event) {
-@@ -4085,14 +4105,14 @@ public class ButtonHelper {
+@@ -4085,20 +4105,24 @@ public class ButtonHelper {
          boolean hasRealButton = updatedTree.findAll(Button.class).stream()
                  .map(Button::getCustomId)
                  .filter(Objects::nonNull)
@@ -2629,7 +2694,17 @@ index d4c34fb..c4805cc 100644
          }
      }
  
-@@ -4817,7 +4837,7 @@ public class ButtonHelper {
+     public static void findOrCreateThreadWithMessage(Game game, String requestedThreadName, String message) {
+         String threadName = DiscordThreadUtility.fitThreadName(requestedThreadName);
+         TextChannel channel = game.getMainGameChannel();
++        if (channel == null) { // e.g. an ended game whose channels were archived
++            BotLogger.warning(new LogOrigin(game), "No main game channel for thread " + threadName + " in " + game.getName());
++            return;
++        }
+         // Use existing thread, if it exists
+         for (ThreadChannel threadChannel_ : channel.getThreadChannels()) {
+             if (threadChannel_.getName().equals(threadName)) {
+@@ -4817,7 +4841,7 @@ public class ButtonHelper {
          return buttons;
      }
  
@@ -2638,7 +2713,7 @@ index d4c34fb..c4805cc 100644
      public static void resolveSpecialRex(Player player, Game game, String buttonID, ButtonInteractionEvent event) {
          String planet = buttonID.split("_")[1];
          String faction = buttonID.split("_")[2];
-@@ -5010,6 +5030,22 @@ public class ButtonHelper {
+@@ -5010,6 +5034,22 @@ public class ButtonHelper {
          return Buttons.red(player.factionButtonChecker() + "endOfTurnAbilities", "End Turn");
      }
  
@@ -2661,7 +2736,7 @@ index d4c34fb..c4805cc 100644
      public static List<Button> getEndOfTurnAbilities(Player player, Game game) {
          List<Button> endButtons = new ArrayList<>();
  
-@@ -5052,7 +5088,11 @@ public class ButtonHelper {
+@@ -5052,7 +5092,11 @@ public class ButtonHelper {
          // Expeditions
          String expeditionText = game.getExpeditions().getTopLevelExpeditionButtonText();
          boolean thundersEdgeOnBoard = game.getTileFromPlanet("thundersedge") != null;
@@ -2674,7 +2749,7 @@ index d4c34fb..c4805cc 100644
              endButtons.add(Buttons.gray(player.factionButtonChecker() + "expeditionInfoAndButtons", expeditionText));
          }
  
-@@ -5563,7 +5603,7 @@ public class ButtonHelper {
+@@ -5563,7 +5607,7 @@ public class ButtonHelper {
          String message2 = player.getRepresentationUnfogged()
                  + ", please choose the planets you wish to exhaust to spend " + MiscEmojis.Resources_6 + ".";
          List<Button> buttons = getExhaustButtonsWithTG(game, player, "res");
@@ -2683,7 +2758,7 @@ index d4c34fb..c4805cc 100644
          buttons.add(doneExhausting);
  
          Tile tile = getTileWithCoatl(game);
-@@ -5804,7 +5844,7 @@ public class ButtonHelper {
+@@ -5804,7 +5848,7 @@ public class ButtonHelper {
                  }
              }
          }
@@ -2692,7 +2767,7 @@ index d4c34fb..c4805cc 100644
          ringButtons.add(Buttons.red("resetTacticalMovement", "Reset all unit movement"));
          return ringButtons;
      }
-@@ -6694,6 +6734,29 @@ public class ButtonHelper {
+@@ -6694,6 +6738,29 @@ public class ButtonHelper {
      @ButtonHandler("combatRoll_")
      public static void resolveCombatRoll(
              Player player, Game game, GenericInteractionCreateEvent event, String buttonID) {
@@ -2722,7 +2797,7 @@ index d4c34fb..c4805cc 100644
          resolveCombatRoll(player, game, event, buttonID, true);
      }
  
-@@ -7888,7 +7951,8 @@ public class ButtonHelper {
+@@ -7888,7 +7955,8 @@ public class ButtonHelper {
      public static List<Button> getGainAndLoseCCButtons(Player player) {
          List<Button> buttons = getGainCCButtons(player);
          buttons.removeIf(b -> !b.getCustomId().startsWith("increase_")); // remove the wiring buttons
@@ -2732,7 +2807,7 @@ index d4c34fb..c4805cc 100644
          return buttons;
      }
  
-@@ -7897,17 +7961,27 @@ public class ButtonHelper {
+@@ -7897,17 +7965,27 @@ public class ButtonHelper {
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_tactic_cc", "Gain 1 Tactic Token"));
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_fleet_cc", "Gain 1 Fleet Token"));
          buttons.add(Buttons.green(player.factionButtonChecker() + "increase_strategy_cc", "Gain 1 Strategy Token"));
@@ -2763,7 +2838,7 @@ index d4c34fb..c4805cc 100644
          List<Button> buttons = new ArrayList<>();
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_tactic_cc", "Lose 1 Tactic Token"));
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_fleet_cc", "Lose 1 Fleet Token"));
-@@ -7915,7 +7989,7 @@ public class ButtonHelper {
+@@ -7915,7 +7993,7 @@ public class ButtonHelper {
              buttons.addAll(MahactTokenService.removeFleetTokenOptions(player.getGame(), player, false, true));
          }
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_strategy_cc", "Lose 1 Strategy Token"));
@@ -2772,7 +2847,7 @@ index d4c34fb..c4805cc 100644
          buttons.add(Buttons.gray(player.factionButtonChecker() + "resetCCs", "Reset Tokens"));
          player.getGame().setStoredValue("originalCCsFor" + player.getFaction(), player.getCCRepresentation());
          return buttons;
-@@ -7925,7 +7999,8 @@ public class ButtonHelper {
+@@ -7925,7 +8003,8 @@ public class ButtonHelper {
          List<Button> buttons = new ArrayList<>();
          buttons.add(Buttons.red(player.factionButtonChecker() + "decrease_fleet_cc", "Lose 1 Fleet Token"));
          buttons.addAll(MahactTokenService.removeFleetTokenOptions(player.getGame(), player, false, true));
@@ -2782,7 +2857,7 @@ index d4c34fb..c4805cc 100644
          return buttons;
      }
  
-@@ -8673,7 +8748,7 @@ public class ButtonHelper {
+@@ -8673,7 +8752,7 @@ public class ButtonHelper {
              int page = Integer.parseInt(buttonID.substring("narrowWayDestination_page".length()));
              List<Button> destinationButtons = getNarrowWayDestinationButtons(game, player);
              List<Button> buttons = getNarrowWayDestinationPage(player, destinationButtons, page);
@@ -2791,7 +2866,7 @@ index d4c34fb..c4805cc 100644
              return;
          }
          String destination = buttonID.substring("narrowWayDestination_".length());
-@@ -8862,7 +8937,7 @@ public class ButtonHelper {
+@@ -8862,7 +8941,7 @@ public class ButtonHelper {
          MessageHelper.sendMessageToChannelWithButtons(
                  player.getCorrectChannel(),
                  "Use buttons to resolve a secondary.",
@@ -2800,7 +2875,7 @@ index d4c34fb..c4805cc 100644
      }
  
      @ButtonHandler("startPath")
-@@ -8890,6 +8965,22 @@ public class ButtonHelper {
+@@ -8890,6 +8969,22 @@ public class ButtonHelper {
  
      @ButtonHandler("resolveMaw")
      public static void resolveMaw(Game game, Player player, ButtonInteractionEvent event) {
@@ -2823,7 +2898,7 @@ index d4c34fb..c4805cc 100644
          player.removeRelic("mawofworlds");
          player.removeExhaustedRelic("mawofworlds");
          for (String planet : player.getPlanets()) {
-@@ -8925,6 +9016,7 @@ public class ButtonHelper {
+@@ -8925,6 +9020,7 @@ public class ButtonHelper {
          }
          game.setStoredValue("endTurnWhenSCFinished", "");
          Player p2 = game.getActivePlayer();
@@ -2831,7 +2906,7 @@ index d4c34fb..c4805cc 100644
          EndTurnService.endTurnAndUpdateMap(event, game, p2);
      }
  
-@@ -8995,6 +9087,20 @@ public class ButtonHelper {
+@@ -8995,6 +9091,20 @@ public class ButtonHelper {
  
      @ButtonHandler("resolveCrownOfE")
      public static void resolveCrownOfE(Game game, Player player, ButtonInteractionEvent event) {
@@ -2852,7 +2927,7 @@ index d4c34fb..c4805cc 100644
          if (player.hasRelic("absol_emphidia")) {
              player.removeRelic("absol_emphidia");
              player.removeExhaustedRelic("absol_emphidia");
-@@ -9011,6 +9117,16 @@ public class ButtonHelper {
+@@ -9011,6 +9121,16 @@ public class ButtonHelper {
          Helper.checkEndGame(game, player);
      }
  
@@ -7787,10 +7862,10 @@ index 0000000..fe63321
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionRegistry.java b/src/main/java/ti4/selfhost/engine/DecisionRegistry.java
 new file mode 100644
-index 0000000..c27bc4c
+index 0000000..e45a167
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionRegistry.java
-@@ -0,0 +1,209 @@
+@@ -0,0 +1,237 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayDeque;
@@ -7799,6 +7874,7 @@ index 0000000..c27bc4c
 +import java.util.Deque;
 +import java.util.List;
 +import java.util.Map;
++import java.util.Objects;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.CopyOnWriteArrayList;
 +import java.util.function.Consumer;
@@ -7822,14 +7898,15 @@ index 0000000..c27bc4c
 +    private static final Map<String, String> gameOfDecision = new ConcurrentHashMap<>();
 +    private static final List<Consumer<EngineEvent>> listeners = new CopyOnWriteArrayList<>();
 +
-+    /** A button of a closed decision, as posted (enough to post it again). */
++    /** A button of a prompt as it was posted (enough to post it again). */
 +    public record ClosedControl(String id, String label, String style, String emoji, boolean disabled) {}
 +
 +    /**
-+     * A decision as it was when it closed, and when (GameRewind brings back the ones a roll-back undid). Kept light: no
-+     * option values, so the journal stays small for every live game.
++     * One state of a prompt's decision over time: opened or changed (reason null) or closed (reason set), and when the
++     * registry saw it. GameRewind reads this history to put each prompt back as it was at the restored save. Kept
++     * light (no option values) so the journal stays small for every live game.
 +     */
-+    public record Closed(
++    public record Version(
 +            String decisionId,
 +            String kind,
 +            EngineModels.Source source,
@@ -7838,18 +7915,43 @@ index 0000000..c27bc4c
 +            long createdAt,
 +            String reason,
 +            long at) {
-+        static Closed of(Decision d, String reason, long at) {
++        static Version of(Decision d, String reason, long at) {
 +            List<ClosedControl> cs = new ArrayList<>(d.options().size());
 +            for (EngineModels.Option o : d.options())
 +                cs.add(new ClosedControl(o.id(), o.label(), o.style(), o.emoji(), o.disabled()));
-+            return new Closed(d.id(), d.kind(), d.source(), d.prompt(), cs, d.createdAt(), reason, at);
++            return new Version(d.id(), d.kind(), d.source(), d.prompt(), cs, d.createdAt(), reason, at);
++        }
++
++        public boolean closed() {
++            return reason != null;
 +        }
 +    }
 +
-+    private static final int CLOSED_PER_GAME = 150;
++    private static final int CLOSED_PER_GAME = 300;
 +    private static final long CLOSED_MAX_AGE_MS = 2 * 60 * 60 * 1000L;
 +    /** game -> the decisions closed lately, oldest first (bounded). */
-+    private static final Map<String, Deque<Closed>> closed = new ConcurrentHashMap<>();
++    private static final Map<String, Deque<Version>> history = new ConcurrentHashMap<>();
++    /** game -> when its journal started (versions of prompts older than that are unknown). */
++    private static final Map<String, Long> historySince = new ConcurrentHashMap<>();
++
++    /** decision id -> signature (prompt + buttons) of its last journaled version: window / value updates are not new. */
++    private static final Map<String, Integer> lastSig = new ConcurrentHashMap<>();
++
++    private static void journal(Decision d, String reason) {
++        int sig = Objects.hash(d.prompt(), d.options().stream().map(o -> o.id() + "|" + o.label() + "|" + o.disabled()).toList());
++        if (reason == null) {
++            Integer prev = lastSig.put(d.id(), sig);
++            if (prev != null && prev == sig) return;
++        } else lastSig.remove(d.id());
++        long now = System.currentTimeMillis();
++        Deque<Version> j = history.computeIfAbsent(d.game(), g -> new ArrayDeque<>());
++        historySince.putIfAbsent(d.game(), now);
++        j.addLast(Version.of(d, reason, now));
++        while (j.size() > CLOSED_PER_GAME || now - j.peekFirst().at() > CLOSED_MAX_AGE_MS) {
++            Version gone = j.removeFirst();
++            historySince.put(d.game(), gone.at() + 1);
++        }
++    }
 +
 +    private DecisionRegistry() {}
 +
@@ -7871,6 +7973,7 @@ index 0000000..c27bc4c
 +        if (prev != null && prev.id().equals(d.id()) && prev.game().equals(d.game())) {
 +            d = d.withSeq(++seq, prev.revision() + 1);
 +            open.get(d.game()).put(d.id(), d);
++            journal(d, null);
 +            fire(append(new EngineEvent(d.seq(), "decision.updated", d.game(), d.stateVersion(), d, null)));
 +            return d;
 +        }
@@ -7879,6 +7982,7 @@ index 0000000..c27bc4c
 +        open.computeIfAbsent(d.game(), g -> new ConcurrentHashMap<>()).put(d.id(), d);
 +        byMessage.put(d.source().messageId(), d.id());
 +        gameOfDecision.put(d.id(), d.game());
++        journal(d, null);
 +        fire(append(new EngineEvent(d.seq(), "decision.opened", d.game(), d.stateVersion(), d, null)));
 +        return d;
 +    }
@@ -7890,6 +7994,7 @@ index 0000000..c27bc4c
 +        if (prev == null) return null;
 +        d = d.withSeq(++seq, prev.revision() + 1);
 +        m.put(d.id(), d);
++        journal(d, null);
 +        fire(append(new EngineEvent(d.seq(), "decision.updated", d.game(), d.stateVersion(), d, null)));
 +        return d;
 +    }
@@ -7910,11 +8015,7 @@ index 0000000..c27bc4c
 +        Decision d = m == null ? null : m.remove(decisionId);
 +        if (d == null) return null;
 +        byMessage.remove(d.source().messageId(), decisionId);
-+        Deque<Closed> journal = closed.computeIfAbsent(game, g -> new ArrayDeque<>());
-+        long now = System.currentTimeMillis();
-+        journal.addLast(Closed.of(d, reason, now));
-+        while (journal.size() > CLOSED_PER_GAME || now - journal.peekFirst().at() > CLOSED_MAX_AGE_MS)
-+            journal.removeFirst();
++        journal(d, reason);
 +        EngineEvent ev = append(new EngineEvent(++seq, "decision.closed", game, d.stateVersion(), d, reason));
 +        fire(ev);
 +        return ev;
@@ -7929,17 +8030,19 @@ index 0000000..c27bc4c
 +     * rewind): event game.rewound, so clients drop what they remember about this game's decisions (answers sent,
 +     * caps, plans) before GameRewind re-opens the restored state's prompts.
 +     */
-+    public static synchronized void rewound(String game, long restoredSavedAt) {
-+        fire(append(new EngineEvent(++seq, "game.rewound", game, restoredSavedAt, null, "rewound")));
++    public static synchronized void rewound(String game, long restoredSavedAt, String reason) {
++        fire(append(new EngineEvent(++seq, "game.rewound", game, restoredSavedAt, null, reason)));
 +    }
 +
-+    /** Decisions of {@code game} closed at or after {@code since}, oldest first. */
-+    public static synchronized List<Closed> closedSince(String game, long since) {
-+        Deque<Closed> journal = closed.get(game);
-+        List<Closed> out = new ArrayList<>();
-+        if (journal == null) return out;
-+        for (Closed c : journal) if (c.at() >= since) out.add(c);
-+        return out;
++    /** The game's prompt history (DecisionRegistry.Version), oldest first. */
++    public static synchronized List<Version> history(String game) {
++        Deque<Version> j = history.get(game);
++        return j == null ? new ArrayList<>() : new ArrayList<>(j);
++    }
++
++    /** From when the game's history is complete (0: nothing recorded yet). */
++    public static long historySince(String game) {
++        return historySince.getOrDefault(game, Long.MAX_VALUE);
 +    }
 +
 +    public static Decision get(String decisionId) {
@@ -8002,10 +8105,10 @@ index 0000000..c27bc4c
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..8273a0d
+index 0000000..42396ad
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,216 @@
+@@ -0,0 +1,233 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -8059,11 +8162,13 @@ index 0000000..8273a0d
 +        if (!ENABLED || gameName == null) return;
 +        long rollbackAt = System.currentTimeMillis();
 +        try {
-+            long from = restoredSavedAt + UNDO_SLACK_MS;
++            long from = undoBoundary(gameName, restoredSavedAt);
 +            int n = 0;
 +            for (Decision d : DecisionRegistry.openDecisions(gameName)) {
 +                if (d.createdAt() >= from) {
 +                    DecisionRegistry.close(d.id(), "undone");
++                    // Its buttons go too (the Discord UNDO path leaves them; the web rewind strips by a fixed slack).
++                    if (!d.source().ephemeral()) GameRewind.stripLater(d.source().channelId(), d.source().messageId());
 +                    n++;
 +                }
 +            }
@@ -8071,11 +8176,26 @@ index 0000000..8273a0d
 +            // Answers the engine recorded on windows after the restored save were undone with it.
 +            WindowResponses.forgetSince(gameName, from);
 +            // Clients drop their memory of this game's decisions, then the restored state's prompts come back.
-+            DecisionRegistry.rewound(gameName, restoredSavedAt);
-+            GameRewind.schedule(gameName, restoredSavedAt, rollbackAt);
++            DecisionRegistry.rewound(gameName, restoredSavedAt, "rewound");
++            GameRewind.schedule(gameName, restoredSavedAt, from, rollbackAt);
 +        } catch (Exception e) {
 +            BotLogger.error("engine: undo hook failed for " + gameName, e);
 +        }
++    }
++
++    /**
++     * Where the restored state's prompts end: a prompt posted up to UNDO_SLACK_MS after the restored save belongs to
++     * that save's action, unless an undone action had already started by then (its first press in the game): bots
++     * press again within a second (live pbd273: the move prompt of the undone system pick came 1 s after the save).
++     */
++    static long undoBoundary(String gameName, long restoredSavedAt) {
++        long boundary = restoredSavedAt + UNDO_SLACK_MS;
++        for (InteractionTracker.Info i : InteractionTracker.pressesBetween(restoredSavedAt, boundary)) {
++            if (i.at() >= boundary || i.channelId() == null) continue;
++            Game g = DecisionCapture.gameForChannel(i.channelId());
++            if (g != null && gameName.equals(g.getName())) boundary = i.at();
++        }
++        return boundary;
 +    }
 +
 +    /** GameWebStatePipeline.queue: every save and every undo. */
@@ -9189,13 +9309,14 @@ index 0000000..8641f14
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/GameRewind.java b/src/main/java/ti4/selfhost/engine/GameRewind.java
 new file mode 100644
-index 0000000..13d93e1
+index 0000000..2b07d5c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/GameRewind.java
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,310 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
++import java.util.Collections;
 +import java.util.HashSet;
 +import java.util.LinkedHashMap;
 +import java.util.List;
@@ -9214,34 +9335,37 @@ index 0000000..13d93e1
 +import ti4.game.persistence.ManagedGame;
 +import ti4.logging.BotLogger;
 +import ti4.message.MessageHelper;
-+import ti4.selfhost.engine.DecisionRegistry.Closed;
 +import ti4.selfhost.engine.DecisionRegistry.ClosedControl;
++import ti4.selfhost.engine.DecisionRegistry.Version;
 +import ti4.selfhost.engine.EngineModels.Decision;
 +import ti4.selfhost.engine.EngineModels.Option;
 +
 +/**
-+ * After a roll-back (UNDO button, /game undo, web undo / rewind) the game is back in an older state, but the prompts
-+ * that state was waiting on may be gone: answered (closed, often deleted) by the actions that were undone. The bot
-+ * itself re-posts only the prompt of the first undone press ("saved buttons"), so e.g. rewinding past another
-+ * player's "Not Following" left the active player's End Turn menu deleted and the game stuck.
++ * After a roll-back (UNDO button, /game undo, web undo / rewind) the game is back in an older state, but its prompts
++ * are not: the undone actions answered, deleted or edited them in place (a tactical action walks one message from the
++ * turn menu to the ring menu, the system list, the move and landing steps), and the bot re-posts only the saved
++ * buttons of the first undone press (the web rewind may add a start-of-turn menu). Live pbd252: the move prompt was
++ * gone and the game waited forever; live pbd273: the turn message showed the undone move step, the re-post was its
++ * last (move) version, and a fresh start-of-turn menu let the bot start a second tactical action.
 + *
-+ * <p>This brings the restored state's prompts back, a moment after the roll-back (so the bot's own re-post and the
-+ * web rewind's prompt retirement have landed):
++ * <p>This puts every prompt back <b>as it was at the restored save</b> (the boundary: Engine.undoBoundary), from the
++ * registry's per-game prompt history (DecisionRegistry.Version), a moment after the roll-back (so the bot's own
++ * re-posts have landed):
 + * <ol>
-+ *   <li>every open decision is re-read against the restored state (window, progress, values, target);
-+ *   <li>every decision closed by an undone action (closed after the restored save, prompt posted before it) is
-+ *       re-captured from its message when that is still posted with buttons, else its prompt is posted again (unless
-+ *       an identical prompt is already open in that channel, e.g. the bot's own re-post).
++ *   <li>open decisions are re-read against the restored state;
++ *   <li>each message an undone action changed (a version at or after the boundary; posted before it; not last pressed
++ *       by the restored action itself) gets its version at the boundary back: re-captured when the message shows it,
++ *       else the message's buttons are removed and that version is posted again (or nothing, when the message had
++ *       no prompt then);
++ *   <li>prompts posted since the roll-back that repeat another version of such a message (the saved-buttons re-post
++ *       of an older step, a start-of-turn menu while the restored state is mid-action) are retired.
 + * </ol>
-+ * Clients learned of the roll-back from the game.rewound event (DecisionRegistry.rewound) before any of this.
++ * Clients learned of the roll-back from game.rewound (reason "rewound"); a second game.rewound (reason "restored")
++ * says the restored state's prompts are in place.
 + */
 +public final class GameRewind {
 +    /** Wait this long after the roll-back before restoring (bot re-post, web prompt retirement, card info). */
-+    private static final long DELAY_MS = 4000;
-+    /** Reasons a prompt went away that a roll-back undoes (the restored state still waits on it). */
-+    private static final Set<String> REPOST_REASONS = Set.of("answered", "deleted", "no_options", "undone");
-+    /** Closes that are never brought back: not prompts (info menus), or replaced by a newer copy / form. */
-+    private static final Set<String> NEVER = Set.of("info", "superseded", "cancelled", "replaced");
++    private static final long DELAY_MS = 3000;
 +    /** At most this many prompts are read back per roll-back (each is one request to the shim). */
 +    private static final int MAX_PROMPTS = 60;
 +
@@ -9250,75 +9374,147 @@ index 0000000..13d93e1
 +
 +    private GameRewind() {}
 +
-+    public record Result(int refreshed, int recaptured, int reposted, int skipped) {}
++    public record Result(int refreshed, int recaptured, int reposted, int retired, int skipped) {}
 +
-+    static void schedule(String gameName, long restoredSavedAt, long rollbackAt) {
++    static void schedule(String gameName, long restoredSavedAt, long boundary, long rollbackAt) {
 +        latest.put(gameName, rollbackAt);
 +        Thread.ofVirtual().name("engine-rewind").start(() -> {
 +            try {
 +                Thread.sleep(DELAY_MS);
 +                if (!Objects.equals(latest.get(gameName), rollbackAt)) return;
-+                Result r = restore(gameName, restoredSavedAt, rollbackAt);
++                Result r = restore(gameName, restoredSavedAt, boundary, rollbackAt);
 +                if (r != null)
 +                    BotLogger.info("engine: " + gameName + " rolled back to the state saved at " + restoredSavedAt
-+                            + ": refreshed " + r.refreshed() + ", re-captured " + r.recaptured() + ", re-posted "
-+                            + r.reposted() + " prompts (" + r.skipped() + " left)");
++                            + " (boundary +" + (boundary - restoredSavedAt) + " ms): refreshed " + r.refreshed()
++                            + ", re-captured " + r.recaptured() + ", re-posted " + r.reposted() + ", retired "
++                            + r.retired() + " prompts (" + r.skipped() + " left)");
 +            } catch (InterruptedException e) {
 +                Thread.currentThread().interrupt();
 +            } catch (Exception e) {
 +                BotLogger.error("engine: restoring prompts after the roll-back of " + gameName + " failed", e);
++            } finally {
++                if (Objects.equals(latest.get(gameName), rollbackAt))
++                    DecisionRegistry.rewound(gameName, restoredSavedAt, "restored");
 +            }
 +        });
 +    }
 +
-+    static Result restore(String gameName, long restoredSavedAt, long rollbackAt) {
++    /** What one message showed at the boundary (null: no prompt), and the versions it went through. */
++    record Plan(String messageId, Version atBoundary, List<Version> versions) {}
++
++    /**
++     * Pure: the messages an undone action changed and what each showed at the boundary. A message counts when it has
++     * a version in [boundary, rollbackAt), was posted before the boundary, and was not last pressed by the restored
++     * action (lastPress(id) in (0, restoredSavedAt]: its own late edit / delete). Its state at the boundary is the last
++     * version before it (null when closed then); a message with no version before the boundary that was posted before
++     * the history starts (`since`) is left alone (its state then is unknown).
++     */
++    static List<Plan> plans(
++            List<Version> history,
++            long restoredSavedAt,
++            long boundary,
++            long rollbackAt,
++            long since,
++            java.util.function.ToLongFunction<String> lastPress) {
++        Map<String, List<Version>> byMessage = new LinkedHashMap<>();
++        for (Version v : history) byMessage.computeIfAbsent(v.source().messageId(), k -> new ArrayList<>()).add(v);
++        List<Plan> out = new ArrayList<>();
++        for (Map.Entry<String, List<Version>> e : byMessage.entrySet()) {
++            List<Version> vs = e.getValue();
++            boolean changed = vs.stream().anyMatch(v -> v.at() >= boundary && v.at() < rollbackAt);
++            if (!changed || vs.getFirst().createdAt() >= boundary) continue;
++            long pressed = lastPress.applyAsLong(e.getKey());
++            if (pressed > 0 && pressed <= restoredSavedAt) continue;
++            Version before = null;
++            for (Version v : vs) if (v.at() < boundary) before = v;
++            if (before == null && vs.getFirst().createdAt() < since) continue;
++            out.add(new Plan(e.getKey(), before == null || before.closed() ? null : before, vs));
++        }
++        return out;
++    }
++
++    static Result restore(String gameName, long restoredSavedAt, long boundary, long rollbackAt) {
 +        ManagedGame mg = GameManager.getManagedGame(gameName);
 +        Game game = mg == null ? null : mg.getGame();
 +        if (game == null) return null;
 +        int refreshed = refreshOpen(game);
-+        long from = restoredSavedAt + Engine.UNDO_SLACK_MS;
-+        // The latest close per message: what the prompt looked like when an undone action took it away.
-+        Map<String, Closed> undone = new LinkedHashMap<>();
-+        for (Closed c : DecisionRegistry.closedSince(gameName, from)) {
-+            if (c.at() >= rollbackAt || c.createdAt() >= from) continue; // this roll-back's own closes / undone prompts
-+            if (NEVER.contains(c.reason())) continue;
-+            // Pressed last by the restored action itself (its own delete or edit landed late, under load): that
-+            // prompt was answered in the restored state too. Only prompts an undone action took away come back.
-+            long pressed = InteractionTracker.lastPressAt(c.source().messageId());
-+            if (pressed > 0 && pressed <= restoredSavedAt) {
-+                undone.remove(c.source().messageId());
-+                continue;
-+            }
-+            undone.put(c.source().messageId(), c);
-+        }
-+        int recaptured = 0, reposted = 0, skipped = 0;
-+        for (Closed c : undone.values()) {
-+            if (recaptured + reposted + skipped >= MAX_PROMPTS) break;
-+            String messageId = c.source().messageId();
-+            if (DecisionRegistry.decisionIdForMessage(messageId) != null) continue; // open again already
-+            if (c.source().ephemeral() || c.kind().startsWith("ui.") || "input.form".equals(c.kind())) {
++        List<Plan> plans = plans(
++                DecisionRegistry.history(gameName),
++                restoredSavedAt,
++                boundary,
++                rollbackAt,
++                DecisionRegistry.historySince(gameName),
++                InteractionTracker::lastPressAt);
++        int recaptured = 0, reposted = 0, retired = 0, skipped = 0;
++        for (Plan p : plans) {
++            if (recaptured + reposted + retired + skipped >= MAX_PROMPTS) break;
++            Version first = p.versions().getFirst();
++            Version target = p.atBoundary();
++            if (first.source().ephemeral() || (target != null && !repostable(target))) {
 +                skipped++;
 +                continue;
 +            }
 +            DataObject msg;
 +            try {
-+                msg = DecisionRebuild.fetchMessage(c.source().channelId(), messageId);
++                msg = DecisionRebuild.fetchMessage(first.source().channelId(), p.messageId());
 +            } catch (Exception e) {
 +                skipped++;
 +                continue;
 +            }
-+            if (msg != null && !DecisionCapture.controls(msg).isEmpty()) {
-+                DecisionCapture.onMessage(msg, null, game);
-+                if (DecisionRegistry.decisionIdForMessage(messageId) != null) recaptured++;
++            List<String> shown = new ArrayList<>();
++            if (msg != null) for (DecisionCapture.RawControl c : DecisionCapture.controls(msg)) shown.add(c.optionId());
++            if (target != null && msg != null && sameIds(shown, ids(target.controls()))) {
++                if (DecisionRegistry.decisionIdForMessage(p.messageId()) == null) {
++                    DecisionCapture.onMessage(msg, null, game);
++                    if (DecisionRegistry.decisionIdForMessage(p.messageId()) != null) recaptured++;
++                }
 +                continue;
 +            }
-+            if (!REPOST_REASONS.contains(c.reason()) || !repost(game, c)) skipped++;
-+            else reposted++;
++            // The message shows an undone step (or nothing): retire it, then post the restored step again.
++            DecisionRegistry.closeByMessage(p.messageId(), "undone");
++            if (!shown.isEmpty()) {
++                strip(first.source().channelId(), p.messageId());
++                retired++;
++            }
++            if (target == null) continue;
++            if (repost(game, target)) reposted++;
++            else skipped++;
 +        }
++        retired += retireRepeats(gameName, plans, rollbackAt);
 +        EngineMetrics.count("rewind.restore");
 +        if (recaptured > 0) EngineMetrics.count("rewind.recaptured");
 +        if (reposted > 0) EngineMetrics.count("rewind.reposted");
-+        return new Result(refreshed, recaptured, reposted, skipped);
++        if (retired > 0) EngineMetrics.count("rewind.retired");
++        return new Result(refreshed, recaptured, reposted, retired, skipped);
++    }
++
++    /**
++     * Prompts posted since the roll-back that repeat a version of a restored message other than its version at the
++     * boundary (the bot's saved-buttons re-post of an older step; a start-of-turn menu while the restored state is
++     * mid-action): they offer a step the restored state is not at, so they close and lose their buttons.
++     */
++    private static int retireRepeats(String gameName, List<Plan> plans, long rollbackAt) {
++        int n = 0;
++        for (Decision d : DecisionRegistry.openDecisions(gameName)) {
++            if (d.createdAt() < rollbackAt) continue;
++            Set<String> have = ids(d);
++            if (have.isEmpty() || !repeatsOtherStep(have, plans)) continue;
++            DecisionRegistry.close(d.id(), "undone");
++            strip(d.source().channelId(), d.source().messageId());
++            n++;
++        }
++        return n;
++    }
++
++    /** Pure: these buttons are an open version of a restored message, but not the one it shows at the boundary. */
++    static boolean repeatsOtherStep(Set<String> have, List<Plan> plans) {
++        for (Plan p : plans) {
++            if (p.atBoundary() != null && have.equals(ids(p.atBoundary().controls()))) return false;
++        }
++        for (Plan p : plans) {
++            for (Version v : p.versions()) if (!v.closed() && have.equals(ids(v.controls()))) return true;
++        }
++        return false;
 +    }
 +
 +    /** Re-reads every open decision of the game against the restored state. Returns how many it looked at. */
@@ -9344,36 +9540,74 @@ index 0000000..13d93e1
 +        return n;
 +    }
 +
-+    /** Posts the closed decision's prompt again (buttons as they were). False when it cannot or need not. */
-+    private static boolean repost(Game game, Closed c) {
-+        List<ClosedControl> controls = new ArrayList<>();
-+        for (ClosedControl cc : c.controls()) {
-+            if (cc.id() == null || cc.id().contains("ultimateUndo")) continue; // the bot adds its own undo button
-+            if (cc.id().contains("#")) return false; // a select menu option: not re-postable as a button
-+            controls.add(cc);
-+        }
++    private static boolean repostable(Version v) {
++        if (v.kind().startsWith("ui.") || "input.form".equals(v.kind())) return false;
++        for (ClosedControl c : v.controls()) if (c.id() == null || c.id().contains("#")) return false; // select menus
++        return !buttonsOf(v).isEmpty();
++    }
++
++    private static List<ClosedControl> buttonsOf(Version v) {
++        List<ClosedControl> out = new ArrayList<>();
++        for (ClosedControl c : v.controls())
++            if (c.id() != null && !c.id().contains("ultimateUndo")) out.add(c); // the bot adds its own undo button
++        return out;
++    }
++
++    /** Posts the version's prompt again (buttons as they were). False when it cannot or need not. */
++    private static boolean repost(Game game, Version v) {
++        List<ClosedControl> controls = buttonsOf(v);
 +        if (controls.isEmpty()) return false;
-+        if (identicalOpen(game.getName(), c.source().channelId(), controls)) return false;
-+        MessageChannel channel = JdaService.jda.getChannelById(MessageChannel.class, c.source().channelId());
++        if (identicalOpen(game.getName(), v.source().channelId(), controls)) return false;
++        MessageChannel channel = JdaService.jda.getChannelById(MessageChannel.class, v.source().channelId());
 +        if (channel == null) return false;
 +        List<Button> buttons = new ArrayList<>();
 +        for (ClosedControl cc : controls) buttons.add(button(cc));
-+        String text = c.prompt() == null || c.prompt().isBlank() ? "(prompt restored after a roll-back)" : c.prompt();
++        String text = v.prompt() == null || v.prompt().isBlank() ? "(prompt restored after a roll-back)" : v.prompt();
 +        MessageHelper.sendMessageToChannelWithButtons(channel, text, buttons);
 +        return true;
 +    }
 +
++    /** Removes a message's buttons (queued REST edit; safe to call under the game lock). */
++    static void stripLater(String channelId, String messageId) {
++        strip(channelId, messageId);
++    }
++
++    private static void strip(String channelId, String messageId) {
++        try {
++            MessageChannel channel = JdaService.jda.getChannelById(MessageChannel.class, channelId);
++            if (channel != null)
++                channel.editMessageComponentsById(messageId, Collections.emptyList())
++                        .queue(ok -> {}, BotLogger::catchRestError);
++        } catch (Exception e) {
++            BotLogger.error("engine: could not retire the buttons of " + messageId + " after a roll-back", e);
++        }
++    }
++
 +    /** An open prompt in the channel offers exactly these buttons (the bot's own re-post of the first undone press). */
 +    static boolean identicalOpen(String gameName, String channelId, List<ClosedControl> controls) {
-+        Set<String> want = new HashSet<>();
-+        for (ClosedControl cc : controls) want.add(cc.id());
++        Set<String> want = ids(controls);
 +        for (Decision d : DecisionRegistry.openDecisions(gameName)) {
-+            if (!Objects.equals(d.source().channelId(), channelId)) continue;
-+            Set<String> have = new HashSet<>();
-+            for (Option o : d.options()) if (o.id() != null && !o.id().contains("ultimateUndo")) have.add(o.id());
-+            if (have.equals(want)) return true;
++            if (Objects.equals(d.source().channelId(), channelId) && ids(d).equals(want)) return true;
 +        }
 +        return false;
++    }
++
++    static Set<String> ids(List<ClosedControl> controls) {
++        Set<String> out = new HashSet<>();
++        for (ClosedControl c : controls) if (c.id() != null && !c.id().contains("ultimateUndo")) out.add(c.id());
++        return out;
++    }
++
++    private static Set<String> ids(Decision d) {
++        Set<String> out = new HashSet<>();
++        for (Option o : d.options()) if (o.id() != null && !o.id().contains("ultimateUndo")) out.add(o.id());
++        return out;
++    }
++
++    private static boolean sameIds(List<String> shown, Set<String> want) {
++        Set<String> have = new HashSet<>();
++        for (String s : shown) if (s != null && !s.contains("ultimateUndo")) have.add(s);
++        return have.equals(want);
 +    }
 +
 +    private static Button button(ClosedControl cc) {
@@ -9498,10 +9732,10 @@ index 0000000..85c4423
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/InteractionTracker.java b/src/main/java/ti4/selfhost/engine/InteractionTracker.java
 new file mode 100644
-index 0000000..fa539f9
+index 0000000..a7d1d6f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/InteractionTracker.java
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,124 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.Map;
@@ -9590,6 +9824,13 @@ index 0000000..fa539f9
 +            if (channelId.equals(i.channelId()) && i.at() >= cutoff && (best == null || i.at() > best.at())) best = i;
 +        }
 +        return best;
++    }
++
++    /** Presses (clicks and engine answers) made in (after, before], any channel. */
++    public static java.util.List<Info> pressesBetween(long after, long before) {
++        java.util.List<Info> out = new java.util.ArrayList<>();
++        for (Info i : byToken.values()) if (i.at() > after && i.at() <= before && i.messageId() != null) out.add(i);
++        return out;
 +    }
 +
 +    /** When the message was last pressed (a click or an engine answer on it), within the last ~15 min; 0 if unknown. */
@@ -10065,10 +10306,10 @@ index 0000000..f641b0f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ScFollowGate.java b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
 new file mode 100644
-index 0000000..0ea7268
+index 0000000..a9e47d5
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
-@@ -0,0 +1,257 @@
+@@ -0,0 +1,259 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -10247,8 +10488,10 @@ index 0000000..0ea7268
 +    public static String midAction(@Nullable Game game, @Nullable Player holder) {
 +        if (game == null || holder == null) return null;
 +        String active = game.getCurrentActiveSystem();
++        // (A save written with no active system loads it as the text "null": not a system.)
 +        if (active != null
 +                && !active.isEmpty()
++                && !"null".equalsIgnoreCase(active)
 +                && game.getStoredValue(ti4.helpers.ButtonHelperTacticalAction.TACTICAL_ACTION_LOGGED).isEmpty())
 +            return "your tactical action is still under way";
 +        for (int sc : playedThisTurn(game, holder)) {
@@ -27900,10 +28143,10 @@ index 0000000..494a82e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TacticalMoveKind.java b/src/main/java/ti4/selfhost/engine/kinds/TacticalMoveKind.java
 new file mode 100644
-index 0000000..440c5f5
+index 0000000..12fc1d8
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TacticalMoveKind.java
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,144 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -27975,7 +28218,8 @@ index 0000000..440c5f5
 +    public boolean obsolete(CaptureContext ctx) {
 +        // getCurrentActiveSystem: getActiveSystem() falls back to the stored lastActiveSystem.
 +        String active = ctx.game().getCurrentActiveSystem();
-+        return active == null || active.isEmpty();
++        // A save with no active system loads it as the string "null".
++        return active == null || active.isEmpty() || "null".equals(active);
 +    }
 +
 +    /** Movement staged so far (Game.tacticalActionDisplacement), recomputed after every save. */
@@ -35573,6 +35817,74 @@ index 0000000..cedde9a
 +        assertTrue(SetupControls.refuses(game, "FFCC_mentak_startPlayerSetup"));
 +        assertTrue(SetupControls.refuses(game, "milty_slice_D"));
 +        assertFalse(SetupControls.refuses(game, "leadershipGenerateCCButtons"));
++    }
++}
+diff --git a/src/test/java/ti4/selfhost/engine/GameRewindPlanTest.java b/src/test/java/ti4/selfhost/engine/GameRewindPlanTest.java
+new file mode 100644
+index 0000000..18adcc9
+--- /dev/null
++++ b/src/test/java/ti4/selfhost/engine/GameRewindPlanTest.java
+@@ -0,0 +1,62 @@
++package ti4.selfhost.engine;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Set;
++import org.junit.jupiter.api.Test;
++import ti4.selfhost.engine.DecisionRegistry.ClosedControl;
++import ti4.selfhost.engine.DecisionRegistry.Version;
++import ti4.selfhost.engine.EngineModels.Source;
++
++/**
++ * Live pbd273: rewound to "Bot Mu pressed Ring #3". The turn message had walked turn menu -> ring menu -> system list
++ * (the restored step) -> move (undone, 1 s after the save); the restore re-posted the move step and a start-of-turn
++ * menu let the bot start a second tactical action. A roll-back puts each message back at its step at the save.
++ */
++class GameRewindPlanTest {
++    private static final long S = 10_000, B = 10_900, R = 60_000; // save, first undone press, roll-back
++
++    private static Version v(String msg, long created, long at, String reason, String... ids) {
++        List<ClosedControl> cs = new ArrayList<>();
++        for (String id : ids) cs.add(new ClosedControl(id, id, "secondary", null, false));
++        return new Version("d" + msg, "tactical.activate", new Source("ch", msg, null, false), "p", cs, created, reason, at);
++    }
++
++    private static final List<Version> HISTORY = List.of(
++            v("M", 1_000, 1_000, null, "tacticalAction", "passForRound"),
++            v("M", 1_000, 5_000, null, "ring_1", "ring_2", "ring_3"),
++            v("M", 1_000, 9_900, null, "ringTile_301", "ringTile_302"),
++            v("M", 1_000, 11_000, null, "move_1", "doneMove"),
++            v("M", 1_000, 13_000, "no_options"),
++            v("N", 10_950, 10_950, null, "land_1"),
++            v("T", 2_000, 2_000, null, "turnEnd"),
++            v("T", 2_000, 10_500, "deleted"),
++            v("U", 500, 500, null, "x"));
++
++    private static List<GameRewind.Plan> plans() {
++        return GameRewind.plans(HISTORY, S, B, R, 0, id -> id.equals("T") ? 9_000 : id.equals("M") ? 10_900 : 0);
++    }
++
++    @Test
++    void eachWalkedMessageGetsItsStepAtTheSave() {
++        List<GameRewind.Plan> p = plans();
++        assertThat(p).extracting(GameRewind.Plan::messageId).containsExactly("M");
++        assertThat(GameRewind.ids(p.getFirst().atBoundary().controls())).containsExactlyInAnyOrder("ringTile_301", "ringTile_302");
++    }
++
++    @Test
++    void repostsOfAnotherStepAreRetired() {
++        List<GameRewind.Plan> p = plans();
++        assertThat(GameRewind.repeatsOtherStep(Set.of("tacticalAction", "passForRound"), p)).isTrue();
++        assertThat(GameRewind.repeatsOtherStep(Set.of("ringTile_301", "ringTile_302"), p)).isFalse();
++        assertThat(GameRewind.repeatsOtherStep(Set.of("sc_follow_1"), p)).isFalse();
++    }
++
++    @Test
++    void unknownStateAtTheSaveIsLeftAlone() {
++        List<Version> late = HISTORY.stream().filter(x -> x.at() >= 11_000).toList();
++        assertThat(GameRewind.plans(late, S, B, R, 11_000, id -> 0)).extracting(GameRewind.Plan::messageId).doesNotContain("M");
 +    }
 +}
 diff --git a/src/test/java/ti4/selfhost/engine/interaction/InteractionSmoke.java b/src/test/java/ti4/selfhost/engine/interaction/InteractionSmoke.java
