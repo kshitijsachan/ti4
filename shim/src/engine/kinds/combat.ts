@@ -4,20 +4,20 @@
  * Roll types: "combat" (a combat round), "afb", "bombardment", "spacecannonoffence", "spacecannondefence".
  * Hit sources: "space" (space combat), "ground", "afb", "spacecannonoffence".
  */
-import type { DecisionBase, FactionId, UserId } from "../types.js";
+import type { DecisionBase, FactionId, HolderName, TileId, TilePosition, UnitId, UserId } from "../types.js";
 
 export type RollType = "combat" | "afb" | "bombardment" | "spacecannonoffence" | "spacecannondefence";
 export type HitSource = "space" | "ground" | "afb" | "spacecannonoffence";
 
 /** A unit stack a hit may land on. holder: "space" or a planet id; unit: async id (dd, ca, dn, ff, inf, mf, ...). */
-export type HittableUnit = { holder: string; unit: string; count: number; damaged: number; sustain: boolean };
+export type HittableUnit = { holder: HolderName; unit: UnitId; count: number; damaged: number; sustain: boolean };
 
 // ---------------------------------------------------------------- option values
 
 export type CombatRollValue = {
   action: "roll";
-  tile: string;
-  holder: string;
+  tile: TilePosition;
+  holder: HolderName;
   rollType: RollType;
   /** Bombardment that first asks which planets the dice target. */
   chooseTargets?: boolean;
@@ -26,19 +26,19 @@ export type CombatRollValue = {
 /** Options on the combat controls message besides rolls. tile may be null when the id does not carry it. */
 export type CombatControlValue =
   | CombatRollValue
-  | { action: "decline_space_cannon"; tile: string | null; rollType: "spacecannonoffence" }
-  | { action: "assign_manual"; tile: string; assignType: string }
-  | { action: "announce_retreat" | "ready_for_dice" | "automate"; tile: string | null }
+  | { action: "decline_space_cannon"; tile: TilePosition | null; rollType: "spacecannonoffence" }
+  | { action: "assign_manual"; tile: TilePosition; assignType: string }
+  | { action: "announce_retreat" | "ready_for_dice" | "automate"; tile: TilePosition | null }
   /** The combat action-card window: playing the cards belongs to the action-card kinds (G8). */
-  | { action: "action_cards"; tile: string | null }
-  | { action: "repair"; tile: string }
-  | { action: "retreat"; tile: string; variant: "skilled" | "foresight" | "gheminabt" | string | null };
+  | { action: "action_cards"; tile: TilePosition | null }
+  | { action: "repair"; tile: TilePosition }
+  | { action: "retreat"; tile: TilePosition; variant: "skilled" | "foresight" | "gheminabt" | string | null };
 
 export type CombatHitsValue =
   | {
       action: "auto";
-      tile: string;
-      holder: string;
+      tile: TilePosition;
+      holder: HolderName;
       source: HitSource;
       hits: number;
       /** The units the hits may land on when the prompt was posted (live counts: GameState.tiles / combat). */
@@ -46,28 +46,28 @@ export type CombatHitsValue =
       /** Hits one SUSTAIN DAMAGE cancels (2 with Non-Euclidean Shielding). */
       sustainCancels: 1 | 2;
     }
-  | { action: "cancel"; tile: string; holder: string; source: HitSource; hits: number }
-  | { action: "assign_manual"; tile: string; assignType: string }
+  | { action: "cancel"; tile: TilePosition; holder: HolderName; source: HitSource; hits: number }
+  | { action: "assign_manual"; tile: TilePosition; assignType: string }
   | CombatRollValue;
 
 export type CombatUnitPickValue =
   | {
       action: "sustain" | "destroy";
-      tile: string;
-      holder: string;
-      unit: string;
+      tile: TilePosition;
+      holder: HolderName;
+      unit: UnitId;
       count: number;
       damaged: boolean;
       state: "none" | "dmg" | "glv" | "dmg_glv";
       /** The engine's assignment mode: spacecombat, groundcombat, afb, pds, remove, combat... */
       assignType: string;
     }
-  | { action: "destroy_all" | "destroy_all_ships"; tile: string; assignType: string }
+  | { action: "destroy_all" | "destroy_all_ships"; tile: TilePosition; assignType: string }
   | { action: "done"; tile: null; assignType: string };
 
 export type CombatRetreatValue =
-  | { action: "retreat_to"; tile: string; to: string; skilled: boolean }
-  | { action: "retreat_ground"; tile: string; to: string; count: number; unit: string; holder: string | null }
+  | { action: "retreat_to"; tile: TilePosition; to: TilePosition; skilled: boolean }
+  | { action: "retreat_ground"; tile: TilePosition; to: TilePosition; count: number; unit: UnitId; holder: HolderName | null }
   | { action: "done"; tile: null };
 
 // ---------------------------------------------------------------- kinds
@@ -101,24 +101,24 @@ export type CombatSide = {
   abilities: ("afb" | "bombardment" | "spacecannondefence")[];
 };
 
-export type CombatFront = { holder: string; sides: CombatSide[] };
+export type CombatFront = { holder: HolderName; sides: CombatSide[] };
 
 export type CombatRoll = {
   at: number;
   faction: FactionId;
   opponent: FactionId | null;
-  tile: string;
-  holder: string;
+  tile: TilePosition;
+  holder: HolderName;
   rollType: RollType;
   round: number | null;
   hits: number;
-  dice: { unit: string; threshold: number; results: number[] }[];
+  dice: { unit: UnitId; threshold: number; results: number[] }[];
 };
 
 export type CombatState = {
   /** Active system position. */
-  tile: string;
-  tileId: string;
+  tile: TilePosition;
+  tileId: TileId;
   /** Fighting factions; empty before the combat starts (space cannon offence). */
   factions: FactionId[];
   fronts: CombatFront[];
@@ -130,6 +130,6 @@ export type CombatState = {
 
 // ---------------------------------------------------------------- plan answer (POST …/decisions/{id}/combat-plan)
 
-export type CombatPlanEntry = { holder: string; unit: string; damaged: boolean; action: "sustain" | "destroy"; count: number };
+export type CombatPlanEntry = { holder: HolderName; unit: UnitId; damaged: boolean; action: "sustain" | "destroy"; count: number };
 export type CombatPlanRequest = { plan: CombatPlanEntry[]; expectedSeq?: number; userId?: UserId };
 export type CombatPlanResult = { ok: boolean; status: string; error: string | null; pressed: number };

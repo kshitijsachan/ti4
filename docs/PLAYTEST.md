@@ -12,7 +12,7 @@ Goal: a human can play complete rounds (strategy → action → status → agend
 ## Shared rules (every agent)
 
 - Read docs/ARCHITECTURE.md, docs/UI_REDESIGN.md first. Stack: shim + prod web at http://127.0.0.1:8090 (bot behind it).
-  Admin key: `python3 -c "import json;print(json.load(open('/home/user/run/shim-data/state.json'))['admin_token'])"`.
+  Admin key: `python3 -c "import json;print(json.load(open('/home/user/run/shim-data/store/global.json'))['admin_token'])"`.
   Seats: GET /app/admin/players?key=…; a solo game: POST /app/solo-game {token, bots} or the Play solo button on /play.
   Existing e2e drivers: web/e2e/*.mjs (setup-flow.mjs reaches the strategy phase in ~60s). Chromium:
   /opt/pw-browsers/chromium with /opt/node-tools/node_modules/playwright-core.

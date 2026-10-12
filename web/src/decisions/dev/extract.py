@@ -10,12 +10,22 @@ with --web, the game's current web-data (strategy cards, units, command tokens) 
 """
 import json
 import os
+import subprocess
 import sys
 import urllib.request
 
 STATE = os.environ.get("SHIM_STATE", "/home/user/run/shim-data/state.json")
 SHIM = os.environ.get("SHIM_URL", "http://127.0.0.1:8090")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+READ_STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../shim/tools/read-state.mjs")
+
+
+def load_state(path):
+    """The shim's state from its sharded store (via shim/tools/read-state.mjs) or a plain state.json."""
+    data_dir = os.path.dirname(path) if os.path.basename(path) == "state.json" else path
+    if os.path.exists(os.path.join(data_dir, "store", "global.json")):
+        return json.loads(subprocess.check_output(["node", READ_STATE, data_dir]))
+    return json.load(open(path if path.endswith(".json") else os.path.join(path, "state.json")))
 
 
 def view(msg, user_id):
@@ -64,7 +74,7 @@ def latest(s, game, uid, pattern, player):
 def main():
     fid, game, player, message_id = sys.argv[1:5]
     flags = set(sys.argv[5:])
-    s = json.load(open(STATE))
+    s = load_state(STATE)
     user = next(u for u in s["users"].values() if (u.get("global_name") or u["username"]) == player)
     uid = user["id"]
     if message_id.startswith("latest:"):
