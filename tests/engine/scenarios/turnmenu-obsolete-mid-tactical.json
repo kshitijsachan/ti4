@@ -1,0 +1,67 @@
+{
+  "name": "turnmenu-obsolete-mid-tactical",
+  "description": "Live pbd290: after an Undo of the activation, re-activating from the map left the start-of-turn menu (turn.action: Tactical / Component action / Play card / Pass) open next to the move panel. pbd28@54: a fresh start-of-turn menu is posted for deepwrought (/player turn_start), then 209 is activated through the tactical.activate decision (as the map does), without answering the menu. While the tactical action is under way no turn.action is open for deepwrought; after move, land and Conclude the post-action \"end turn or do another action\" menu (turn.action) is open.",
+  "base": {
+    "recording": "pbd28",
+    "index": 54
+  },
+  "setup": [
+    "/player turn_start faction_or_color:deepwrought",
+    { "wait": 2500 }
+  ],
+  "steps": [
+    {
+      "wait": 500,
+      "expect": { "decision": { "kind": "turn.action", "as": "deepwrought", "open": true } }
+    },
+    {
+      "answer": { "kind": "tactical.activate", "option": "ringTile_209" },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 2000,
+      "expect": {
+        "decision": [
+          { "kind": "turn.action", "as": "deepwrought", "open": false },
+          { "kind": "tactical.move", "as": "deepwrought", "open": true }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            { "from": "313", "holder": "space", "unit": "cv", "count": 1 },
+            { "from": "313", "holder": "space", "unit": "dn", "count": 1 },
+            { "from": "313", "holder": "space", "unit": "ff", "count": 2 },
+            { "from": "313", "holder": "ikatena", "unit": "gf", "count": 2 }
+          ]
+        }
+      },
+      "as": "deepwrought"
+    },
+    {
+      "answer": {
+        "kind": "tactical.land",
+        "action": "land",
+        "body": { "landings": [ { "planet": "vorhal", "unit": "gf", "count": 2 } ] }
+      },
+      "as": "deepwrought",
+      "expect": { "decision": { "kind": "turn.action", "as": "deepwrought", "open": false } }
+    },
+    {
+      "answer": { "kind": "/tactical/", "option": "doneWithTacticalAction" },
+      "as": "deepwrought"
+    },
+    { "wait": 2500 }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": { "kind": "turn.action", "as": "deepwrought", "open": true },
+    "state": [
+      { "path": "players[faction=deepwrought].commandTokens.tactic", "eq": 2 }
+    ]
+  }
+}

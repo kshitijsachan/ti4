@@ -16,6 +16,7 @@
 //                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command } ],
 //     diffIgnore: [ "stored.violatedSystems" ]   (save keys --diff skips: game.<k> | stored.<k> | player.<k>)
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ] } }
+//   A step may carry its own "expect" (same shape), checked right after it (e.g. a prompt closed mid-flow).
 //   A step with "refused": true expects the engine to refuse it (the legacy fork must still end in the same state).
 //   "as": "seat1".."seat8" | a faction | a user id (default seat1). Strings may use ${seat1}…${seat8}, ${fork},
 //   ${faction:xxcha} (that faction's user id), ${color:red}.
@@ -522,6 +523,8 @@ for (const { phase, st } of all) {
     console.log(`        [${x.via}] ${pr.id} ${pr.kind} -> ${pr.target}: ${pr.options.map((o) => o.id).join(" | ")}`);
     if (flag("--values")) for (const o of pr.options) if (o.value) console.log(`            ${o.id} = ${JSON.stringify(o.value)}`);
   }
+  // A step's own "expect" (same shape as the scenario's) is checked right after it, on every fork.
+  if (st.expect) for (const r of runs) for (const f of await checkExpect(r, st.expect)) fail(`${phase} ${n} expect (${r.label}): ${f}`);
   if (diffs?.length) for (const d of diffs.slice(0, 6)) console.log(`        ${d.key}${d.orderOnly ? " (order)" : ""}: legacy ${short(d.expected, 60)}  |  engine ${short(d.actual, 60)}`);
 }
 if (firstDiff) fail(`legacy and engine saves differ from step ${firstDiff.n ?? firstDiff.step} (${firstDiff.phase}) on: ${firstDiff.diffs.slice(0, 5).map((d) => d.key).join(", ")}`);
