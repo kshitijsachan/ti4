@@ -9,6 +9,7 @@ import { phaseLabel, type TurnState } from "@/play/turn";
 import type { Decision, GameState, PlayerState } from "./contract";
 import { decisionTitle } from "./queue";
 import { factionName } from "./names";
+import { followHeader } from "./follows";
 
 /** The engine's raw phase ("statusScoring", "agendaVoting", "miltydraft") as the board labels it. */
 export function enginePhaseLabel(raw: string | null | undefined): string | undefined {
@@ -150,5 +151,13 @@ export function engineWaitingNote(state: GameState, myId: string | undefined): s
 
 /** The header's "Your move" count and tooltip (the popup's queue), else what the table waits on. */
 export function engineWaiting(state: GameState, queue: Decision[], myId: string | undefined) {
-  return { count: queue.length, title: queue[0] ? decisionTitle(queue[0], state) : null, note: queue.length ? null : engineWaitingNote(state, myId) };
+  /* A strategy card's follow window holds the turn (rules): name it rather than a bare "Your turn" / "<x>'s turn". */
+  const follows = followHeader(state, myId);
+  return {
+    count: queue.length,
+    title: queue[0] ? decisionTitle(queue[0], state) : null,
+    note: queue.length ? null : engineWaitingNote(state, myId),
+    follow: follows.mine,
+    hold: follows.others,
+  };
 }

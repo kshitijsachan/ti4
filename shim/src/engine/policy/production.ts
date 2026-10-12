@@ -5,8 +5,12 @@
  */
 import type { GameState, HolderName, Option, PlanetId } from "../types.js";
 import {
+  capExcludes,
+  capRoom,
   isPaymentDone,
   isPlacement,
+  isProductionDone,
+  type ProductionCap,
   type PaymentDoneValue,
   type PaymentPayload,
   type PaymentSpend,
@@ -145,17 +149,61 @@ export function contextCost(done: PaymentDoneValue, state: GameState | null, me:
  */
 export function productionPayload(d: ProductionProduce, build: string[]): ProductionPayload {
   const places = d.options.filter((o) => !o.disabled).map((o) => o.value as ProductionValue | null).filter(isPlacement);
+  const cap = productionCap(d);
   const counts = new Map<string, number>();
   for (const u of build) counts.set(u, (counts.get(u) ?? 0) + 1);
   const units: ProductionPayload["units"] = [];
-  for (const [unit, count] of counts) {
+  let chosen = 0;
+  let spent = 0;
+  for (const [unit, want] of counts) {
     const offered = places.filter((p) => p.unit === unit);
     if (!offered.length) continue;
     const spot = offered.find((p) => p.holder !== "space") ?? offered[0];
+    // A capped production (Umbat, riders, ...) takes only what fits; the engine refuses the rest.
+    if (capExcludes(cap, spot.unit, spot.cost)) continue;
+    const count = Math.min(want, capRoom(cap, spot.cost, chosen, spent));
+    if (count <= 0) continue;
+    chosen += count;
+    spent += count * (spot.cost ?? 0);
     const ground = unit === "gf" || unit === "mf";
     units.push(ground ? { unit: spot.unit, count, holder: spot.holder } : { unit: spot.unit, count });
   }
   return { units };
+}
+
+/** The cap of a capped production (Umbat, Production / Armament Rider, Maximus, Availyn, Flaah Hyphae), or null. */
+export function productionCap(d: ProductionProduce): ProductionCap | null {
+  const done = d.options.map((o) => o.value as ProductionValue | null).find(isProductionDone);
+  return done?.limit ?? ((d.progress?.required as { limit?: ProductionCap | null } | undefined)?.limit ?? null);
+}
+
+/** Cheap units first: a capped build is a bonus, and the bot does not know its resources before the bill. */
+const CAPPED_PREFERENCE = ["dd", "ff", "gf", "ca", "cv", "mf"];
+
+/**
+ * A capped production addressed to the bot (Umbat exhausted on it, a rider it won, its Maximus / Availyn / Flaah
+ * Hyphae): no planner job builds these, so the policy does — as many of the cheapest offered unit as the cap
+ * allows (destroyers, else fighters, else infantry …), within trade goods + ready planets (a rough budget: one
+ * resource a planet); nothing when none fits.
+ */
+export function chooseCappedBuild(d: ProductionProduce, state: GameState | null, me: string): { payload: Record<string, unknown>; why: string } | null {
+  if (d.target?.userId !== me) return null;
+  const cap = productionCap(d);
+  if (!cap) return null;
+  const self = state?.players.find((p) => p.userId === me);
+  const budget = self ? (self.tg ?? 0) + (self.planets ?? []).filter((p) => !(self.exhaustedPlanets ?? []).includes(p)).length : 2;
+  const places = d.options.filter((o) => !o.disabled).map((o) => o.value as ProductionValue | null).filter(isPlacement);
+  for (const unit of CAPPED_PREFERENCE) {
+    const spot = places.find((p) => p.unit === unit && p.holder !== "space") ?? places.find((p) => p.unit === unit);
+    if (!spot || capExcludes(cap, spot.unit, spot.cost)) continue;
+    const affordable = spot.cost ? Math.floor((budget + 1e-6) / spot.cost) : Infinity;
+    const count = Math.min(capRoom(cap, spot.cost, 0, 0), affordable, 20);
+    if (count <= 0) continue;
+    const ground = unit === "gf" || unit === "mf";
+    const units = [ground ? { unit: spot.unit, count, holder: spot.holder } : { unit: spot.unit, count }];
+    return { payload: { units }, why: `${cap.label}: produce ${count} ${unit}` };
+  }
+  return { payload: { units: [] }, why: `${cap.label}: nothing fits; build nothing` };
 }
 
 /**

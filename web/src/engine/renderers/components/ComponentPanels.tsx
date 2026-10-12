@@ -9,6 +9,7 @@ import type {
 } from "../../../../../shim/src/engine/kinds/components";
 import type { GameState, Option } from "../../../../../shim/src/engine/types";
 import { strategyCardName } from "../tactical/names";
+import { unavailableReason } from "../explore/types";
 import classes from "./components.module.css";
 
 export type RendererProps<D> = {
@@ -79,16 +80,22 @@ function Choice({
   children: ReactNode;
 }) {
   const pending = pendingOptionId === option.id;
+  // A use the player cannot make right now (engine value.unavailable, e.g. the card is exhausted): greyed out with
+  // the reason; it enables by itself when the engine re-reads it as usable.
+  const reason = unavailableReason(option);
   return (
     <UnstyledButton
       className={cx(classes.option, quiet && classes.quiet)}
-      disabled={!live(option) || !!pendingOptionId}
+      disabled={!live(option) || !!pendingOptionId || !!reason}
       data-pending={pending || undefined}
+      data-unavailable={reason ? true : undefined}
       aria-busy={pending}
+      title={reason ?? undefined}
       onClick={() => answer(option.id)}
     >
       {pending && <Loader size={12} color="currentColor" />}
       <span>{children}</span>
+      {reason && <span className={classes.reason}>{reason}</span>}
     </UnstyledButton>
   );
 }

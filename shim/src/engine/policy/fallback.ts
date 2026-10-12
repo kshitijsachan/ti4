@@ -13,7 +13,8 @@
  * may deliberately hold the answer (combat rolls ahead of the opponent, a strategy card primary waiting for its
  * sub-prompt, the tactical planner, payment / production).
  */
-import { turnStale, unplayedCards } from "./turn.js";
+import { followWaits, turnStale, unplayedCards } from "./turn.js";
+import type { TurnActionValue } from "../kinds/tactical.js";
 import { awaits, optionsFor, type Decision, type DecisionKind, type GameState, type Option } from "../types.js";
 
 /** Kinds with no specific policy that would wait on purpose: answered by the fallback this soon. */
@@ -418,8 +419,11 @@ export function chooseFallback(d: Decision, state: GameState | null, me: string)
   if (d.kind === "turn.action") {
     // (No `open` here: chooseFallback has no view of our other decisions; the shim's engineStep skips turn menus while
     // an action is in flight or the planner is busy.)
+    // A follow window holds the turn (policy/turn.ts followWaits): never press the refused end / pass.
+    const held = followWaits(d.options as Option<TurnActionValue>[]).length > 0;
     const pick = fallbackCandidates(d, state, me).find((o) => {
       const action = o.value?.action;
+      if (held) return action === "end_turn_when_followed";
       if (action === "end_turn" || action === "strategic") return true;
       return action === "pass" && !unplayedCards(state, me).length;
     });

@@ -9,6 +9,7 @@ import type {
   PaymentPayload,
   PaymentSpend,
   PaymentValue,
+  ProductionCap,
   ProductionDoneValue,
   ProductionPlaceValue,
   ProductionValue,
@@ -22,6 +23,22 @@ export function isProductionDone(v: ProductionValue | null | undefined): v is Pr
 }
 export function isPlacement(v: ProductionValue | null | undefined): v is ProductionPlaceValue {
   return !!v && "unit" in v;
+}
+
+/** Mirrors capExcludes in shim/src/engine/kinds/production.ts: why a production cap rules this unit out. */
+export function capExcludes(cap: ProductionCap | null | undefined, unit: string, cost: number | null): string | null {
+  if (!cap) return null;
+  if (cap.onlyUnit && cap.onlyUnit !== unit) return "not allowed";
+  if (cap.maxEachCost != null && cost != null && cost > cap.maxEachCost) return `costs ${cost} (> ${cap.maxEachCost})`;
+  return null;
+}
+
+/** Mirrors capRoom in shim/src/engine/kinds/production.ts: more units of this cost that fit under the cap. */
+export function capRoom(cap: ProductionCap | null | undefined, cost: number | null, units: number, spent: number): number {
+  if (!cap) return Infinity;
+  let room = Math.max(0, cap.maxUnits - units);
+  if (cap.maxTotalCost != null && cost) room = Math.min(room, Math.max(0, Math.floor((cap.maxTotalCost - spent + 1e-6) / cost)));
+  return room;
 }
 
 export type PaymentPlan = { payload: PaymentPayload; why: string };

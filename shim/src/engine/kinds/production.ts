@@ -85,7 +85,23 @@ export type ProductionDoneValue = {
   cost: number;
   /** Production limit the engine applies here (tactical action, Warfare, Bellum Gloriosum); null = not enforced. */
   productionLimit: number | null;
+  /** A capped production's cap (Umbat, Production / Armament Rider, Maximus, Availyn, Flaah Hyphae): enforced. */
+  limit?: ProductionCap | null;
 };
+
+/**
+ * The cap of a capped production, enforced by the engine (validate) and the bot's own buttons: at most maxUnits
+ * units in all (each fighter / infantry counts), each costing ≤ maxEachCost, all together ≤ maxTotalCost, only
+ * onlyUnit. label: e.g. "Umbat: up to 2 units, each cost ≤4".
+ */
+export interface ProductionCap {
+  maxUnits: number;
+  maxEachCost: number | null;
+  maxTotalCost: number | null;
+  onlyUnit: UnitId | null;
+  source: "umbat" | "rider" | "maximus" | "availyn" | "flaah" | string;
+  label: string;
+}
 export type ProductionValue = ProductionPlaceValue | ProductionResetValue | ProductionDoneValue;
 
 export type ProductionProduce = DecisionBase<"production.produce", ProductionValue>;
@@ -117,6 +133,25 @@ export type ProductionDecision = PaymentSpend | ProductionProduce | ProductionPl
 export function isPaymentDone(v: PaymentValue | null | undefined): v is PaymentDoneValue {
   return !!v && "action" in v && v.action === "done";
 }
+/** Why a production cap rules this unit out (only unit / cost each); null when it may be produced under the cap. */
+export function capExcludes(cap: ProductionCap | null | undefined, unit: UnitId, cost: number | null): string | null {
+  if (!cap) return null;
+  if (cap.onlyUnit && cap.onlyUnit !== unit) return "not allowed";
+  if (cap.maxEachCost != null && cost != null && cost > cap.maxEachCost) return `costs ${cost} (> ${cap.maxEachCost})`;
+  return null;
+}
+
+/**
+ * How many more units of this cost fit under a production cap, given `units` units costing `spent` already chosen
+ * (produced before + picked); Infinity without a cap.
+ */
+export function capRoom(cap: ProductionCap | null | undefined, cost: number | null, units: number, spent: number): number {
+  if (!cap) return Infinity;
+  let room = Math.max(0, cap.maxUnits - units);
+  if (cap.maxTotalCost != null && cost) room = Math.min(room, Math.max(0, Math.floor((cap.maxTotalCost - spent + 1e-6) / cost)));
+  return room;
+}
+
 export function isProductionDone(v: ProductionValue | null | undefined): v is ProductionDoneValue {
   return !!v && "action" in v && v.action === "done";
 }

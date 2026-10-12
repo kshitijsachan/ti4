@@ -17,7 +17,7 @@ import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
 import { chooseComponents, isComponentsKind } from "./policy/components.js";
-import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
+import { chooseCappedBuild, chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
 import { TECH_PREFERENCE } from "../botplay/techs.js";
 import { chooseFallback, fallbackDue, mayPress, staleForBot } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
@@ -160,7 +160,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "turn.action":
       // The action-phase turn policy (policy/turn.ts): end turn / play the strategy card / finish passing at once;
       // the start-of-turn menu is the planner's (brain.ts) for TURN_PLANNER_GRACE_MS, then pass.
-      return chooseTurnAction(d, state, me, { waitedMs: ctx.waitedMs, force: ctx.force, open: ctx.open });
+      return chooseTurnAction(d, state, me, { waitedMs: ctx.waitedMs, force: ctx.force, open: ctx.open, history: ctx.history });
     case "tactical.rift": {
       // The planner never paths through gravity rifts; a rift prompt outside its plan has nothing to roll.
       const done = d.options.find((o) => !o.disabled && o.value?.op === "done");
@@ -186,7 +186,7 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "production.produce":
       // What to build is the planner's call (botplay BuildJob sends it as one production payload); a build opened
       // from the Modify Units menu builds nothing.
-      return chooseManualBuild(d, me);
+      return chooseManualBuild(d, me) ?? chooseCappedBuild(d, state, me);
     default:
       return null;
   }

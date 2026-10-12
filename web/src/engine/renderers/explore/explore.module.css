@@ -121,6 +121,19 @@
   cursor: default;
 }
 
+/* A costed option the player cannot pay right now: greyed out, reason underneath. */
+.option[data-unavailable] {
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0.6;
+}
+
+.reason {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--play-ink-muted);
+}
+
 .go {
   --fill: rgba(var(--play-green), 0.14);
   --fill-hover: rgba(var(--play-green), 0.24);

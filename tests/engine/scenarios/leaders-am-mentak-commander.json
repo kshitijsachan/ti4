@@ -1,0 +1,14 @@
+{
+  "name": "leaders-am-mentak-commander",
+  "description": "Rules audit leaders A-M: S'ula Mentarion (Mentak commander) is 'After you win a space combat'. Muaat still has a cruiser in the active system 308: taking a promissory note is refused (original: the button posted at combat start worked any time).",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [
+    "/leaders unlock leader:mentakcommander faction_or_color:mentak",
+    "/add_units tile_name:308 unit_names:cruiser faction_or_color:mentak",
+    "/add_units tile_name:308 unit_names:cruiser faction_or_color:muaat"
+  ],
+  "steps": [
+    { "press": "FFCC_mentak_mentakCommander_bloodred", "as": "mentak", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true }
+}

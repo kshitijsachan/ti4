@@ -102,6 +102,9 @@ export type ExploreOutcome = DecisionBase<
     /** deep_mining | distant_suns (ability offered instead of / on top of an explore). */
     ability?: string;
     trait?: ExploreTrait;
+    /** Costed options only: why it cannot be chosen right now (null = it can). Re-read on every state change, so it
+     * clears as soon as the player can pay; validate() refuses the option while set. Rules audit (tech/relic/explore). */
+    unavailable?: string | null;
   }
 >;
 

@@ -14,6 +14,7 @@ import { EngineClient } from "./engine/client.js";
 import { EngineFanout } from "./engine/fanout.js";
 import { defaultAvatarPng, discordError, sendJson } from "./http.js";
 import { log } from "./log.js";
+import { startLagMonitor } from "./lag.js";
 
 const PORT = Number(process.env.PORT ?? 8090);
 const DATA_DIR = process.env.SHIM_DATA ?? join(process.cwd(), "data");
@@ -246,8 +247,10 @@ function proxyWebSocket(req: import("node:http").IncomingMessage, socket: import
 }
 
 server.listen(PORT, () => {
+  startLagMonitor();
   log.info(`shim listening on :${PORT} (data ${DATA_DIR})`);
-  log.info(`bot token: ${store.state.bot_token}`);
+  // Never log the token itself (shim.log / docker logs are shared): enough to tell which one is in use.
+  log.info(`bot token: …${String(store.state.bot_token ?? "").slice(-4)} (masked)`);
   log.info(`bot user id: ${store.state.bot_id}, guild id: ${store.state.guild_id}`);
   log.info(`admin link: ${PUBLIC_URL || INTERNAL_URL}/admin?key=${store.state.admin_token}`);
 });

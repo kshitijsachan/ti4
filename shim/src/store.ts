@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { snowflake, isoFromSnowflake, token } from "./ids.js";
 import { ShardStore, type SaveStats } from "./shards.js";
 import { log } from "./log.js";
+import { syncSpan } from "./lag.js";
 
 /** Raw Discord-shaped JSON objects. We keep them close to the wire format. */
 export type Json = Record<string, any>;
@@ -87,8 +88,11 @@ export type State = {
 export const PERMS_ALL = "2251799813685247";
 export const PERMS_EVERYONE = "1071698660929";
 
-/** How long a canView answer is reused (see Store.canView). */
-const VIEW_TTL_MS = 3000;
+/** Longest a canView answer is reused (see Store.canView); permission changes invalidate them at once. */
+const VIEW_TTL_MS = 10_000;
+
+/** One user's cached visibility answers (see Store.canView). */
+type ViewCache = { gen: number; at: number; ok: Map<string, boolean>; base?: bigint; list?: Json[] };
 
 /** How often the verifier re-checks a slice of the files for unmarked changes (see ShardStore.verifySome). */
 const VERIFY_EVERY_MS = 5000;
@@ -138,7 +142,7 @@ export class Store {
   /** Safety net for changes made without scheduleSave(channelId): see ShardStore.verifySome. */
   private verifyTick() {
     if (this.saveTimer || this.disk.pending) return;
-    this.disk.verifySome(this.state);
+    syncSpan("store verify", () => this.disk.verifySome(this.state));
     if (this.disk.unmarked.length) log.warn(`store: unmarked changes saved by the verifier: ${this.disk.unmarked.join(", ")}`);
     this.disk.unmarked.length = 0;
   }
@@ -248,7 +252,7 @@ export class Store {
 
   /** Writes what changed now. `all` also re-checks every file (used at exit). */
   saveNow(all = false) {
-    const stats = this.disk.save(this.state, { all });
+    const stats = syncSpan(all ? "store save (all)" : "store save", () => this.disk.save(this.state, { all }));
     this.lastSave = stats;
     this.lastSaveMs = stats.ms;
     if (stats.ms > 500 && !all) log.info(`store: slow save ${stats.ms}ms (${stats.written.length} files, ${stats.bytes} bytes)`);
@@ -407,41 +411,73 @@ export class Store {
 
   // ---- visibility ----
 
-  /** Mirrors Discord's VIEW_CHANNEL resolution closely enough for our use. */
   /**
-   * canView answers, cached for VIEW_TTL_MS: the autopilot asks for every seat x channel on every pass (live profile:
-   * ~20% of the shim's CPU). Permission changes (roles, overwrites, thread members) show within the TTL.
+   * Mirrors Discord's VIEW_CHANNEL resolution closely enough for our use. Answers are cached per user until the next
+   * invalidateViews() (every permission-relevant change calls it) and at most VIEW_TTL_MS as a safety net. The old
+   * cache (one map of user|channel entries, 3 s each, cleared whole past 200k entries) thrashed once seats x channels
+   * passed 200k (live 15:15: 86 autopilot seats x 3600 channels), so every autopilot pass recomputed every channel.
    */
-  private viewCache = new Map<string, { at: number; ok: boolean }>();
+  private views = new Map<string, ViewCache>();
+  private viewGen = 0;
+
+  private viewsOf(userId: string): ViewCache {
+    const now = Date.now();
+    let v = this.views.get(userId);
+    if (!v || v.gen !== this.viewGen || now - v.at > VIEW_TTL_MS) {
+      v = { gen: this.viewGen, at: now, ok: new Map() };
+      this.views.set(userId, v);
+    }
+    return v;
+  }
 
   canView(userId: string, channelId: string): boolean {
-    const key = `${userId}|${channelId}`;
-    const now = Date.now();
-    const hit = this.viewCache.get(key);
-    if (hit && now - hit.at < VIEW_TTL_MS) return hit.ok;
-    const ok = this.computeCanView(userId, channelId);
-    if (this.viewCache.size > 200_000) this.viewCache.clear();
-    this.viewCache.set(key, { at: now, ok });
+    const v = this.viewsOf(userId);
+    let ok = v.ok.get(channelId);
+    if (ok === undefined) {
+      ok = this.computeCanView(userId, channelId, v);
+      v.ok.set(channelId, ok);
+    }
     return ok;
+  }
+
+  /**
+   * Every channel (any type) this user can see, in state order; cached like canView. Loops that only care about one
+   * user's channels walk this instead of every channel of every game (3600+ live, most of them ended games').
+   */
+  visibleChannels(userId: string): Json[] {
+    const v = this.viewsOf(userId);
+    if (!v.list) {
+      const list: Json[] = [];
+      for (const ch of Object.values(this.state.channels)) if (this.canView(userId, ch.id)) list.push(ch);
+      v.list = list;
+    }
+    return v.list;
+  }
+
+  /** Changes whenever cached views are dropped (channels or permissions changed). */
+  get viewGeneration() {
+    return this.viewGen;
   }
 
   /** Forget cached canView answers (channel / thread / member / role / overwrite changed). */
   invalidateViews() {
-    this.viewCache.clear();
+    this.viewGen++;
+    this.views.clear();
   }
 
-  private computeCanView(userId: string, channelId: string): boolean {
+  private computeCanView(userId: string, channelId: string, v?: ViewCache): boolean {
     const ch = this.state.channels[channelId];
     if (!ch) return false;
     if (ch.type === 1) return (ch.recipients ?? []).some((r: Json) => r.id === userId);
     if (ch.type === 12) {
       return (this.state.thread_members[channelId] ?? []).includes(userId) || ch.owner_id === userId;
     }
-    if (ch.type === 10 || ch.type === 11) return ch.parent_id ? this.computeCanView(userId, ch.parent_id) : true;
+    if (ch.type === 10 || ch.type === 11) return ch.parent_id ? (v ? this.canView(userId, ch.parent_id) : this.computeCanView(userId, ch.parent_id)) : true;
     const member = this.state.members[userId];
     if (!member) return false;
-    if (this.memberHasPerm(member, 8n)) return true;
-    let allowed = this.basePerms(member);
+    const base = v ? (v.base ??= this.basePerms(member)) : this.basePerms(member);
+    if ((base & 8n) === 8n) return true;
+    let allowed = base;
     const apply = (ows: Json[]) => {
       const everyone = ows.find((o) => o.id === this.state.guild_id);
       if (everyone) allowed = (allowed & ~BigInt(everyone.deny ?? 0)) | BigInt(everyone.allow ?? 0);
@@ -465,10 +501,6 @@ export class Store {
     let p = BigInt(this.state.roles[this.state.guild_id]?.permissions ?? PERMS_EVERYONE);
     for (const r of member.roles) p |= BigInt(this.state.roles[r]?.permissions ?? 0);
     return p;
-  }
-
-  private memberHasPerm(member: Member, bit: bigint) {
-    return (this.basePerms(member) & bit) === bit;
   }
 
   // ---- interactions ----
