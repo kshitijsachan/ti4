@@ -1,0 +1,117 @@
+{
+  "name": "relic-use",
+  "description": "Relic component actions (ComponentActionHelper.resolveRelicComponentAction) for Ral Nel: Dynamis Core (TGs), Nano-Forge (attach to Lisis), JR-XS455-O (choose player, then structure/TG), Stellar Converter (choose planet), Circlet of the Void (frontier explore). Untyped on the live bot until c6 merges (component.action / relic.use / choose.*): legacy vs engine answers must still match.",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "dynamiscore",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    },
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "nanoforge",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    },
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "titanprototype",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    },
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "stellarconverter",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    },
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "circletofthevoid",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "press": "FFCC_ralnel_componentActionRes_relic_dynamiscore",
+      "as": "ralnel"
+    },
+    {
+      "press": "FFCC_ralnel_componentActionRes_relic_nanoforge",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "nanoforgePlanet_lisis"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "FFCC_ralnel_componentActionRes_relic_titanprototype",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "jrResolution_ralnel"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "jrStructure_tg"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "FFCC_ralnel_componentActionRes_relic_stellarconverter",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "stellarConvert_"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "FFCC_ralnel_componentActionRes_relic_circletofthevoid",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "probeStep2_"
+      },
+      "as": "ralnel"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=ralnel].relics",
+        "excludes": "dynamiscore"
+      }
+    ]
+  }
+}

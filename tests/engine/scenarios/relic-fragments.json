@@ -1,0 +1,20 @@
+{
+  "name": "relic-fragments",
+  "description": "Purge fragments for a relic (component action getRelic -> relic.fragments): Ral Nel holds 2 cultural + 1 frontier (wild) fragment, purges Cultural (2) and Frontier (1), then Finish Purging and Draw Relic.",
+  "base": { "recording": "pbd105", "index": 174, "repost": false },
+  "setup": [
+    "/explore use explore_card_id:crf1 planet:lisis faction_or_color:ralnel",
+    "/explore use explore_card_id:crf2 planet:lisis faction_or_color:ralnel",
+    "/explore use explore_card_id:urf1 faction_or_color:ralnel"
+  ],
+  "steps": [
+    { "press": "FFCC_ralnel_componentActionRes_getRelic_", "as": "ralnel" },
+    { "answer": { "kind": "relic.fragments", "option": "purge_Frags_CRF_2" }, "as": "ralnel" },
+    { "answer": { "kind": "relic.fragments", "option": "purge_Frags_URF_1" }, "as": "ralnel" },
+    { "answer": { "kind": "relic.fragments", "option": "drawRelicFromFrag" }, "as": "ralnel" }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [ { "path": "players[faction=ralnel].fragments", "excludes": "crf1" } ]
+  }
+}
