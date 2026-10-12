@@ -3,7 +3,34 @@
  * Outcome ids: "for"/"against", a faction (or colour in fog), a planet id, a secret objective id, a strategy card
  * number as text, a law (agenda) id, a tech alias (unit / unit upgrade).
  */
-import type { DecisionBase, UserId } from "../types.js";
+import type {
+  AgendaId,
+  AgendaType,
+  ColorName,
+  DecisionBase,
+  FactionId,
+  Phase,
+  PlanetId,
+  SecretObjectiveId,
+  StrategyCardNumber,
+  TechId,
+  UnitId,
+  UserId,
+} from "../types.js";
+
+/** An outcome id, by outcome type: for_against, player (faction; colour in fog), planet, secret_objective,
+ * strategy_card (number as text), law (agenda id), unit_upgrade (tech id), unit. */
+export type AgendaOutcomeId =
+  | "for"
+  | "against"
+  | FactionId
+  | ColorName
+  | PlanetId
+  | SecretObjectiveId
+  | `${StrategyCardNumber}`
+  | AgendaId
+  | TechId
+  | UnitId;
 
 export type AgendaOutcomeType =
   | "for_against"
@@ -18,22 +45,22 @@ export type AgendaOutcomeType =
 
 // ---------------------------------------------------------------- state (GameState.agenda)
 
-export type AgendaVoteCast = { userId: UserId | null; faction: string; votes: number };
-export type AgendaRider = { userId: UserId | null; faction: string; rider: string };
-export type AgendaOutcomeState = { outcome: string; name: string; votes: number; voters: AgendaVoteCast[]; riders: AgendaRider[] };
+export type AgendaVoteCast = { userId: UserId | null; faction: FactionId; votes: number };
+/** rider: the action card / promissory note / ability id the engine records the rider as. */
+export type AgendaRider = { userId: UserId | null; faction: FactionId; rider: string };
+export type AgendaOutcomeState = { outcome: AgendaOutcomeId; name: string; votes: number; voters: AgendaVoteCast[]; riders: AgendaRider[] };
 
 export type AgendaState = {
-  agendaId: string | null;
+  agendaId: AgendaId | null;
   name: string | null;
-  /** "Law" | "Directive" */
-  type: string;
+  type: AgendaType;
   /** The card's target line: "For/Against", "Elect Player", "Elect Cultural Planet", ... */
   target: string;
   outcomeType: AgendaOutcomeType;
   /** 1st, 2nd (3rd) agenda of this phase. */
   number: number;
   /** Engine phase: "agendawaiting" (whens/afters), "agendaVoting", "agendaEnd" (resolve). */
-  stage: string;
+  stage: Phase;
   whensResolved: boolean;
   aftersResolved: boolean;
   awaitingWhens: UserId[];
@@ -49,8 +76,8 @@ export type AgendaState = {
 
 // ---------------------------------------------------------------- decisions
 
-export type AgendaOutcomeChoice = { id: string; name: string; userId?: UserId };
-export type PlanetVotes = { planet: string; votes: number };
+export type AgendaOutcomeChoice = { id: AgendaOutcomeId; name: string; userId?: UserId };
+export type PlanetVotes = { planet: PlanetId; votes: number };
 
 /** What a voter chooses from (vote and pre-vote options). */
 export type Ballot = {
@@ -68,14 +95,14 @@ export type Ballot = {
  */
 export type AgendaVote = DecisionBase<
   "agenda.vote",
-  ({ action: "vote" } & Ballot) | { action: "abstain" } | { action: "force_abstain"; faction: string }
+  ({ action: "vote" } & Ballot) | { action: "abstain" } | { action: "force_abstain"; faction: FactionId }
 >;
 
 /** Structured answer for agenda.vote (and the pre-vote option of agenda.preassign). */
 export type VotePayload = {
-  outcome?: string;
+  outcome?: AgendaOutcomeId;
   /** Planet ids to exhaust (must be ready planets listed in the ballot). */
-  planets?: string[];
+  planets?: PlanetId[];
   /** Exhaust every voting planet instead of listing them. */
   allPlanets?: boolean;
   /** Other vote sources by engine id as shown on the exhaust step, e.g. "zeal_6", "predictive_3", "hacanCommanderTg". */
@@ -86,9 +113,9 @@ export type VotePayload = {
 /** One step of a vote in progress (what the structured answer walks through); progress.accumulated: VoteProgress. */
 export type AgendaVoteStep = DecisionBase<
   "agenda.vote_step",
-  | { step: "outcome"; outcome: string; name: string }
-  | { step: "planet_owner"; faction: string; userId: UserId | null }
-  | { step: "exhaust"; planet: string; votes: number | null }
+  | { step: "outcome"; outcome: AgendaOutcomeId; name: string }
+  | { step: "planet_owner"; faction: FactionId; userId: UserId | null }
+  | { step: "exhaust"; planet: PlanetId; votes: number | null }
   | { step: "exhaust_all"; votes: number | null }
   | { step: "source"; source: string; votes: number | null }
   | { step: "done_exhausting" }
@@ -98,9 +125,9 @@ export type AgendaVoteStep = DecisionBase<
 >;
 
 export type VoteProgress = {
-  outcome?: string;
+  outcome?: AgendaOutcomeId;
   outcomeName?: string;
-  planets: string[];
+  planets: PlanetId[];
   sources: string[];
   votes: number;
   available: number;
@@ -110,7 +137,7 @@ export type VoteProgress = {
 /** Speaker breaks a tie (target: speaker). planetOwner options lead to that player's planets. */
 export type AgendaTieBreak = DecisionBase<
   "agenda.tiebreak",
-  { outcome: string; name: string } | { planetOwner: string; userId: UserId | null }
+  { outcome: AgendaOutcomeId; name: string } | { planetOwner: FactionId; userId: UserId | null }
 >;
 
 type QueueValue = { action: "open" } | { action: "pass" } | { action: "queue"; cardType: string; card: string };
@@ -136,8 +163,8 @@ export type AgendaShenanigans = DecisionBase<
 /** Resolve the agenda (target: speaker): with the current winner / a chosen outcome, manually, or with no effect. */
 export type AgendaResolve = DecisionBase<
   "agenda.resolve",
-  | { action: "resolve"; outcome: string; name: string }
-  | { action: "planet_owner"; planetOwner: string; userId: UserId | null }
+  | { action: "resolve"; outcome: AgendaOutcomeId; name: string }
+  | { action: "planet_owner"; planetOwner: FactionId; userId: UserId | null }
   | { action: "manual" }
   | { action: "no_effect" }
 >;
@@ -148,7 +175,8 @@ export type AgendaNext = DecisionBase<"agenda.next", { action: "flip" | "strateg
 /** Place a rider on an outcome (outcomeKind: fa | player | planet | law | so | sc), or pick a planet's owner first. */
 export type AgendaRiderPlacement = DecisionBase<
   "agenda.rider",
-  { rider: string; outcomeKind: string; outcome: string; name: string } | { rider: string; planetOwner: string; userId: UserId | null }
+  | { rider: string; outcomeKind: "fa" | "player" | "planet" | "law" | "so" | "sc"; outcome: AgendaOutcomeId; name: string }
+  | { rider: string; planetOwner: FactionId; userId: UserId | null }
 >;
 
 export type AgendaDecision =

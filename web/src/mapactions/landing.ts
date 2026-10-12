@@ -1,4 +1,5 @@
 import type { PlayConnection } from "@/discord";
+import type { PlanetId, UnitId } from "../../../shim/src/engine/types";
 import { controlSignature } from "@/discord/client/store";
 import { baseId } from "@/decisions/model/controls";
 import {
@@ -71,7 +72,8 @@ export async function commitLanding(
     const landings = Object.entries(plan).flatMap(([planet, units]) =>
       Object.entries(units)
         .filter(([, n]) => n > 0)
-        .map(([unit, count]) => ({ planet, unit, count })),
+        // Legacy plan keys are the engine's planet / async unit ids.
+        .map(([unit, count]) => ({ planet: planet as PlanetId, unit: unit as UnitId, count })),
     );
     if (await landViaEngine(landings, { conn, gameName })) {
       conn.actions.noteInteraction(prompt.channelId, prompt.messageId);

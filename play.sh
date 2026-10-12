@@ -44,14 +44,16 @@ curl -fsS "$BASE/healthz" 2>/dev/null | grep -q '"bot":true' || {
 
 # Read the admin key and the existing seats from the shim's saved state.
 state() { docker compose exec -T shim node -e "$1" "${@:2}"; }
-KEY="$(state 'console.log(JSON.parse(require("fs").readFileSync("/data/state.json","utf8")).admin_token)')"
+# The shim keeps these in /data/store/global.json (the sharded store), or /data/state.json before it.
+STATE_FILE='(require("fs").existsSync("/data/store/global.json")?"/data/store/global.json":"/data/state.json")'
+KEY="$(state "console.log(JSON.parse(require('fs').readFileSync($STATE_FILE,'utf8')).admin_token)")"
 
 NAME="${TI4_NAME:-$(id -F 2>/dev/null || true)}"
 NAME="${NAME:-${USER:-Host}}"
 NAME="${NAME%% *}"
 
 find_seat() {
-  state "const s=JSON.parse(require('fs').readFileSync('/data/state.json','utf8'));
+  state "const s=JSON.parse(require('fs').readFileSync($STATE_FILE,'utf8'));
     const seats=Object.values(s.seats).filter(x=>!x.autopilot);
     const want=process.argv[1]||'';
     const mine=seats.find(x=>(s.users[x.user_id]?.global_name||'')===want);

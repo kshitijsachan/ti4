@@ -66,25 +66,7 @@ export const PlayerSetupRenderer: Renderer<"setup.player"> = ({ decision, answer
   );
 };
 
-const PREFERENCE_TITLE: Record<string, string> = {
-  survey: "Table survey",
-  sandbag: "Secret objective scoring",
-  auto_pass_sabotage: "Auto-pass on Sabotage (hours)",
-  agenda: "Auto-react when you have no whens or afters",
-  distance: "Order systems by",
-  pillage_own_transactions: "Pillage on your own transactions",
-};
-
-/** Preference questions; one title per preference, the engine's own answer labels. */
-export const PreferenceRenderer: Renderer<"setup.preference"> = ({ decision, answer }) => {
-  const pref = decision.options.find((o) => o.value)?.value?.preference ?? "";
-  return (
-    <div className={classes.stack}>
-      <p className={classes.title}>{PREFERENCE_TITLE[pref] ?? "Preference"}</p>
-      <Options options={decision.options} answer={answer} />
-    </div>
-  );
-};
+// Preference questions: player.preference (renderers/ui).
 
 const SETTING_TITLE: Record<string, string> = {
   expansion: "Which expansion is this game using?",

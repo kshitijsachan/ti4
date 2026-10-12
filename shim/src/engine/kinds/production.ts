@@ -4,7 +4,7 @@
  * Both are answered atomically with a payload (AnswerRequest.payload) instead of one option at a time: the engine
  * validates the whole answer, then makes the presses under the game lock. Plain option presses still work (legacy).
  */
-import type { DecisionBase, Progress } from "../types.js";
+import type { DecisionBase, HolderName, PlanetId, Progress, TilePosition, UnitId } from "../types.js";
 
 // ---------------------------------------------------------------- payment.spend
 
@@ -12,7 +12,7 @@ export type PaymentCurrency = "res" | "inf" | "both" | "freelancers" | string;
 
 export type PaymentPlanetValue = {
   source: "planet";
-  planet: string;
+  planet: PlanetId;
   /** Include attachments and other modifiers (engine Planet values). */
   resources: number;
   influence: number;
@@ -48,7 +48,7 @@ export type PaymentValue =
   | PaymentResetValue
   | PaymentDoneValue;
 
-export type PaymentProgress = Progress<{ resources: number; influence: number; planets: string[]; tg?: number }> & {
+export type PaymentProgress = Progress<{ resources: number; influence: number; planets: PlanetId[]; tg?: number }> & {
   required: { currency: PaymentCurrency; cost: number | null; costSource: string | null; remaining: number | null };
 };
 
@@ -56,7 +56,7 @@ export type PaymentSpend = DecisionBase<"payment.spend", PaymentValue>;
 
 /** The one answer that pays: planets exhausted, trade goods, commodities (Keleres agent only), Sarween Tools. */
 export interface PaymentPayload {
-  planets: string[];
+  planets: PlanetId[];
   tg?: number;
   commodities?: number;
   sarween?: boolean;
@@ -66,12 +66,12 @@ export interface PaymentPayload {
 
 export type ProductionPlaceValue = {
   /** Async unit id: gf, ff, mf, dd, ca, cv, dn, fs, ws, sd, pd, ... */
-  unit: string;
+  unit: UnitId;
   /** 2 for the "2 infantry / 2 fighters" buttons. */
   count: number;
   /** "space" or a planet id. */
-  holder: string;
-  tile: string | null;
+  holder: HolderName;
+  tile: TilePosition | null;
   /** Resource cost of one unit (0.5 for fighters/infantry); null if unknown. */
   cost: number | null;
 };
@@ -79,8 +79,8 @@ export type ProductionResetValue = { action: "reset" };
 export type ProductionDoneValue = {
   action: "done";
   context: string;
-  tile: string | null;
-  produced: Record<string, number>;
+  tile: TilePosition | null;
+  produced: Partial<Record<UnitId, number>>;
   unitCount: number;
   cost: number;
   /** Production limit the engine applies here (tactical action, Warfare, Bellum Gloriosum); null = not enforced. */
@@ -92,7 +92,7 @@ export type ProductionProduce = DecisionBase<"production.produce", ProductionVal
 
 /** The one answer that produces: units to place, then Done (empty list = build nothing). */
 export interface ProductionPayload {
-  units: { unit: string; count: number; holder?: string; tile?: string }[];
+  units: { unit: UnitId; count: number; holder?: HolderName; tile?: TilePosition }[];
 }
 
 export type ProductionDecision = PaymentSpend | ProductionProduce;
