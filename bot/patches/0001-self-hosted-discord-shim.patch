@@ -116,6 +116,68 @@ index edc648f..70ccd9a 100644
                  .append("\n> ⚠ **Slow Button Warning:**")
                  .append("\n> 🕒 Event start: ")
                  .append(eventTime);
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/FlawlessStrategyAcd2ButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/FlawlessStrategyAcd2ButtonHandler.java
+index edb9d01..4f19173 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/FlawlessStrategyAcd2ButtonHandler.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/FlawlessStrategyAcd2ButtonHandler.java
+@@ -10,6 +10,7 @@ import ti4.discord.interactions.buttons.Buttons;
+ import ti4.discord.interactions.routing.ButtonHandler;
+ import ti4.game.Game;
+ import ti4.game.Player;
++import ti4.helpers.ScOffer;
+ import ti4.logging.BotLogger;
+ import ti4.message.MessageHelper;
+ import ti4.service.strategycard.StrategyCardSecondaryButtonService;
+@@ -24,6 +25,7 @@ class FlawlessStrategyAcd2ButtonHandler {
+                 new ArrayList<>(StrategyCardSecondaryButtonService.getSecondaryAbilityButtons(game, player.getSCs()));
+         scButtons.add(Buttons.red("deleteButtons", "Done resolving"));
+         MessageHelper.sendMessageToChannelWithButtons(
+-                event.getMessageChannel(), player.getRepresentation() + ", use the buttons to resolve.", scButtons);
++                event.getMessageChannel(), player.getRepresentation() + ", use the buttons to resolve.",
++                ScOffer.tag(game, scButtons));
+     }
+ }
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/OverthrowAcd2ButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/OverthrowAcd2ButtonHandler.java
+index 8c10528..c41a987 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/OverthrowAcd2ButtonHandler.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/OverthrowAcd2ButtonHandler.java
+@@ -11,6 +11,7 @@ import ti4.game.Game;
+ import ti4.game.Player;
+ import ti4.helpers.ButtonHelper;
+ import ti4.helpers.Helper;
++import ti4.helpers.ScOffer;
+ import ti4.message.MessageHelper;
+ import ti4.service.emoji.CardEmojis;
+ import ti4.service.emoji.TI4Emoji;
+@@ -53,7 +54,7 @@ class OverthrowAcd2ButtonHandler {
+                 player.getCorrectChannel(),
+                 player.getRepresentationUnfogged()
+                         + ", choose the **secondary** ability you are resolving for _Overthrow_.",
+-                getSecondaryAbilityButtons(game));
++                ScOffer.tag(game, getSecondaryAbilityButtons(game)));
+     }
+ 
+     @ButtonHandler("overthrowPrimary_")
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/StrategicFocusAcd2ButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/StrategicFocusAcd2ButtonHandler.java
+index f555130..6d65252 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/StrategicFocusAcd2ButtonHandler.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/StrategicFocusAcd2ButtonHandler.java
+@@ -9,6 +9,7 @@ import ti4.discord.interactions.routing.ButtonHandler;
+ import ti4.game.Game;
+ import ti4.game.Player;
+ import ti4.helpers.ButtonHelper;
++import ti4.helpers.ScOffer;
+ import ti4.helpers.thundersedge.TeHelperActionCards;
+ import ti4.message.MessageHelper;
+ 
+@@ -25,6 +26,6 @@ class StrategicFocusAcd2ButtonHandler {
+                 player.getRepresentationUnfogged()
+                         + ", choose the secondary ability of a readied or unchosen strategy card to resolve for"
+                         + " _Strategic Focus_. No command token is spent.",
+-                buttons);
++                ScOffer.tag(game, buttons));
+     }
+ }
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/UbiquityAcd2ButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/UbiquityAcd2ButtonHandler.java
 index 5eb02e2..0613db8 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/UbiquityAcd2ButtonHandler.java
@@ -137,6 +199,26 @@ index 5eb02e2..0613db8 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  player.getCorrectChannel(),
                  player.getRepresentationUnfogged() + ", use these buttons to pay the 3 resources for _Ubiquity_.",
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/resolver/CrisisAgendaResolver.java b/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/resolver/CrisisAgendaResolver.java
+index a75dc8e..bb92af9 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/resolver/CrisisAgendaResolver.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/resolver/CrisisAgendaResolver.java
+@@ -7,6 +7,7 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+ import ti4.discord.interactions.buttons.Buttons;
+ import ti4.game.Game;
+ import ti4.helpers.Helper;
++import ti4.helpers.ScOffer;
+ import ti4.message.MessageHelper;
+ import ti4.service.emoji.CardEmojis;
+ import ti4.service.emoji.MiscEmojis;
+@@ -49,6 +50,6 @@ public class CrisisAgendaResolver implements AgendaResolver {
+                 game.getMainGameChannel(),
+                 "You may use these button to resolve the secondary ability of **"
+                         + Helper.getSCName(Integer.parseInt(winner), game) + "**.",
+-                scButtons);
++                ScOffer.tag(game, scButtons));
+     }
+ }
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/commandcounter/CommandCounterButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/commandcounter/CommandCounterButtonHandler.java
 index 5b2d268..24af700 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/commandcounter/CommandCounterButtonHandler.java
@@ -621,7 +703,7 @@ index a513e12..da1e360 100644
          StringBuilder message = new StringBuilder(
                  "🛑 Cannot deal secret objectives yet as some players still need to pick their starting technologies. If you wish to proceed anyways, just press the button again.");
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/other/DeleteButtonsButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/other/DeleteButtonsButtonHandler.java
-index e68223d..9e739be 100644
+index e68223d..f956af3 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/other/DeleteButtonsButtonHandler.java
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/other/DeleteButtonsButtonHandler.java
 @@ -36,8 +36,10 @@ import ti4.helpers.ButtonHelperCommanders;
@@ -643,12 +725,18 @@ index e68223d..9e739be 100644
  import ti4.service.turn.StartTurnService;
  import ti4.spring.service.gameevent.GameEventDraft;
  import ti4.spring.service.gameevent.GameEventService;
-@@ -66,21 +69,25 @@ class DeleteButtonsButtonHandler {
+@@ -66,21 +69,27 @@ class DeleteButtonsButtonHandler {
  
      @ButtonHandler("deleteButtons")
      public static void deleteButtons(ButtonInteractionEvent event, String buttonID, Game game, Player player) {
 -        String buttonLabel = event.getButton().getLabel();
 -        buttonID = buttonID.replace("deleteButtons_", "");
+-        String editedMessage = event.getMessage().getContentRaw();
+-        if (("Done Gaining Command Tokens".equalsIgnoreCase(buttonLabel)
+-                        || "Done Redistributing Command Tokens".equalsIgnoreCase(buttonLabel)
+-                        || "Done Losing Command Tokens".equalsIgnoreCase(buttonLabel)
+-                        || "Done Losing Fleet Tokens".equalsIgnoreCase(buttonLabel))
+-                && editedMessage.contains("command tokens have gone from")) {
 +        // What this closer finishes (paying, producing, adjusting command tokens) is carried in its id, not its label.
 +        DoneRole role = DoneRole.of(buttonID);
 +        // Untagged closers (prompts posted before the role suffix existed, recordings) keep the old label rule: an
@@ -658,12 +746,9 @@ index e68223d..9e739be 100644
 +        boolean producing = role == DoneRole.PRODUCE;
 +        boolean paying = role == DoneRole.PAY;
 +        buttonID = DoneRole.strip(buttonID).replace("deleteButtons_", "");
-         String editedMessage = event.getMessage().getContentRaw();
--        if (("Done Gaining Command Tokens".equalsIgnoreCase(buttonLabel)
--                        || "Done Redistributing Command Tokens".equalsIgnoreCase(buttonLabel)
--                        || "Done Losing Command Tokens".equalsIgnoreCase(buttonLabel)
--                        || "Done Losing Fleet Tokens".equalsIgnoreCase(buttonLabel))
--                && editedMessage.contains("command tokens have gone from")) {
++        // What this prompt was summarising (payment, readied planets, produced units), rebuilt from the game rather
++        // than read back from the prompt's text; "" when nothing was done on it.
++        String editedMessage = promptSummary(event, game, player, paying);
 +        // The pools this prompt started from, recorded by the gain/lose/reset buttons on this same prompt.
 +        String ccAdjustedFrom = PromptState.get(player, "ccAdjustFrom", event.getMessageId());
 +        if (role != null && role.isCommandTokens() && !ccAdjustedFrom.isEmpty()) {
@@ -680,7 +765,7 @@ index e68223d..9e739be 100644
                  boolean cyber = false;
                  boolean malevolency = false;
                  int netGain = ButtonHelper.checkNetGain(player, shortCCs);
-@@ -165,7 +172,7 @@ class DeleteButtonsButtonHandler {
+@@ -165,7 +174,7 @@ class DeleteButtonsButtonHandler {
                  player.setTotalExpenses(player.getTotalExpenses() + netGain * 3);
              }
  
@@ -689,7 +774,7 @@ index e68223d..9e739be 100644
                  MessageHelper.sendMessageToChannel(
                          player.getCorrectChannel(),
                          playerRep + ", your initial command token allocation was " + shortCCs
-@@ -185,18 +192,17 @@ class DeleteButtonsButtonHandler {
+@@ -185,18 +194,17 @@ class DeleteButtonsButtonHandler {
              }
              ButtonHelper.checkFleetInEveryTile(player, game);
          }
@@ -712,7 +797,7 @@ index e68223d..9e739be 100644
                  String pos = buttonID.split("_")[1];
                  buttonID = buttonID.split("_")[0];
                  tile = game.getTileByPosition(pos);
-@@ -209,7 +215,7 @@ class DeleteButtonsButtonHandler {
+@@ -209,22 +217,22 @@ class DeleteButtonsButtonHandler {
                              MyrrBreakthroughHandler.PRODUCTION_USED_KEY + player.getFaction(), buttonID + "|" + pos);
                  }
              }
@@ -721,7 +806,10 @@ index e68223d..9e739be 100644
                      && player.hasAbility("amalgamation")
                      && !game.getStoredValue("amalgAmount").isEmpty()) {
                  editedMessage = Helper.buildSpentThingsMessage(player, game, "res");
-@@ -218,13 +224,12 @@ class DeleteButtonsButtonHandler {
+             }
+-            ButtonHelper.sendMessageToRightStratThread(player, game, editedMessage, buttonID);
++            if (!editedMessage.isEmpty())
++                ButtonHelper.sendMessageToRightStratThread(player, game, editedMessage, buttonID);
              if ("skarnathBuild".equalsIgnoreCase(buttonID)) {
                  ThronesThroneHandler.clearSkarnathDiscount(game, player);
              }
@@ -737,7 +825,7 @@ index e68223d..9e739be 100644
                  CommanderUnlockCheckService.checkPlayer(player, "revenantponthous");
                  RevenantLeadersHandler.offerRevPonthousCommander(game, player, tile);
                  SvartalfheimLegendaryButtonHandler.offerAndvarisArtificing(event, game, player);
-@@ -312,7 +317,7 @@ class DeleteButtonsButtonHandler {
+@@ -312,7 +320,7 @@ class DeleteButtonsButtonHandler {
                          && !"solBtBuild".equalsIgnoreCase(buttonID)
                          && !buttonID.contains("integrated")) {
                      buttons.add(Buttons.red(
@@ -746,7 +834,7 @@ index e68223d..9e739be 100644
                              "Exhaust AI Development Algorithm (" + ButtonHelper.getNumberOfUnitUpgrades(player) + "r)",
                              TechEmojis.WarfareTech));
                  }
-@@ -392,9 +397,9 @@ class DeleteButtonsButtonHandler {
+@@ -392,9 +400,9 @@ class DeleteButtonsButtonHandler {
                  }
                  Button doneExhausting;
                  if (!buttonID.contains("deleteButtons")) {
@@ -758,7 +846,7 @@ index e68223d..9e739be 100644
                  }
                  if (warM) {
                      player.addSpentThing("warmachine");
-@@ -451,13 +456,13 @@ class DeleteButtonsButtonHandler {
+@@ -451,13 +459,13 @@ class DeleteButtonsButtonHandler {
                  }
              }
          }
@@ -775,15 +863,36 @@ index e68223d..9e739be 100644
              EmergencyAppropriationsLLButtonHandler.clear(game, player);
              PriorityRequisitionLLButtonHandler.clear(game, player);
              SharedResourcesLLButtonHandler.clear(game, player);
-@@ -540,7 +545,7 @@ class DeleteButtonsButtonHandler {
-         if ("diplomacy".equalsIgnoreCase(buttonID)) {
+@@ -537,12 +545,27 @@ class DeleteButtonsButtonHandler {
+                 ArdentiaAbilityHandler.useSeizeCommand(event, player, game);
+             }
+         }
+-        if ("diplomacy".equalsIgnoreCase(buttonID)) {
++        if ("diplomacy".equalsIgnoreCase(buttonID) && !editedMessage.isEmpty()) {
              ButtonHelper.sendMessageToRightStratThread(player, game, editedMessage, "diplomacy", null);
          }
 -        if ("spitItOut".equalsIgnoreCase(buttonID) && !"Done Exhausting Planets".equalsIgnoreCase(buttonLabel)) {
-+        if ("spitItOut".equalsIgnoreCase(buttonID) && !paying) {
++        if ("spitItOut".equalsIgnoreCase(buttonID) && !paying && !editedMessage.isEmpty()) {
              MessageHelper.sendMessageToChannel(player.getCorrectChannel(), editedMessage);
          }
          ButtonHelper.deleteMessage(event);
+     }
++
++    /**
++     * The summary a closed prompt showed: the spending summary of a payment prompt, the planets readied from a
++     * ready-planets prompt, or the units produced so far. All three are kept in the game (PromptState / produced units);
++     * the prompt's text only displayed them.
++     */
++    private static String promptSummary(ButtonInteractionEvent event, Game game, Player player, boolean paying) {
++        if (player == null) return "";
++        String promptId = event.getMessageId();
++        if (paying) return Helper.paymentPromptText(player, game, promptId);
++        String readied = Helper.readiedPlanetsPromptText(player, game, promptId);
++        if (!readied.isEmpty()) return readied;
++        if (!player.getCurrentProducedUnits().isEmpty()) return Helper.buildProducedUnitsMessage(player, game);
++        return "";
++    }
+ }
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/phases/GamePhaseButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/phases/GamePhaseButtonHandler.java
 index 87d3885..67a1767 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/phases/GamePhaseButtonHandler.java
@@ -830,18 +939,10 @@ index 87d3885..67a1767 100644
          List<Button> buttons = ButtonHelper.getPassingAbilities(player, game);
          buttons.addFirst(Buttons.red(player.factionButtonChecker() + "passForRound", "Pass"));
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/planet/PlanetExhaustButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/planet/PlanetExhaustButtonHandler.java
-index 4652fc9..58f0565 100644
+index 4652fc9..b6ce0ae 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/planet/PlanetExhaustButtonHandler.java
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/planet/PlanetExhaustButtonHandler.java
-@@ -11,6 +11,7 @@ import ti4.game.Game;
- import ti4.game.Player;
- import ti4.helpers.ButtonHelper;
- import ti4.helpers.Helper;
-+import ti4.helpers.PromptState;
- import ti4.logging.BotLogger;
- import ti4.service.planet.PlanetService;
- 
-@@ -34,13 +35,17 @@ class PlanetExhaustButtonHandler {
+@@ -34,13 +34,9 @@ class PlanetExhaustButtonHandler {
          }
  
          PlanetService.refreshPlanet(p2, planetName);
@@ -851,17 +952,10 @@ index 4652fc9..58f0565 100644
 -        } else {
 -            totalVotesSoFar = player.getFactionEmojiOrColor() + " Readied "
 -                    + Helper.getPlanetRepresentationPlusEmojiPlusResourceInfluence(planetName, game);
+-        }
 +        // Planets readied from this prompt so far: kept in the game (PromptState), the message only displays them.
-+        String readiedSoFar = PromptState.get(player, "readiedPlanets", event.getMessageId());
-+        readiedSoFar = readiedSoFar.isEmpty() ? planetName : readiedSoFar + "," + planetName;
-+        PromptState.put(player, "readiedPlanets", event.getMessageId(), readiedSoFar);
-+        StringBuilder readied = new StringBuilder(player.getFactionEmojiOrColor() + " Readied ");
-+        String[] readiedPlanets = readiedSoFar.split(",");
-+        for (int i = 0; i < readiedPlanets.length; i++) {
-+            if (i > 0) readied.append(", ");
-+            readied.append(Helper.getPlanetRepresentationPlusEmojiPlusResourceInfluence(readiedPlanets[i], game));
-         }
-+        String totalVotesSoFar = readied.toString();
++        Helper.noteReadiedPlanet(player, event.getMessageId(), planetName);
++        String totalVotesSoFar = Helper.readiedPlanetsPromptText(player, game, event.getMessageId());
          event.getMessage().editMessage(totalVotesSoFar).queue(Consumers.nop(), BotLogger::catchRestError);
          ButtonHelper.deleteButtonAndDeleteMessageIfEmpty(event);
      }
@@ -1263,6 +1357,71 @@ index 5a14c75..830820d 100644
      private void handleModal(ModalInteractionEvent event, HandlerRegistry.Route<ModalContext> route) {
          ModalContext context = new ModalContext(event);
          if (!context.isValid()) {
+diff --git a/src/main/java/ti4/discord/interactions/routing/ComponentIdEnvelope.java b/src/main/java/ti4/discord/interactions/routing/ComponentIdEnvelope.java
+index 162d989..9965527 100644
+--- a/src/main/java/ti4/discord/interactions/routing/ComponentIdEnvelope.java
++++ b/src/main/java/ti4/discord/interactions/routing/ComponentIdEnvelope.java
+@@ -9,12 +9,34 @@ public record ComponentIdEnvelope(
+         String spoofedFaction,
+         boolean deleteButton,
+         boolean deleteMessage,
+-        String handlerId) {
++        String handlerId,
++        String offer) {
+ 
+     private static final String OWNER_PREFIX = "FFCC_";
+     private static final String SPOOF_PREFIX = "dummyPlayerSpoof";
+     private static final String DELETE_BUTTON_MARKER = "deleteThisButton";
+     private static final String DELETE_MESSAGE_MARKER = "deleteThisMessage";
++    /**
++     * Trailing {@code ~o<n>}: which strategy-card secondary offer a button belongs to (see ti4.helpers.ScOffer). Like
++     * the delete markers it is not part of the handler id, so handlers and kinds see the id they always saw.
++     */
++    public static final String OFFER_MARKER = "~o";
++
++    private static final java.util.regex.Pattern OFFER_SUFFIX = java.util.regex.Pattern.compile("~o(\\d+)$");
++
++    /** The id without its offer marker (unchanged when it has none). */
++    public static String withoutOffer(String id) {
++        if (id == null) return null;
++        java.util.regex.Matcher m = OFFER_SUFFIX.matcher(id);
++        return m.find() ? id.substring(0, m.start()) : id;
++    }
++
++    /** The offer number an id carries, or null. */
++    public static String offerOf(String id) {
++        if (id == null) return null;
++        java.util.regex.Matcher m = OFFER_SUFFIX.matcher(id);
++        return m.find() ? m.group(1) : null;
++    }
+ 
+     public static String ownedBy(String faction) {
+         return OWNER_PREFIX + faction + "_";
+@@ -25,11 +47,12 @@ public record ComponentIdEnvelope(
+     }
+ 
+     public static ComponentIdEnvelope decode(String rawId) {
+-        if (rawId == null) return new ComponentIdEnvelope(null, null, null, false, false, null);
++        if (rawId == null) return new ComponentIdEnvelope(null, null, null, false, false, null, null);
+ 
+         String ownerFaction = null;
+         String spoofedFaction = null;
+-        String rest = rawId;
++        String offer = offerOf(rawId);
++        String rest = withoutOffer(rawId);
+         if (rest.startsWith(OWNER_PREFIX)) {
+             rest = rest.substring(OWNER_PREFIX.length());
+             ownerFaction = leadingFaction(rest);
+@@ -43,7 +66,8 @@ public record ComponentIdEnvelope(
+         boolean deleteButton = rest.contains(DELETE_BUTTON_MARKER);
+         boolean deleteMessage = rest.contains(DELETE_MESSAGE_MARKER);
+         String handlerId = rest.replace(DELETE_BUTTON_MARKER, "").replace(DELETE_MESSAGE_MARKER, "");
+-        return new ComponentIdEnvelope(rawId, ownerFaction, spoofedFaction, deleteButton, deleteMessage, handlerId);
++        return new ComponentIdEnvelope(
++                rawId, ownerFaction, spoofedFaction, deleteButton, deleteMessage, handlerId, offer);
+     }
+ 
+     private static String leadingFaction(String idAfterPrefix) {
 diff --git a/src/main/java/ti4/discord/interactions/selections/SelectionMenuProcessor.java b/src/main/java/ti4/discord/interactions/selections/SelectionMenuProcessor.java
 index 23c623d..5115002 100644
 --- a/src/main/java/ti4/discord/interactions/selections/SelectionMenuProcessor.java
@@ -1512,9 +1671,18 @@ index d91d9d5..50e3842 100644
  
              generateSavedButtons(Objects.requireNonNullElse(savedButtonsGame, gameToUndo));
 diff --git a/src/main/java/ti4/helpers/AgendaHelper.java b/src/main/java/ti4/helpers/AgendaHelper.java
-index 9b27bd5..54ac37d 100644
+index 9b27bd5..42a5e0e 100644
 --- a/src/main/java/ti4/helpers/AgendaHelper.java
 +++ b/src/main/java/ti4/helpers/AgendaHelper.java
+@@ -974,7 +974,7 @@ public final class AgendaHelper {
+                                 winningR.getCorrectChannel(),
+                                 winningR.getRepresentation()
+                                         + ", please resolve _Kleptocratic Politics_ by using the buttons below. You do not spend a command token when doing this, if it removes one just use /player stats to add one back.",
+-                                ButtonHelperHeroes.getSecondaryButtons(game));
++                                ScOffer.tag(game, ButtonHelperHeroes.getSecondaryButtons(game)));
+                     }
+ 
+                     if (winningR != null
 @@ -1099,7 +1099,8 @@ public final class AgendaHelper {
                          if (specificVote.contains("Construction Rider")) {
                              String message = identity
@@ -1526,7 +1694,7 @@ index 9b27bd5..54ac37d 100644
                          }
                          if (specificVote.contains("Warfare Rider")) {
 diff --git a/src/main/java/ti4/helpers/ButtonHelper.java b/src/main/java/ti4/helpers/ButtonHelper.java
-index d4c34fb..3a72d8e 100644
+index d4c34fb..06a8b3a 100644
 --- a/src/main/java/ti4/helpers/ButtonHelper.java
 +++ b/src/main/java/ti4/helpers/ButtonHelper.java
 @@ -131,6 +131,7 @@ import ti4.model.TechnologyModel.TechnologyType;
@@ -1589,6 +1757,15 @@ index d4c34fb..3a72d8e 100644
          buttons.add(DoneExhausting);
          MessageHelper.sendMessageToChannelWithButtons(
                  player.getCorrectChannel(), player.getRepresentation() + ", please pay for the planet.", buttons);
+@@ -3579,7 +3577,7 @@ public class ButtonHelper {
+                         p1.getRepresentationUnfogged()
+                                 + " use buttons to resolve an SC secondary"
+                                 + "-# Reminder that you may only do one of these.",
+-                        ButtonHelperAbilities.getGraceButtons(game, p1, 9));
++                        ScOffer.tag(game, ButtonHelperAbilities.getGraceButtons(game, p1, 9)));
+             default -> {
+                 p1.gainTG(5, true);
+                 MessageHelper.sendMessageToChannel(
 @@ -3987,21 +3985,17 @@ public class ButtonHelper {
      }
  
@@ -1745,8 +1922,17 @@ index d4c34fb..3a72d8e 100644
              return;
          }
          String destination = buttonID.substring("narrowWayDestination_".length());
+@@ -8862,7 +8862,7 @@ public class ButtonHelper {
+         MessageHelper.sendMessageToChannelWithButtons(
+                 player.getCorrectChannel(),
+                 "Use buttons to resolve a secondary.",
+-                ButtonHelperHeroes.getSecondaryButtons(game));
++                ScOffer.tag(game, ButtonHelperHeroes.getSecondaryButtons(game)));
+     }
+ 
+     @ButtonHandler("startPath")
 diff --git a/src/main/java/ti4/helpers/ButtonHelperAbilities.java b/src/main/java/ti4/helpers/ButtonHelperAbilities.java
-index d6e4d1f..7f18945 100644
+index d6e4d1f..a20d47e 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperAbilities.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperAbilities.java
 @@ -252,7 +252,7 @@ public final class ButtonHelperAbilities {
@@ -1758,6 +1944,15 @@ index d6e4d1f..7f18945 100644
          buttons.add(doneExhausting);
          MessageHelper.sendMessageToChannelWithButtons(event.getMessageChannel(), message2, buttons);
      }
+@@ -594,7 +594,7 @@ public final class ButtonHelperAbilities {
+                 player.getRepresentationUnfogged()
+                         + " use buttons to resolve **Grace**.\n"
+                         + "-# Reminder that you have to spend a command token from your strategy pool if applicable, and that you may only do one of these.",
+-                getGraceButtons(game, player, scPlayed));
++                ScOffer.tag(game, getGraceButtons(game, player, scPlayed)));
+     }
+ 
+     public static List<Button> getGraceButtons(Game game, Player edyn, int scPlayed) {
 @@ -1010,7 +1010,8 @@ public final class ButtonHelperAbilities {
              if (player.hasUnexhaustedLeader("mentakagent")) {
                  List<Button> buttons = new ArrayList<>();
@@ -1810,7 +2005,7 @@ index 1b73177..0c55676 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  event.getChannel(), "Please choose the planets you wish to exhaust to pay the 5 influence.", buttons);
 diff --git a/src/main/java/ti4/helpers/ButtonHelperAgents.java b/src/main/java/ti4/helpers/ButtonHelperAgents.java
-index f6fd934..2fb7594 100644
+index f6fd934..b70eb8e 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperAgents.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperAgents.java
 @@ -10,7 +10,6 @@ import java.util.Set;
@@ -1868,7 +2063,7 @@ index f6fd934..2fb7594 100644
                  ButtonHelper.deleteButtonAndDeleteMessageIfEmpty(buttonEvent);
  
              } else {
-@@ -2421,7 +2411,9 @@ public final class ButtonHelperAgents {
+@@ -2421,11 +2411,13 @@ public final class ButtonHelperAgents {
          FoWHelper.notifyPlayerAndAffectedInFog(game, player, bentor, msg);
  
          if (event instanceof ButtonInteractionEvent event2) {
@@ -1877,8 +2072,14 @@ index f6fd934..2fb7594 100644
 +            // on to landing troops in the same prompt.
 +            if (buttonID.endsWith("_landing")) {
                  List<Button> systemButtons = TacticalActionService.getLandingTroopsButtons(game, player, tile);
++                // Only the buttons change; the prompt keeps its text (not read back and re-sent).
                  event2.getMessage()
-                         .editMessage(event2.getMessage().getContentRaw())
+-                        .editMessage(event2.getMessage().getContentRaw())
+-                        .setComponents(ButtonHelper.turnButtonListIntoActionRowList(systemButtons))
++                        .editMessageComponents(ButtonHelper.turnButtonListIntoActionRowList(systemButtons))
+                         .queue(Consumers.nop(), BotLogger::catchRestError);
+             }
+         }
 @@ -2890,11 +2882,7 @@ public final class ButtonHelperAgents {
                          + "Brother Milor, the Yin" + (player.hasUnexhaustedLeader("yssarilagent") ? "/Yssaril" : "")
                          + " agent to.",
@@ -1918,7 +2119,7 @@ index 10339f1..a6fc6d7 100644
              buttons.add(Buttons.red("deleteButtons", "Decline"));
              MessageHelper.sendMessageToChannelWithButtons(
 diff --git a/src/main/java/ti4/helpers/ButtonHelperFactionSpecific.java b/src/main/java/ti4/helpers/ButtonHelperFactionSpecific.java
-index a11c931..0ece4a0 100644
+index a11c931..98c0ed8 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperFactionSpecific.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperFactionSpecific.java
 @@ -488,7 +488,7 @@ public final class ButtonHelperFactionSpecific {
@@ -1939,7 +2140,17 @@ index a11c931..0ece4a0 100644
          buttons.add(DoneExhausting);
          MessageHelper.sendMessageToChannel(
                  event.getMessageChannel(),
-@@ -2234,7 +2234,7 @@ public final class ButtonHelperFactionSpecific {
+@@ -1641,8 +1641,7 @@ public final class ButtonHelperFactionSpecific {
+ 
+     @ButtonHandler("titansConstructionMechDeployStep1")
+     public static void handleTitansConstructionMechDeployStep1(Game game, Player player, ButtonInteractionEvent event) {
+-        String messageID = event.getMessageId();
+-        boolean used = ButtonHelperSCs.addUsedSCPlayer(messageID, game, player);
++        boolean used = ButtonHelperSCs.markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel =
+                 game.getStrategyCardModelByName("construction").orElse(null);
+         int scNum = scModel.getInitiative();
+@@ -2234,7 +2233,7 @@ public final class ButtonHelperFactionSpecific {
                      game.getTileFromPlanet(planet));
          }
          List<Button> options = ButtonHelper.getExhaustButtonsWithTG(game, player, "res");
@@ -1948,7 +2159,7 @@ index a11c931..0ece4a0 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  event.getMessageChannel(),
                  player.getRepresentationUnfogged() + ", please pay 3 resources for the mech.",
-@@ -2317,9 +2317,6 @@ public final class ButtonHelperFactionSpecific {
+@@ -2317,9 +2316,6 @@ public final class ButtonHelperFactionSpecific {
                          + ", please choose which planet to relocate the Saar ground forces to.",
                  buttons);
          ButtonHelper.deleteButtonAndDeleteMessageIfEmpty(event);
@@ -1958,7 +2169,7 @@ index a11c931..0ece4a0 100644
      }
  
      @ButtonHandler("hacanMechTradeStepOne_")
-@@ -3991,7 +3988,7 @@ public final class ButtonHelperFactionSpecific {
+@@ -3991,7 +3987,7 @@ public final class ButtonHelperFactionSpecific {
                  event.getMessageChannel(),
                  player.getRepresentationNoPing() + " replaced 1 of their infantry with 1 " + unit + " on "
                          + Helper.getPlanetRepresentation(planet, game) + " using the mech's DEPLOY ability.");
@@ -1967,7 +2178,7 @@ index a11c931..0ece4a0 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  event.getMessageChannel(),
                  player.getRepresentationUnfogged() + ", please pay two resources for your mech.",
-@@ -5102,7 +5099,7 @@ public final class ButtonHelperFactionSpecific {
+@@ -5102,7 +5098,7 @@ public final class ButtonHelperFactionSpecific {
          String toRemove = buttonID.split("_")[2];
          String planet = toRemove.split(" ")[1];
          List<Button> buttons = ButtonHelper.getExhaustButtonsWithTG(game, player, "res");
@@ -2221,10 +2432,39 @@ index d01c4ce..af5f527 100644
              ButtonHelper.deleteButtonAndDeleteMessageIfEmpty(event);
          }
 diff --git a/src/main/java/ti4/helpers/ButtonHelperSCs.java b/src/main/java/ti4/helpers/ButtonHelperSCs.java
-index c270fc8..272143b 100644
+index c270fc8..7ead944 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperSCs.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperSCs.java
-@@ -302,7 +302,7 @@ public final class ButtonHelperSCs {
+@@ -125,8 +125,7 @@ public final class ButtonHelperSCs {
+     private static void warfareSecondaryThundersEdge(ButtonInteractionEvent event, Game game, Player player) {
+         StrategyCardModel warfare = Mapper.getStrategyCard("te6warfare");
+         if (warfare == null) return;
+-        String messageID = event.getMessageId();
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         if (!used
+                 && !player.getFollowedSCs().contains(warfare.getInitiative())
+                 && game.getPlayedSCs().contains(warfare.getInitiative())) {
+@@ -187,8 +186,7 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("diploRefresh2")
+     public static void diploRefresh2(Game game, Player player, ButtonInteractionEvent event) {
+-        String messageID = event.getMessageId();
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel = null;
+         for (int scNum : player.getUnfollowedSCs()) {
+             if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("pok2diplomacy")) {
+@@ -268,7 +266,7 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("nekroFollowTech")
+     public static void nekroFollowTech(Game game, Player player, ButtonInteractionEvent event) {
+-        boolean used = addUsedSCPlayer(event.getMessageId(), game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel = null;
+         for (int scNum : player.getUnfollowedSCs()) {
+             if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("pok7technology")) {
+@@ -302,7 +300,7 @@ public final class ButtonHelperSCs {
          Button getFleet = Buttons.green("increase_fleet_cc", "Gain 1 Fleet Token");
          Button getStrat = Buttons.green("increase_strategy_cc", "Gain 1 Strategy Token");
          Button exhaust = Buttons.red("nekroTechExhaust", "Exhaust Planets");
@@ -2233,7 +2473,91 @@ index c270fc8..272143b 100644
          game.setStoredValue("originalCCsFor" + player.getFaction(), player.getCCRepresentation());
          String message = player.getRepresentationUnfogged() + ", your current command tokens are "
                  + player.getCCRepresentation() + ". Use buttons to gain command tokens.";
-@@ -1204,7 +1204,8 @@ public final class ButtonHelperSCs {
+@@ -365,7 +363,7 @@ public final class ButtonHelperSCs {
+                     "Only the player who controls Mecatol Rex may score the **Imperial** victory point.");
+             return;
+         }
+-        boolean used = addUsedSCPlayer(event.getMessageId() + "score_imperial", game, player);
++        boolean used = markOfferUsed(event, game, player, "score_imperial");
+         if (used) return;
+         ButtonHelperFactionSpecific.keleresIIHQCCGainCheck(player, game);
+         ScorePublicObjectiveService.scorePO(event, game, player, 0);
+@@ -374,7 +372,7 @@ public final class ButtonHelperSCs {
+     @ButtonHandler("sc_trade_follow")
+     @ButtonHandler("sc_follow_trade")
+     public static void followTrade(Game game, Player player, ButtonInteractionEvent event) {
+-        boolean used = addUsedSCPlayer(event.getMessageId(), game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel = null;
+         for (int scNum : player.getUnfollowedSCs()) {
+             if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("pok5trade")) {
+@@ -413,8 +411,7 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("sc_draw_so")
+     public static void scDrawSO(Game game, Player player, ButtonInteractionEvent event) {
+-        String messageID = event.getMessageId();
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel = null;
+         for (int scNum : player.getUnfollowedSCs()) {
+             if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("pok8imperial")
+@@ -445,7 +442,7 @@ public final class ButtonHelperSCs {
+         if (!player.getFollowedSCs().contains(scModel.getInitiative())) {
+             ButtonHelperFactionSpecific.resolveVadenSCDebt(player, scModel.getInitiative(), game, event);
+         }
+-        boolean used2 = addUsedSCPlayer(messageID + "so", game, player);
++        boolean used2 = markOfferUsed(event, game, player, "so");
+         if (used2) return;
+ 
+         Player imperialHolder = Helper.getPlayerWithThisSC(game, scModel.getInitiative());
+@@ -502,7 +499,7 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("sc_refresh")
+     public static void refresh(Game game, Player player, ButtonInteractionEvent event) {
+-        boolean used = addUsedSCPlayer(event.getMessageId(), game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         if (used) {
+             return;
+         }
+@@ -543,7 +540,6 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("sc_refresh_and_wash")
+     public static void refreshAndWash(Game game, Player player, ButtonInteractionEvent event) {
+-        String messageID = event.getMessageId();
+         if (player.hasAbility("military_industrial_complex")) {
+             MessageHelper.sendMessageToChannel(
+                     player.getCorrectChannel(),
+@@ -569,7 +565,7 @@ public final class ButtonHelperSCs {
+             return;
+         }
+ 
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         if (used) {
+             return;
+         }
+@@ -962,9 +958,8 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("warfareBuild")
+     public static void warfareBuild(Game game, Player player, ButtonInteractionEvent event) {
+-        String messageID = event.getMessageId();
+         List<Button> buttons;
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel = null;
+         for (int scNum : player.getUnfollowedSCs()) {
+             if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("pok6warfare")) {
+@@ -1014,8 +1009,7 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("construction_")
+     public static void construction(Game game, Player player, ButtonInteractionEvent event, String buttonID) {
+-        String messageID = event.getMessageId();
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel = null;
+         for (int scNum : player.getUnfollowedSCs()) {
+             if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("pok4construction")
+@@ -1204,7 +1198,8 @@ public final class ButtonHelperSCs {
                                          && !"monumentstf4".equals(scModel.getBotSCAutomationID())))) {
                      message += "\n-# It will place a command token in the system as well.";
                  }
@@ -2243,7 +2567,7 @@ index c270fc8..272143b 100644
                  if (buttons.isEmpty()) {
                      MessageHelper.sendEphemeralMessageToEventChannel(
                              event, "You have no eligible planet on which to place that unit.");
-@@ -1457,6 +1458,19 @@ public final class ButtonHelperSCs {
+@@ -1457,6 +1452,19 @@ public final class ButtonHelperSCs {
  
      @ButtonHandler("leadershipGenerateCCButtons")
      public static void leadershipButtons(ButtonInteractionEvent event, Game game, Player player, String buttonID) {
@@ -2263,7 +2587,7 @@ index c270fc8..272143b 100644
          StrategyCardModel scModel = null;
          for (int scNum : player.getUnfollowedSCs()) {
              if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("pok1leadership")) {
-@@ -1488,7 +1502,7 @@ public final class ButtonHelperSCs {
+@@ -1488,7 +1496,7 @@ public final class ButtonHelperSCs {
          } else {
              game.setStoredValue("ledSpend" + player.getFaction(), "Yes");
          }
@@ -2272,7 +2596,7 @@ index c270fc8..272143b 100644
          buttons.add(doneExhausting);
          if (player.hasPlayablePromissoryInHand("thpnardentia")) {
              buttons.add(ArdentiaPromissoryHandler.getUsurpersLeaseButton(player));
-@@ -1519,8 +1533,9 @@ public final class ButtonHelperSCs {
+@@ -1519,8 +1527,9 @@ public final class ButtonHelperSCs {
          Button getFleet = Buttons.green(player.factionButtonChecker() + "increase_fleet_cc", "Gain 1 Fleet Token");
          Button getStrat =
                  Buttons.green(player.factionButtonChecker() + "increase_strategy_cc", "Gain 1 Strategy Token");
@@ -2284,7 +2608,7 @@ index c270fc8..272143b 100644
          Button resetCC = Buttons.gray(player.factionButtonChecker() + "resetCCs", "Reset Command Tokens");
          List<Button> buttons2 = Arrays.asList(getTactic, getFleet, getStrat, doneGainingCC, resetCC);
          // MessageHelper.sendMessageToEventChannelWithEphemeralButtons(event, message, buttons2);
-@@ -1531,6 +1546,37 @@ public final class ButtonHelperSCs {
+@@ -1531,6 +1540,47 @@ public final class ButtonHelperSCs {
          }
      }
  
@@ -2319,10 +2643,20 @@ index c270fc8..272143b 100644
 +        return -1;
 +    }
 +
++    /**
++     * Marks that player used the strategy-card offer the pressed button belongs to (ScOffer: the card's play, or the
++     * offer its id carries); true if they already had. {@code part} names a separate one-time part of the offer.
++     */
++    public static boolean markOfferUsed(ButtonInteractionEvent event, Game game, Player player, String part) {
++        if (event == null) return ScOffer.markUsed(game, player, null, null, part);
++        return ScOffer.markUsed(game, player, event.getButton().getCustomId(), event.getMessageId(), part);
++    }
++
++    /** Raw "already used" flag under a key (an offer, or for prompts posted before offers, a message id). */
      public static boolean addUsedSCPlayer(String messageID, Game game, Player player) {
          String players = game.getStoredValue(messageID + "SCReacts");
          boolean contains = players.contains(player.getFaction());
-@@ -1542,7 +1588,7 @@ public final class ButtonHelperSCs {
+@@ -1542,7 +1592,7 @@ public final class ButtonHelperSCs {
      @ButtonHandler("mahactA_follow_")
      @ButtonHandler("thardentiag_follow_")
      public static void mahactAndScepterFollow(Game game, Player player, ButtonInteractionEvent event, String buttonID) {
@@ -2331,7 +2665,7 @@ index c270fc8..272143b 100644
          boolean setStatus = true;
          int scNum = 1;
          try {
-@@ -1645,7 +1691,7 @@ public final class ButtonHelperSCs {
+@@ -1645,7 +1695,7 @@ public final class ButtonHelperSCs {
      @ButtonHandler("sc_no_follow_")
      public static void scNoFollow(Game game, Player player, @NotNull ButtonInteractionEvent event, String buttonID) {
          String messageID = event.getMessageId();
@@ -2340,15 +2674,66 @@ index c270fc8..272143b 100644
          int scNum = 1;
          boolean setStatus = true;
          String suffix = "";
-@@ -1715,7 +1761,7 @@ public final class ButtonHelperSCs {
+@@ -1673,9 +1723,7 @@ public final class ButtonHelperSCs {
+             }
+         }
+         ReactionService.addReaction(event, game, player, "is not following" + suffix + ".");
+-        String players = game.getStoredValue(messageID + "SCReacts");
+-
+-        game.setStoredValue(messageID + "SCReacts", players.replace(player.getFaction(), ""));
++        ScOffer.unmarkUsed(game, player, event.getButton().getCustomId(), messageID);
+ 
+         StrategyCardModel scModel = game.getStrategyCardModelByInitiative(scNum).orElse(null);
+         if (scModel == null) {
+@@ -1714,8 +1762,7 @@ public final class ButtonHelperSCs {
+ 
      @ButtonHandler("sc_follow_")
      public static void scFollow(Game game, Player player, @NotNull ButtonInteractionEvent event, String buttonID) {
-         String messageID = event.getMessageId();
+-        String messageID = event.getMessageId();
 -        String lastChar = StringUtils.right(event.getButton().getLabel(), 2).replace("#", "");
 +        String lastChar = "" /* every creation site puts the card number in the id; labels carry none */;
          int scNum = 1;
          boolean setStatus = true;
          try {
+@@ -1736,7 +1783,7 @@ public final class ButtonHelperSCs {
+             MessageHelper.sendMessageToChannel(player.getCorrectChannel(), message);
+             return;
+         }
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         if ((used || player.getFollowedSCs().contains(scNum))
+                 && OnyxxaAbilityHandler.trySpendForStrategicFluidity(game, player, event, scNum)) {
+             return;
+@@ -1808,12 +1855,11 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("sc_ac_draw")
+     public static void scACDraw(Game game, Player player, ButtonInteractionEvent event) {
+-        String messageID = event.getMessageId();
+-        boolean used2 = addUsedSCPlayer(messageID + "ac", game, player);
++        boolean used2 = markOfferUsed(event, game, player, "ac");
+         if (used2) {
+             return;
+         }
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel = null;
+         for (int scNum : player.getUnfollowedSCs()) {
+             if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("pok3politics")) {
+@@ -1877,12 +1923,11 @@ public final class ButtonHelperSCs {
+ 
+     @ButtonHandler("lumiACdraw")
+     public static void lumiACDraw(Game game, Player player, ButtonInteractionEvent event) {
+-        String messageID = event.getMessageId();
+-        boolean used2 = addUsedSCPlayer(messageID + "ac", game, player);
++        boolean used2 = markOfferUsed(event, game, player, "ac");
+         if (used2) {
+             return;
+         }
+-        boolean used = addUsedSCPlayer(messageID, game, player);
++        boolean used = markOfferUsed(event, game, player, "");
+         StrategyCardModel scModel = null;
+         for (int scNum : player.getUnfollowedSCs()) {
+             if (game.getStrategyCardModelByInitiative(scNum).get().usesAutomationForSCID("luminous2")) {
 diff --git a/src/main/java/ti4/helpers/ButtonHelperStats.java b/src/main/java/ti4/helpers/ButtonHelperStats.java
 index 12c7b89..c2125d5 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperStats.java
@@ -2366,7 +2751,7 @@ index 12c7b89..c2125d5 100644
              ButtonInteractionEvent event, Game game, Player player, int amt, boolean deleteMsg) {
          convertComms(event, game, player, amt, deleteMsg, null);
 diff --git a/src/main/java/ti4/helpers/ButtonHelperTwilightsFall.java b/src/main/java/ti4/helpers/ButtonHelperTwilightsFall.java
-index 1c6dee8..9294161 100644
+index 1c6dee8..89e7176 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperTwilightsFall.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperTwilightsFall.java
 @@ -712,7 +712,7 @@ public final class ButtonHelperTwilightsFall {
@@ -2396,6 +2781,16 @@ index 1c6dee8..9294161 100644
          buttons.add(DoneExhausting);
          MessageHelper.sendMessageToChannelWithButtons(
                  player.getCorrectChannel(), "Please pay the 3 resources and 3 influence.", buttons);
+@@ -1132,8 +1132,7 @@ public final class ButtonHelperTwilightsFall {
+             Game game, Player player, ButtonInteractionEvent event, boolean scPara, boolean artifice) {
+ 
+         if (scPara) {
+-            String messageID = event.getMessageId();
+-            boolean used = ButtonHelperSCs.addUsedSCPlayer(messageID, game, player);
++            boolean used = ButtonHelperSCs.markOfferUsed(event, game, player, "");
+             StrategyCardModel scModel = game.getStrategyCardModelByInitiative(8).get();
+             if (!player.getFollowedSCs().contains(scModel.getInitiative())) {
+                 ButtonHelperFactionSpecific.resolveVadenSCDebt(player, scModel.getInitiative(), game, event);
 diff --git a/src/main/java/ti4/helpers/DoneRole.java b/src/main/java/ti4/helpers/DoneRole.java
 new file mode 100644
 index 0000000..ee14482
@@ -2495,10 +2890,10 @@ index 0000000..ee14482
 +    }
 +}
 diff --git a/src/main/java/ti4/helpers/Helper.java b/src/main/java/ti4/helpers/Helper.java
-index 661fb78..11a7041 100644
+index 661fb78..50200a2 100644
 --- a/src/main/java/ti4/helpers/Helper.java
 +++ b/src/main/java/ti4/helpers/Helper.java
-@@ -1535,6 +1535,22 @@ public final class Helper {
+@@ -1535,6 +1535,44 @@ public final class Helper {
          SharedResourcesLLButtonHandler.clear(game, player);
      }
  
@@ -2518,10 +2913,32 @@ index 661fb78..11a7041 100644
 +        return buildSpentThingsMessage(player, game, PromptState.get(player, PAYMENT_CURRENCY, promptId));
 +    }
 +
++    private static final String READIED_PLANETS = "readiedPlanets";
++
++    /** Records that this "ready planets" prompt readied planetName (kept in the game, the prompt only shows it). */
++    public static void noteReadiedPlanet(Player player, String promptId, String planetName) {
++        String readiedSoFar = PromptState.get(player, READIED_PLANETS, promptId);
++        readiedSoFar = readiedSoFar.isEmpty() ? planetName : readiedSoFar + "," + planetName;
++        PromptState.put(player, READIED_PLANETS, promptId, readiedSoFar);
++    }
++
++    /** The "Readied ..." summary this ready-planets prompt shows, or "" if nothing has been readied from it. */
++    public static String readiedPlanetsPromptText(Player player, Game game, String promptId) {
++        String readiedSoFar = PromptState.get(player, READIED_PLANETS, promptId);
++        if (readiedSoFar.isEmpty()) return "";
++        StringBuilder readied = new StringBuilder(player.getFactionEmojiOrColor() + " Readied ");
++        String[] readiedPlanets = readiedSoFar.split(",");
++        for (int i = 0; i < readiedPlanets.length; i++) {
++            if (i > 0) readied.append(", ");
++            readied.append(getPlanetRepresentationPlusEmojiPlusResourceInfluence(readiedPlanets[i], game));
++        }
++        return readied.toString();
++    }
++
      public static String buildSpentThingsMessage(Player player, Game game, String resOrInfOrBoth) {
          String message = buildSpentThingsMessage(player, game, resOrInfOrBoth, false);
          if (message.length() <= Message.MAX_CONTENT_LENGTH) {
-@@ -3347,7 +3363,8 @@ public final class Helper {
+@@ -3347,7 +3385,8 @@ public final class Helper {
          }
          if ("place".equalsIgnoreCase(placePrefix)) {
              Button DoneProducingUnits = Buttons.red(
@@ -2532,7 +2949,7 @@ index 661fb78..11a7041 100644
              unitButtons.add(DoneProducingUnits);
              unitButtons.add(Buttons.gray(player.factionButtonChecker() + "resetProducedThings", "Reset Build"));
 diff --git a/src/main/java/ti4/helpers/NewStuffHelper.java b/src/main/java/ti4/helpers/NewStuffHelper.java
-index 272ed66..ea6a413 100644
+index 272ed66..df595dd 100644
 --- a/src/main/java/ti4/helpers/NewStuffHelper.java
 +++ b/src/main/java/ti4/helpers/NewStuffHelper.java
 @@ -8,20 +8,20 @@ import java.util.regex.Matcher;
@@ -2558,7 +2975,18 @@ index 272ed66..ea6a413 100644
  import ti4.service.emoji.CardEmojis;
  
  public final class NewStuffHelper {
-@@ -160,9 +160,7 @@ public final class NewStuffHelper {
+@@ -155,14 +155,17 @@ public final class NewStuffHelper {
+ 
+     public static void sendOrEditButtons(
+             GenericInteractionCreateEvent event, MessageChannel channel, String message, List<Button> buttons) {
++        // A page button only exists on the paginated prompt it pages, so pressing one edits that prompt in place
++        // (decided by the pressed id, not by comparing the prompt's text).
+         if (event instanceof ButtonInteractionEvent bEvent
+-                && bEvent.getMessage().getContentRaw().equals(message)) {
++                && bEvent.getButton().getCustomId() != null
++                && Pattern.compile(RegexHelper.pageRegex())
++                        .matcher(bEvent.getButton().getCustomId())
++                        .find()) {
              // replace the buttons in the previous message
              List<List<ActionRow>> actionRows = MessageHelper.getPartitionedButtonLists(buttons);
              if (!actionRows.isEmpty()) {
@@ -2586,7 +3014,7 @@ index 75d7823..af7fc90 100644
  
      @ButtonHandler(value = "setHourAsAFK_", save = false)
 diff --git a/src/main/java/ti4/helpers/PromissoryNoteHelper.java b/src/main/java/ti4/helpers/PromissoryNoteHelper.java
-index 8bb5899..7f8c852 100644
+index 8bb5899..448a448 100644
 --- a/src/main/java/ti4/helpers/PromissoryNoteHelper.java
 +++ b/src/main/java/ti4/helpers/PromissoryNoteHelper.java
 @@ -492,7 +492,7 @@ public class PromissoryNoteHelper {
@@ -2598,6 +3026,15 @@ index 8bb5899..7f8c852 100644
              buttons.add(doneExhausting);
              MessageHelper.sendMessageToChannelWithButtons(
                      player.getCorrectChannel(), "Please spend 1 influence.", buttons);
+@@ -788,7 +788,7 @@ public class PromissoryNoteHelper {
+                     game.getActionsChannel(),
+                     player.getRepresentation()
+                             + ", you may use these buttons to perform the secondary ability of the strategy card you played _Pact Renewed_ for.\n**REMINDER**: You do not spend a command token when doing this.",
+-                    ButtonHelperHeroes.getSecondaryButtons(game));
++                    ScOffer.tag(game, ButtonHelperHeroes.getSecondaryButtons(game)));
+         }
+         if ("thpnthrones".equalsIgnoreCase(id)) {
+             ThronesPromissoryHandler.getUnplacedThronePlanetButtonsForPN(event, game, player);
 diff --git a/src/main/java/ti4/helpers/PromptState.java b/src/main/java/ti4/helpers/PromptState.java
 new file mode 100644
 index 0000000..2205d74
@@ -2716,6 +3153,134 @@ index 03c37ae..1607c1b 100644
      }
  
      public static String riftUnit(
+diff --git a/src/main/java/ti4/helpers/ScOffer.java b/src/main/java/ti4/helpers/ScOffer.java
+new file mode 100644
+index 0000000..9168ab5
+--- /dev/null
++++ b/src/main/java/ti4/helpers/ScOffer.java
+@@ -0,0 +1,122 @@
++package ti4.helpers;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.regex.Pattern;
++import javax.annotation.Nullable;
++import net.dv8tion.jda.api.components.buttons.Button;
++import ti4.discord.interactions.routing.ComponentIdEnvelope;
++import ti4.game.Game;
++import ti4.game.Player;
++
++/**
++ * Which strategy-card secondary "offer" a pressed button belongs to, so the "this player already used this offer"
++ * flags (no second command token, no second draw) are kept by offer in the game instead of by the Discord message the
++ * buttons sit on.
++ *
++ * <ul>
++ *   <li>A strategy card play: the card's message keeps its plain ids (sc_draw_so, sc_ac_draw, sc_follow_8 …); when it
++ *       is posted, each of those ids is recorded in the game as belonging to this play ({@link #recordPlay}). Every
++ *       play is a new offer, so the next play (next round, Winnu hero …) starts clean.
++ *   <li>Any other offer of the same buttons (Grace, Crisis, heroes, action cards …): the ids carry the offer, as a
++ *       trailing {@code ~o<n>} that {@link ComponentIdEnvelope} keeps out of the handler id ({@link #tag}).
++ * </ul>
++ *
++ * A pressed id that is neither (a prompt posted before offers existed) keeps the old per-message flags.
++ */
++public final class ScOffer {
++
++    private static final String SEQ = "scOfferSeq";
++    private static final String PLAY_OF = "scOfferOf_";
++    private static final String REACTS = "SCReacts";
++
++    /** Handlers that record "already used on this offer" (ButtonHelperSCs.addUsedSCPlayer). */
++    private static final Pattern TRACKED = Pattern.compile("^(sc_follow_\\d+|sc_no_follow_\\d+|sc_trade_follow|sc_follow_trade"
++            + "|sc_refresh|sc_refresh_and_wash|sc_ac_draw|lumiACdraw|sc_draw_so|score_imperial|diploRefresh2"
++            + "|construction_[A-Za-z]+|warfareBuild|warfareTeBuild|nekroFollowTech|acquireATechWithSC(_first)?"
++            + "|titansConstructionMechDeployStep1|drawParadigm|resolveSacrificeSecondary)$");
++
++    private ScOffer() {}
++
++    static boolean tracked(String handlerId) {
++        return handlerId != null && TRACKED.matcher(handlerId).matches();
++    }
++
++    private static String nextOffer(Game game) {
++        int n;
++        try {
++            n = Integer.parseInt(game.getStoredValue(SEQ));
++        } catch (NumberFormatException e) {
++            n = 0;
++        }
++        n++;
++        game.setStoredValue(SEQ, Integer.toString(n));
++        return Integer.toString(n);
++    }
++
++    /** A strategy card's message is being posted: its secondary ids now belong to this (new) play. */
++    public static void recordPlay(Game game, List<Button> buttons) {
++        String offer = null;
++        for (Button button : buttons) {
++            String handlerId = ComponentIdEnvelope.decode(button.getCustomId()).handlerId();
++            if (!tracked(handlerId)) continue;
++            if (offer == null) offer = nextOffer(game);
++            game.setStoredValue(PLAY_OF + handlerId, offer);
++        }
++    }
++
++    /** These buttons (another offer of strategy card secondaries) carry a fresh offer in their ids. */
++    public static List<Button> tag(Game game, List<Button> buttons) {
++        String offer = null;
++        List<Button> tagged = new ArrayList<>(buttons.size());
++        for (Button button : buttons) {
++            String id = button.getCustomId();
++            String handlerId = ComponentIdEnvelope.decode(id).handlerId();
++            if (tracked(handlerId) && ComponentIdEnvelope.offerOf(id) == null) {
++                if (offer == null) offer = nextOffer(game);
++                tagged.add(button.withCustomId(id + ComponentIdEnvelope.OFFER_MARKER + offer));
++            } else {
++                tagged.add(button);
++            }
++        }
++        return tagged;
++    }
++
++    /** The offer a pressed id belongs to, or null for a prompt posted before offers existed. */
++    @Nullable
++    public static String of(Game game, @Nullable String rawId) {
++        if (rawId == null) return null;
++        String offer = ComponentIdEnvelope.offerOf(rawId);
++        if (offer == null) {
++            String handlerId = ComponentIdEnvelope.decode(rawId).handlerId();
++            if (tracked(handlerId)) offer = game.getStoredValue(PLAY_OF + handlerId);
++        }
++        return offer == null || offer.isEmpty() ? null : "scOffer" + offer;
++    }
++
++    /**
++     * Marks that player used the offer the pressed button belongs to ({@code part} distinguishes separate one-time
++     * parts of one offer, e.g. "so" for Imperial's draw); true if they already had.
++     *
++     * @param legacyPromptId the message the button sits on — used only for a prompt posted before offers existed,
++     *     and to honour flags such a prompt recorded before this change.
++     */
++    public static boolean markUsed(
++            Game game, Player player, @Nullable String rawId, @Nullable String legacyPromptId, String part) {
++        String offer = of(game, rawId);
++        if (offer == null) return ButtonHelperSCs.addUsedSCPlayer(legacyPromptId + part, game, player);
++        boolean usedBefore = legacyPromptId != null
++                && game.getStoredValue(legacyPromptId + part + REACTS).contains(player.getFaction());
++        return ButtonHelperSCs.addUsedSCPlayer(offer + part, game, player) || usedBefore;
++    }
++
++    /** "Not following": forget that player used the offer. */
++    public static void unmarkUsed(Game game, Player player, @Nullable String rawId, @Nullable String legacyPromptId) {
++        String offer = of(game, rawId);
++        for (String key : new String[] {offer, legacyPromptId}) {
++            if (key == null) continue;
++            String players = game.getStoredValue(key + REACTS);
++            if (!players.isEmpty()) game.setStoredValue(key + REACTS, players.replace(player.getFaction(), ""));
++        }
++    }
++}
 diff --git a/src/main/java/ti4/helpers/TransactionHelper.java b/src/main/java/ti4/helpers/TransactionHelper.java
 index 22ecac6..6d15e7d 100644
 --- a/src/main/java/ti4/helpers/TransactionHelper.java
@@ -2775,10 +3340,10 @@ index 6d9bcab..9dc0abb 100644
      }
  
 diff --git a/src/main/java/ti4/helpers/thundersedge/TeHelperActionCards.java b/src/main/java/ti4/helpers/thundersedge/TeHelperActionCards.java
-index d4d3cdb..b962fd8 100644
+index d4d3cdb..f782936 100644
 --- a/src/main/java/ti4/helpers/thundersedge/TeHelperActionCards.java
 +++ b/src/main/java/ti4/helpers/thundersedge/TeHelperActionCards.java
-@@ -23,6 +23,7 @@ import ti4.helpers.ButtonHelperAbilities;
+@@ -23,10 +23,12 @@ import ti4.helpers.ButtonHelperAbilities;
  import ti4.helpers.ButtonHelperCommanders;
  import ti4.helpers.ButtonHelperHeroes;
  import ti4.helpers.CommandCounterHelper;
@@ -2786,7 +3351,12 @@ index d4d3cdb..b962fd8 100644
  import ti4.helpers.FoWHelper;
  import ti4.helpers.Helper;
  import ti4.helpers.NewStuffHelper;
-@@ -313,7 +314,19 @@ public class TeHelperActionCards {
+ import ti4.helpers.RegexHelper;
++import ti4.helpers.ScOffer;
+ import ti4.helpers.SecretObjectiveHelper;
+ import ti4.helpers.StringHelper;
+ import ti4.helpers.Units.UnitType;
+@@ -313,7 +315,19 @@ public class TeHelperActionCards {
      @ButtonHandler("crashLandingStart")
      private static void crashLandingStart(Game game, Player player, ButtonInteractionEvent event) {
          List<Button> buttons = new ArrayList<>();
@@ -2807,7 +3377,7 @@ index d4d3cdb..b962fd8 100644
          for (Planet planet : tile.getPlanetUnitHolders()) {
              if (planet.getName().contains("mr")) {
                  continue;
-@@ -331,6 +344,14 @@ public class TeHelperActionCards {
+@@ -331,6 +345,14 @@ public class TeHelperActionCards {
                          UnitEmojis.infantry));
              }
          }
@@ -2822,7 +3392,16 @@ index d4d3cdb..b962fd8 100644
          String message = "Choose the unit and planet you wish to crash land on.";
          MessageHelper.sendMessageToChannelWithButtons(player.getCorrectChannel(), message, buttons);
          ButtonHelper.deleteMessage(event);
-@@ -622,7 +643,7 @@ public class TeHelperActionCards {
+@@ -511,7 +533,7 @@ public class TeHelperActionCards {
+                     + ", you have no strategy tokens to deduct, so the bot did not deduct one. You should probably only resolve leadership.";
+         }
+         buttons.add(Buttons.red("deleteButtons", "Done Resolving"));
+-        MessageHelper.sendMessageToChannelWithButtons(player.getCorrectChannel(), message, buttons);
++        MessageHelper.sendMessageToChannelWithButtons(player.getCorrectChannel(), message, ScOffer.tag(game, buttons));
+         MessageHelper.sendMessageToChannel(player.getCorrectChannel(), msg2);
+         ButtonHelper.deleteMessage(event);
+     }
+@@ -622,7 +644,7 @@ public class TeHelperActionCards {
          String message = player.getRepresentation() + " choose a system to place the pirates! 🦜☠";
          if (allowRes) {
              List<Button> buttons = ButtonHelper.getExhaustButtonsWithTG(game, player, "res");
@@ -3155,10 +3734,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..e4c3ff5
+index 0000000..a624e5a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,605 @@
+@@ -0,0 +1,617 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -3202,6 +3781,7 @@ index 0000000..e4c3ff5
 +import ti4.selfhost.engine.EngineModels.InputSchema;
 +import ti4.selfhost.engine.EngineModels.Option;
 +import ti4.selfhost.engine.interaction.EngineInteraction;
++import ti4.selfhost.engine.interaction.EphemeralMessages;
 +import ti4.selfhost.engine.interaction.Forms;
 +import ti4.selfhost.engine.interaction.MessageSink;
 +import ti4.selfhost.engine.interaction.NativeCoverage;
@@ -3217,8 +3797,9 @@ index 0000000..e4c3ff5
 + *
 + * <ul>
 + *   <li><b>engine</b> — an {@link EngineInteraction} (no Discord interaction, no shim mint, no JDA internals) for
-+ *       handlers {@link NativeCoverage} proves only use what the engine interaction supports, on non-ephemeral
-+ *       prompts. Also the only path for select menus and forms (modal buttons → "input.form" decisions).
++ *       handlers {@link NativeCoverage} proves only use what the engine interaction supports (ephemeral prompts
++ *       too, from the copy {@link EphemeralMessages} keeps). Also the only path for select menus and forms (modal
++ *       buttons → "input.form" decisions).
 + *   <li><b>synthetic</b> — fallback: the shim mints an interaction and we build a real JDA click event from it.
 + * </ul>
 + *
@@ -3596,15 +4177,25 @@ index 0000000..e4c3ff5
 +        return null;
 +    }
 +
-+    /** Engine path for a button: enabled, handler proven covered, prompt fetchable (not ephemeral), channel known. */
++    /**
++     * Engine path for a button: enabled, handler proven covered, prompt readable (an ephemeral one only from the
++     * capture's copy), channel known.
++     */
 +    private static boolean canRunNatively(Decision d, Plan plan) {
-+        if (!NATIVE || d.source().ephemeral()) return false;
++        if (!NATIVE) return false;
++        // Ephemeral prompts: native once capture kept the message (EphemeralMessages); else the synthetic click.
++        if (d.source().ephemeral() && !EphemeralMessages.has(d.source().messageId())) return false;
 +        String handlerId = ComponentIdEnvelope.decode(plan.componentId()).handlerId();
-+        NativeCoverage.HandlerCoverage c = NativeCoverage.forHandlerIfReady("button", handlerId);
++        // A form button has no synthetic fallback (it would answer "needs_input"): wait for the analysis if it is
++        // still running (first seconds after a restart) instead of refusing.
++        boolean form = plan.option() != null && plan.option().needsInput();
++        NativeCoverage.HandlerCoverage c = form
++                ? NativeCoverage.forHandler("button", handlerId)
++                : NativeCoverage.forHandlerIfReady("button", handlerId);
 +        if (c == null || !c.nativeOk()) return false;
 +        try {
-+            MessageSink.jda().channel(d.source().channelId());
-+            return true;
++            var channel = MessageSink.jda().channel(d.source().channelId());
++            return !d.source().ephemeral() || EphemeralMessages.message(channel, d.source().messageId()) != null;
 +        } catch (Exception e) {
 +            return false;
 +        }
@@ -3766,10 +4357,10 @@ index 0000000..e4c3ff5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..98a8ec0
+index 0000000..aea0798
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,710 @@
+@@ -0,0 +1,726 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -3806,6 +4397,7 @@ index 0000000..98a8ec0
 +import ti4.selfhost.engine.EngineModels.ReactionWindow;
 +import ti4.selfhost.engine.EngineModels.Source;
 +import ti4.selfhost.engine.EngineModels.Target;
++import ti4.selfhost.engine.interaction.EphemeralMessages;
 +import ti4.selfhost.engine.interaction.MessageSink;
 +import ti4.selfhost.engine.interaction.NativeCoverage;
 +import ti4.service.game.GameNameService;
@@ -3850,7 +4442,10 @@ index 0000000..98a8ec0
 +        if ("POST".equals(method) && (m = CH_BULK.matcher(path)).matches()) {
 +            DataObject body = DataObject.fromJson(bodyString(req));
 +            DataArray ids = body.getArray("messages");
-+            for (int i = 0; i < ids.length(); i++) DecisionRegistry.closeByMessage(ids.getString(i), "deleted");
++            for (int i = 0; i < ids.length(); i++) {
++                EphemeralMessages.forget(ids.getString(i));
++                DecisionRegistry.closeByMessage(ids.getString(i), "deleted");
++            }
 +            return;
 +        }
 +        if ((m = CH_MSGS.matcher(path)).matches() && "POST".equals(method)) {
@@ -3865,7 +4460,10 @@ index 0000000..98a8ec0
 +            return;
 +        }
 +        if ((m = CH_MSG.matcher(path)).matches()) {
-+            if ("DELETE".equals(method)) DecisionRegistry.closeByMessage(m.group(2), "deleted");
++            if ("DELETE".equals(method)) {
++                EphemeralMessages.forget(m.group(2));
++                DecisionRegistry.closeByMessage(m.group(2), "deleted");
++            }
 +            else if ("PATCH".equals(method)) onMessage(responseJson(res), null);
 +            return;
 +        }
@@ -3878,7 +4476,10 @@ index 0000000..98a8ec0
 +                if (id == null && InteractionTracker.byToken(token) != null) id = InteractionTracker.byToken(token).messageId();
 +            }
 +            if ("DELETE".equals(method)) {
-+                if (id != null) DecisionRegistry.closeByMessage(id, "deleted");
++                if (id != null) {
++                    EphemeralMessages.forget(id);
++                    DecisionRegistry.closeByMessage(id, "deleted");
++                }
 +            } else if ("PATCH".equals(method)) {
 +                DataObject msg = responseJson(res);
 +                if (msg != null && "@original".equals(m.group(3)))
@@ -3934,6 +4535,8 @@ index 0000000..98a8ec0
 +        }
 +        List<RawControl> controls = new ArrayList<>();
 +        if (msg.hasKey("components") && !msg.isNull("components")) collect(msg.getArray("components"), controls);
++        // Ephemeral prompts cannot be read back by id: keep them for engine answers (EphemeralMessages).
++        if (knownGame == null) EphemeralMessages.observe(msg, !controls.isEmpty());
 +        if (controls.isEmpty()) {
 +            DecisionRegistry.closeByMessage(messageId, "no_options");
 +            return;
@@ -4182,7 +4785,11 @@ index 0000000..98a8ec0
 +     * posts the agent's target picker; leader.use types it). Read-only for the undo log, not for capture: a message of
 +     * them alone is a decision (the cards-info shortcut getAgentSelection_saaragent stays an INFO_COMPANION).
 +     */
-+    private static final List<String> ACTION_NOT_SAVED = List.of("getAgentSelection_");
++    private static final List<String> ACTION_NOT_SAVED = List.of(
++            "getAgentSelection_",
++            // Emelpar's "Ready Another Player's Components" -> faction picker -> that faction's emelparReady_ menu.
++            "getOtherFactionsEmelpar",
++            "getEmelparButtons_");
 +
 +    /**
 +     * An info menu, not a decision: every option opens a read-only handler (save = false: info, decks, views,
@@ -8549,6 +9156,77 @@ index 0000000..7df605e
 +        return s.length() > 80 ? s.substring(0, 80) + "…" : s;
 +    }
 +}
+diff --git a/src/main/java/ti4/selfhost/engine/interaction/EphemeralMessages.java b/src/main/java/ti4/selfhost/engine/interaction/EphemeralMessages.java
+new file mode 100644
+index 0000000..bdb3b95
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/interaction/EphemeralMessages.java
+@@ -0,0 +1,65 @@
++package ti4.selfhost.engine.interaction;
++
++import java.util.Collections;
++import java.util.LinkedHashMap;
++import java.util.Map;
++import javax.annotation.Nullable;
++import net.dv8tion.jda.api.entities.Message;
++import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
++import net.dv8tion.jda.api.utils.data.DataObject;
++import net.dv8tion.jda.internal.JDAImpl;
++import ti4.discord.JdaService;
++
++/**
++ * Ephemeral prompts as the bot last sent or edited them (raw message JSON from decision capture). Discord, and the
++ * shim like it, never returns an ephemeral message by id, so without this an engine answer to an ephemeral prompt
++ * could not show its handler {@code event.getMessage()} and had to take the synthetic click (no forms: a form button
++ * on an ephemeral prompt answered "needs_input"). With it, ephemeral prompts answer natively like any other: the
++ * handler sees the message (flags 64, so {@code isEphemeral()} holds), edits and deletes go to the channel routes the
++ * shim honours for the bot's own ephemerals.
++ *
++ * <p>Bounded (oldest first); ephemerals do not survive a restart anyway (decision rebuild cannot read them).
++ */
++public final class EphemeralMessages {
++    private static final int MAX = 3000;
++    private static final Map<String, DataObject> byId = Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, true) {
++        @Override
++        protected boolean removeEldestEntry(Map.Entry<String, DataObject> e) {
++            return size() > MAX;
++        }
++    });
++
++    private EphemeralMessages() {}
++
++    public static boolean isEphemeral(DataObject msg) {
++        return msg != null && (msg.getInt("flags", 0) & 64) != 0;
++    }
++
++    /** Capture saw this message posted or edited: keep it while it is an ephemeral prompt. */
++    public static void observe(DataObject msg, boolean hasControls) {
++        if (msg == null || !msg.hasKey("id")) return;
++        String id = msg.getString("id");
++        if (isEphemeral(msg) && hasControls) byId.put(id, msg);
++        else byId.remove(id);
++    }
++
++    public static void forget(String messageId) {
++        if (messageId != null) byId.remove(messageId);
++    }
++
++    public static boolean has(String messageId) {
++        return messageId != null && byId.containsKey(messageId);
++    }
++
++    /** The cached ephemeral as a JDA message on that channel, or null when not cached or not buildable. */
++    @Nullable
++    public static Message message(MessageChannel channel, String messageId) {
++        DataObject json = messageId == null ? null : byId.get(messageId);
++        if (json == null || channel == null || !(JdaService.jda instanceof JDAImpl jda)) return null;
++        try {
++            return jda.getEntityBuilder().createMessageWithChannel(json, channel, false);
++        } catch (Exception e) {
++            return null;
++        }
++    }
++}
 diff --git a/src/main/java/ti4/selfhost/engine/interaction/Forms.java b/src/main/java/ti4/selfhost/engine/interaction/Forms.java
 new file mode 100644
 index 0000000..493f60d
@@ -8892,10 +9570,10 @@ index 0000000..745ffc5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/interaction/MessageSink.java b/src/main/java/ti4/selfhost/engine/interaction/MessageSink.java
 new file mode 100644
-index 0000000..608301d
+index 0000000..3e4d5dc
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/interaction/MessageSink.java
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,147 @@
 +package ti4.selfhost.engine.interaction;
 +
 +import java.util.concurrent.TimeUnit;
@@ -8911,6 +9589,7 @@ index 0000000..608301d
 +import net.dv8tion.jda.api.utils.messages.MessageEditData;
 +import org.apache.commons.lang3.function.Consumers;
 +import ti4.discord.JdaService;
++import ti4.discord.utility.DiscordChannelUtility;
 +import ti4.logging.BotLogger;
 +
 +/**
@@ -8957,12 +9636,34 @@ index 0000000..608301d
 +        public MessageChannel channel(String channelId) {
 +            MessageChannel ch = jda().getChannelById(MessageChannel.class, channelId);
 +            if (ch == null) ch = jda().getThreadChannelById(channelId);
++            // A thread JDA does not cache (archived, e.g. a cards-info thread after a restart): load it, as the
++            // Discord path's interaction payload would carry it. Without this a form button on such a prompt
++            // answered "needs_input" (live pbd109/pbd174: newTransact_Details…~MDL).
++            if (ch == null && channelId != null && channelId.matches("\\d+")) {
++                for (Guild g : jda().getGuilds()) {
++                    try {
++                        ch = DiscordChannelUtility.retrieveThreadChannelById(g, channelId).complete();
++                    } catch (Exception e) {
++                        ch = null;
++                    }
++                    if (ch != null) break;
++                }
++            }
 +            if (ch == null) throw new IllegalStateException("unknown channel " + channelId);
 +            return ch;
 +        }
 +
 +        @Override
 +        public Message fetch(String channelId, String messageId) {
++            // Ephemeral prompts are never returned by id (Discord, shim): use the copy capture kept.
++            if (EphemeralMessages.has(messageId)) {
++                try {
++                    Message m = EphemeralMessages.message(channel(channelId), messageId);
++                    if (m != null) return m;
++                } catch (Exception e) {
++                    return null;
++                }
++            }
 +            try {
 +                return channel(channelId).retrieveMessageById(messageId).complete();
 +            } catch (Exception e) {
@@ -13515,10 +14216,10 @@ index 0000000..4aebd9d
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
 new file mode 100644
-index 0000000..d714f69
+index 0000000..791612c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
-@@ -0,0 +1,204 @@
+@@ -0,0 +1,207 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -13614,7 +14315,10 @@ index 0000000..d714f69
 +                        + o.value().get("hits") + " left (or press Cancel a Hit) instead of auto-assigning all "
 +                        + o.value().get("promptHits") + ".";
 +        }
-+        return null;
++        // The next round's roll on a hits prompt waits for the hits (pbd203: rolled while the opponent still owed).
++        String h = optionId == null ? null : ti4.discord.interactions.routing.ComponentIdEnvelope.decode(optionId).handlerId();
++        String why = CombatSupport.rollBlocked(game, h);
++        return why == null ? null : "Not yet: " + why + ".";
 +    }
 +
 +    private static Map<String, Object> captureValue(String handlerId, CaptureContext ctx) {
@@ -14129,10 +14833,10 @@ index 0000000..b9ec9db
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
 new file mode 100644
-index 0000000..9b6da10
+index 0000000..83d1944
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,137 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -14234,6 +14938,14 @@ index 0000000..9b6da10
 +        return true;
 +    }
 +
++    /** A combat round may not be rolled while hits are owed there or before anti-fighter barrage (pbd203). */
++    @Override
++    public String validate(Game game, Player answering, Decision decision, String optionId) {
++        String h = optionId == null ? null : ti4.discord.interactions.routing.ComponentIdEnvelope.decode(optionId).handlerId();
++        String why = CombatSupport.rollBlocked(game, h);
++        return why == null ? null : "Not yet: " + why + ".";
++    }
++
 +    /** A roll prompt whose fights are all over (see CombatSupport.combatPromptOver) closes. */
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
@@ -14264,10 +14976,10 @@ index 0000000..9b6da10
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
 new file mode 100644
-index 0000000..e9b39dc
+index 0000000..ce31266
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
-@@ -0,0 +1,770 @@
+@@ -0,0 +1,834 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayDeque;
@@ -14593,6 +15305,12 @@ index 0000000..e9b39dc
 +            subject.put("holder", combatHolder);
 +            subject.put("rollType", "combat");
 +            subject.put("roundsRolled", rounds);
++            String blocked = rollBlocked(game, m.tile(), combatHolder);
++            if (blocked != null) {
++                // Nobody rolls the next round yet (pbd203): the UI shows why, autopilots wait.
++                subject.put("waitingFor", blocked);
++                return new ReactionWindow("combat_roll", subject, List.of(), List.of(), Map.of());
++            }
 +            return new ReactionWindow("combat_roll", subject, eligible, responded, Map.of());
 +        }
 +        String type = m.types().containsKey("afb")
@@ -15036,6 +15754,64 @@ index 0000000..e9b39dc
 +            if (!hittableUnits(game, p, tile, holder, space ? "space" : "ground").isEmpty()) sides++;
 +        }
 +        return sides >= 2;
++    }
++
++    // ------------------------------------------------------------------ round order (pbd203)
++
++    /**
++     * Why the next combat round in this holder may not be rolled yet, or null: hits from the previous roll (or from
++     * anti-fighter barrage / space cannon offence) are still owed there, or — before space combat round 1 — a
++     * combatant that can fire ANTI-FIGHTER BARRAGE at the other side's fighters has not rolled it this activation.
++     * pbd203: a bot rolled round 1 before barrage and a ground round before the opponent assigned the last hits.
++     */
++    @Nullable
++    static String rollBlocked(Game game, String pos, String holder) {
++        Tile tile = game == null || pos == null ? null : game.getTileByPosition(pos);
++        if (tile == null || holder == null) return null;
++        // 1. hits owed in this holder (an open hits prompt whose player still has units there)
++        for (ti4.selfhost.engine.EngineModels.Decision d : ti4.selfhost.engine.DecisionRegistry.openDecisions(game.getName())) {
++            if (!"combat.hits".equals(d.kind())) continue;
++            for (ti4.selfhost.engine.EngineModels.Option o : d.options()) {
++                Map<String, Object> v = o.value();
++                if (v == null || o.disabled() || !"auto".equals(v.get("action"))) continue;
++                if (!pos.equals(v.get("tile")) || !holder.equals(v.get("holder"))) continue;
++                if (!(v.get("hits") instanceof Number n) || n.intValue() <= 0) continue;
++                Player owes = d.target() == null || d.target().userId() == null ? null : game.getPlayer(d.target().userId());
++                if (owes == null) continue;
++                if (hittableUnits(game, owes, tile, holder, String.valueOf(v.get("source"))).isEmpty()) continue;
++                return owes.getFaction() + " must assign " + n.intValue() + " hit(s) first";
++            }
++        }
++        // 2. anti-fighter barrage before space combat round 1
++        if (!"space".equals(holder)) return null;
++        List<Player> fighters = new ArrayList<>();
++        for (String f : game.getStoredValue("factionsInCombat").split("_")) {
++            Player p = f.isBlank() ? null : game.getPlayerFromColorOrFaction(f);
++            if (p != null) fighters.add(p);
++        }
++        if (fighters.size() < 2) return null;
++        for (Player p : fighters) if (roundsRolled(game, p, pos, "space") > 0) return null;
++        UnitHolder space = tile.getSpaceUnitHolder();
++        for (Player p : fighters) {
++            if (!abilities(p, tile, space, true).contains("afb")) continue;
++            boolean targets = false;
++            for (Player o : fighters) {
++                if (o == p) continue;
++                for (Map<String, Object> u : hittableUnits(game, o, tile, "space", "afb")) targets |= ((Number) u.get("count")).intValue() > 0;
++            }
++            if (targets && !rolledThisActivation(game, p.getFaction(), "afb", pos))
++                return p.getFaction() + " must roll ANTI-FIGHTER BARRAGE first";
++        }
++        return null;
++    }
++
++    /** rollBlocked for a combat-round roll button (combatRoll_<pos>_<holder>, no roll type), else null. */
++    @Nullable
++    static String rollBlocked(Game game, String handlerId) {
++        if (handlerId == null) return null;
++        Matcher m = ROLL.matcher(handlerId);
++        if (!m.matches() || m.group(1) != null || m.group(4) != null) return null;
++        return rollBlocked(game, m.group(2), m.group(3));
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java b/src/main/java/ti4/selfhost/engine/kinds/CommandTokensAdjustKind.java
@@ -17914,10 +18690,10 @@ index 0000000..b6a6614
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/FactionStepsTeSystems.java b/src/main/java/ti4/selfhost/engine/kinds/FactionStepsTeSystems.java
 new file mode 100644
-index 0000000..013391c
+index 0000000..088e6c0
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/FactionStepsTeSystems.java
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,33 @@
 +package ti4.selfhost.engine.kinds;
 +
 +/**
@@ -17934,6 +18710,8 @@ index 0000000..013391c
 +
 +    public FactionStepsTeSystems() {
 +        ability("emelparReady_", "planet", "emelpar", null, "target", false, "choice", "target", "ref*");
++        ability("getOtherFactionsEmelpar", "planet", "emelpar", null, "use", true);
++        ability("getEmelparButtons_", "planet", "emelpar", null, "target", false, "target");
 +        ability("faunusTake_", "planet", "faunus", null, "target", false, "planet");
 +        ability("startFacilityPlacement_", "facility", "facility", null, "use", true, "choice");
 +        ability("addFacility_", "facility", "facility", null, "target", false, "planet", "choice", "args*");
@@ -21145,10 +21923,10 @@ index 0000000..bb13661
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusHomeworkKind.java b/src/main/java/ti4/selfhost/engine/kinds/StatusHomeworkKind.java
 new file mode 100644
-index 0000000..5140efe
+index 0000000..0132e8a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StatusHomeworkKind.java
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,189 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -21215,6 +21993,16 @@ index 0000000..5140efe
 +            for (Player p : game.getRealPlayers()) StatusPhase.rememberBase(game, p);
 +        }
 +        return v;
++    }
++
++    /**
++     * The homework prompt can be posted just before the game records the statusHomework phase (and Custodians scored
++     * mid-status changes "next"): re-read the values after each save, so payload turns true once homework is on
++     * (pbd203 playtest: payload stayed false and a web player could not take their tokens).
++     */
++    @Override
++    public boolean dynamicValues() {
++        return true;
 +    }
 +
 +    @Override
@@ -22327,10 +23115,10 @@ index 0000000..c2054a1
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
 new file mode 100644
-index 0000000..cb62d9e
+index 0000000..bb7368c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,301 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -22526,7 +23314,26 @@ index 0000000..cb62d9e
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
 +        Integer sc = cardOfMessage.get(ctx.messageId());
-+        return sc != null && StrategyCards.holder(ctx.game(), sc) == null;
++        if (sc == null) return false;
++        Game game = ctx.game();
++        if (StrategyCards.holder(game, sc) == null) return true;
++        // Settled: the holder resolved every primary part (scPrimaryDone, persisted since walk-fixes) and every other
++        // player has followed or declined. A follower may still owe the secondary right after spending the token, so
++        // only once the play is 15 min old (live: ~40 such windows stayed open for the rest of the round).
++        if (!olderThan(ctx.messageId(), 15 * 60_000L)) return false;
++        List<String> parts = primaryParts(StrategyCards.automation(game, sc));
++        List<String> done = new ArrayList<>(ButtonHelperSCs.primaryDone(game, sc));
++        for (String part : parts) if (!done.remove(part)) return false;
++        ReactionWindow w = window(ctx);
++        return w != null && w.responded().containsAll(w.eligible());
++    }
++
++    private static boolean olderThan(String messageId, long ms) {
++        try {
++            return System.currentTimeMillis() - ((Long.parseUnsignedLong(messageId) >>> 22) + 1420070400000L) > ms;
++        } catch (NumberFormatException e) {
++            return false;
++        }
 +    }
 +
 +    /**
@@ -25922,7 +26729,7 @@ index ca24054..10d78f3 100644
              String message = player.getRepresentationUnfogged() + ", your current command tokens are "
                      + player.getCCRepresentation() + ". Use buttons to gain command tokens.";
 diff --git a/src/main/java/ti4/service/button/ReactionCheckService.java b/src/main/java/ti4/service/button/ReactionCheckService.java
-index b6fb6af..cb8ac2a 100644
+index b6fb6af..11f1dfa 100644
 --- a/src/main/java/ti4/service/button/ReactionCheckService.java
 +++ b/src/main/java/ti4/service/button/ReactionCheckService.java
 @@ -21,6 +21,7 @@ import ti4.helpers.Helper;
@@ -25947,6 +26754,17 @@ index b6fb6af..cb8ac2a 100644
          String message2 =
                  "All players have indicated scoring. Flip the relevant public objective using the buttons. This will automatically run status clean-up if it has not been run already.";
          Button draw2Stage2 = Buttons.green("reveal_stage_2x2", "Reveal 2 Stage 2");
+@@ -181,7 +189,9 @@ public class ReactionCheckService {
+     }
+ 
+     private static void respondAllPlayersReacted(ButtonInteractionEvent event, Game game) {
+-        String buttonID = event.getButton().getCustomId();
++        // without a strategy-card offer marker (ScOffer), which is not part of what the button does
++        String buttonID = ti4.discord.interactions.routing.ComponentIdEnvelope.withoutOffer(
++                event.getButton().getCustomId());
+         if (game == null || buttonID == null) {
+             return;
+         }
 diff --git a/src/main/java/ti4/service/combat/CombatRollService.java b/src/main/java/ti4/service/combat/CombatRollService.java
 index ade82fc..e6de162 100644
 --- a/src/main/java/ti4/service/combat/CombatRollService.java
@@ -26005,6 +26823,19 @@ index ff687fc..d9da862 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  event.getMessageChannel(), "Please choose the system that you wish to activate.", chooseTileButtons);
  
+diff --git a/src/main/java/ti4/service/fow/RiftSetModeService.java b/src/main/java/ti4/service/fow/RiftSetModeService.java
+index 64abce2..954a2fe 100644
+--- a/src/main/java/ti4/service/fow/RiftSetModeService.java
++++ b/src/main/java/ti4/service/fow/RiftSetModeService.java
+@@ -268,7 +268,7 @@ public final class RiftSetModeService {
+             ButtonInteractionEvent event, String buttonID, Game game, Player player) {
+         if (!isActive(game)) return;
+ 
+-        ButtonHelperSCs.addUsedSCPlayer(event.getMessageId(), game, player);
++        ButtonHelperSCs.markOfferUsed(event, game, player, "");
+         player.addFollowedSC(9, event);
+         ReactionService.addReaction(event, game, player, "IS PERFORMING A **SACRIFICE**.");
+ 
 diff --git a/src/main/java/ti4/service/game/CreateGameService.java b/src/main/java/ti4/service/game/CreateGameService.java
 index 5b8e62a..15390f1 100644
 --- a/src/main/java/ti4/service/game/CreateGameService.java
@@ -26026,6 +26857,27 @@ index 5b8e62a..15390f1 100644
          if (CommandHelper.hasRole(event, JdaService.bothelperRoles)) {
              return false;
          }
+diff --git a/src/main/java/ti4/service/leader/PlayHeroService.java b/src/main/java/ti4/service/leader/PlayHeroService.java
+index 081d51e..6a5af25 100644
+--- a/src/main/java/ti4/service/leader/PlayHeroService.java
++++ b/src/main/java/ti4/service/leader/PlayHeroService.java
+@@ -59,6 +59,7 @@ import ti4.helpers.FoWHelper;
+ import ti4.helpers.Helper;
+ import ti4.helpers.RandomHelper;
+ import ti4.helpers.RelicHelper;
++import ti4.helpers.ScOffer;
+ import ti4.helpers.StringHelper;
+ import ti4.helpers.Units.UnitType;
+ import ti4.helpers.thundersedge.DSHelperBreakthroughs;
+@@ -714,7 +715,7 @@ public class PlayHeroService {
+             }
+             case "naazhero" -> {
+                 RelicHelper.drawRelicAndNotify(player, event, game);
+-                List<Button> buttons = ButtonHelperHeroes.getNRAHeroButtons(game);
++                List<Button> buttons = ScOffer.tag(game, ButtonHelperHeroes.getNRAHeroButtons(game));
+                 MessageHelper.sendMessageToChannelWithButtons(
+                         event.getMessageChannel(),
+                         player.getRepresentation(true, showFlavourText)
 diff --git a/src/main/java/ti4/service/map/SystemPickerService.java b/src/main/java/ti4/service/map/SystemPickerService.java
 index adb283d..0e25b46 100644
 --- a/src/main/java/ti4/service/map/SystemPickerService.java
@@ -26121,10 +26973,18 @@ index 5fc1ce7..e2c4d5d 100644
                  if (!player.hasAbility("blood_ties")) {
                      MessageHelper.sendMessageToChannelWithButtons(channel, message2, buttons);
 diff --git a/src/main/java/ti4/service/strategycard/PlayStrategyCardService.java b/src/main/java/ti4/service/strategycard/PlayStrategyCardService.java
-index df4d7a8..503644b 100644
+index df4d7a8..c5a00f2 100644
 --- a/src/main/java/ti4/service/strategycard/PlayStrategyCardService.java
 +++ b/src/main/java/ti4/service/strategycard/PlayStrategyCardService.java
-@@ -140,6 +140,8 @@ public class PlayStrategyCardService {
+@@ -30,6 +30,7 @@ import ti4.game.Tile;
+ import ti4.game.UnitHolder;
+ import ti4.helpers.ActionCardHelper;
+ import ti4.helpers.ButtonHelper;
++import ti4.helpers.ScOffer;
+ import ti4.helpers.ButtonHelperAbilities;
+ import ti4.helpers.ButtonHelperActionCards;
+ import ti4.helpers.ButtonHelperSCs;
+@@ -140,6 +141,8 @@ public class PlayStrategyCardService {
              }
          }
  
@@ -26133,6 +26993,21 @@ index df4d7a8..503644b 100644
          game.setStoredValue(
                  "currentActionSummary" + player.getFaction(),
                  game.getStoredValue("currentActionSummary" + player.getFaction()) + " played "
+@@ -258,6 +261,14 @@ public class PlayStrategyCardService {
+             scButtons.add(Buttons.gray("requestAllFollow_" + scToPlay, "Request All Resolve Now"));
+         }
+ 
++        // "Already used" flags belong to this play (ScOffer): a normal play records its ids, a Winnu hero / Overrule
++        // re-offer of a card carries its own offer in the ids.
++        if (winnuHero || isOverrule) {
++            scButtons = new ArrayList<>(ScOffer.tag(game, scButtons));
++        } else {
++            ScOffer.recordPlay(game, scButtons);
++        }
++
+         // set the action rows
+         baseMessageObject.addComponents(ButtonHelper.turnButtonListIntoActionRowList(scButtons));
+         if (!game.isTwilightsFallMode() || (scToPlay != 6 && scToPlay != 2 && scToPlay != 7)) {
 diff --git a/src/main/java/ti4/service/tactical/TacticalActionOutputService.java b/src/main/java/ti4/service/tactical/TacticalActionOutputService.java
 index 845795b..ff5b959 100644
 --- a/src/main/java/ti4/service/tactical/TacticalActionOutputService.java
@@ -26218,6 +27093,19 @@ index c84c651..8829db7 100644
                  "Use Zelian Agent Yourself",
                  FactionEmojis.zelian));
      }
+diff --git a/src/main/java/ti4/service/tech/ListTechService.java b/src/main/java/ti4/service/tech/ListTechService.java
+index 6eec3b5..a7d9366 100644
+--- a/src/main/java/ti4/service/tech/ListTechService.java
++++ b/src/main/java/ti4/service/tech/ListTechService.java
+@@ -167,7 +167,7 @@ public class ListTechService {
+ 
+         if (sc || dwsBt) {
+             boolean commanderSkipsToken = NetrunnersLeadersHandler.commanderSkipsTechnologySecondaryToken(game, player);
+-            boolean used = dwsBt || ButtonHelperSCs.addUsedSCPlayer(event.getMessageId(), game, player);
++            boolean used = dwsBt || ButtonHelperSCs.markOfferUsed(event, game, player, "");
+             StrategyCardModel scModel =
+                     game.getStrategyCardModelByName("technology").orElse(null);
+             if (!used
 diff --git a/src/main/java/ti4/service/tech/PlayerTechService.java b/src/main/java/ti4/service/tech/PlayerTechService.java
 index 35cec21..883825a 100644
 --- a/src/main/java/ti4/service/tech/PlayerTechService.java
@@ -29264,6 +30152,112 @@ index f828bd2..737e2db 100644
          pnHelper = mockStatic(PromissoryNoteHelper.class);
          messageHelper = mockStatic(MessageHelper.class);
          buttonHelper = mockStatic(ButtonHelper.class);
+diff --git a/src/test/java/ti4/helpers/ScOfferTest.java b/src/test/java/ti4/helpers/ScOfferTest.java
+new file mode 100644
+index 0000000..d37effa
+--- /dev/null
++++ b/src/test/java/ti4/helpers/ScOfferTest.java
+@@ -0,0 +1,100 @@
++package ti4.helpers;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import java.util.List;
++import net.dv8tion.jda.api.components.buttons.Button;
++import org.junit.jupiter.api.Test;
++import ti4.discord.interactions.buttons.Buttons;
++import ti4.discord.interactions.routing.ComponentIdEnvelope;
++import ti4.game.Game;
++import ti4.game.Player;
++
++class ScOfferTest {
++
++    private static Player player(Game game, String faction) {
++        Player p = new Player(faction, faction, game);
++        p.setFaction(faction);
++        return p;
++    }
++
++    @Test
++    void aPlayKeepsItsIdsAndEachPlayIsANewOffer() {
++        Game game = new Game();
++        Player hacan = player(game, "hacan");
++        List<Button> play = List.of(Buttons.green("sc_follow_3", "Spend"), Buttons.gray("sc_ac_draw", "Draw 2"));
++
++        ScOffer.recordPlay(game, play);
++        assertThat(play).extracting(Button::getCustomId).containsExactly("sc_follow_3", "sc_ac_draw");
++        String first = ScOffer.of(game, "sc_ac_draw");
++        assertThat(first).isNotNull().isEqualTo(ScOffer.of(game, "sc_follow_3"));
++
++        // the same play: any copy of the card's buttons shares the flags
++        assertThat(ScOffer.markUsed(game, hacan, "sc_ac_draw", "msgA", "ac")).isFalse();
++        assertThat(ScOffer.markUsed(game, hacan, "sc_ac_draw", "msgB", "ac")).isTrue();
++
++        // next play of the card starts clean
++        ScOffer.recordPlay(game, play);
++        assertThat(ScOffer.of(game, "sc_ac_draw")).isNotEqualTo(first);
++        assertThat(ScOffer.markUsed(game, hacan, "sc_ac_draw", "msgC", "ac")).isFalse();
++    }
++
++    @Test
++    void otherOffersCarryTheirOfferInTheIdOutsideTheHandlerId() {
++        Game game = new Game();
++        Player hacan = player(game, "hacan");
++        ScOffer.recordPlay(game, List.of(Buttons.gray("sc_ac_draw", "Draw 2")));
++
++        List<Button> crisis = ScOffer.tag(
++                game,
++                List.of(
++                        Buttons.gray("sc_ac_draw", "Draw 2"),
++                        Buttons.green("leadershipGenerateCCButtons", "Gain"),
++                        Buttons.blue("sc_no_follow_3", "Not Following")));
++        String drawId = crisis.get(0).getCustomId();
++        assertThat(drawId).startsWith("sc_ac_draw~o");
++        assertThat(crisis.get(1).getCustomId()).isEqualTo("leadershipGenerateCCButtons");
++        assertThat(ComponentIdEnvelope.decode(drawId).handlerId()).isEqualTo("sc_ac_draw");
++        assertThat(ComponentIdEnvelope.decode(crisis.get(2).getCustomId()).handlerId())
++                .isEqualTo("sc_no_follow_3");
++
++        // used on the card's play does not use up the Crisis offer, and vice versa
++        assertThat(ScOffer.markUsed(game, hacan, "sc_ac_draw", "play", "ac")).isFalse();
++        assertThat(ScOffer.markUsed(game, hacan, drawId, "crisis", "ac")).isFalse();
++        assertThat(ScOffer.markUsed(game, hacan, drawId, "crisis", "ac")).isTrue();
++
++        // "not following" on the Crisis offer forgets only that offer
++        ScOffer.unmarkUsed(game, hacan, crisis.get(2).getCustomId(), "crisis");
++        assertThat(ScOffer.markUsed(game, hacan, drawId, "crisis", "")).isFalse();
++        assertThat(ScOffer.markUsed(game, hacan, "sc_ac_draw", "play", "ac")).isTrue();
++    }
++
++    @Test
++    void promptsFromBeforeOffersKeepTheirMessageFlags() {
++        Game game = new Game();
++        Player hacan = player(game, "hacan");
++        // no play recorded, no marker: the old per-message flag
++        assertThat(ScOffer.of(game, "sc_draw_so")).isNull();
++        assertThat(ScOffer.markUsed(game, hacan, "sc_draw_so", "oldMsg", "so")).isFalse();
++        assertThat(ScOffer.markUsed(game, hacan, "sc_draw_so", "oldMsg", "so")).isTrue();
++
++        // a flag such a prompt recorded is still honoured once the card's ids are recorded
++        ScOffer.recordPlay(game, List.of(Buttons.gray("sc_draw_so", "Draw")));
++        assertThat(ScOffer.markUsed(game, hacan, "sc_draw_so", "oldMsg", "so")).isTrue();
++        // …and carried over to the play: the same player is still done, another is not
++        assertThat(ScOffer.markUsed(game, hacan, "sc_draw_so", "newMsg", "so")).isTrue();
++        assertThat(ScOffer.markUsed(game, player(game, "sol"), "sc_draw_so", "newMsg", "so")).isFalse();
++    }
++
++    @Test
++    void untrackedIdsAreNotOffers() {
++        Game game = new Game();
++        ScOffer.recordPlay(game, List.of(Buttons.gray("requestAllFollow_3", "Request")));
++        assertThat(ScOffer.of(game, "requestAllFollow_3")).isNull();
++        assertThat(ComponentIdEnvelope.decode("deleteButtons~pay").handlerId()).isEqualTo("deleteButtons~pay");
++        assertThat(ComponentIdEnvelope.decode("sc_refreshdeleteThisButton~o12").handlerId())
++                .isEqualTo("sc_refresh");
++        assertThat(ComponentIdEnvelope.decode("sc_refreshdeleteThisButton~o12").deleteButton())
++                .isTrue();
++    }
++}
 diff --git a/src/test/java/ti4/selfhost/engine/DecisionCaptureAccess.java b/src/test/java/ti4/selfhost/engine/DecisionCaptureAccess.java
 new file mode 100644
 index 0000000..f0f6988
