@@ -182,4 +182,28 @@ expect("bombardment: a damaged mech dies after the infantry", JSON.stringify(pla
 expect("bombardment: hits unknown: left alone", chooseCombat(bombHits(null, jord), fight(1, 1), ME), null);
 expect("bombardment: someone else's hits: never", chooseCombat({ ...bombHits(2, jord), target: { userId: OPP } } as unknown as Decision, fight(1, 1), ME), null);
 
+// pbd60 / pbd161: the per-unit menu opened from a bombardment opener (no progress) was closed with Done, nothing removed.
+const bombMenu = {
+  id: "d12",
+  kind: "combat.assign_units",
+  scope: "player",
+  target: { userId: ME, faction: "letnev", color: "red", resolvedBy: "owner_prefix" },
+  window: null,
+  progress: null,
+  createdAt: 0,
+  options: [
+    opt("FFCC_letnev_assignHits_201_1_gf_jord_red", { action: "destroy", tile: "201", count: 1, unit: "gf", holder: "jord", damaged: false, state: "none", assignType: "bombardment" }),
+    opt("FFCC_letnev_assignHits_201_1_pd_jord_red", { action: "destroy", tile: "201", count: 1, unit: "pd", holder: "jord", damaged: false, state: "none", assignType: "bombardment" }),
+    opt("FFCC_letnev_assignHits_201_All", { action: "destroy_all", tile: "201", assignType: "bombardment" }),
+    opt("deleteButtons", { action: "done", tile: null, assignType: "bombardment" }),
+  ],
+} as unknown as Decision;
+const menuPick = (open: Decision[], history: string[]) => chooseCombat(bombMenu, fight(1, 1), ME, open, history)?.option.id ?? null;
+expect("bombardment menu, hits unknown: remove an infantry (never the PDS)", menuPick([], []), "FFCC_letnev_assignHits_201_1_gf_jord_red");
+expect("bombardment menu, one removed: done", menuPick([], ["FFCC_letnev_assignHits_201_1_gf_jord_red"]), "deleteButtons");
+const owed2 = bombHits(2, jord);
+(owed2 as unknown as { options: { value: { tile: string } }[] }).options[0].value.tile = "201";
+expect("bombardment menu while the hits prompt is open: its plan assigns (hold)", menuPick([owed2], []), null);
+expect("bombardment menu, 2 owed, one removed: one more", menuPick([owed2], ["FFCC_letnev_assignHits_201_1_gf_jord_red"]), "FFCC_letnev_assignHits_201_1_gf_jord_red");
+
 process.exit(failed ? 1 : 0);

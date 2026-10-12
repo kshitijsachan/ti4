@@ -71,7 +71,7 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
 function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx): TypedChoice | null {
   const all = ctx.all;
   // Combat (G4): ctx.open = this seat's other open decisions (no next roll while hits are owed).
-  if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, ctx.open);
+  if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, ctx.open, ctx.history);
   // Affordances (ui.*: never answered), preferences (defaults) and select-only prompts (c12).
   const perpetual = choosePerpetual(d, state, me);
   if (perpetual !== undefined) return perpetual;

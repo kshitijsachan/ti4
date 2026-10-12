@@ -59,4 +59,43 @@ const panel = (reinforcements: number) =>
 expect("tokens left: gain", chooseStrategy(panel(5), state, ME, ctx)?.option.id, "FFCC_mentak_increase_tactic_cc");
 expect("no tokens left in reinforcements: done", chooseStrategy(panel(0), state, ME, ctx)?.option.id, "FFCC_mentak_deleteButtons_leadership");
 
+// pbd171: Construction must never place a 4th space dock (unit supply: 3 space docks, 6 PDS).
+const docks = (sd: number, pd = 0) =>
+  ({
+    players: [{ userId: ME, faction: "hacan", color: "spring", self: true, strategyCards: [4], planets: ["a", "b", "c", "d"], commandTokens: { tactic: 3, fleet: 3, strategy: 2 } }],
+    strategyCards: [{ number: 4, card: "pok4construction", played: true, holder: ME, reactions: [] }],
+    tiles: [{ position: "103", tileId: "1", holders: [{ name: "arnor", units: [{ owner: "hacan", color: "spring", unit: "sd", count: sd }, { owner: "hacan", color: "spring", unit: "pd", count: pd }], tokens: [], control: [] }] }],
+  }) as unknown as GameState;
+const construction = () => {
+  const v = (id: string, unit: string) => ({
+    id,
+    label: id,
+    disabled: false,
+    needsInput: false,
+    value: { strategyCard: 4, name: "Construction", card: "pok4construction", holder: "hacan", action: "structure", unit, who: "holder", spendsToken: false, part: "structure", primaryParts: ["structure", "structure"], copy: false },
+  });
+  return {
+    id: "d4",
+    kind: "strategy_card.resolve",
+    revision: 1,
+    scope: "table",
+    target: null,
+    window: { kind: "strategy_card", subject: { strategyCard: 4, primaryDone: [] }, eligible: [], responded: [], responses: {} },
+    options: [v("construction_spacedock", "spacedock"), v("construction_pds", "pds")],
+  } as unknown as Decision;
+};
+expect("construction: room for a dock: dock first", chooseStrategy(construction(), docks(2), ME, ctx)?.option.id, "construction_spacedock");
+expect("construction: 3 docks on the board: PDS", chooseStrategy(construction(), docks(3), ME, ctx)?.option.id, "construction_pds");
+expect("construction: 3 docks and 6 PDS: nothing", chooseStrategy(construction(), docks(3, 6), ME, ctx), null);
+const place = {
+  id: "d5",
+  kind: "strategy_card.construction_place",
+  revision: 1,
+  scope: "player",
+  target: { userId: ME },
+  options: [{ id: "place_arnor", label: "Arnor", disabled: false, needsInput: false, value: { unit: "spacedock", planet: "arnor", home: false, resources: 2, influence: 1, pds: 0, spaceDock: 0 } }],
+} as unknown as Decision;
+expect("construction_place: never a 4th space dock", chooseStrategy(place, docks(3), ME, ctx), null);
+expect("construction_place: a 3rd one is fine", chooseStrategy(place, docks(2), ME, ctx)?.option.id, "place_arnor");
+
 process.exit(failed ? 1 : 0);

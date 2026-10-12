@@ -208,6 +208,16 @@ export function mayPress(o: Option<any>, d: Decision, state: GameState | null, m
   return d.target?.userId === me;
 }
 
+/** Whether `me` already has the whole supply of that structure on the board (unknown board: no). */
+export function overSupply(unit: "spacedock" | "pds", state: GameState | null, me: string): boolean {
+  const self = state?.players.find((p) => p.userId === me);
+  if (!state || !self) return false;
+  const id = unit === "spacedock" ? "sd" : "pd";
+  let n = 0;
+  for (const t of state.tiles) for (const h of t.holders) for (const u of h.units) if ((u.owner === self.faction || u.color === self.color) && u.unit === id) n += u.count;
+  return n >= (unit === "spacedock" ? 3 : 6);
+}
+
 /** Options of `d` the fallback may press for `me`, passive ones first. */
 export function fallbackCandidates(d: Decision, state: GameState | null, me: string): Option<any>[] {
   const opts = (optionsFor(d, me) as Option<any>[]).filter((o) => {
@@ -218,6 +228,8 @@ export function fallbackCandidates(d: Decision, state: GameState | null, me: str
     // Claims the engine says we cannot make (an objective we do not meet, a secret not met).
     if (Array.isArray(o.value?.eligible) && !(o.value.eligible as unknown[]).includes(me)) return false;
     if (o.value?.met === false) return false;
+    // A structure past the unit supply (3 space docks / 6 PDS: pbd171's 4th space dock).
+    if (d.kind.startsWith("strategy_card.") && (o.value?.unit === "spacedock" || o.value?.unit === "pds") && overSupply(o.value.unit, state, me)) return false;
     const handler = (o.handler || o.id).replace(/^FFCC_[^_]+_/, "");
     // A discard prompt's options are discards: that is the answer it asks for.
     const discardKind = d.kind.endsWith(".discard") && /discard/i.test(handler);
