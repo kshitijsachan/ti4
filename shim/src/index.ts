@@ -257,8 +257,8 @@ for (const sig of ["SIGINT", "SIGTERM"]) {
     }
     stopping = true;
     gateway.draining = true;
-    // Save first and keep saving while draining: saves are spaced out in normal running, and a slow drain must not
-    // let a hard kill lose the last seconds of messages.
+    // Save first and keep saving while draining: saves are spaced out in normal running (>= 1 s), and a slow drain
+    // must not let a hard kill lose the last seconds of messages.
     store.saveNow();
     log.info(`${sig}: draining bot REST traffic before exit`);
     const t0 = Date.now();
@@ -271,7 +271,8 @@ for (const sig of ["SIGINT", "SIGTERM"]) {
       }
     }
     log.info(`exiting after ${Date.now() - t0}ms (${restInFlight} REST calls still in flight)`);
-    store.saveNow();
+    // Saves write only what was marked changed; the last one also re-checks every shard for unmarked changes.
+    store.saveNow(true);
     process.exit(0);
   });
 }

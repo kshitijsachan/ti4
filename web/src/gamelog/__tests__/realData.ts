@@ -2,6 +2,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readShimState } from "../../../../shim/tools/read-state.mjs";
 import type { Message } from "../../discord/types.ts";
 import type { LogMessage } from "../parse/classify.ts";
 import { toLogMessage } from "../parse/timeline.ts";
@@ -26,12 +27,12 @@ export function fixtureMessages(): LogMessage[] {
 }
 
 export function hasState(): boolean {
-  return existsSync(STATE_PATH);
+  return existsSync(STATE_PATH) || existsSync(resolve(dirname(STATE_PATH), "store", "global.json"));
 }
 
 let cached: State | null = null;
 function state(): State {
-  cached ??= JSON.parse(readFileSync(STATE_PATH, "utf8")) as State;
+  cached ??= readShimState(STATE_PATH) as State;
   return cached;
 }
 
