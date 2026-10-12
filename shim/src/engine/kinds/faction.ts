@@ -36,10 +36,23 @@ export type FactionStepFields = {
   free?: boolean;
   from?: string;
   hits?: number;
+  /** Dice still eligible (Hacan flagship). */
+  remaining?: number;
+  /** "Start over" (Hacan flagship). */
+  reset?: boolean;
   strategyCard?: number;
   ownStrategyCard?: number;
   /** Raw id segments the kind does not type further. */
   args?: string[];
+  /** Group C: Jol-Nar hero swap (tech in / out), Yssaril commander (what) / Spy Net (who) / hand cards, Yin hits. */
+  tech?: string;
+  techOut?: string;
+  /** Yssaril look-at (ac/pn/so, c3) or Mentak pillage take (tg/commodity, c2). */
+  what?: "ac" | "pn" | "so" | "tg" | "commodity";
+  who?: "self" | "yssaril";
+  actionCard?: string;
+  cardName?: string;
+  exo?: boolean;
 };
 
 /** Agents, commanders, heroes. Generic ids: exhaustAgent_<agent>[_<target>], getAgentSelection_<agent>. */

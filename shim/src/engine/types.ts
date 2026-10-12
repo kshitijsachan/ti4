@@ -17,6 +17,7 @@ import type { StrategyDecision } from "./kinds/strategy.js";
 import type { TacticalDecision } from "./kinds/tactical.js";
 import type { ThundersEdgeDecision, ThundersEdgeState } from "./kinds/te.js";
 import type { TradeForceReplenish, TradeOffer, TradeOfferSent, TradeState } from "./kinds/trade.js";
+import type { UiDecision } from "./kinds/ui.js";
 
 export type * from "./kinds/agenda.js";
 export type * from "./kinds/cards.js";
@@ -429,6 +430,7 @@ export type Decision =
   | ProductionDecision
   | InputFormDecision
   | FactionDecision
+  | UiDecision
   | LegacyDecision;
 export type DecisionKind = Decision["kind"];
 export type DecisionOf<K extends DecisionKind> = Extract<Decision, { kind: K }>;
@@ -503,8 +505,18 @@ export interface DecisionsSnapshot {
   decisions: Decision[];
 }
 
+/** A non-decision affordance (ui.undo_affordance, ui.optional, ui.info_menu): never pending, bots ignore it. */
+export function isAffordance(d: Pick<Decision, "kind">): boolean {
+  return AFFORDANCE_KINDS.has(d.kind);
+}
+
+/** Kinds that are affordances, not questions (Java UiAffordanceKind, UiOptionalKind, InfoMenuSplit). */
+export const AFFORDANCE_KINDS: ReadonlySet<string> = new Set(["ui.undo_affordance", "ui.optional", "ui.info_menu"]);
+
 /** Is this decision waiting on `userId`? (player scope: target; table scope: eligible and not yet responded.) */
 export function awaits(d: Decision, userId: UserId): boolean {
+  // Undo / optional / info-menu affordances (ui.*): nobody is asked anything; answerable on click, never awaited.
+  if (isAffordance(d)) return false;
   if (d.window) return d.window.eligible.includes(userId) && !d.window.responded.includes(userId);
   if (d.scope === "player") return d.target?.userId === userId;
   // Mixed-owner menu: only the options owned by this user (or by nobody) are theirs.
@@ -517,10 +529,20 @@ export function awaits(d: Decision, userId: UserId): boolean {
  * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only).
  */
 export function answersOutsideWindow(d: Decision, userId: UserId, state: GameState | null): boolean {
+  // Status scoring / homework: a player who declared or is ready may still press again, like the buttons.
+  if ((d.kind === "status.score" || d.kind === "status.homework") && d.window) return d.window.eligible.includes(userId);
   if (d.kind !== "strategy_card.resolve" || !d.window) return false;
   const holder = d.window.subject?.holder;
   const me = state?.players.find((p) => p.userId === userId);
   return !!holder && !!me?.faction && me.faction === holder;
+}
+
+/**
+ * A player-scoped decision another seat may still answer (KindSpec.othersMayAnswer): agenda.resolve / agenda.next
+ * wait on the speaker, but the original button is pressable by anyone at the table.
+ */
+export function othersMayAnswer(d: Decision): boolean {
+  return (d.kind === "agenda.resolve" || d.kind === "agenda.next") && d.target?.resolvedBy !== "owner_prefix";
 }
 
 /** The options of `d` this user may press (per-option owner on mixed-owner menus; all options otherwise). */

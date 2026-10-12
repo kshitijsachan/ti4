@@ -7,6 +7,9 @@ import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
 import { chooseFaction } from "./policy/faction.js";
+import { chooseFactionGroupC } from "./policy/factionGroupC.js";
+import { chooseFactionB } from "./policy/factionB.js";
+import { choosePokFaction } from "./policy/factionPok.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
@@ -15,6 +18,7 @@ import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat } from "./combatPolicy.js";
 import { planPayment } from "./policy/production.js";
 import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
+import { choosePerpetual } from "./policy/ui.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -60,6 +64,9 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   const all = ctx.all;
   // Combat (G4): ctx.open = this seat's other open decisions (no next roll while hits are owed).
   if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, ctx.open);
+  // Affordances (ui.*: never answered), preferences (defaults) and select-only prompts (c12).
+  const perpetual = choosePerpetual(d, state, me);
+  if (perpetual !== undefined) return perpetual;
   const setup = chooseSetup(d, state, me);
   if (setup !== undefined) return setup;
   if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);
@@ -69,6 +76,12 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   const cards = chooseCards(d, state, me, all);
   if (cards !== undefined) return cards;
   // Faction leaders / abilities (shared kinds leader.use, faction.ability; phase C faction areas).
+  const groupC = chooseFactionGroupC(d, state, me); // Jol-Nar, Winnu, Xxcha, Yin, Yssaril, Keleres overrides
+  if (groupC !== undefined) return groupC;
+  const factionB = chooseFactionB(d, state, me);
+  if (factionB !== undefined) return factionB;
+  const pok = choosePokFaction(d, state, me, ctx.history);
+  if (pok !== undefined) return pok;
   const faction = chooseFaction(d, state, me);
   if (faction !== undefined) return faction;
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
