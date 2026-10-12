@@ -161,7 +161,8 @@ export function productionPayload(d: ProductionProduce, build: string[]): Produc
     const spot = offered.find((p) => p.holder !== "space") ?? offered[0];
     // A capped production (Umbat, riders, ...) takes only what fits; the engine refuses the rest.
     if (capExcludes(cap, spot.unit, spot.cost)) continue;
-    const count = Math.min(want, capRoom(cap, spot.cost, chosen, spent));
+    // None left in reinforcements (component limit): the engine refuses it, so it is not asked for.
+    const count = Math.min(want, capRoom(cap, spot.cost, chosen, spent), spot.remaining ?? Infinity);
     if (count <= 0) continue;
     chosen += count;
     spent += count * (spot.cost ?? 0);
@@ -197,7 +198,7 @@ export function chooseCappedBuild(d: ProductionProduce, state: GameState | null,
     const spot = places.find((p) => p.unit === unit && p.holder !== "space") ?? places.find((p) => p.unit === unit);
     if (!spot || capExcludes(cap, spot.unit, spot.cost)) continue;
     const affordable = spot.cost ? Math.floor((budget + 1e-6) / spot.cost) : Infinity;
-    const count = Math.min(capRoom(cap, spot.cost, 0, 0), affordable, 20);
+    const count = Math.min(capRoom(cap, spot.cost, 0, 0), affordable, spot.remaining ?? 20, 20);
     if (count <= 0) continue;
     const ground = unit === "gf" || unit === "mf";
     const units = [ground ? { unit: spot.unit, count, holder: spot.holder } : { unit: spot.unit, count }];

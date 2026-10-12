@@ -475,8 +475,16 @@ export async function driveDraft(client, game, userId, rng, log = console.log, m
 
 /** One snapshot of a game: the bot's web data + the current save (for card zones), labelled by the save's last command. */
 export async function snapshotOf(game, id) {
-  const web = await webData(game);
-  const save = readSave(game);
+  // The web data and the save must describe the same moment: re-read when a save landed while the web data was
+  // fetched (else the round of one and the phase of the other disagree: fuzz pbd312's false phase.round-advance).
+  let web;
+  let save;
+  for (let i = 0; i < 3; i++) {
+    const before = readSave(game);
+    web = await webData(game);
+    save = readSave(game);
+    if (save === before) break;
+  }
   const label = save ? /^latest_command (.*)$/m.exec(save)?.[1] : undefined;
   return { id, web, save, label };
 }

@@ -431,14 +431,19 @@ function facts(s: Snapshot): Facts | null {
   const losable = new Map<string, number>();
   const techs = new Map<string, Set<string>>();
   const secretsScored = new Map<string, number>();
+  let saveRound: number | null = null;
   if (s.save) {
     const p = parseSave(s.save);
     phase = p.game.get("phase_of_game") ?? "";
     if (p.game.get("game_has_ended") === "true") phase = "finished";
+    if (p.game.has("round")) saveRound = num(p.game.get("round"));
   }
   if (s.web) {
     phase ||= webPhase(s.web);
-    round = num(s.web.gameRound);
+    // Phase and round from the same source: the web data is fetched before the save is read, so across a save
+    // that starts the strategy phase it can still say round 1 while the save says strategy (fuzz pbd312: a false
+    // "statusHomework -> strategy moved the round 1 -> 1", then "round changed 1 -> 2 within strategy").
+    round = saveRound ?? num(s.web.gameRound);
     for (const p of realPlayers(s.web)) {
       vps.set(p.faction, num(p.totalVps));
       const entries: Json[] = s.web.scoreBreakdowns?.[p.faction]?.entries ?? [];

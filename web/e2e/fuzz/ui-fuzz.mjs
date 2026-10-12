@@ -27,7 +27,6 @@ import {
   makeRecorder,
   makeRng,
   myDecisions,
-  awaits,
   now,
   parseArgs,
   seatSummary,
@@ -39,6 +38,12 @@ import {
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PW_CORE ?? "/opt/node-tools/node_modules/playwright-core");
+// The web's own rules for what the popup lists (reducer.myDecisions + order.orderDecisions + decisionTitle), loaded
+// from web/src through tsx: a hand-kept copy here drifted from the web (fuzz pbd299: "live-view-behind" for the
+// pre-decline / plan / undo prompts the web rightly keeps behind "Available now").
+const { tsImport } = await import(new URL("../../../shim/node_modules/tsx/dist/esm/api/index.mjs", import.meta.url).href);
+const webOrder = await tsImport(new URL("../../src/engine/order.ts", import.meta.url).href, import.meta.url);
+const webReducer = await tsImport(new URL("../../src/engine/reducer.ts", import.meta.url).href, import.meta.url);
 
 const args = parseArgs();
 const seed = Number(args.seed ?? freshSeed()) >>> 0;
@@ -138,7 +143,7 @@ async function popupState(p = page) {
     let queue = [];
     if (await more.count()) {
       await more.first().click({ timeout: 3000 });
-      queue = (await d.locator("[role=menuitem]").allTextContents()).map((s) => s.trim()).sort();
+      queue = (await d.locator("[role=menuitem]").allTextContents()).map((s) => s.trim()).filter((s) => !/^Hide the \d+ untyped prompts/.test(s)).sort();
       await more.first().click({ timeout: 3000 }).catch(() => {});
     }
     const selected = (await d.locator('[aria-selected=true], [aria-pressed=true], [aria-checked=true], input:checked').allTextContents()).map((s) => s.trim().slice(0, 40)).sort();
@@ -173,21 +178,53 @@ async function mySeat() {
   return { w, me: seatSummary(w?.playerData?.find((p) => String(p.discordId) === ME)) };
 }
 
-/** The popup's title as EngineDecisionHost.decisionTitle draws it from a decision. */
-const titleOf = (d) => {
-  if (d.kind === "legacy") return d.scope === "table" ? "Open to everyone" : "Your move";
-  const w = d.kind.replace(/[._]/g, " ").trim();
-  return w.charAt(0).toUpperCase() + w.slice(1);
-};
 /** What the popup lists: the "more" list when there is one, else the one decision shown. */
-const listOf = (p) => JSON.stringify(p ? (p.queue.length ? p.queue : [p.title]) : []);
-/** What the engine says the popup must list (window-less table prompts only appear in the "more" list). */
-const expectedList = () => {
-  const own = myDecisions(oracle.view, ME);
-  if (own.length === 0) return "[]";
-  if (own.length === 1) return JSON.stringify([titleOf(own[0])]);
-  return JSON.stringify(myDecisions(oracle.view, ME, { includeOpen: true }).map(titleOf).sort());
-};
+const shownOf = (p) => (p ? (p.queue.length ? p.queue : [p.title]) : []);
+const listOf = (p) => JSON.stringify(shownOf(p));
+/**
+ * The popup's queue by the web's own rules on the oracle's view: `sure` titles it must list, `maybe` titles it may
+ * list. Membership that depends on the page's own state is only "maybe": a perpetual action-card panel my last
+ * answer brought up (answeredKind / answeredAtSeq), the move / land step the map answers, my card's panel during it,
+ * draft picks on the draft board.
+ */
+function engineQueue() {
+  const view = oracle.view;
+  const state = view.state ?? null;
+  const mine = webReducer.myDecisions({ ...webReducer.EMPTY_VIEW, decisions: view.decisions, state }, ME);
+  const a = webOrder.orderDecisions(mine, null, undefined, state, null).queue;
+  const b = webOrder.orderDecisions(mine, 0, undefined, state, "turn.action").queue;
+  const myFaction = state?.players?.find((p) => p.userId === ME)?.faction;
+  const mapStep = [...a, ...b].some((d) => /^tactical\.(move|land)$/.test(d.kind));
+  const loose = (d) =>
+    /^tactical\.(move|land)$/.test(d.kind) ||
+    (mapStep && d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction) ||
+    (state?.draft?.status === "drafting" && /^draft\.milty\./.test(d.kind));
+  const inB = new Set(b.map((d) => d.id));
+  const sure = a.filter((d) => inB.has(d.id) && !loose(d));
+  const all = new Map([...a, ...b].map((d) => [d.id, d]));
+  const title = (d) => webOrder.decisionTitle(d, state);
+  return { sure, sureTitles: sure.map(title).sort(), maybeTitles: [...all.values()].map(title).sort() };
+}
+/** What the engine says the popup must list (for messages). */
+const expectedList = () => JSON.stringify(engineQueue().sureTitles);
+/** Whether the popup's list fits the engine: every sure title listed, nothing listed beyond the possible ones. */
+function fitsEngine(p) {
+  const { sureTitles, maybeTitles } = engineQueue();
+  const shown = shownOf(p);
+  const rest = [...shown];
+  for (const t of sureTitles) {
+    const i = rest.indexOf(t);
+    if (i < 0) return false;
+    rest.splice(i, 1);
+  }
+  const pool = [...maybeTitles];
+  for (const t of shown) {
+    const i = pool.indexOf(t);
+    if (i < 0) return false;
+    pool.splice(i, 1);
+  }
+  return true;
+}
 
 // ---- actions ----
 /** My Milty draft pick on the draft board (no popup there): a ready pick button, a speaker-order token, or focus a card. */
@@ -302,15 +339,15 @@ async function doReload() {
   const seat1 = await mySeat();
   const quiet = s0 && s1 && s0.stateVersion === s1.stateVersion && mine0 === mine1;
   if (!quiet) return note(`  (state moved during the reload: not compared)`);
-    if (!!before !== !!after && ENGINE && listOf(after) === expectedList()) return violation("live-view-behind", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after, as the engine says (the open tab was out of date)`);
+  if (!!before !== !!after && ENGINE && !before?.offer && !after?.offer && fitsEngine(after)) return violation("live-view-behind", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after, as the engine says (the open tab was out of date)`);
   if (!!before !== !!after) return violation("reload-popup-changed", `popup ${before ? `"${before.title}"` : "none"} before the reload, ${after ? `"${after.title}"` : "none"} after (engine state unchanged)`);
   if (before && after) {
     const a = listOf(before);
     const b = listOf(after);
-    const want = expectedList(before);
+    const want = expectedList();
     if (a !== b) {
-      // Which side is wrong? In engine mode the oracle's decisions give the titles the popup must list.
-      const which = before.offer ? "reload-closed-opened-panel" : !ENGINE ? "reload-pending-changed" : b === want && a !== want ? "live-view-behind" : a === want && b !== want ? "reload-pending-changed" : "reload-pending-changed";
+      // Which side is wrong? In engine mode the web's rules on the oracle's decisions say what the popup must list.
+      const which = before.offer ? "reload-closed-opened-panel" : !ENGINE ? "reload-pending-changed" : fitsEngine(after) && !fitsEngine(before) ? "live-view-behind" : "reload-pending-changed";
       await violation(which, `pending decisions before the reload ${a}, after ${b}${ENGINE ? `; the engine says ${want}` : ""}`, before.offer ? { severity: "warn" } : {});
     }
     if (before.title === after.title && (JSON.stringify(before.selected) !== JSON.stringify(after.selected) || JSON.stringify(before.inputs) !== JSON.stringify(after.inputs)))
@@ -365,11 +402,12 @@ async function checks() {
   if (ENGINE && ++checkN % 2 === 0) {
     const p = await popupState(page);
     const have = listOf(p);
-    const want = expectedList(p);
-    if (p && !p.unstable && have !== want) {
+    // A panel I opened from "Available now" is not the queue.
+    if (p && !p.unstable && !p.offer && !fitsEngine(p)) {
       if (countMismatch >= 2) await freshOracle();
-      if (++countMismatch >= 3 && listOf(p) !== expectedList(p)) {
-        await violation("live-view-behind", `popup lists ${have}, the engine has ${want} waiting on me (persisted over 3 checks)`);
+      if (++countMismatch >= 3 && !fitsEngine(p)) {
+        const { sureTitles, maybeTitles } = engineQueue();
+        await violation("live-view-behind", `popup lists ${have}, the engine (by the web's own queue rules) has ${JSON.stringify(sureTitles)} waiting on me${maybeTitles.length > sureTitles.length ? ` (may also list ${JSON.stringify(maybeTitles.filter((t) => !sureTitles.includes(t)))})` : ""} (persisted over 3 checks)`);
         countMismatch = -10;
       }
     } else if (countMismatch > 0) countMismatch = 0;
@@ -377,11 +415,18 @@ async function checks() {
   // The legacy UI pops up what its message heuristics call a decision: hold it only to the typed, required kinds.
   // (No holder-resolves-own-card prompts and no status prompts outside the status phase: the legacy UI need not pop those.)
   const phase = String(oracle.view.state?.phase ?? "");
-  const mine = myDecisions(oracle.view, ME).filter(
-    (d) =>
-      ENGINE ||
-      (d.kind !== "legacy" && !/preassign|pre_decline|queue|game_settings|info|draft\.milty/.test(d.kind) && awaits(d, ME) && !(d.kind.startsWith("status.") && !phase.startsWith("status"))),
-  );
+  // Engine UI: what its queue must show (the web's rules). Legacy UI: the typed, required kinds only — not the undo /
+  // optional affordances (nobody is asked anything) nor the perpetual "play an action card" panel (fuzz pbd299).
+  const mine = ENGINE
+    ? engineQueue().sure
+    : myDecisions(oracle.view, ME).filter(
+        (d) =>
+          d.kind !== "legacy" &&
+          !/preassign|pre_decline|queue|game_settings|info|draft\.milty/.test(d.kind) &&
+          webReducer.awaits(d, ME) &&
+          !(d.kind === "action_card.play" && !d.window) &&
+          !(d.kind.startsWith("status.") && !phase.startsWith("status")),
+      );
   const pop = await popupState(page);
   if (mine.length && !pop) {
     waitingSince ??= Date.now();
