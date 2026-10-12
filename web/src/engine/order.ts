@@ -206,6 +206,8 @@ export function orderDecisions(
         !(AGENDA_LIVE.has(d.kind) && !agendaPhase) &&
         !(d.kind === "agenda.when" && !!state?.agenda?.whensResolved) &&
         !(d.kind === "agenda.after" && !!state?.agenda?.aftersResolved) &&
+        /* Pre-declining a card I hold now (an offer left from before I took it): never mine to follow. */
+        !(d.kind === "strategy_card.pre_decline" && preDeclinesMine(d, state, selfId)) &&
         /* A turn menu left open from my last turn: not mine while someone else is taking theirs. */
         !(d.kind === "turn.action" && !!state?.activePlayer && !!selfId && state.activePlayer !== selfId),
     ),
@@ -352,6 +354,13 @@ export function primaryPartMissing(d: Decision): boolean {
 function politicsPlacement(value: unknown): boolean {
   const a = (value as { action?: string } | null)?.action;
   return a === "top" || a === "bottom" || a === "discard";
+}
+
+/** A pre-decline offer for a strategy card I hold. */
+function preDeclinesMine(d: Decision, state: GameState | null | undefined, selfId: string | undefined): boolean {
+  if (!selfId || !state) return false;
+  const sc = d.options.map((o) => (o.value as { strategyCard?: number } | null)?.strategyCard).find((n) => typeof n === "number");
+  return sc !== undefined && state.strategyCards.some((c) => c.number === sc && c.holder === selfId);
 }
 
 type PublicScoreValue = { action?: string; objective?: string; eligible?: string[] } | null;

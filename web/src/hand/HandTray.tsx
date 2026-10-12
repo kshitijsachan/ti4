@@ -169,7 +169,7 @@ export function HandTray({ gameName, token, defaultOpen = false, className }: Pr
   const shownGroups = hand.groups.map((g) => (g.id === "pn" && !ownOpen ? foldOwnNotes(g, hand.myColor) : g));
   const budgets = fanBudgets(shownGroups, useViewportWidth());
   const pick = (card: HandCard) => (card.key === OWN_STACK ? setOwnOpen(true) : setSelected(card));
-  const arrivals = useNewCards(hand.groups, !hand.loading && !!hand.myColor);
+  const arrivals = useNewCards(hand.groups, !hand.loading && !!hand.myColor, hand.myColor);
   // Silent draws leave the new cards unlisted by the bot (no number, so no Play): ask it to relist once.
   const synced = useRef("");
   const refresh = hand.index.refresh;

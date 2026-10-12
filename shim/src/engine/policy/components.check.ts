@@ -67,3 +67,5 @@ assert.equal(pick(base("choose.confirm", [opt("redistributeCCButtons_", { source
 assert.equal(pick(base("choose.system", [opt("deleteButtons", null)])), "deleteButtons");
 assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card" })], { target: { userId: "u2", faction: "sol", color: "red", resolvedBy: "owner_prefix" } })), undefined);
 console.log("components policy: ok");
+// Lead From the Front / Galvanize: which pools pay (bots keep the bot's old order: strategy tokens first).
+assert.equal(pick(base("choose.confirm", [opt("s3", { source: "spend_objective_tokens", confirm: true, choice: "split", objective: "lead", strategy: 3, tactic: 0 }), opt("s2", { source: "spend_objective_tokens", confirm: true, choice: "split", objective: "lead", strategy: 2, tactic: 1 })])), "s3");

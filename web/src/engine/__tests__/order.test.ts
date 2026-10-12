@@ -195,3 +195,29 @@ void test("my starting technology is a required setup step even while the engine
   const done = state({ ...s, setup: { ...setup, players: [{ ...setup.players[0], startingTechsNeeded: 0 }] } as unknown as GameState["setup"] });
   assert.deepEqual(kinds(orderDecisions([tech], null, undefined, done)), []);
 });
+
+const optV = (id: string, value: unknown) => ({ id, label: id, style: "primary", emoji: null, disabled: false, needsInput: false, handler: id, value });
+
+void test("Imperial's score list with nothing left to score never takes the head from my turn (it goes on offer)", () => {
+  const turn = dec("turn.action");
+  const imperial = dec("status.score", {
+    options: [
+      optV("lead", { action: "score_public", objective: "lead", eligible: [ME] }),
+      optV("pop", { action: "score_public", objective: "pop", eligible: [] }),
+    ],
+  } as Partial<Decision>);
+  const r = orderDecisions([turn, imperial], 0, undefined, state({ publicObjectives: { lead: [ME] } } as Partial<GameState>));
+  assert.deepEqual(kinds(r), ["turn.action"]);
+  assert.ok(r.offers.some((d) => d.kind === "status.score"));
+  const open = orderDecisions([turn, imperial], 0, undefined, state());
+  assert.deepEqual(kinds(open), ["status.score", "turn.action"]);
+});
+
+void test("a pre-decline offer for a strategy card I hold is dropped", () => {
+  const pre = dec("strategy_card.pre_decline", { options: [optV("y", { strategyCard: 8, action: "pre_decline" })] } as Partial<Decision>);
+  const cards = [{ number: 8, name: "Imperial", holder: ME }] as unknown as GameState["strategyCards"];
+  const r = orderDecisions([pre], null, undefined, state({ strategyCards: cards }));
+  assert.equal(r.queue.length + r.offers.length, 0);
+  const other = orderDecisions([pre], null, undefined, state({ strategyCards: [{ number: 8, name: "Imperial", holder: "u2" }] as unknown as GameState["strategyCards"] }));
+  assert.equal(other.queue.length + other.offers.length, 1);
+});
