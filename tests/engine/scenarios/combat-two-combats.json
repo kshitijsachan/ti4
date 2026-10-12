@@ -1,0 +1,15 @@
+{
+  "name": "combat-two-combats",
+  "description": "Two combats at once (pbd203: 209 and 314): mentak vs muaat in 306 and mentak vs ghost in 307 (factionsInCombat names only the latest). muaat, with no units in 307, may not roll 307's round (engine refuses; the original code takes the press and rolls nothing; legacy fork: no press). mentak still rolls in 306 as usual is not exercised (dice).",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [
+    "/combat start_combat tile_name:306",
+    "/add_units tile_name:307 unit_names:\"2 ca\" faction_or_color:ghost",
+    "/combat start_combat tile_name:307"
+  ],
+  "steps": [
+    { "wait": 3000 },
+    { "press": "combatRoll_307_space", "as": "muaat", "refused": true, "legacy": [] }
+  ],
+  "expect": { "invariants": true, "decision": { "kind": "combat.round", "open": true } }
+}

@@ -135,7 +135,14 @@ export type CombatAutomate = DecisionBase<"combat.automate", CombatAutomateValue
 export type CombatModifierValue = { source: "action_cards" | "tech" | string; card: string };
 export type CombatModifier = DecisionBase<"combat.modifier", CombatModifierValue>;
 
-export type CombatDecision = CombatRound | CombatHits | CombatAssignUnits | CombatRetreat | CombatBombard | CombatAutomate | CombatModifier;
+/**
+ * "Unsure if a combat should occur on <planet>" (pbd203): engage (startCombatOn_), coexist (deleteButtons) or, after a
+ * won combat with coexisters left, claim the planet (claimPlanet_). Target: the player the message names.
+ */
+export type CombatEngageValue = { action: "engage" | "claim"; planet: string } | { action: "coexist"; planet: null };
+export type CombatEngage = DecisionBase<"combat.engage", CombatEngageValue>;
+
+export type CombatDecision = CombatRound | CombatHits | CombatAssignUnits | CombatRetreat | CombatBombard | CombatAutomate | CombatModifier | CombatEngage;
 
 /**
  * The "Modify Units" menu (a manual board edit opened from the turn-start / cards-info "Modify Units" button):

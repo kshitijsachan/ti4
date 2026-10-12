@@ -55,6 +55,7 @@ const TITLES: Record<string, string> = {
   "combat.assign_hits": "Assign hits",
   "combat.assign_units": "Choose units",
   "combat.retreat": "Retreat?",
+  "combat.engage": "Engage in combat?",
   "action_card.play": "Play an action card",
   "action_card.resolve": "Resolve an action card",
   "action_card.target": "Choose a target",
