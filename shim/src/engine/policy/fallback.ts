@@ -299,6 +299,10 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
   if (d.kind === "turn.action") return turnStale(d, state, me);
   if (!state) return false;
   // "Setup a Player" stays up after it is pressed: once we are seated it asks nothing of us (pbd147).
+  // Manual player setup needs a map ("After setting up the map, you may use this button"): on a fresh game the
+  // steward (solo.ts: expansion → Milty draft) is still choosing how to set up, and the bots must not race it (live
+  // pbd182: five bots pressed "Setup a Player" 13 times and all chose Arborec / green before any map existed).
+  if (d.kind === "setup.player" && !state.tiles.length) return true;
   if (d.kind === "setup.player" && d.options.every((o) => !o.value || (o.value as { step?: string }).step === "start")) {
     return !!state.players.find((p) => p.userId === me)?.faction;
   }

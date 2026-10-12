@@ -82,8 +82,8 @@ function playerSetup(state: GameState, me: string, live: Option<any>[], history:
   const choices = live.filter((o) => o.value.step === step && !o.value.page);
   switch (step) {
     case "start":
-      // Once per prompt (the message stays after it is pressed), and never once we are seated.
-      if (mine?.faction || history.length) return null;
+      // Once per prompt (the message stays after it is pressed), never once we are seated, never before a map.
+      if (mine?.faction || history.length || !state.tiles.length) return null;
       return choices[0] ? { option: choices[0], why: "setup: set ourselves up" } : null;
     case "user": {
       const o = choices.find((x) => x.value.userId === me);
@@ -91,11 +91,14 @@ function playerSetup(state: GameState, me: string, live: Option<any>[], history:
     }
     case "faction": {
       if (choices.some((x) => x.value.userId && x.value.userId !== me)) return null;
-      const o = choices.find((x) => is.faction(x.value.faction) && !taken.has(x.value.faction));
+      // Seats set up at the same time see the same free list: each takes a different one (by seat order).
+      const free = choices.filter((x) => is.faction(x.value.faction) && !taken.has(x.value.faction));
+      const o = free.length ? free[seatIndex(state, me) % free.length] : undefined;
       return o ? { option: o, why: `setup: faction ${o.value.faction} (official, free)` } : null;
     }
     case "color": {
-      const o = choices.find((x) => x.value.color && !taken.has(x.value.color)) ?? choices[0];
+      const free = choices.filter((x) => x.value.color && !taken.has(x.value.color));
+      const o = free.length ? free[seatIndex(state, me) % free.length] : choices[0];
       return o ? { option: o, why: `setup: colour ${o.value.color ?? "default"}` } : null;
     }
     case "home":
@@ -107,6 +110,12 @@ function playerSetup(state: GameState, me: string, live: Option<any>[], history:
     default:
       return null;
   }
+}
+
+/** Our position among the seats (stable: by user id), to spread simultaneous choices. */
+function seatIndex(state: GameState, me: string): number {
+  const ids = state.players.map((p) => p.userId).sort();
+  return Math.max(0, ids.indexOf(me));
 }
 
 function draftPick(state: GameState, me: string, live: Option<any>[]): SetupChoice | null {

@@ -51,7 +51,7 @@ const state = {
     { userId: OTHER, faction: "xxcha", color: "green", self: false, real: true, techs: [], planets: [], exhaustedPlanets: [], strategyCards: [], commandTokens: { tactic: 3, fleet: 3, strategy: 2 }, tg: 0, commodities: 0, commoditiesMax: 4, secretObjectiveCount: 1, secretsScored: {}, hand: null, relics: [], fragments: [], leaders: [], promissoryNotesInPlayArea: [] },
   ],
   strategyCards: [],
-  tiles: [],
+  tiles: [{ position: "000", tileId: "18", holders: [] }],
   publicObjectives: {},
   laws: [],
   draft: null,
@@ -288,7 +288,11 @@ const setupStep = (step: string, values: Record<string, unknown>[]) =>
     "setup.player",
     values.map((v, i) => opt(`setupStep_${i}`, String(v.faction ?? v.color ?? v.userId ?? step), { step, userId: null, faction: null, color: null, position: null, speaker: null, page: null, ...v })),
   );
-const unseated = { ...state, players: state.players.map((p) => (p.userId === ME ? { ...p, faction: null, color: null } : p)) } as unknown as GameState;
+const unseated = {
+  ...state,
+  tiles: [{ position: "000", tileId: "18", holders: [] }],
+  players: state.players.map((p) => (p.userId === ME ? { ...p, faction: null, color: null } : p)),
+} as unknown as GameState;
 
 test("pbd147: setup.player — start once, then official free faction / free colour / no speaker", () => {
   const start = setupStep("start", [{}]);
@@ -301,6 +305,18 @@ test("pbd147: setup.player — start once, then official free faction / free col
   assert.equal(chooseTyped(color, unseated, ME, { history: [], open: [], all: [color] })?.option?.value.color, "forest");
   const speaker = setupStep("speaker", [{ userId: ME, speaker: true }, { userId: ME, speaker: false }]);
   assert.equal(chooseTyped(speaker, unseated, ME, { history: [], open: [], all: [speaker] })?.option?.value.speaker, false);
+});
+
+test("pbd182: no manual setup before a map exists (the steward's Milty path), and seats spread their choices", () => {
+  const start = setupStep("start", [{}]);
+  const fresh = { ...unseated, tiles: [] } as unknown as GameState;
+  assert.equal(staleForBot(start, fresh, ME), true);
+  assert.equal(chooseTyped(start, fresh, ME, { history: [], open: [], all: [start], force: true }), null);
+  const blank = { ...unseated, players: unseated.players.map((p) => ({ ...p, faction: null, color: null })) } as unknown as GameState;
+  const offer = (who: string) => setupStep("faction", ["arborec", "argent", "letnev"].map((f) => ({ userId: who, faction: f })));
+  const mine = chooseTyped(offer(ME), blank, ME, { history: [], open: [], all: [] })?.option?.value.faction;
+  const theirs = chooseTyped(offer(OTHER), blank, OTHER, { history: [], open: [], all: [] })?.option?.value.faction;
+  assert.notEqual(mine, theirs);
 });
 
 // ---- live gaps 01:28–01:32
