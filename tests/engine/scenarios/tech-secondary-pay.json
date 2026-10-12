@@ -32,11 +32,17 @@
       "as": "mentak",
       "legacy": [
         {
-          "press": "spend_mollprimus_restech",
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_mollprimus_restech"
+          },
           "as": "mentak"
         },
         {
-          "press": "deleteButtons_technology",
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
           "as": "mentak"
         }
       ]
