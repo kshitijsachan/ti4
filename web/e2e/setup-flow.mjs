@@ -1,0 +1,259 @@
+// One-click solo game through setup into the strategy phase: from /play as a human seat, press "Play solo", land in the draft,
+// let the autopilot bots draft, make our own picks, and wait for setup to continue past the draft.
+// Usage: node e2e/solo.mjs <baseUrl> <seatToken> [outDir=/home/user/run/screenshots/solo] [tag=run1]
+import { mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require(
+  process.env.PW_CORE ?? "/opt/node-tools/node_modules/playwright-core",
+);
+
+const base = process.argv[2] ?? "http://127.0.0.1:5173";
+const token = process.argv[3];
+const out = process.argv[4] ?? "/home/user/run/screenshots/solo";
+const tag = process.argv[5] ?? "run1";
+const bots = Number(process.env.BOTS ?? 3);
+mkdirSync(out, { recursive: true });
+
+const browser = await chromium
+  .launch({ executablePath: "/opt/pw-browsers/chromium" })
+  .catch(() => chromium.launch());
+const page = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+// Prompt lifecycle as the tab sees it (create / update / delete of messages with setup buttons, socket closes): a
+// prompt that lingers after the game moved on can then be traced to a missed frame or to the client.
+const PROMPT_ID = /getTech_|discardSecret_|SODISCARD_|setupStep5_|getKeleresTechOptions/;
+page.on("websocket", (ws) => {
+  console.log(`[ws] open ${ws.url().replace(/token=[^&]+/, "token=…")}`);
+  ws.on("close", () => console.log("[ws] closed"));
+  ws.on("framereceived", ({ payload }) => {
+    if (typeof payload !== "string" || payload.length > 200000) return;
+    let f;
+    try { f = JSON.parse(payload); } catch { return; }
+    if (f.t === "message_delete") console.log(`[ws] delete ${f.id}`);
+    else if ((f.t === "message_create" || f.t === "message_update") && PROMPT_ID.test(JSON.stringify(f.message?.components ?? []))) console.log(`[ws] ${f.t.slice(8)} prompt ${f.message.id}`);
+    else if (f.t === "history" && f.messages?.some((m) => PROMPT_ID.test(JSON.stringify(m.components ?? [])))) console.log(`[ws] history ${f.channel_id} has prompts ${f.messages.filter((m) => PROMPT_ID.test(JSON.stringify(m.components ?? []))).map((m) => m.id).join(",")}`);
+  });
+});
+const problems = [];
+page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
+const shot = (name) =>
+  page.screenshot({ path: `${out}/${tag}-${name}.png` }).catch(() => {});
+const t0 = Date.now();
+const say = (s) => console.log(`[${tag} +${((Date.now() - t0) / 1000).toFixed(0)}s] ${s}`);
+
+// The shim restarts while other work lands; retry JSON fetches through a restart instead of failing the run.
+const getJson = async (url) => {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (r.ok || i >= 30) return await r.json();
+    } catch (e) {
+      if (i >= 30) throw e;
+    }
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+};
+
+const me = await getJson(`${base}/app/me?token=${token}`);
+const myId = me.user.id;
+
+await page.goto(`${base}/play?t=${token}`, { waitUntil: "domcontentloaded" });
+if (process.env.GAME) {
+  // Resume an existing game (e.g. one stuck after its draft) instead of starting a new one.
+  await page.waitForTimeout(1500);
+  await page.goto(`${base}/game/${process.env.GAME}`);
+} else {
+
+  await page.waitForSelector("text=Quick solo game", { timeout: 30000 });
+  // Set the bot count with the stepper (default 3).
+  for (let n = 3; n < bots; n++) await page.getByLabel("More opponents").click();
+  for (let n = 3; n > bots; n--) await page.getByLabel("Fewer opponents").click();
+  await page.waitForTimeout(800);
+  await shot("1-play");
+  await page.getByRole("button", { name: "Play solo" }).click();
+  say("pressed Play solo");
+  await page.waitForTimeout(2500);
+  await shot("2-progress");
+  
+  await page.waitForURL(/\/game\/[a-z]+\d+/, { timeout: 300000 }).catch(async () => {
+    await shot("error");
+    const err = await page.locator("text=/Timed out|refused|failed/i").allTextContents();
+    throw new Error(`never reached the game page: ${err.join(" | ")}`);
+  });
+  }
+const game = /\/game\/([a-z]+\d+)/.exec(page.url())[1];
+say(`landed on /game/${game}`);
+await page.waitForTimeout(5000);
+await shot("3-draft");
+
+const draft = async () =>
+  getJson(`${base}/bot/api/public/game/${game}/draft`);
+
+/**
+ * Moves the decision popup to my next waiting decision: open the "N more after this / waiting" list and pick the
+ * first entry that is not the one shown (e.g. the strategy-card queue prompt shown before the actual pick).
+ */
+async function nextDecision(dialog, title) {
+  const more = dialog.getByRole("button", { name: /more (after this|waiting)/ });
+  if (!(await more.count())) return false;
+  await more.first().click().catch(() => {});
+  const items = dialog.getByRole("menuitem");
+  for (let i = 0; i < (await items.count()); i++) {
+    const text = ((await items.nth(i).textContent()) ?? "").trim();
+    if (text && text !== title.trim()) {
+      say(`next decision: ${text}`);
+      return items.nth(i).click().then(() => true, () => false);
+    }
+  }
+  return false;
+}
+
+let picks = 0;
+const deadline = Date.now() + 15 * 60000;
+let stuckSince;
+for (;;) {
+  if (Date.now() > deadline) throw new Error("draft did not finish in 15 minutes");
+  const d = await draft();
+  if (d.status === "finished") break;
+  if (String(d.currentPlayer) !== myId) {
+    await page.waitForTimeout(2000);
+    continue;
+  }
+  // Our pick: a ready pick button, else a speaker-order token, else focus a card to reveal its pick button.
+  const ready = page.locator('button[class*="pickReady"]:enabled').first();
+  const order = page.locator('button[class*="orderReady"]:enabled').first();
+  if (await ready.count()) {
+    say(`my pick: ${await ready.textContent()}`);
+    await ready.click();
+    stuckSince = undefined;
+  } else if (await order.count()) {
+    say(`my pick: speaker order ${await order.getAttribute("title")}`);
+    await order.click();
+    stuckSince = undefined;
+  } else {
+    const cards = page.locator('[class*="sliceCard"], [class*="factionCard"]');
+    const n = await cards.count();
+    for (let i = 0; i < n && !(await ready.count()); i++) {
+      await cards.nth(i).click().catch(() => {});
+      await page.waitForTimeout(400);
+    }
+    if (!(await ready.count())) {
+      // The board may not have caught up with the previous pick yet: look again for a while before giving up.
+      if (Date.now() - (stuckSince ??= Date.now()) < 10000) {
+        await page.waitForTimeout(1000);
+        continue;
+      }
+      await shot("stuck");
+      throw new Error("my turn, but no pick button found");
+    }
+    say(`my pick: ${await ready.textContent()}`);
+    await ready.click();
+    stuckSince = undefined;
+  }
+  picks++;
+  await page.waitForTimeout(1500);
+  await shot(`4-pick${picks}`);
+  await page.waitForTimeout(2000);
+}
+say(`draft finished after ${picks} picks of mine`);
+await page.waitForTimeout(4000);
+await shot("5-after-draft");
+
+// After the draft: answer only the decisions that are the human's own; the table-wide setup steps are the
+// orchestrator's. Stop once the human picked a strategy card (or the action phase began).
+const web = () => getJson(`${base}/bot/api/public/game/${game}/web-data`);
+const seen = [];
+let n = 0;
+const end2 = Date.now() + 20 * 60000;
+let done = false;
+while (Date.now() < end2 && !done) {
+  const w = await web();
+  const phase = w.gameState?.phase ?? "";
+  const mine = w.playerData.find((p) => p.discordId === myId);
+  if (phase.startsWith("action") || (phase.startsWith("strategy") && (mine?.scs?.length ?? 0) > 0)) {
+    say(`reached ${phase}; my strategy cards: ${JSON.stringify(mine?.scs)}`);
+    done = true;
+    break;
+  }
+  const dialog = page.locator('[role=dialog]').first();
+  if (!(await dialog.count())) {
+    const status = await page.locator('[role=status]').allTextContents();
+    if (n % 5 === 0) say(`phase ${phase}; no decision; status: ${status.join(" | ").slice(0, 160)}`);
+    n++;
+    await page.waitForTimeout(2000);
+    continue;
+  }
+  const title = (await dialog.locator("h2").first().textContent()) ?? "";
+  if (/deal secret|start the game|strategy phase$/i.test(title)) {
+    if (!seen.includes(title)) { seen.push(title); await shot(`6-table-${seen.length}`); say(`table-wide step shown: ${title} (left to the orchestrator)`); }
+    // look at my other decisions, if any
+    await nextDecision(dialog, title);
+    await page.waitForTimeout(2000);
+    continue;
+  }
+  seen.push(title);
+  await shot(`7-decision-${seen.length}`);
+  const options = dialog.locator('[role=option]:not([aria-disabled=true])');
+  if (await options.count()) {
+    // A repeated prompt (e.g. Argent picks two starting techs) needs a different option than last time.
+    const repeats = seen.filter((t) => t === title).length - 1;
+    // The panel can re-render under the click (a new prompt arrived): look again rather than fail the run.
+    const picked = await options.nth(repeats % (await options.count())).click({ timeout: 10000 }).then(() => true, () => false);
+    if (!picked) { seen.pop(); await page.waitForTimeout(1500); continue; }
+    await page.waitForTimeout(500);
+    await shot(`7-decision-${seen.length}-selected`);
+    const confirm = dialog.getByRole("button", { name: /^(Take|Keep|Start with|Research|Discard|Pick)\b/ }).first();
+    say(`my decision: ${title} -> ${(await confirm.textContent())?.trim()}`);
+    await confirm.click();
+  } else if (await dialog.locator('button[class*="choice"]:not([disabled])').count()) {
+    // Engine UI (the default since the TI4_ENGINE_WEB=1 flip): choice cards, then a "go" card to confirm when the
+    // renderer asks for one (secret objective keep, ...). A repeated prompt takes a different card than last time.
+    const cards = dialog.locator('button[class*="choice"]:not([disabled]):not([class*="go"])');
+    const n = await cards.count();
+    if (n) {
+      const repeats = seen.filter((t) => t === title).length - 1;
+      const card = cards.nth(repeats % n);
+      const label = ((await card.textContent()) ?? "").trim().slice(0, 60);
+      const clicked = await card.click({ timeout: 10000 }).then(() => true, () => false);
+      if (!clicked) { seen.pop(); await page.waitForTimeout(1500); continue; }
+      await page.waitForTimeout(700);
+      const go = dialog.locator('button[class*="go"]:not([disabled])').first();
+      if (await go.count()) {
+        say(`my decision: ${title} -> ${((await go.textContent()) ?? "").trim().slice(0, 60)}`);
+        await go.click({ timeout: 10000 }).catch(() => {});
+      } else say(`my decision: ${title} -> ${label}`);
+    }
+  } else if (await dialog.getByRole("button", { name: "Roll For The Fracture" }).count()) {
+    // Crimson Rebellion starts with its breakthrough, which asks for a Fracture roll during setup.
+    say(`my decision: ${title} -> Roll For The Fracture`);
+    await dialog.getByRole("button", { name: "Roll For The Fracture" }).click();
+  } else if (await dialog.getByRole("button", { name: "Get a Technology" }).count()) {
+    say(`my decision: ${title} -> Get a Technology`);
+    await dialog.getByRole("button", { name: "Get a Technology" }).click();
+  } else if (/type of technology/i.test(title) && (await dialog.getByRole("button", { name: /Propulsion|Biotic|Cybernetic|Warfare/ }).count())) {
+    // A "Get a Technology" start (Deepwrought, …) asks for the technology colour first.
+    const type = dialog.getByRole("button", { name: /Propulsion|Biotic|Cybernetic|Warfare/ }).first();
+    say(`my decision: ${title} -> ${(await type.textContent())?.trim()}`);
+    await type.click();
+  } else {
+    say(`not mine to script (left alone): ${title}`);
+    await nextDecision(dialog, title);
+    await page.waitForTimeout(3000);
+  }
+  await page.waitForTimeout(4000);
+}
+await shot("8-end");
+const w = await web();
+const factions = w.playerData.map((p) => `${p.userName}:${p.faction}`).join(", ");
+// Factions that start with no technology at all.
+const NO_START_TECH = new Set(["sardakk"]);
+const noTech = w.playerData
+  .filter((p) => p.faction && !NO_START_TECH.has(p.faction) && !(p.techs?.length))
+  .map((p) => `${p.userName} (${p.faction})`);
+console.log(JSON.stringify({ game, picks, phase: w.gameState?.phase, done, decisions: seen, factions, noTech, problems: problems.slice(0, 10) }));
+await browser.close();
+if (!done || noTech.length) {
+  console.error(`REGRESSION FAILED: ${!done ? "never reached the strategy phase" : `no starting technology: ${noTech.join(", ")}`}`);
+  process.exit(1);
+}

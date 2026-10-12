@@ -1,0 +1,12 @@
+{
+  "name": "combat-hits-manual-sustain",
+  "description": "Manual hit assignment (combat.hits assign_manual -> combat.assign_units): muaat sustains its dreadnought, destroys its cruiser, Done.",
+  "base": { "recording": "pbd60", "index": 165 },
+  "trigger": { "press": "getDamageButtons_306deleteThis_spacecombat", "as": "muaat" },
+  "steps": [
+    { "press": "FFCC_muaat_assignDamage_306_1_dn_bloodred", "as": "muaat" },
+    { "press": "FFCC_muaat_assignHits_306_1_ca_bloodred", "as": "muaat" },
+    { "answer": { "kind": "combat.assign_units", "option": "deleteButtons" }, "as": "muaat", "legacy": [ { "press": "deleteButtons", "as": "muaat" } ] }
+  ],
+  "expect": { "invariants": true }
+}

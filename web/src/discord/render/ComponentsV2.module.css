@@ -1,0 +1,90 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.container {
+  --accent: rgba(148, 163, 184, 0.45);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 560px;
+  padding: 10px 12px;
+  background: var(--play-field);
+  border: 1px solid var(--play-hairline);
+  border-radius: 3px;
+  box-shadow: var(--play-bevel);
+}
+
+.container::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 10px;
+  width: 36px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.container[data-accent] {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.container[data-spoiler] {
+  filter: blur(6px);
+}
+
+.container[data-spoiler]:hover {
+  filter: none;
+}
+
+.section {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sectionText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.accessory {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--play-separator);
+}
+
+.divider[data-large] {
+  margin: 8px 0;
+}
+
+.spacer {
+  height: 2px;
+}
+
+.spacer[data-large] {
+  height: 12px;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 4px;
+  max-width: 520px;
+}
+
+.gallerySingle {
+  display: block;
+}

@@ -1,0 +1,62 @@
+import { Stack, Box, Group, Text, Flex } from "@mantine/core";
+import cx from "clsx";
+import styles from "./StasisInfantryCard.module.css";
+import { Unit } from "@/shared/ui/Unit";
+import { getColorAlias } from "@/entities/lookup/colors";
+import { DenseUnitCell } from "../UnitCard/DenseUnitCell";
+
+type Props = {
+  reviveCount: number;
+  color?: string;
+  condensed?: boolean;
+};
+
+export function StasisInfantryCard({ reviveCount, color, condensed }: Props) {
+  const colorAlias = getColorAlias(color);
+
+  if (reviveCount <= 0) return null;
+
+  if (condensed) {
+    return (
+      <DenseUnitCell
+        image={
+          <Unit
+            unitType="gf"
+            colorAlias={colorAlias}
+            className={styles.denseUnitImage}
+            scaleSprite
+          />
+        }
+        reinforcements={reviveCount}
+        label="revive"
+      />
+    );
+  }
+
+  return (
+    <Stack className={cx(styles.stasisCard, styles.cardStack)}>
+      <Box className={cx(styles.highlight, styles.topHighlight)} />
+
+      <Box className={styles.glassySheen} />
+      <Box className={styles.innerGlow} />
+
+      <Flex className={styles.imageContainer}>
+        <Unit
+          unitType="gf"
+          colorAlias={colorAlias}
+          className={styles.unitImage}
+          scaleSprite
+        />
+      </Flex>
+
+      <Stack className={styles.infoStack}>
+        <Group className={styles.mainGroup}>
+          <Group className={styles.reviveGroup}>
+            <Text className={styles.countText}>{reviveCount}</Text>
+            <Text className={styles.reviveLabel}>revive</Text>
+          </Group>
+        </Group>
+      </Stack>
+    </Stack>
+  );
+}

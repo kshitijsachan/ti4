@@ -1,0 +1,25 @@
+{
+  "name": "status-agenda-nonspeaker",
+  "description": "Agenda flow: a non-speaker presses 'Resolve with Current Winner' and 'Flip Agenda #2' (speaker-targeted prompts; the original button lets anyone press). Engine used to refuse 403 'for someone else'. pbd72 steps 780-781.",
+  "base": {
+    "recording": "pbd72",
+    "index": 779,
+    "repost": false
+  },
+  "steps": [
+    {
+      "press": "agendaResolution_for",
+      "as": "muaat"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "press": "flip_agenda",
+      "as": "muaat"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

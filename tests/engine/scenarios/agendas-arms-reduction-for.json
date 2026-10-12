@@ -1,0 +1,24 @@
+{
+  "name": "agendas-arms-reduction-for",
+  "description": "Arms Reduction For: destroy excess dreads/carriers; Against: exhaust tech-skip planets.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:arms_reduction force:true"
+  ],
+  "steps": [
+    {
+      "press": "agendaResolution_for",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

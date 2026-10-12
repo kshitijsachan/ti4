@@ -1,0 +1,293 @@
+/*
+ * Game state plate.
+ *
+ * The panel used to wash its whole field in the phase colour, ring itself in an
+ * accent border, and put a 10px glow behind the label — so "ACTION PHASE" read
+ * as a green-lit box rather than an instrument reporting a phase. It now sits on
+ * the shared Module plate: neutral graphite field, machined bevel, cut corner,
+ * with the phase colour confined to the rail edge, the status dot and the
+ * graduation ticks. Chrome stays neutral; the colour is the signal.
+ */
+.panel {
+  min-width: 260px;
+  max-width: 420px;
+}
+
+.collapseToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  color: var(--mantine-color-gray-5);
+}
+
+.collapseToggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--mantine-color-gray-2);
+}
+
+.collapseToggle:focus-visible {
+  outline: 2px solid rgb(var(--gd-blue));
+  outline-offset: 1px;
+}
+
+.chevron {
+  display: block;
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chevronClosed {
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+/* Engraved, matching the module rails: a pixel of light under the glyphs, not a
+   coloured bloom behind them. */
+.phaseLabel {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mantine-font-family-headings);
+  font-size: 9px;
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  color: var(--mantine-color-gray-1);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+
+/* The one place the phase colour goes bright. A 6px dot that breathes reports a
+   live phase; the old version also lit the label and the whole field. */
+.phaseDot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgb(var(--accent-rgb));
+  box-shadow:
+    0 0 5px rgba(var(--accent-rgb), 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+/*
+ * The pulse crossfades a rest glow and a peak glow on pseudo-elements rather
+ * than animating box-shadow, which repainted every frame while the page idled.
+ */
+.phaseDot::before,
+.phaseDot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.phaseDot::before {
+  box-shadow: 0 0 4px rgba(var(--accent-rgb), 0.4);
+  animation: phaseDotRest 3.2s ease-in-out infinite;
+}
+
+.phaseDot::after {
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.9);
+  opacity: 0;
+  animation: phaseDotPeak 3.2s ease-in-out infinite;
+}
+
+/* While pulsing, the pseudo-elements carry the whole glow */
+@media (prefers-reduced-motion: no-preference) {
+  .phaseDot {
+    box-shadow: none;
+  }
+}
+
+@keyframes phaseDotRest {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes phaseDotPeak {
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Red theme: the dot arms itself — a double-blink heartbeat, then holds */
+:global(.theme-midnightredtheme) .phaseDot {
+  animation: phaseDotArmed 3.4s ease-out infinite;
+}
+
+:global(.theme-midnightredtheme) .phaseDot::before {
+  animation: phaseDotArmedRest 3.4s ease-out infinite;
+}
+
+:global(.theme-midnightredtheme) .phaseDot::after {
+  box-shadow: 0 0 13px rgba(var(--accent-rgb), 1);
+  animation: phaseDotArmedPeak 3.4s ease-out infinite;
+}
+
+@keyframes phaseDotArmed {
+  0%,
+  22%,
+  100% {
+    opacity: 0.9;
+  }
+  4%,
+  12% {
+    opacity: 1;
+  }
+  8% {
+    opacity: 0.92;
+  }
+}
+
+@keyframes phaseDotArmedRest {
+  0%,
+  22%,
+  100% {
+    opacity: 1;
+  }
+  4%,
+  12% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes phaseDotArmedPeak {
+  0%,
+  22%,
+  100% {
+    opacity: 0;
+  }
+  4% {
+    opacity: 1;
+  }
+  8% {
+    opacity: 0.1;
+  }
+  12% {
+    opacity: 0.93;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phaseDot,
+  :global(.theme-midnightredtheme) .phaseDot {
+    animation: none;
+  }
+
+  .phaseDot::before,
+  .phaseDot::after {
+    display: none;
+  }
+}
+
+:global(.mobile) .phaseDot {
+  animation: none;
+  box-shadow:
+    0 0 5px rgba(var(--accent-rgb), 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+:global(.mobile) .phaseDot::before,
+:global(.mobile) .phaseDot::after {
+  display: none;
+}
+
+.turnText {
+  color: var(--mantine-color-gray-4);
+  font-size: var(--mantine-font-size-xs);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turnName {
+  color: var(--mantine-color-white);
+  font-weight: var(--weight-rail);
+}
+
+.voteTableWrapper {
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding-right: 8px;
+}
+
+.voteTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--mantine-color-gray-2);
+}
+
+.voteTable th {
+  padding: 3px 6px;
+  text-align: right;
+  color: var(--mantine-color-gray-4);
+  font-weight: var(--weight-title);
+  font-size: 10px;
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--mantine-color-dark-4);
+}
+
+.voteTable th:first-child {
+  text-align: left;
+}
+
+.voteTable td {
+  padding: 3px 6px;
+  text-align: right;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-gray-2);
+}
+
+.voteTable td:first-child {
+  text-align: left;
+  font-weight: var(--weight-data);
+  color: var(--mantine-color-gray-3);
+}
+
+.voteTable td:last-child {
+  color: var(--mantine-color-gray-4);
+}
+
+.currentVoterRow {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.currentVoterRow td:first-child {
+  font-weight: var(--weight-rail);
+  color: var(--mantine-color-gray-1);
+}
+
+.voterName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.voterNameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

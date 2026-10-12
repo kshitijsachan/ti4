@@ -1,0 +1,7 @@
+{
+  "name": "faction-arborec-mitosis",
+  "description": "Arborec Mitosis (status-phase reminder): place 1 infantry, then the mech variant (remove infantry, deploy mech)",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "trigger": { "press": "mitosisInf", "as": "arborec" },
+  "steps": []
+}

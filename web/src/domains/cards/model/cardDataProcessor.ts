@@ -1,0 +1,100 @@
+type CardDataItem = {
+  name: string;
+  text: string;
+  id: string;
+};
+
+export type ProcessedCardData = {
+  name: string;
+  aliases: string[];
+  count: number;
+  text: string;
+};
+
+type CardSortMode = "percentage" | "alphanumeric";
+
+type CardSection = {
+  title: string;
+  count: number;
+  items: Array<ProcessedCardData & { percentage?: number }>;
+};
+
+const naturalNameCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function compareByName(a: ProcessedCardData, b: ProcessedCardData) {
+  return naturalNameCollator.compare(a.name, b.name);
+}
+
+function compareCards(
+  a: ProcessedCardData,
+  b: ProcessedCardData,
+  sortMode: CardSortMode
+) {
+  if (sortMode === "alphanumeric") {
+    return compareByName(a, b);
+  }
+
+  // Alphanumeric tiebreak keeps equal-% buckets in a stable order.
+  const countDifference = b.count - a.count;
+  return countDifference !== 0 ? countDifference : compareByName(a, b);
+}
+
+/** Groups card IDs by card name. */
+export function processCardData<T extends CardDataItem>(
+  cardIds: string[],
+  lookupFunction: (id: string) => T | undefined,
+  sortMode: CardSortMode = "alphanumeric"
+): ProcessedCardData[] {
+  const cardMap = new Map<string, { aliases: string[]; text: string }>();
+
+  cardIds.forEach((cardId) => {
+    const card = lookupFunction(cardId);
+    if (!card) {
+      console.warn(`Card with ID "${cardId}" not found`);
+      return;
+    }
+    const existing = cardMap.get(card.name);
+    cardMap.set(card.name, {
+      aliases: existing ? existing.aliases.concat(card.id) : [card.id],
+      text: card.text,
+    });
+  });
+
+  return Array.from(cardMap.entries())
+    .map(([name, data]) => ({
+      name,
+      aliases: data.aliases,
+      count: data.aliases.length,
+      text: data.text,
+    }))
+    .sort((a, b) => compareCards(a, b, sortMode));
+}
+
+/** Deck section with draw percentages, then the discard section. */
+export function createCardSections(
+  deckData: ProcessedCardData[],
+  discardData: ProcessedCardData[],
+  deckIds: string[],
+  discardIds: string[],
+  deckLabel = "Deck",
+  discardLabel = "Discard"
+): CardSection[] {
+  return [
+    {
+      title: deckLabel,
+      count: deckIds.length,
+      items: deckData.map((item) => ({
+        ...item,
+        percentage: (item.count / deckIds.length) * 100,
+      })),
+    },
+    {
+      title: discardLabel,
+      count: discardIds.length,
+      items: discardData,
+    },
+  ];
+}

@@ -1,0 +1,41 @@
+import type { ComponentType } from "react";
+import { IconMap2, IconTarget, IconUsers } from "@tabler/icons-react";
+
+type MantineBreakpoint = "xs" | "sm" | "md" | "lg" | "xl";
+
+type MainTabValue = "map" | "objectives" | "general" | "players";
+
+type MainTabConfig = {
+  value: MainTabValue;
+  label: string;
+  Icon: ComponentType<{ size?: number }>;
+  visibleFrom?: MantineBreakpoint;
+  hideOnMobile?: boolean;
+};
+
+export const MAIN_TAB_CONFIGS: MainTabConfig[] = [
+  {
+    value: "map",
+    label: "Map",
+    Icon: IconMap2,
+    visibleFrom: "sm",
+  },
+  {
+    value: "objectives",
+    label: "Objectives",
+    Icon: IconTarget,
+    visibleFrom: "sm",
+  },
+  {
+    value: "general",
+    label: "General",
+    Icon: IconTarget,
+    visibleFrom: "sm",
+  },
+  {
+    value: "players",
+    label: "Player",
+    Icon: IconUsers,
+    visibleFrom: "sm",
+  },
+];

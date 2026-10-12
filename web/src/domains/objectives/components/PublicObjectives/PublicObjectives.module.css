@@ -1,0 +1,37 @@
+/* Stage Titles */
+.stageTitle {
+  font-size: var(--mantine-font-size-md);
+  font-weight: var(--weight-rail);
+  color: var(--mantine-color-white) !important;
+  margin-bottom: var(--mantine-spacing-xs);
+}
+
+.lawsTitle {
+  color: rgba(226, 232, 240, 0.92) !important;
+}
+
+/*
+ * Objectives are a section of the bottom HUD deck, not a card sitting on it. The
+ * bordered panel and its inner padding pushed the Stage I and Laws headings
+ * further in than the Player Areas heading beside them, which is what made the
+ * three sections read as unrelated blocks at three different indents.
+ */
+.themedContainer {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* Objectives tab at phone width: the two stages stop sharing a row, and the
+   one-off objectives stack instead of squeezing three plates into one line. */
+@container scoreboard (max-width: 640px) {
+  .stageGrid.stageGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--mantine-spacing-md);
+  }
+
+  .customRow {
+    flex-direction: column;
+  }
+}

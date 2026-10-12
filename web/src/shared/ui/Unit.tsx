@@ -1,0 +1,172 @@
+import { LawInPlay } from "@/entities/data/types";
+import {
+  isFighterOrInfantry,
+  computeDefaultAlt,
+  computeUrlColor,
+  computeTokenSuffix,
+  isDimensionalTearSpaceDock,
+} from "./Unit/utils";
+import { DecalImage } from "./Unit/components/DecalImage";
+import { BaseUnitImage } from "./Unit/components/BaseUnitImage";
+import { SpriteUnitImage } from "./Unit/components/SpriteUnitImage";
+import { LawOverlay } from "./Unit/overlays/LawOverlay";
+import { DamageMarker } from "./Unit/overlays/DamageMarker";
+import { DimensionalTearToken } from "./Unit/overlays/DimensionalTearToken";
+import { SpecialUnitsOverlay } from "./Unit/overlays/SpecialUnitsOverlay";
+import { cdnImage } from "@/entities/data/cdnImage";
+import { getUnitSprite } from "./Unit/unitSprites";
+
+type UnitProps = {
+  unitType: string;
+  colorAlias: string;
+  faction?: string;
+  sustained?: boolean;
+  bgDecalPath?: string;
+  decalPath?: string;
+  lawsInPlay?: LawInPlay[];
+  galvanized?: boolean;
+  x?: number;
+  y?: number;
+  zIndex?: number;
+  alt?: string;
+  className?: string;
+  /** Use scale-safe sprite positioning for constrained card/grid icons. */
+  scaleSprite?: boolean;
+  /** Show faction-specific tokens like dimensional tear. Defaults to true. */
+  showFactionTokens?: boolean;
+  damageMarkerDelayMs?: number;
+};
+
+export function Unit({
+  unitType,
+  colorAlias,
+  faction,
+  alt,
+  sustained,
+  bgDecalPath,
+  decalPath,
+  lawsInPlay,
+  galvanized,
+  x,
+  y,
+  zIndex,
+  className,
+  scaleSprite,
+  showFactionTokens = true,
+  damageMarkerDelayMs,
+}: UnitProps) {
+  const defaultAlt = computeDefaultAlt(alt, faction, colorAlias, unitType);
+  const tokenSuffix = computeTokenSuffix(colorAlias);
+  const urlColor = computeUrlColor(unitType, colorAlias);
+  const sprite = getUnitSprite(colorAlias, unitType);
+  const fighterOrInfantry = isFighterOrInfantry(unitType);
+
+  const isArticlesOfWarActive = lawsInPlay?.some(
+    (law) => law.id === "articles_war",
+  );
+  const isSchematicsActive = lawsInPlay?.some((law) => law.id === "schematics");
+  const showArticles = isArticlesOfWarActive && unitType === "mf";
+  const showSchematics = isSchematicsActive && unitType === "ws";
+
+  // Cabal space docks (Dimensional Tear) create a gravity rift in their system
+  const showDimensionalTear =
+    showFactionTokens && isDimensionalTearSpaceDock(unitType, faction);
+
+  const isPositioned = x !== undefined && y !== undefined;
+
+  return (
+    <div
+      style={{
+        ...(isPositioned
+          ? {
+              position: "absolute",
+              left: `${x}px`,
+              top: `${y}px`,
+              transform: "translate(-50%, -50%)",
+              zIndex: zIndex,
+            }
+          : {
+              position: "relative",
+            }),
+      }}
+    >
+      {showDimensionalTear && <DimensionalTearToken />}
+      <DecalImage path={bgDecalPath} />
+      {sprite ? (
+        <SpriteUnitImage
+          sprite={sprite}
+          alt={defaultAlt}
+          className={className}
+          scaled={scaleSprite}
+        />
+      ) : (
+        <BaseUnitImage
+          urlColor={urlColor}
+          unitType={unitType}
+          alt={defaultAlt}
+          className={className}
+        />
+      )}
+      <SpecialUnitsOverlay faction={faction} unitType={unitType} />
+      {!fighterOrInfantry && <DecalImage path={decalPath} />}
+      {showArticles && (
+        <LawOverlay
+          tokenPath={`/tokens/agenda_articles_of_war${tokenSuffix}.png`}
+          alt={`${defaultAlt} articles of war`}
+        />
+      )}
+      {showSchematics && (
+        <LawOverlay
+          tokenPath={`/tokens/agenda_publicize_weapon_schematics${tokenSuffix}.png`}
+          alt={`${defaultAlt} weapon schematics`}
+        />
+      )}
+
+      <DamageMarker
+        show={sustained}
+        alt={defaultAlt}
+        delayMs={damageMarkerDelayMs}
+      />
+
+      {galvanized && (
+        <GalvanizeMarker
+          alt="Galvanize Marker"
+          zIndex={zIndex ? zIndex + 1 : undefined}
+          unitType={unitType}
+        />
+      )}
+    </div>
+  );
+}
+
+type GalvanizeMarkerProps = {
+  alt: string;
+  zIndex?: number;
+  unitType: string;
+};
+
+function GalvanizeMarker({ alt, zIndex, unitType }: GalvanizeMarkerProps) {
+  const styles =
+    unitType === "mf"
+      ? {
+          right: "0%",
+          top: "25%",
+        }
+      : {
+          left: "70%",
+          top: "30%",
+        };
+  return (
+    <img
+      src={cdnImage("/extra/marker_galvanize.png")}
+      alt={alt}
+      style={{
+        position: "absolute",
+        ...styles,
+        transform: "translate(-50%, -50%)",
+        width: "28px",
+        zIndex: zIndex ? zIndex + 10000 : undefined,
+      }}
+    />
+  );
+}

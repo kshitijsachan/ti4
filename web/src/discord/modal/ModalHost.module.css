@@ -1,0 +1,138 @@
+.modalBody {
+  padding: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 16px 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.label {
+  color: var(--play-ink-bright);
+  font-family: var(--font-display);
+  font-size: var(--text-label);
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+
+.req {
+  margin-left: 3px;
+  color: rgb(var(--play-red));
+}
+
+.desc {
+  color: var(--play-ink-muted);
+  font-size: var(--text-meta);
+  margin-top: -2px;
+}
+
+.display {
+  font-size: var(--text-body);
+}
+
+.input {
+  width: 100%;
+  padding: 7px 9px;
+  background: var(--header-tab-input-bg, rgba(2, 6, 23, 0.86));
+  border: 1px solid var(--play-hairline-strong);
+  border-radius: 4px;
+  color: var(--play-ink-bright);
+  font: inherit;
+  font-size: var(--text-body);
+  line-height: 1.45;
+  resize: vertical;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.input::placeholder {
+  color: #8f979f;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--play-accent);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.45);
+}
+
+.counter {
+  align-self: flex-end;
+  color: var(--play-ink-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+}
+
+.error {
+  padding: 7px 9px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 3px;
+  color: #fca5a5;
+  font-size: var(--text-data);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--play-separator);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.cancel,
+.submit {
+  min-height: 30px;
+  padding: 4px 14px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: var(--text-data);
+  font-weight: var(--weight-title);
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+.cancel {
+  border: 1px solid transparent;
+  background: none;
+  color: var(--play-ink);
+}
+
+.cancel:hover {
+  color: var(--play-ink-bright);
+  text-decoration: underline;
+}
+
+.submit {
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.28);
+  color: var(--play-ink-bright);
+}
+
+.submit:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.4);
+}
+
+.submit:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.cancel:focus-visible,
+.submit:focus-visible {
+  outline: 1px solid var(--play-accent);
+  outline-offset: 1px;
+}

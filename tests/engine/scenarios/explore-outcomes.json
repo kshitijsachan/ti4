@@ -1,0 +1,103 @@
+{
+  "name": "explore-outcomes",
+  "description": "Explore cards with a choice (PoK hazardous/industrial/frontier + Codex): Ral Nel (active, infantry on Lisis/Velnor) resolves Expedition, Core Mine, Volatile Fuel Source, Local Fabricators, Functioning Base, Abandoned Warehouses, Merchant Station, Ion Storm and declines one, all through explore.outcome. Setup/explore commands run as seat1 (Crimson): regression for the explorer target (the command must not make Crimson the target of Ral Nel's Functioning Base prompt).",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    "/player stats commodities:2 faction_or_color:ralnel"
+  ],
+  "steps": [
+    {
+      "command": "/explore use explore_card_id:exp1 planet:lisis faction_or_color:ralnel"
+    },
+    {
+      "answer": {
+        "kind": "explore.outcome",
+        "option": "resolveExpeditionInf_lisis$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "command": "/explore use explore_card_id:cm1 planet:velnor faction_or_color:ralnel"
+    },
+    {
+      "answer": {
+        "kind": "explore.outcome",
+        "option": "resolveCoreMineInf_velnor$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "command": "/explore use explore_card_id:vfs1 planet:lisis faction_or_color:ralnel"
+    },
+    {
+      "answer": {
+        "kind": "explore.outcome",
+        "option": "resolveVolatileInf_lisis$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "command": "/explore use explore_card_id:lf1 planet:lisis faction_or_color:ralnel"
+    },
+    {
+      "answer": {
+        "kind": "explore.outcome",
+        "option": "resolveLocalFab_lisis"
+      },
+      "as": "ralnel"
+    },
+    {
+      "command": "/explore use explore_card_id:fb1 planet:velnor faction_or_color:ralnel"
+    },
+    {
+      "answer": {
+        "kind": "explore.outcome",
+        "option": "comm_for_AC$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "command": "/player stats commodities:2 faction_or_color:ralnel"
+    },
+    {
+      "command": "/explore use explore_card_id:ms1 faction_or_color:ralnel"
+    },
+    {
+      "answer": {
+        "kind": "explore.outcome",
+        "option": "resolveHarness"
+      },
+      "as": "ralnel"
+    },
+    {
+      "command": "/explore use explore_card_id:aw1 planet:velnor faction_or_color:ralnel"
+    },
+    {
+      "as": "ralnel",
+      "press": "convert_2_comms"
+    },
+    {
+      "command": "/explore use explore_card_id:cm2 planet:velnor faction_or_color:ralnel"
+    },
+    {
+      "answer": {
+        "kind": "explore.outcome",
+        "option": "decline_explore$"
+      },
+      "as": "ralnel"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.phase_of_game",
+        "eq": "action"
+      }
+    ]
+  }
+}

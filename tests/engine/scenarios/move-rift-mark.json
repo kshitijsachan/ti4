@@ -1,0 +1,91 @@
+{
+  "name": "move-rift-mark",
+  "description": "pbd104@59 + setup: letnev carrier and 2 infantry at 203; letnev activates 205 (trigger ringTile_205). 203->205 is 2 normally but 1 through the gravity rift at 204, so moving marks possiblyUsedRift (rift rolls offered later). Engine: direct /move (marks the rift itself); legacy: per-unit buttons + Done moving (TacticalActionOutputService.validateMoveValue marks it).",
+  "base": {
+    "recording": "pbd104",
+    "index": 59
+  },
+  "setup": [
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "203",
+        "unit_names": "carrier, 2 infantry",
+        "faction_or_color": "letnev"
+      }
+    },
+    {
+      "command": "player turn_start",
+      "options": {
+        "faction_or_color": "letnev"
+      }
+    }
+  ],
+  "trigger": {
+    "press": "FFCC_letnev_ringTile_205",
+    "as": "letnev"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "203",
+              "holder": "space",
+              "unit": "cv",
+              "count": 1
+            },
+            {
+              "from": "203",
+              "holder": "space",
+              "unit": "gf",
+              "count": 2
+            }
+          ]
+        }
+      },
+      "as": "letnev",
+      "legacy": [
+        {
+          "press": "FFCC_letnev_tacticalMoveFrom_203"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_letnev_unitTacticalMove_203_1_cv_rainbow"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_letnev_unitTacticalMove_203_2_gf_rainbow"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_letnev_doneWithOneSystem_203"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_letnev_concludeMove_205"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "stored.possiblyUsedRift",
+        "eq": "yes"
+      }
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558161017400328192",
+    "channel_id": "1558160984722505728",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "<:Yssaril:1558154714279968768> rolls for Cresius/Lazul Rex combat (round #1) <a:RollDice:1558154657107410944> :\n> `2x`<:destroyer:1558154778951942144> 1 rolls, hits on **9** [<:d10red_0:1558154675524599808><:d10red_9:1558154793812361216>] - 2 hits\n> `1x`<:cruiser:1558154650002259968> hits on **7** [<:d10grey_4:1558154659829514240>] - 0 hit\n\n**Total hits 2** :boom::boom:",
+    "timestamp": "2026-10-09T16:55:35.780Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

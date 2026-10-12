@@ -1,0 +1,90 @@
+/* The seats: a slim strip under the header, same surface, one hairline below. */
+.rail {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  height: 48px;
+  padding: 4px 12px;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--panel-hairline);
+}
+
+.seat {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 260px;
+}
+
+.seatButton {
+  flex: 1;
+  min-width: 0;
+  border-radius: 6px;
+}
+
+.seatButton > * {
+  width: 100%;
+}
+
+.seatButton:hover > * {
+  background: var(--socket-bg);
+}
+
+.seatButton:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-5);
+  outline-offset: -2px;
+}
+
+.card {
+  padding: 12px 14px;
+  border: var(--details-card-border);
+  background: var(--details-card-bg);
+}
+
+.more {
+  font-size: 12px;
+  font-weight: var(--weight-title);
+  color: var(--mantine-color-blue-4);
+}
+
+/* Phones: seats shrink to icon, cards and score; with many players the strip scrolls sideways. */
+@media (max-width: 640px) {
+  .rail {
+    justify-content: flex-start;
+    gap: 2px;
+    height: 44px;
+    padding: 4px 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .seat {
+    flex: 1 0 auto;
+  }
+}
+
+.detail {
+  width: min(1180px, calc(100vw - 32px));
+  max-width: none;
+}
+
+.detailBody {
+  padding-top: 4px;
+}
+
+.detailFoot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+}
+
+.hintRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detailTabs {
+  margin-bottom: 10px;
+}

@@ -1,0 +1,76 @@
+{
+  "name": "tech-secondary-aida",
+  "description": "Technology secondary (pbd101 r1): Ral Nel (owns AI Development Algorithm, given AMD + Plasma Scoring) follows, researches Carrier II, exhausts AI Development from the payment prompt, then pays Mez + Rep through payment.spend.",
+  "base": {
+    "recording": "pbd101",
+    "index": 46
+  },
+  "setup": [
+    "/tech add tech:amd faction_or_color:ralnel",
+    "/tech add tech:ps faction_or_color:ralnel"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "acquireATechWithSC_first"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "getTech_cv2"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "exhaustTech_aida",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "mez",
+            "rep"
+          ]
+        }
+      },
+      "as": "ralnel",
+      "legacy": [
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_mez_restech"
+          },
+          "as": "ralnel"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_rep_restech"
+          },
+          "as": "ralnel"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
+          "as": "ralnel"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=ralnel].techs",
+        "includes": "cv2"
+      }
+    ]
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558159863132061696",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "__Turn Order:__\n`1.`<:SC1:1558154754511732736><:sc_1_1:1558154800447750144>⁠<:sc_1_2:1558154804457504768>⁠<:sc_1_3:1558154808886689792>⁠<:sc_1_4:1558154811201945600>⁠<:sc_1_5:1558154789613862912>⁠<:sc_1_6:1558154793808166912><:SC6:1558154773893611520><:sc_6_1:1558154662711001088>⁠<:sc_6_2:1558154664065761280>⁠<:sc_6_3:1558154666318102528>⁠<:sc_6_4:1558154653718413312>⁠<:sc_6_5:1558154659405889536><:Mentak:1558154745624002560><@1558155013921046528> <:gold:1558154785268563968>**Gold** <:SpeakerToken:1558154788959551488>\n`4.`<:SC5:1558154766796849152><:sc_5_1:1558154729849225216>⁠<:sc_5_2:1558154735285043200>⁠<:sc_5_3:1558154737604493312>⁠<:sc_5_4:1558154741777825792><:SC4:1558154769242128384><:sc_4_1:1558154794831577088>⁠<:sc_4_2:1558154775839768576>⁠<:sc_4_3:1558154777853034496>⁠<:sc_4_4:1558154779832745984>⁠<:sc_4_5:1558154786208088064>⁠<:sc_4_6:1558154766239006720>⁠<:sc_4_7:1558154771259588608><:Yssaril:1558154714279968768><@1558155013925240832> <:camouflage:1558154748006367232>**Camouflage**\n`7.`<:SC7:1558154771846791168><:sc_7_1:1558154653902962688>⁠<:sc_7_2:1558154655614238720>⁠<:sc_7_3:1558154640900620288>⁠<:sc_7_4:1558154645145255936>⁠<:sc_7_5:1558154647896719360>⁠<:sc_7_6:1558154650379747328>⁠<:sc_7_7:1558154738703400960><:SC8:1558154780268953600><:sc_8_1:1558154640095313920>⁠<:sc_8_2:1558154827245158400>⁠<:sc_8_3:1558154632419737600>⁠<:sc_8_4:1558154633686417408>⁠<:sc_8_5:1558154636114919424><:Sol:1558154703500607488><@1558155013916852224> <:vapourwave:1558154672991240192>**Vapourwave**\n_ _",
+    "timestamp": "2026-10-09T16:51:00.581Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [
+      {
+        "id": "1558155013921046528",
+        "username": "bob",
+        "global_name": "Bob",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false,
+        "member": {
+          "roles": [
+            "1558155836839297024"
+          ],
+          "nick": null,
+          "avatar": null,
+          "banner": null,
+          "joined_at": "2026-10-09T16:31:44.439Z",
+          "premium_since": null,
+          "deaf": false,
+          "mute": false,
+          "flags": 0,
+          "pending": false,
+          "communication_disabled_until": null
+        }
+      },
+      {
+        "id": "1558155013925240832",
+        "username": "carol",
+        "global_name": "Carol",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false,
+        "member": {
+          "roles": [
+            "1558155836839297024"
+          ],
+          "nick": null,
+          "avatar": null,
+          "banner": null,
+          "joined_at": "2026-10-09T16:31:44.440Z",
+          "premium_since": null,
+          "deaf": false,
+          "mute": false,
+          "flags": 0,
+          "pending": false,
+          "communication_disabled_until": null
+        }
+      },
+      {
+        "id": "1558155013916852224",
+        "username": "alice",
+        "global_name": "Alice",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false,
+        "member": {
+          "roles": [
+            "1558155836839297024"
+          ],
+          "nick": null,
+          "avatar": null,
+          "banner": null,
+          "joined_at": "2026-10-09T16:31:44.438Z",
+          "premium_since": null,
+          "deaf": false,
+          "mute": false,
+          "flags": 0,
+          "pending": false,
+          "communication_disabled_until": null
+        }
+      }
+    ],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

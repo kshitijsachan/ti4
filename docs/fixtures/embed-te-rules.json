@@ -1,0 +1,117 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158517033107456",
+    "channel_id": "1558155837074178048",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "Hello <@&1558155836839297024>!\nIt looks like you are playing with Thunder's Edge. Since it's new, you might like some of the rules posted here for your convenience:",
+    "timestamp": "2026-10-09T16:45:39.646Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [
+      "1558155836839297024"
+    ],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [
+      {
+        "type": "rich",
+        "description": ">>> Players may venture to Thunder's Edge to unlock powerful new abilities and potentially earn the right to claim the planet of Thunder's Edge for their faction. Thunder's Edge begins the game in play, off the board, with its expedition side - the side divided into six \"slices\" - faceup.\n\n**__At the end of a player's turn__**, they may commit to the expedition. To do so, they choose an unclaimed slice of the expedition and pay the indicated cost, placing one of their control tokens in that slice to indicate that it has been claimed.\n\nOnce claimed, that slice cannot be claimed by another player, which means other players must choose a different cost to pay in order to contribute to the expedition. **__The first time a player claims one of the expedition slices, they gain their faction's breakthrough__**. A player can claim multiple expedition slices in a game, but must choose a different unclaimed slice each time they do so",
+        "title": "**__Thunder's Edge Expedition:__**",
+        "fields": [
+          {
+            "inline": false,
+            "name": "**__The expedition costs are as follows:__**",
+            "value": ">>> <:Resources_5:1558154656922861568> Spend 5 Resources\n<:Influence_5:1558154807380934656> Spend 5 Influence\n<:tg:1558154671703588864> Spend 3 Trade Goods\n<:ActionCard:1558154640514744320> Discard 2 Action Cards\n<:SecretObjective:1558154665143697408> Discard 1 Unscored Secret Objective\n<:NonUnitTechSkip:1558154781732765696> Exhaust 1 Technology Specialty Planet"
+          },
+          {
+            "inline": false,
+            "name": "**__When all slices are claimed:__**",
+            "value": ">>> The Expedition is complete; the player who claimed the final slice flips Thunder's Edge to its planet side and places it in a system of their choice that does not contain a planet, a supernova, or a printed wormhole. Then, the player with the most control tokens on the expedition places that many infantry on Thunder's Edge. In the case of a tie, the player who claimed the final slice chooses which tied player places infantry on Thunder's Edge. Thunder's Edge cannot be placed in The Fracture."
+          }
+        ]
+      },
+      {
+        "type": "rich",
+        "title": "**__<:SynergyBioticLeft:1558154734119026688><:SynergyCyberneticRight:1558154739131219968> Breakthroughs and Synergy:__**",
+        "fields": [
+          {
+            "inline": false,
+            "name": "**__Breakthrough:__**",
+            "value": ">>> A breakthrough is a new type of faction-specific component, most commonly gained by interacting with Thunder's Edge. A breakthrough will give each faction a unique new ability and grants synergy between two technology colors.\n- TIP: Use `/search rules search:expeditions` to learn more about Expeditions"
+          },
+          {
+            "inline": false,
+            "name": "**__Synergy:__**",
+            "value": ">>> Synergy links two colors of technology. A technology or technology specialty of a color that a player has synergy with can count as the other color instead, for the purposes of researching technology and for scoring technology-related objectives. Even so, a technology can only count as one or the other at any given time, not both.\n- EX: <:SynergyPropulsionLeft:1558154759712669696><:SynergyWarfareRight:1558154684185837568>  is an example of a breakthrough that grants Blue-Red synergy."
+          },
+          {
+            "inline": false,
+            "name": "**__Rolling for The Fracture:__**",
+            "value": ">>> Each time a breakthrough is gained, there is a possibility that The Fracture will come into play. When a player gains their breakthrough, regardless of the source, if The Fracture is not already in play, they roll one die. If their die roll is equal to 1 or 10, they put The Fracture into play."
+          }
+        ]
+      },
+      {
+        "type": "rich",
+        "description": ">>> Some game effects allow a player's units to coexist with other units on a planet. When a unit or units coexist with another player's units, they do not trigger combat. The player whose units triggered coexistence does not gain control of the planet; if they already controlled it, the player they are now coexisting with gains control of it instead, exhausted. Coexisting structures are always blockaded. If the coexisting player places, produces, or moves additional units onto that planet, those units also coexist. If a player's coexisting units become the only units on a planet, that player gains control of the planet.",
+        "title": "**__Coexist:__**",
+        "fields": [
+          {
+            "inline": false,
+            "name": "**__Bombardment:__**",
+            "value": ">>> Coexisting units can be bombarded. When a player makes a bombardment roll against a planet, they choose which of their units with bombardment are bombarding which other player's units, rolling against each player separately."
+          },
+          {
+            "inline": false,
+            "name": "**__Combat:__**",
+            "value": ">>> Coexisting units can have combat initiated against them by committing units to the planet that contains them, including units that they were already coexisting with. The activating player may choose not to engage the coexisting units, however, and leave the coexisting units in a state of coexistence. If a player does wish to engage coexisting units, they may optionally engage coexisting players' units after winning a combat against the planet's owner, initiating separate combats against any coexisting player as desired.\n\nLikewise, a coexisting player may choose to end their coexistence by activating the coexisting unit's system and committing the coexisting units against the planet they are coexisting on. If they win the ground combat, they cease coexisting and gain control of the planet as normal."
+          },
+          {
+            "inline": false,
+            "name": "**__Control & Objectives:__**",
+            "value": ">>> When scoring objectives, a coexisting player counts as controlling the planet they are coexisting on; they do not count as controlling the planet for any other game ability or effect.\n - NOTE: This also means that if you are coexisting on your own home planet, you still get to score objectives"
+          }
+        ]
+      },
+      {
+        "type": "rich",
+        "description": ">>> An __Entropic Scar__ is a new kind of anomaly. All unit abilities Sustain Damage, Production, Planetary Shield, Space Cannon, Bombardment, Deploy, and Anti-Fighter Barrage) cannot be used by or against units inside of an entropic scar. Text abilities are unaffected. Additionally, wormholes that would be placed inside of an entropic scar are discarded instead.\n\nAt the start of the status phase, a player that has ships in an entropic scar can spend a token from their strategy pool to gain one of their faction-specific technologies.",
+        "title": "**__Entropic Scar Anomaly:__**"
+      }
+    ],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

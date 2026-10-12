@@ -1,0 +1,93 @@
+{
+  "name": "te-ralnel-move",
+  "description": "Ral Nel (TE) movement abilities on pbd101 r1: Survival Instinct (startSurvival_<dest>[_<from>] -> moveSurvival_ -> finishSurvival_), mech Alarum/Forerunner (startForerunner_ -> moveForerunner_ -> finishForerunner_), Nano-Link courier (startCourierTransport_<pos>)",
+  "base": {
+    "recording": "pbd101",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/player turn_start faction_or_color:ralnel",
+    "/add_units tile_name:307 unit_names:\"mech mez\" faction_or_color:ralnel"
+  ],
+  "steps": [
+    {
+      "press": "FFCC_ralnel_startSurvival_306",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "startSurvival_306_307$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "moveSurvival_306_307_"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "startSurvival_306$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "finishSurvival_306"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "FFCC_ralnel_startForerunner_306",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "startForerunner_306_307$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "moveForerunner_306_307_"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "startForerunner_306$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "finishForerunner_306"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "startCourierTransport_306",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/faction.ability|leader.use|legacy/",
+        "option": "courierTransport_"
+      },
+      "as": "ralnel"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

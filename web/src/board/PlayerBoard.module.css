@@ -1,0 +1,380 @@
+/* ---------- a seat at rest: one quiet line ---------- */
+
+.seat {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px 0 8px;
+  border-radius: 6px;
+  color: var(--mantine-color-gray-2);
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+/* Whose turn: the seat is lit, with its colour underneath like a placard. */
+.active {
+  background: color-mix(in srgb, var(--player) 14%, transparent);
+}
+
+.active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--player);
+}
+
+.passed {
+  opacity: 0.5;
+}
+
+.icon,
+.iconBlank {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--lh-tight);
+}
+
+.faction {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: var(--weight-title);
+  color: var(--mantine-color-gray-0);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--mantine-color-gray-5);
+}
+
+.subText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.colorDot {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--player);
+}
+
+.scs {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.scTile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--sc);
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: var(--weight-title);
+  color: #fff;
+}
+
+/* A played card is turned face down: it stays in front of its owner, greyed. */
+.scPlayed {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--panel-hairline-strong);
+  color: var(--mantine-color-gray-5);
+}
+
+.vp {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.vpNum {
+  font-family: var(--font-data);
+  font-size: 18px;
+  font-weight: var(--weight-title);
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-gray-0);
+}
+
+.vpLabel {
+  font-size: 9px;
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-rail);
+  color: var(--mantine-color-gray-5);
+}
+
+/* Narrow seats (many players, phones) keep the icon, cards and score. */
+@media (max-width: 640px) {
+  .who {
+    display: none;
+  }
+
+  .seat {
+    gap: 5px;
+    padding: 0 6px 0 4px;
+  }
+
+  .icon,
+  .iconBlank {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* ---------- hover card: the seat's full readout ---------- */
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+  color: var(--mantine-color-gray-2);
+}
+
+.statsHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.statsIcon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.statsWho {
+  flex: 1;
+  min-width: 0;
+  line-height: var(--lh-tight);
+}
+
+.statsFaction {
+  font-size: 14px;
+  font-weight: var(--weight-title);
+  color: var(--mantine-color-gray-0);
+}
+
+.statsName {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--mantine-color-gray-5);
+  white-space: nowrap;
+}
+
+.statsStatus {
+  color: var(--mantine-color-gray-3);
+}
+
+.statsVp {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.statsVpOf {
+  font-size: 10px;
+  color: var(--mantine-color-gray-5);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-hairline);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.rowLabel {
+  font-size: 10px;
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--mantine-color-gray-6);
+}
+
+.rowValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.rowIcon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+.num {
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-gray-0);
+}
+
+.unit {
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--mantine-color-gray-5);
+}
+
+.scFull {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 6px;
+}
+
+.scName {
+  font-size: 12px;
+  color: var(--mantine-color-gray-1);
+}
+
+.scNamePlayed {
+  color: var(--mantine-color-gray-5);
+}
+
+.speaker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--mantine-color-gray-4);
+}
+
+.speakerImg {
+  height: 14px;
+}
+
+.econ {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: var(--weight-rail);
+  color: #111;
+}
+
+.res {
+  background: var(--mantine-color-yellow-5);
+}
+
+.inf {
+  background: var(--mantine-color-blue-4);
+}
+
+.dim {
+  opacity: 0.35;
+}
+
+.tech {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: var(--weight-title);
+  color: #fff;
+}
+
+.blue {
+  background: var(--mantine-color-blue-7);
+}
+
+.green {
+  background: var(--mantine-color-green-8);
+}
+
+.red {
+  background: var(--mantine-color-red-8);
+}
+
+.yellow {
+  background: var(--mantine-color-yellow-7);
+  color: #1a1a1a;
+}
+
+.leader {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: var(--weight-title);
+}
+
+.leaderState {
+  font-family: var(--font-text);
+  font-weight: normal;
+  color: var(--mantine-color-gray-5);
+}
+
+.leader_ready {
+  color: var(--mantine-color-gray-0);
+}
+
+.leader_exhausted,
+.leader_locked,
+.leader_gone {
+  color: var(--mantine-color-gray-6);
+}
+
+.hint {
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-hairline);
+  font-size: 11px;
+  color: var(--mantine-color-gray-5);
+}

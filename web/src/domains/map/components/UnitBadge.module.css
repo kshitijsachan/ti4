@@ -1,0 +1,40 @@
+.unitBadge {
+  position: relative;
+  width: 70px;
+  height: 35px;
+}
+
+.unitIcon {
+  position: absolute;
+}
+
+.unitCountContainer {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.unitCount {
+  font-size: 24px;
+  font-weight: var(--weight-rail);
+  font-family: var(--font-display);
+  text-align: center;
+  color: white;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+
+  background: white;
+  -webkit-background-clip: text;
+  -webkit-text-stroke: 4px transparent;
+}
+
+.unitCount.whiteText {
+  background: black;
+}

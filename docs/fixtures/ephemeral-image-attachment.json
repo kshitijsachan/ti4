@@ -1,0 +1,79 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558163895976329216",
+    "channel_id": "1558163817383460864",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "Here is a preview of the selected map template:",
+    "timestamp": "2026-10-09T17:07:02.086Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [
+      {
+        "id": "1558163895972134912",
+        "filename": "3pStaticEq_2026.10.09_-_17.07.02.webp",
+        "size": 374500,
+        "url": "/attachments/1558163895972134912/3pStaticEq_2026.10.09_-_17.07.02.webp",
+        "proxy_url": "/attachments/1558163895972134912/3pStaticEq_2026.10.09_-_17.07.02.webp",
+        "content_type": "application/octet-stream",
+        "width": 2300,
+        "height": 2300
+      }
+    ],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 64,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    },
+    "webhook_id": "1558153075842220033",
+    "application_id": "1558153075842220033",
+    "interaction_metadata": {
+      "id": "1558163892960624640",
+      "type": 3,
+      "user": {
+        "id": "1558155013925240832",
+        "username": "carol",
+        "global_name": "Carol",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false
+      },
+      "authorizing_integration_owners": {
+        "0": "1558153075842220032"
+      }
+    },
+    "ephemeral": true
+  }
+}

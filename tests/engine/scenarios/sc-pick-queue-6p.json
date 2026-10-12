@@ -1,0 +1,23 @@
+{
+  "name": "sc-pick-queue-6p",
+  "description": "6-player strategy phase (pbd101 r1, TE, Naalu with Telepathic): Mentak queues Construction then Politics before its turn, restarts the queue and queues Politics then Construction; Nekro takes Politics, Naalu Leadership, Ral Nel Imperial, Titans Warfare; Mentak's queue picks Construction (Politics is taken); Mahact picks Diplomacy last, ending the phase: trade goods go on the unpicked Trade and Technology, Naalu's 0 token is handed out.",
+  "base": { "recording": "pbd101", "index": 36 },
+  "steps": [
+    { "press": "queueScPick_4", "as": "mentak" },
+    { "press": "queueScPick_3", "as": "mentak" },
+    { "press": "restartSCQueue", "as": "mentak" },
+    { "press": "queueScPick_3", "as": "mentak" },
+    { "press": "queueScPick_4", "as": "mentak" },
+    { "answer": { "kind": "strategy_card.pick", "value": { "strategyCard": 3 } }, "as": "nekro" },
+    { "answer": { "kind": "strategy_card.pick", "value": { "strategyCard": 1 } }, "as": "naalu" },
+    { "answer": { "kind": "strategy_card.pick", "value": { "strategyCard": 8 } }, "as": "ralnel" },
+    { "answer": { "kind": "strategy_card.pick", "value": { "strategyCard": 6 } }, "as": "titans" },
+    { "wait": 3000 },
+    { "answer": { "kind": "strategy_card.pick", "value": { "strategyCard": 2 } }, "as": "mahact" },
+    { "wait": 3000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "game.phase_of_game", "eq": "action" } ]
+  }
+}

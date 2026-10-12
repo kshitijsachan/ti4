@@ -1,0 +1,14 @@
+{
+  "name": "te-void-tether",
+  "description": "Empyrean Void Tether (te.breakthrough, pbd105 r1): addVoidTetherStep1 -> addVoidTetherStep2_<pos> -> addVoidTetherStep3_<pos> -> newVoidTether_<pos> -> placeVoidTether_<pos>_<dir>",
+  "base": { "recording": "pbd105", "index": 113, "repost": false },
+  "setup": [ "/breakthrough unlock breakthrough:empyreanbt faction_or_color:empyrean" ],
+  "trigger": { "press": "FFCC_empyrean_addVoidTetherStep1", "as": "empyrean" },
+  "steps": [
+    { "answer": { "kind": "te.breakthrough", "option": "addVoidTetherStep2_" }, "as": "empyrean" },
+    { "answer": { "kind": "te.breakthrough", "option": "addVoidTetherStep3_" }, "as": "empyrean" },
+    { "answer": { "kind": "te.breakthrough", "option": "newVoidTether_" }, "as": "empyrean" },
+    { "answer": { "kind": "te.breakthrough", "option": "placeVoidTether_" }, "as": "empyrean" }
+  ],
+  "expect": { "invariants": true }
+}

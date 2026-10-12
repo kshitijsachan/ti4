@@ -1,0 +1,60 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158717676027904",
+    "channel_id": "1558155837137092608",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "",
+    "timestamp": "2026-10-09T16:46:27.483Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [
+      {
+        "id": "1558158717671833600",
+        "filename": "pbd1_2026.10.09_-_16.46.27.webp",
+        "size": 755678,
+        "url": "/attachments/1558158717671833600/pbd1_2026.10.09_-_16.46.27.webp",
+        "proxy_url": "/attachments/1558158717671833600/pbd1_2026.10.09_-_16.46.27.webp",
+        "content_type": "application/octet-stream",
+        "width": 2940,
+        "height": 4650
+      }
+    ],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      /*
+       * A player link (/play?t=…) stores its seat token now, before any
+       * stylesheet or the app's code loads: a page left or replaced while that
+       * code is still loading (a slow server, a second click) would otherwise
+       * lose the seat, and the next page would land on the home page signed
+       * out. Mirrors setToken in src/play/session.ts; the app still strips the
+       * token from the address bar.
+       */
+      (function () {
+        try {
+          if (!/^\/(play|game\/)/.test(location.pathname)) return;
+          var q = new URLSearchParams(location.search);
+          var t = q.get("t");
+          if (!t) return;
+          sessionStorage.setItem("ti4online.token", t);
+          if (q.get("tab") !== "1") localStorage.setItem("ti4online.token", t);
+        } catch (e) {
+          /* storage blocked: the app keeps the token for the page */
+        }
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/favico.png" />
+    <!--
+      Text and data faces. Slider (self-hosted, styles/fonts.css) carries display;
+      IBM Plex Sans carries UI text and IBM Plex Mono every numeral. One
+      superfamily for text and data keeps them coherent, and Plex holds up at the
+      9-12px sizes this interface actually runs at. Only the weights in the type
+      scale are requested, latin only, and swap so text paints immediately.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Enable pinch-zoom out below 1 and allow user scaling -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5, user-scalable=yes"
+    />
+    <meta
+      name="description"
+      content="TI4 Online – play Twilight Imperium 4th Edition with friends in the browser."
+    />
+    <title>TI4 Online</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

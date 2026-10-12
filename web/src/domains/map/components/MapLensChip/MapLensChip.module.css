@@ -1,0 +1,50 @@
+.chip {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-floating-toolbar);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--mantine-color-blue-7);
+  border-radius: 999px;
+  background: var(--mantine-color-dark-8);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  color: var(--mantine-color-gray-1);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mantine-color-blue-4);
+}
+
+.label {
+  font-weight: 600;
+}
+
+.detail {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--mantine-color-gray-5);
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--mantine-color-gray-4);
+}
+
+.close:hover {
+  color: var(--mantine-color-gray-0);
+  background: var(--mantine-color-dark-5);
+}

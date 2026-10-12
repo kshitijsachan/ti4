@@ -1,0 +1,112 @@
+.wrapper {
+  position: relative;
+  border-radius: 8px;
+  height: 100%;
+}
+
+/*
+ * The active player's card breathes in their faction color (desktop only).
+ * The rest and peak glows sit on two pseudo-elements that crossfade, because
+ * animating box-shadow repaints every frame and kept the main thread ~35% busy
+ * at idle. Opacity runs on the compositor.
+ */
+.activeCard::before,
+.activeCard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.activeCard::before {
+  box-shadow:
+    0 0 0 1px var(--active-glow-weak),
+    0 0 14px var(--active-glow-weak);
+  animation: activeCardRest 4.5s ease-in-out infinite;
+}
+
+.activeCard::after {
+  box-shadow:
+    0 0 0 1px var(--active-glow),
+    0 0 26px var(--active-glow-weak),
+    0 0 10px var(--active-glow);
+  opacity: 0;
+  animation: activeCardBreath 4.5s ease-in-out infinite;
+}
+
+@keyframes activeCardRest {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes activeCardBreath {
+  50% {
+    opacity: 1;
+  }
+}
+
+:global(.mobile) .activeCard::before,
+:global(.mobile) .activeCard::after,
+:global(.theme-mobile) .activeCard::before,
+:global(.theme-mobile) .activeCard::after {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activeCard {
+    box-shadow: 0 0 0 1px var(--active-glow-weak);
+  }
+
+  .activeCard::before,
+  .activeCard::after {
+    display: none;
+  }
+}
+
+/*
+ * The card is a panel and the modules inside it are subpanels. The bevel gives
+ * the ground the same milled edge the plates have, so the whole player area
+ * reads as one enclosure rather than parts scattered on a black field.
+ */
+.paper {
+  height: 100%;
+  position: relative;
+  max-width: 100%;
+  background: var(--player-card-box-bg);
+  border: 1px solid var(--panel-hairline-strong);
+  box-shadow: var(--machined-bevel), var(--player-card-box-shadow, none);
+}
+
+/*
+ * Player identity key. A full colored border around the card shouts, and with
+ * eight cards stacked it turns the column into a stack of highlighter outlines.
+ * A short band notched into the top edge identifies the player just as fast and
+ * lets the card keep the neutral chrome everything else uses.
+ */
+.colorBand {
+  position: absolute;
+  top: 0;
+  left: 15px;
+  width: 36px;
+  height: 3px;
+  z-index: 2;
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
+  pointer-events: none;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Theme ambience layer; themes define --player-card-inner-glow (default none) */
+.innerGlow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--player-card-inner-glow);
+}

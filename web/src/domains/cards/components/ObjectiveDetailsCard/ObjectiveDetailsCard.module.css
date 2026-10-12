@@ -1,0 +1,27 @@
+.factionIconBox {
+  flex-shrink: 0;
+}
+
+.factionName {
+  width: 70px;
+  letter-spacing: var(--track-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.playerName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progressValueBox {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+

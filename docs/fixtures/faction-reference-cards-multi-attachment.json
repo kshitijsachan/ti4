@@ -1,0 +1,80 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158903143956480",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "Here are the quick reference cards for the factions in this game.\n-# A reminder that these reference cards are general overviews, and not specific mechanical text.",
+    "timestamp": "2026-10-09T16:47:11.702Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [
+      {
+        "id": "1558158903122984960",
+        "filename": "sol_ref_2026.10.09_-_16.47.11.webp",
+        "size": 65890,
+        "url": "/attachments/1558158903122984960/sol_ref_2026.10.09_-_16.47.11.webp",
+        "proxy_url": "/attachments/1558158903122984960/sol_ref_2026.10.09_-_16.47.11.webp",
+        "content_type": "application/octet-stream",
+        "width": 858,
+        "height": 500
+      },
+      {
+        "id": "1558158903127179264",
+        "filename": "mentak_ref_2026.10.09_-_16.47.11.webp",
+        "size": 66140,
+        "url": "/attachments/1558158903127179264/mentak_ref_2026.10.09_-_16.47.11.webp",
+        "proxy_url": "/attachments/1558158903127179264/mentak_ref_2026.10.09_-_16.47.11.webp",
+        "content_type": "application/octet-stream",
+        "width": 858,
+        "height": 500
+      },
+      {
+        "id": "1558158903131373568",
+        "filename": "yssaril_ref_2026.10.09_-_16.47.11.webp",
+        "size": 60224,
+        "url": "/attachments/1558158903131373568/yssaril_ref_2026.10.09_-_16.47.11.webp",
+        "proxy_url": "/attachments/1558158903131373568/yssaril_ref_2026.10.09_-_16.47.11.webp",
+        "content_type": "application/octet-stream",
+        "width": 858,
+        "height": 500
+      }
+    ],
+    "embeds": [],
+    "reactions": [],
+    "pinned": true,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

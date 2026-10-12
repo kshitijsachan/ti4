@@ -1,0 +1,45 @@
+{
+  "name": "relic-codex",
+  "description": "The Codex: Ral Nel (3 action cards discarded first) purges The Codex as a component action and takes a discarded action card (codexCardPick_).",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "ac discard_random",
+      "options": {
+        "count": 3,
+        "faction_or_color": "crimson"
+      }
+    },
+    {
+      "command": "relic draw_specific",
+      "options": {
+        "relic": "codex",
+        "player": "${faction:ralnel}",
+        "force": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "press": "FFCC_ralnel_componentActionRes_relic_codex",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "/./",
+        "option": "codexCardPick_"
+      },
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

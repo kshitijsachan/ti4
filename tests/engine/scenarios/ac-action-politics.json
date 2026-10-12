@@ -1,0 +1,102 @@
+{
+  "name": "ac-action-politics",
+  "description": "pbd72 r3 agenda phase right after Conscription is flipped: Winnu plays Insider Information, Ancient Burial Sites (Arborec), Assassinate Representative (Arborec) and Veto through action_card.play / .resolve / .target. Five starting cards are discarded first (playAC refuses while over the hand limit). Winnu's own Ancient Burial Sites (handle 805) is kept in hand and played; Confounding Legal Text (759) is discarded instead.",
+  "base": {
+    "recording": "pbd72",
+    "index": 759,
+    "repost": false
+  },
+  "setup": [
+    "/ac discard action_card_id:49 faction_or_color:winnu",
+    "/ac discard action_card_id:759 faction_or_color:winnu",
+    "/ac discard action_card_id:810 faction_or_color:winnu",
+    "/ac discard action_card_id:368 faction_or_color:winnu",
+    "/ac discard action_card_id:431 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:insider faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:assassin faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:veto faction_or_color:winnu"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "insider"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveInsiderInformation"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "abs"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveABSStep1"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "absStep2_arborec"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "assassin"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveAssRepsStep1"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "/^action_card\\.(target|step)$/",
+        "option": "assRepsStep2_arborec"
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "veto"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "action_card.resolve",
+        "option": "resolveVeto"
+      },
+      "as": "winnu"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

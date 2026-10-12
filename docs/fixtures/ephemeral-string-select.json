@@ -1,0 +1,101 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558163862480617472",
+    "channel_id": "1558163817383460864",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "Select a new setting for Map Template",
+    "timestamp": "2026-10-09T17:06:54.100Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 64,
+    "components": [
+      {
+        "components": [
+          {
+            "min_values": 1,
+            "custom_id": "jmfA_main.game_changeTemplate_0",
+            "max_values": 1,
+            "options": [
+              {
+                "default": false,
+                "label": "3pInPersonHyperlanes",
+                "value": "3pInPersonHyperlanes"
+              },
+              {
+                "default": false,
+                "label": "3pHyperlanes",
+                "value": "3pHyperlanes"
+              },
+              {
+                "default": false,
+                "label": "3pStaticEq",
+                "value": "3pStaticEq"
+              }
+            ],
+            "disabled": false,
+            "placeholder": "Select an option",
+            "type": 3,
+            "id": 2
+          }
+        ],
+        "type": 1,
+        "id": 1
+      }
+    ],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    },
+    "webhook_id": "1558153075842220033",
+    "application_id": "1558153075842220033",
+    "interaction_metadata": {
+      "id": "1558163862350594048",
+      "type": 3,
+      "user": {
+        "id": "1558155013925240832",
+        "username": "carol",
+        "global_name": "Carol",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "bot": false
+      },
+      "authorizing_integration_owners": {
+        "0": "1558153075842220032"
+      }
+    },
+    "ephemeral": true
+  }
+}

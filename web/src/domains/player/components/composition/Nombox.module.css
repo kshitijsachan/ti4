@@ -1,0 +1,109 @@
+.compactNombox {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: max-content;
+  min-width: 0;
+  max-width: 128px;
+  padding: 8px 10px !important;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.04) 0%, rgba(220, 38, 38, 0.02) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.compactTitle {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 8px;
+  color: var(--mantine-color-red-3);
+  font-size: 10px;
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: var(--weight-rail);
+  line-height: 1;
+  letter-spacing: var(--track-rail);
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.compactGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.compactFaction {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.compactFactionHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.compactFactionName {
+  color: var(--mantine-color-red-2);
+  font-weight: var(--weight-title);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compactFactionIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.compactUnitsRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 22px;
+}
+
+.compactUnitGroup {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.compactUnitContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.compactUnitImage {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+.compactUnitImage:global(.unit-sprite) {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.compactCountBadge {
+  color: var(--mantine-color-red-2);
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: var(--weight-rail);
+  font-size: 10px;
+  margin-left: 1px;
+  line-height: 1;
+}

@@ -1,0 +1,65 @@
+import { PlayerData } from "@/entities/data/types";
+
+const INVALID_FACTION_VALUES = new Set(["", "null", "neutral"]);
+
+function cleanDisplayName(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed.toLowerCase() === "null") return null;
+  return trimmed;
+}
+
+/** The bot's Keleres ids carry the flavor (keleresa / keleresm / keleresx): players just say "Keleres". */
+const KELERES_FLAVOR_ID = /^keleres[amx]$/i;
+
+/** A faction id as players say it, where the raw id reads wrong ("keleresx" → "Keleres"). */
+export function factionKeyDisplayName(faction: string) {
+  return KELERES_FLAVOR_ID.test(faction) ? "Keleres" : faction;
+}
+
+export function getPlayerFactionDisplayName(player: PlayerData) {
+  const name =
+    cleanDisplayName(player.displayName) ??
+    cleanDisplayName(player.flexibleDisplayName) ??
+    player.faction;
+  return factionKeyDisplayName(name);
+}
+
+function hasAssignedFaction(
+  player?: PlayerData | null,
+): player is PlayerData {
+  if (!player) return false;
+  const factionValue =
+    typeof player.faction === "string" ? player.faction.trim() : "";
+
+  if (!factionValue) return false;
+  return !INVALID_FACTION_VALUES.has(factionValue.toLowerCase());
+}
+
+export function filterPlayersWithAssignedFaction(playerData: PlayerData[]) {
+  return playerData.filter(hasAssignedFaction);
+}
+
+export function calculateArmyRankings(
+  playerData: PlayerData[],
+): Record<string, number> {
+  const armyValues = playerData.map((player) => {
+    const totalValue =
+      (player.spaceArmyHealth ?? 0) +
+      (player.groundArmyHealth ?? 0) +
+      (player.spaceArmyCombat ?? 0) * 2 +
+      (player.groundArmyCombat ?? 0) * 2;
+    return {
+      faction: player.faction,
+      totalValue,
+    };
+  });
+
+  armyValues.sort((a, b) => b.totalValue - a.totalValue);
+
+  const rankings: Record<string, number> = {};
+  armyValues.forEach((item, index) => {
+    rankings[item.faction] = index + 1;
+  });
+
+  return rankings;
+}

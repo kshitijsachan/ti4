@@ -1,0 +1,240 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558164008383676416",
+    "channel_id": "1558163817383460864",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "",
+    "timestamp": "2026-10-09T17:07:28.887Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 32768,
+    "components": [
+      {
+        "type": 10,
+        "content": "Use the buttons to enable or disable various homebrew options:",
+        "id": 1
+      },
+      {
+        "components": [
+          {
+            "components": [
+              {
+                "type": 10,
+                "content": "### <:TwilightKart:1558154749159800832> __Twilight Kart: Destroyer Cup__",
+                "id": 4
+              },
+              {
+                "type": 10,
+                "content": "*29 Unit Upgrades, 5 Edicts, and 25 Action Cards. For use with Twilight's Fall. Can be combined with Twilight Kart: Nova Cup or used standalone.*\n- [Google Sheet](https://docs.google.com/spreadsheets/d/1RMZd-Gu8SuArRtlS_9IxcksDjN8yuEaCEAbaP7ws3sk/edit?usp=sharing)\n- [Assets Folder](https://drive.google.com/drive/folders/1OMrhOYkMDSBjUOk95fF6_nLegivHYNfh?usp=sharing)\n\n",
+                "id": 5
+              },
+              {
+                "type": 10,
+                "content": "-# Credits: Disasper, OnTheWind, and andcat. With special thanks to QuantumOctopus, SqueamishEmu, Jazzxhands, Wekker, Tactic Blue",
+                "id": 6
+              }
+            ],
+            "type": 9,
+            "accessory": {
+              "emoji": {
+                "name": "TwilightKart",
+                "animated": false,
+                "id": "1558154749159800832"
+              },
+              "custom_id": "toggleTfHomebrew_tk_destroyer_cup",
+              "style": 3,
+              "disabled": false,
+              "label": "Enable Twilight Kart: Destroyer Cup",
+              "type": 2,
+              "id": 7
+            },
+            "id": 3
+          },
+          {
+            "components": [
+              {
+                "type": 10,
+                "content": "### <:TkNovaCup:1558154804646248448> __Twilight Kart: Nova Cup__",
+                "id": 9
+              },
+              {
+                "type": 10,
+                "content": "*8 Alternate Mahact Kings, 13 Reworked Genomes, and 1 Reworked Action Card. For use with Twilight's Fall. Can be combined with Twilight Kart: Destroyer Cup or used standalone.*\n- [Google Sheet](https://docs.google.com/spreadsheets/d/1k2S4_cm96fKZ-qHHZXAxFekM6uoqAC8Ysf0oxHh4R8c/edit?usp=sharing)\n- [Assets Folder](https://drive.google.com/drive/folders/1Dd192T3VHtdUD3te1soVvgFXjETEb8pR?usp=sharing)\n\n",
+                "id": 10
+              },
+              {
+                "type": 10,
+                "content": "-# Credits: Disasper, OnTheWind, and andcat. With special thanks to SqueamishEmu, El Blasto, JayCyrZak, QuantumOctopus, Wekker, RoundtreeBard",
+                "id": 11
+              }
+            ],
+            "type": 9,
+            "accessory": {
+              "emoji": {
+                "name": "TkNovaCup",
+                "animated": false,
+                "id": "1558154804646248448"
+              },
+              "custom_id": "toggleTfHomebrew_tk_nova_cup",
+              "style": 3,
+              "disabled": false,
+              "label": "Enable Twilight Kart: Nova Cup",
+              "type": 2,
+              "id": 12
+            },
+            "id": 8
+          },
+          {
+            "components": [
+              {
+                "type": 10,
+                "content": "###  __Twilight's Fall: Blue Reverie__",
+                "id": 14
+              },
+              {
+                "type": 10,
+                "content": "*Twilight's Fall Mahact King*\n",
+                "id": 15
+              },
+              {
+                "type": 10,
+                "content": "-# Credits: TacticBlue",
+                "id": 16
+              }
+            ],
+            "type": 9,
+            "accessory": {
+              "custom_id": "toggleTfHomebrew_tf_br",
+              "style": 3,
+              "disabled": false,
+              "label": "Enable WhiteTF",
+              "type": 2,
+              "id": 17
+            },
+            "id": 13
+          },
+          {
+            "components": [
+              {
+                "type": 10,
+                "content": "### <:DiscordantStars:1558154796958089216> __Twilight Discordant Stars__",
+                "id": 19
+              },
+              {
+                "type": 10,
+                "content": "*73 abilities right now for use with Twilight's Fall*\n- [Google Sheet](https://docs.google.com/document/d/1214N4Py1NqvkQzFN5YULKiR7rmn1qpf4OdFqb8_vQUg/edit?tab=t.0#heading=h.edh8li2jdsvb)\n\n",
+                "id": 20
+              },
+              {
+                "type": 10,
+                "content": "-# Credits: Tactic Blue",
+                "id": 21
+              }
+            ],
+            "type": 9,
+            "accessory": {
+              "emoji": {
+                "name": "DiscordantStars",
+                "animated": false,
+                "id": "1558154796958089216"
+              },
+              "custom_id": "toggleTfHomebrew_twilight_ds",
+              "style": 3,
+              "disabled": false,
+              "label": "Enable Discordant Stars",
+              "type": 2,
+              "id": 22
+            },
+            "id": 18
+          },
+          {
+            "components": [
+              {
+                "type": 10,
+                "content": "### <:Monuments:1558154747033288704> __Monuments+__",
+                "id": 24
+              },
+              {
+                "type": 10,
+                "content": "*new Structure type Monument, overhaul of SC4, new SOs, Agendas, and ACs*\n- Assets: https://drive.google.com/drive/folders/1U5TTjWyG_qx5q_tyxnLiJ7482_AlkKs1?usp=drive_link\n- Official channel: https://discord.com/channels/743629929484386395/1205395696950321172\n\n",
+                "id": 25
+              },
+              {
+                "type": 10,
+                "content": "-# Credits: Blarknob",
+                "id": 26
+              }
+            ],
+            "type": 9,
+            "accessory": {
+              "emoji": {
+                "name": "Monuments",
+                "animated": false,
+                "id": "1558154747033288704"
+              },
+              "custom_id": "toggleTfHomebrew_monuments",
+              "style": 3,
+              "disabled": false,
+              "label": "Enable Monuments+",
+              "type": 2,
+              "id": 27
+            },
+            "id": 23
+          }
+        ],
+        "spoiler": false,
+        "type": 17,
+        "id": 2
+      },
+      {
+        "components": [
+          {
+            "custom_id": "deleteButtons",
+            "style": 2,
+            "disabled": false,
+            "label": "Done",
+            "type": 2,
+            "id": 29
+          }
+        ],
+        "type": 1,
+        "id": 28
+      }
+    ],
+    "sticker_items": [],
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "faction-jolnar",
+  "description": "Jol-Nar: hero Rin (jnHeroSwapOut_<tech> -> swapTechs__<out>__<in>), agent Doctor Sucaban (jolNarAgentRemoval_<pos>_<holder>)",
+  "base": {
+    "recording": "pbd110",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:jolnarhero faction_or_color:jolnar"
+  ],
+  "trigger": {
+    "press": "FFCC_jolnar_jnHeroSwapOut_nm",
+    "as": "jolnar"
+  },
+  "steps": [
+    {
+      "press": "jolNarAgentRemoval_304_nar",
+      "as": "jolnar"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

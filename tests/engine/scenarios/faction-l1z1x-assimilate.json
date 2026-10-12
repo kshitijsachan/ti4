@@ -1,0 +1,34 @@
+{
+  "name": "faction-l1z1x-assimilate",
+  "description": "L1Z1X Assimilate (live pbd161): ground combat on Xxcha's Archon Tau (2 infantry + PDS). With Xxcha infantry still there the combat buttons must NOT offer assimilate_archontau; after the defenders are gone, the restarted ground-combat buttons offer it and pressing it replaces the PDS. Check the --buttons output of steps 2 and 4.",
+  "base": {
+    "recording": "pbd104",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/player turn_start faction_or_color:l1z1x",
+    "/add_units tile_name:316 unit_names:\"3 infantry archontau\" faction_or_color:l1z1x coexist:true"
+  ],
+  "trigger": {
+    "press": "startCombatOn_archontau",
+    "as": "l1z1x"
+  },
+  "steps": [
+    {
+      "command": "/remove_units tile_name:316 unit_names:\"2 infantry archontau\" faction_or_color:xxcha",
+      "as": "l1z1x"
+    },
+    {
+      "press": "startCombatOn_archontau",
+      "as": "l1z1x"
+    },
+    {
+      "press": "FFCC_l1z1x_assimilate_archontau",
+      "as": "l1z1x"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

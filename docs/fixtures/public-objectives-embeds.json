@@ -1,0 +1,68 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558159734803136512",
+    "channel_id": "1558155837090955264",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "",
+    "timestamp": "2026-10-09T16:50:29.985Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [
+      {
+        "type": "rich",
+        "color": 16762880,
+        "footer": {
+          "text": ""
+        },
+        "description": "Have 1 or more ships in 2 systems that are adjacent to Mecatol Rex's system.",
+        "title": "<:Public1alt:1558154819674439680>__**Intimidate Council**__"
+      },
+      {
+        "type": "rich",
+        "color": 16762880,
+        "footer": {
+          "text": ""
+        },
+        "description": "Have units in 3 systems on the edge of the game board other than your home system.\n-# [The Wormhole Nexus and The Fracture are on the edge.]",
+        "title": "<:Public1alt:1558154819674439680>__**Populate the Outer Rim**__"
+      }
+    ],
+    "reactions": [],
+    "pinned": true,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

@@ -1,0 +1,8 @@
+# Only what deploy/bot.Dockerfile needs (it fetches the bot source itself).
+*
+!bot/UPSTREAM_COMMIT
+!bot/fetch-upstream.sh
+!bot/patches/
+!deploy/bot-entrypoint.sh
+!deploy/bot-healthcheck.sh
+!deploy/mvn-build.sh

@@ -1,0 +1,73 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--main-bg);
+}
+
+/*
+ * The table. The transform makes it the containing block for the map's
+ * position: fixed tooltips and controls, so they stay on the table instead of
+ * sliding under the header and seats.
+ */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  transform: translateZ(0);
+  --map-viewport-top: 0px;
+  --map-viewport-height: 100%;
+}
+
+/* What just happened: one line at the top of the table that fades away again. */
+.ticker {
+  position: absolute;
+  top: 10px;
+  left: calc((100% - var(--board-reserve-right, 0px)) / 2);
+  z-index: var(--z-zoom-controls);
+  display: flex;
+  justify-content: center;
+  width: min(560px, calc(100% - var(--board-reserve-right, 0px) - 120px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.ticker > * {
+  pointer-events: auto;
+}
+
+/* Your hand: a quiet bar at the bottom edge of the table, in front of you. */
+.hand {
+  position: absolute;
+  left: calc((100% - var(--board-reserve-right, 0px)) / 2);
+  bottom: 0;
+  z-index: var(--z-floating-panel);
+  transform: translateX(-50%);
+  transition: left 240ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hand {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .ticker {
+    display: none;
+  }
+}
+
+/* The decision popup docks right (a bottom sheet on phones); keep the hand bar uncovered. */
+.decision.decision {
+  padding-bottom: 48px;
+}
+
+@media (min-width: 721px) {
+  .decision.decision {
+    padding: 12px 12px 48px;
+  }
+}

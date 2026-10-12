@@ -1,0 +1,29 @@
+{
+  "name": "te-firmament",
+  "description": "Firmament -> Obsidian (TE): plot picker (te.plot addFactionTokenToPlot_<plot>_<faction>, removeFactionTokenFromPlot_), Puppets of the Blade flip (componentActionRes_ability_puppetsoftheblade, faction.ability), then the Obsidian plot reveals: Seethe (revealSeethe_<f> -> resolveSeethe_<planet>) and Extract (revealExtract_<f> -> free tech)",
+  "base": { "recording": "pbd116", "index": 42, "repost": false },
+  "setup": [
+    "/planet add planet:bereg faction_or_color:hacan",
+    "/add_units tile_name:211 unit_names:\"2 infantry bereg\" faction_or_color:hacan",
+    "/player turn_start faction_or_color:firmament"
+  ],
+  "trigger": { "press": "addFactionTokenToPlot_seethe", "as": "ruby" },
+  "steps": [
+    { "answer": { "kind": "te.plot", "option": "^addFactionTokenToPlot_seethe_hacan$" }, "as": "ruby" },
+    { "press": "addFactionTokenToPlot_extract", "as": "ruby" },
+    { "answer": { "kind": "te.plot", "option": "^addFactionTokenToPlot_extract_hacan$" }, "as": "ruby" },
+    { "press": "addFactionTokenToPlot_assail", "as": "ruby" },
+    { "answer": { "kind": "te.plot", "option": "^addFactionTokenToPlot_assail_naalu$" }, "as": "ruby" },
+    { "press": "removeFactionTokenFromPlot_assail", "as": "ruby" },
+    { "answer": { "kind": "te.plot", "option": "^removeFactionTokenFromPlot_assail_naalu$" }, "as": "ruby" },
+    { "press": "componentActionRes_ability_puppetsoftheblade", "as": "ruby" },
+    { "answer": { "kind": "te.plot", "option": "revealSeethe_hacan$" }, "as": "ruby" },
+    { "answer": { "kind": "te.plot", "option": "resolveSeethe_bereg$" }, "as": "ruby" },
+    { "answer": { "kind": "te.plot", "option": "revealExtract_hacan$" }, "as": "ruby" },
+    { "answer": { "kind": "/tech/", "option": "amd" }, "as": "ruby" }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "player[obsidian].tech", "includes": "amd" } ]
+  }
+}

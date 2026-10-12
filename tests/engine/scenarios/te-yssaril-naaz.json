@@ -1,0 +1,52 @@
+{
+  "name": "te-yssaril-naaz",
+  "description": "pbd28 r1: Yssaril Deepgloom Executable panel (startYssarilbt -> yssarilbtToggleDebt / yssarilbtIndividualControl -> yssarilbtStep2_), Naaz Eidolon Maximum (checkEidolonMaximum -> activateEidolonMaximum_<pos>_<holder>)",
+  "base": {
+    "recording": "pbd28",
+    "index": 46,
+    "repost": false
+  },
+  "setup": [
+    "/breakthrough unlock breakthrough:yssarilbt faction_or_color:yssaril",
+    "/breakthrough unlock breakthrough:naazbt faction_or_color:naaz",
+    "/add_units tile_name:307 unit_names:\"3 mech naazir\" faction_or_color:naaz"
+  ],
+  "steps": [
+    {
+      "press": "startYssarilbt",
+      "as": "yssaril"
+    },
+    {
+      "answer": {
+        "kind": "/te.breakthrough|legacy/",
+        "option": "yssarilbtToggleDebt"
+      },
+      "as": "yssaril"
+    },
+    {
+      "press": "yssarilbtIndividualControl",
+      "as": "yssaril"
+    },
+    {
+      "answer": {
+        "kind": "/te.breakthrough|legacy/",
+        "option": "yssarilbtStep2_"
+      },
+      "as": "yssaril"
+    },
+    {
+      "press": "checkEidolonMaximum",
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "/te.breakthrough|legacy/",
+        "option": "activateEidolonMaximum_"
+      },
+      "as": "naaz"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "t": "message_create",
+  "message": {
+    "id": "1558158714211532800",
+    "channel_id": "1558155837237755904",
+    "author": {
+      "id": "1558153075842220033",
+      "username": "TI4 Bot",
+      "global_name": "TI4 Bot",
+      "avatar": null,
+      "discriminator": "0",
+      "public_flags": 0,
+      "bot": true
+    },
+    "content": "### __Promissory notes in your hand__:\n1\\. <:PN:1558154809088016384>  _Political Secret_ <:Sol:1558154703500607488><:vapourwave:1558154672991240192>**Vapourwave** `(78)`\n2\\. <:PN:1558154809088016384>  _Trade Agreement_ <:Sol:1558154703500607488><:vapourwave:1558154672991240192>**Vapourwave** `(52)`\n3\\. <:PN:1558154809088016384>  _Support for the Throne_ <:Sol:1558154703500607488><:vapourwave:1558154672991240192>**Vapourwave** `(7)`\n4\\. <:PN:1558154809088016384>  _Alliance_ <:Sol:1558154703500607488><:vapourwave:1558154672991240192>**Vapourwave** `(20)`\n5\\. <:PN:1558154809088016384>  _Ceasefire_ <:Sol:1558154703500607488><:vapourwave:1558154672991240192>**Vapourwave** `(88)`\n6\\. <:PN:1558154809088016384>  _Military Support_ <:Sol:1558154703500607488><:vapourwave:1558154672991240192>**Vapourwave** `(36)`\n> At the start of the Sol player's turn: Remove 1 token from the Sol player's strategy pool, if able, and return it to their reinforcements. Then, you may place 2 infantry from your reinforcements on any planet you control. Then, return this card to the Sol player.\n\n### __Promissory notes in your play area__:\n> None",
+    "timestamp": "2026-10-09T16:46:26.657Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mentions": [],
+    "mention_roles": [],
+    "mention_channels": [],
+    "attachments": [],
+    "embeds": [],
+    "reactions": [],
+    "pinned": false,
+    "type": 0,
+    "flags": 0,
+    "components": [],
+    "sticker_items": [],
+    "poll": null,
+    "guild_id": "1558153075842220032",
+    "member": {
+      "roles": [
+        "1558153075846414336"
+      ],
+      "nick": null,
+      "avatar": null,
+      "banner": null,
+      "joined_at": "2026-10-09T16:24:02.366Z",
+      "premium_since": null,
+      "deaf": false,
+      "mute": false,
+      "flags": 0,
+      "pending": false,
+      "communication_disabled_until": null
+    }
+  }
+}

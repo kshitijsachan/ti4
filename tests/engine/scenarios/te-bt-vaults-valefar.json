@@ -1,0 +1,40 @@
+{
+  "name": "te-bt-vaults-valefar",
+  "description": "TE breakthroughs on pbd101 r1 (te.breakthrough): Mahact Vaults of the Heir (componentActionRes_exhaustBT_mahactbt -> purgeTechVaults_<tech>: purge a tech, draw a relic), Nekro Valefar Assimilator Z (valefarZ_<faction>)",
+  "base": {
+    "recording": "pbd101",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/breakthrough unlock breakthrough:mahactbt faction_or_color:mahact",
+    "/breakthrough unlock breakthrough:nekrobt faction_or_color:nekro",
+    "/player turn_start faction_or_color:mahact"
+  ],
+  "steps": [
+    {
+      "press": "FFCC_mahact_componentActionRes_exhaustBT_mahactbt",
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "/te.breakthrough|legacy/",
+        "option": "purgeTechVaults_bs$"
+      },
+      "as": "mahact"
+    },
+    {
+      "press": "valefarZ_titans",
+      "as": "nekro"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[mahact].tech",
+        "excludes": "bs"
+      }
+    ]
+  }
+}

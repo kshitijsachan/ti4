@@ -1,0 +1,7 @@
+.planetIconContainer {
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

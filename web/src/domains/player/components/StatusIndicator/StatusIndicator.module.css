@@ -1,0 +1,4 @@
+.indicator {
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+}

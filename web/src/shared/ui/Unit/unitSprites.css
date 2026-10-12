@@ -1,0 +1,551 @@
+/* Static CSS matching TI4_map_generator_bot/scripts/generate-unit-sprites.mjs output. */
+.unit-sprite {
+  display: inline-block;
+  flex: 0 0 auto;
+  --unit-sprite-sheet-width: 948px;
+  --unit-sprite-sheet-height: 82px;
+  background-repeat: no-repeat;
+  background-size: var(--unit-sprite-sheet-width) var(--unit-sprite-sheet-height);
+}
+
+.unit-sprite--abr {
+  background-image: url("/art/units/sheets/abr.webp");
+}
+
+.unit-sprite--azr {
+  background-image: url("/art/units/sheets/azr.webp");
+}
+
+.unit-sprite--beg {
+  background-image: url("/art/units/sheets/beg.webp");
+}
+
+.unit-sprite--bld {
+  background-image: url("/art/units/sheets/bld.webp");
+}
+
+.unit-sprite--blk {
+  background-image: url("/art/units/sheets/blk.webp");
+}
+
+.unit-sprite--blt {
+  background-image: url("/art/units/sheets/blt.webp");
+}
+
+.unit-sprite--blu {
+  background-image: url("/art/units/sheets/blu.webp");
+}
+
+.unit-sprite--bwn {
+  background-image: url("/art/units/sheets/bwn.webp");
+}
+
+.unit-sprite--cam {
+  background-image: url("/art/units/sheets/cam.webp");
+}
+
+.unit-sprite--chk {
+  background-image: url("/art/units/sheets/chk.webp");
+}
+
+.unit-sprite--cnb {
+  background-image: url("/art/units/sheets/cnb.webp");
+}
+
+.unit-sprite--cpr {
+  background-image: url("/art/units/sheets/cpr.webp");
+}
+
+.unit-sprite--cqr {
+  background-image: url("/art/units/sheets/cqr.webp");
+}
+
+.unit-sprite--crm {
+  background-image: url("/art/units/sheets/crm.webp");
+}
+
+.unit-sprite--dw {
+  background-image: url("/art/units/sheets/dw.webp");
+}
+
+.unit-sprite--eme {
+  background-image: url("/art/units/sheets/eme.webp");
+}
+
+.unit-sprite--ero {
+  background-image: url("/art/units/sheets/ero.webp");
+}
+
+.unit-sprite--eth {
+  background-image: url("/art/units/sheets/eth.webp");
+}
+
+.unit-sprite--frs {
+  background-image: url("/art/units/sheets/frs.webp");
+}
+
+.unit-sprite--gcr {
+  background-image: url("/art/units/sheets/gcr.webp");
+}
+
+.unit-sprite--gld {
+  background-image: url("/art/units/sheets/gld.webp");
+}
+
+.unit-sprite--grn {
+  background-image: url("/art/units/sheets/grn.webp");
+}
+
+.unit-sprite--gry {
+  background-image: url("/art/units/sheets/gry.webp");
+}
+
+.unit-sprite--hqn {
+  background-image: url("/art/units/sheets/hqn.webp");
+}
+
+.unit-sprite--jad {
+  background-image: url("/art/units/sheets/jad.webp");
+}
+
+.unit-sprite--jpt {
+  background-image: url("/art/units/sheets/jpt.webp");
+}
+
+.unit-sprite--lgy {
+  background-image: url("/art/units/sheets/lgy.webp");
+}
+
+.unit-sprite--lme {
+  background-image: url("/art/units/sheets/lme.webp");
+}
+
+.unit-sprite--lvn {
+  background-image: url("/art/units/sheets/lvn.webp");
+}
+
+.unit-sprite--mgm {
+  background-image: url("/art/units/sheets/mgm.webp");
+}
+
+.unit-sprite--nea {
+  background-image: url("/art/units/sheets/nea.webp");
+}
+
+.unit-sprite--nm {
+  background-image: url("/art/units/sheets/nm.webp");
+}
+
+.unit-sprite--nvy {
+  background-image: url("/art/units/sheets/nvy.webp");
+}
+
+.unit-sprite--orca {
+  background-image: url("/art/units/sheets/orca.webp");
+}
+
+.unit-sprite--org {
+  background-image: url("/art/units/sheets/org.webp");
+}
+
+.unit-sprite--pch {
+  background-image: url("/art/units/sheets/pch.webp");
+}
+
+.unit-sprite--pld {
+  background-image: url("/art/units/sheets/pld.webp");
+}
+
+.unit-sprite--plm {
+  background-image: url("/art/units/sheets/plm.webp");
+}
+
+.unit-sprite--pnk {
+  background-image: url("/art/units/sheets/pnk.webp");
+}
+
+.unit-sprite--ppl {
+  background-image: url("/art/units/sheets/ppl.webp");
+}
+
+.unit-sprite--psn {
+  background-image: url("/art/units/sheets/psn.webp");
+}
+
+.unit-sprite--psy {
+  background-image: url("/art/units/sheets/psy.webp");
+}
+
+.unit-sprite--ptb {
+  background-image: url("/art/units/sheets/ptb.webp");
+}
+
+.unit-sprite--ptr {
+  background-image: url("/art/units/sheets/ptr.webp");
+}
+
+.unit-sprite--rbw {
+  background-image: url("/art/units/sheets/rbw.webp");
+}
+
+.unit-sprite--rby {
+  background-image: url("/art/units/sheets/rby.webp");
+}
+
+.unit-sprite--red {
+  background-image: url("/art/units/sheets/red.webp");
+}
+
+.unit-sprite--rse {
+  background-image: url("/art/units/sheets/rse.webp");
+}
+
+.unit-sprite--rst {
+  background-image: url("/art/units/sheets/rst.webp");
+}
+
+.unit-sprite--ryl {
+  background-image: url("/art/units/sheets/ryl.webp");
+}
+
+.unit-sprite--sbt {
+  background-image: url("/art/units/sheets/sbt.webp");
+}
+
+.unit-sprite--sns {
+  background-image: url("/art/units/sheets/sns.webp");
+}
+
+.unit-sprite--splitbld {
+  background-image: url("/art/units/sheets/splitbld.webp");
+}
+
+.unit-sprite--splitblu {
+  background-image: url("/art/units/sheets/splitblu.webp");
+}
+
+.unit-sprite--splitchk {
+  background-image: url("/art/units/sheets/splitchk.webp");
+}
+
+.unit-sprite--spliteme {
+  background-image: url("/art/units/sheets/spliteme.webp");
+}
+
+.unit-sprite--splitgld {
+  background-image: url("/art/units/sheets/splitgld.webp");
+}
+
+.unit-sprite--splitgrn {
+  background-image: url("/art/units/sheets/splitgrn.webp");
+}
+
+.unit-sprite--splitlme {
+  background-image: url("/art/units/sheets/splitlme.webp");
+}
+
+.unit-sprite--splitnvy {
+  background-image: url("/art/units/sheets/splitnvy.webp");
+}
+
+.unit-sprite--splitorg {
+  background-image: url("/art/units/sheets/splitorg.webp");
+}
+
+.unit-sprite--splitpnk {
+  background-image: url("/art/units/sheets/splitpnk.webp");
+}
+
+.unit-sprite--splitppl {
+  background-image: url("/art/units/sheets/splitppl.webp");
+}
+
+.unit-sprite--splitptr {
+  background-image: url("/art/units/sheets/splitptr.webp");
+}
+
+.unit-sprite--splitrbw {
+  background-image: url("/art/units/sheets/splitrbw.webp");
+}
+
+.unit-sprite--splitred {
+  background-image: url("/art/units/sheets/splitred.webp");
+}
+
+.unit-sprite--splittan {
+  background-image: url("/art/units/sheets/splittan.webp");
+}
+
+.unit-sprite--splittea {
+  background-image: url("/art/units/sheets/splittea.webp");
+}
+
+.unit-sprite--splittqs {
+  background-image: url("/art/units/sheets/splittqs.webp");
+}
+
+.unit-sprite--splitylw {
+  background-image: url("/art/units/sheets/splitylw.webp");
+}
+
+.unit-sprite--spr {
+  background-image: url("/art/units/sheets/spr.webp");
+}
+
+.unit-sprite--tan {
+  background-image: url("/art/units/sheets/tan.webp");
+}
+
+.unit-sprite--tea {
+  background-image: url("/art/units/sheets/tea.webp");
+}
+
+.unit-sprite--tpl {
+  background-image: url("/art/units/sheets/tpl.webp");
+}
+
+.unit-sprite--tqs {
+  background-image: url("/art/units/sheets/tqs.webp");
+}
+
+.unit-sprite--vdg {
+  background-image: url("/art/units/sheets/vdg.webp");
+}
+
+.unit-sprite--vpw {
+  background-image: url("/art/units/sheets/vpw.webp");
+}
+
+.unit-sprite--wsp {
+  background-image: url("/art/units/sheets/wsp.webp");
+}
+
+.unit-sprite--wtm {
+  background-image: url("/art/units/sheets/wtm.webp");
+}
+
+.unit-sprite--ylw {
+  background-image: url("/art/units/sheets/ylw.webp");
+}
+
+.unit-sprite--fs {
+  width: 80px;
+  height: 82px;
+  aspect-ratio: 80 / 82;
+  background-position: -0px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--fs {
+  background-size: 1185% 100%;
+  background-position: 0% 0%;
+}
+
+.unit-sprite--dn {
+  width: 77px;
+  height: 77px;
+  aspect-ratio: 77 / 77;
+  background-position: -82px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--dn {
+  background-size: 1231.168831% 106.493506%;
+  background-position: 9.414466% 0%;
+}
+
+.unit-sprite--cv {
+  width: 71px;
+  height: 70px;
+  aspect-ratio: 71 / 70;
+  background-position: -161px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--cv {
+  background-size: 1335.211268% 117.142857%;
+  background-position: 18.358039% 0%;
+}
+
+.unit-sprite--ca {
+  width: 67px;
+  height: 67px;
+  aspect-ratio: 67 / 67;
+  background-position: -234px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--ca {
+  background-size: 1414.925373% 122.38806%;
+  background-position: 26.560726% 0%;
+}
+
+.unit-sprite--ws {
+  width: 56px;
+  height: 65px;
+  aspect-ratio: 56 / 65;
+  background-position: -303px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--ws {
+  background-size: 1692.857143% 126.153846%;
+  background-position: 33.96861% 0%;
+}
+
+.unit-sprite--monument {
+  width: 64px;
+  height: 64px;
+  aspect-ratio: 64 / 64;
+  background-position: -361px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--monument {
+  background-size: 1481.25% 128.125%;
+  background-position: 40.837104% 0%;
+}
+
+.unit-sprite--dd {
+  width: 51px;
+  height: 50px;
+  aspect-ratio: 51 / 50;
+  background-position: -427px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--dd {
+  background-size: 1858.823529% 164%;
+  background-position: 47.603122% 0%;
+}
+
+.unit-sprite--dd_eyes {
+  width: 51px;
+  height: 50px;
+  aspect-ratio: 51 / 50;
+  background-position: -480px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--dd_eyes {
+  background-size: 1858.823529% 164%;
+  background-position: 53.511706% 0%;
+}
+
+.unit-sprite--mf {
+  width: 45px;
+  height: 45px;
+  aspect-ratio: 45 / 45;
+  background-position: -533px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--mf {
+  background-size: 2106.666667% 182.222222%;
+  background-position: 59.025471% 0%;
+}
+
+.unit-sprite--gf {
+  width: 39px;
+  height: 44px;
+  aspect-ratio: 39 / 44;
+  background-position: -580px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--gf {
+  background-size: 2430.769231% 186.363636%;
+  background-position: 63.806381% 0%;
+}
+
+.unit-sprite--sd {
+  width: 42px;
+  height: 43px;
+  aspect-ratio: 42 / 43;
+  background-position: -621px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--sd {
+  background-size: 2257.142857% 190.697674%;
+  background-position: 68.543046% 0%;
+}
+
+.unit-sprite--pd {
+  width: 33px;
+  height: 38px;
+  aspect-ratio: 33 / 38;
+  background-position: -665px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--pd {
+  background-size: 2872.727273% 215.789474%;
+  background-position: 72.677596% 0%;
+}
+
+.unit-sprite--tkn_ff {
+  width: 70px;
+  height: 35px;
+  aspect-ratio: 70 / 35;
+  background-position: -700px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--tkn_ff {
+  background-size: 1354.285714% 234.285714%;
+  background-position: 79.726651% 0%;
+}
+
+.unit-sprite--tkn_gf {
+  width: 70px;
+  height: 35px;
+  aspect-ratio: 70 / 35;
+  background-position: -772px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--tkn_gf {
+  background-size: 1354.285714% 234.285714%;
+  background-position: 87.927107% 0%;
+}
+
+.unit-sprite--tkn_inf {
+  width: 70px;
+  height: 35px;
+  aspect-ratio: 70 / 35;
+  background-position: -844px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--tkn_inf {
+  background-size: 1354.285714% 234.285714%;
+  background-position: 96.127563% 0%;
+}
+
+.unit-sprite--ff {
+  width: 32px;
+  height: 32px;
+  aspect-ratio: 32 / 32;
+  background-position: -916px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--ff {
+  background-size: 2962.5% 256.25%;
+  background-position: 100% 0%;
+}
+
+.unit-sprite--shared {
+  --unit-sprite-sheet-width: 135px;
+  --unit-sprite-sheet-height: 90px;
+  background-image: url("/art/units/sheets/shared.webp");
+}
+
+.unit-sprite--shared.unit-sprite--tyrantslament {
+  width: 89px;
+  height: 90px;
+  aspect-ratio: 89 / 90;
+  background-position: -0px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--shared.unit-sprite--tyrantslament {
+  background-size: 151.685393% 100%;
+  background-position: 0% 0%;
+}
+
+.unit-sprite--shared.unit-sprite--plenaryorbital {
+  width: 44px;
+  height: 47px;
+  aspect-ratio: 44 / 47;
+  background-position: -91px -0px;
+}
+
+.unit-sprite--scaled.unit-sprite--shared.unit-sprite--plenaryorbital {
+  background-size: 306.818182% 191.489362%;
+  background-position: 100% 0%;
+}

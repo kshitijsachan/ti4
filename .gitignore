@@ -26,3 +26,8 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# local runtime data
+/data/
+shim/data/
+*.tsbuildinfo

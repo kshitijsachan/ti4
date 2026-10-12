@@ -1,0 +1,95 @@
+.unitIconContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.unitImage {
+  object-fit: contain;
+}
+
+.factionBadge {
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+/*
+ * Unit stats as seated readouts, not metric tiles.
+ *
+ * These were four rounded grey boxes with a small label over a large proportional
+ * numeral — the hero-metric pattern, and the numerals were not mono, so cost and
+ * combat could not be compared column to column. Now each stat sits in a recessed
+ * trough with an engraved label and a tabular numeral, which is how every other
+ * number in the app is presented.
+ */
+.statBox {
+  flex: 1;
+  border-radius: var(--panel-radius);
+  background: var(--trough-bg);
+  box-shadow: var(--trough-inset), inset 0 0 0 1px var(--socket-border);
+}
+
+.statLabel {
+  font-family: var(--mantine-font-family-headings);
+  font-size: 9px !important;
+  font-weight: var(--weight-rail) !important;
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.statValue {
+  line-height: 1;
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.modifierAttribution {
+  text-align: center;
+  line-height: 1.4;
+}
+
+.sectionTitle {
+  font-family: var(--mantine-font-family-headings);
+  font-size: 9px;
+  font-weight: var(--weight-rail);
+  letter-spacing: var(--track-rail);
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.abilityText {
+  line-height: var(--lh-body);
+}
+
+.inheritedAbilityBox {
+  background: var(--unit-details-inherited-bg);
+  border: 1px solid var(--unit-details-inherited-border);
+  border-radius: 4px;
+}
+
+.inheritedAbilityTitle {
+  text-transform: uppercase;
+}
+
+.inheritedAbilityText {
+  line-height: 1.4;
+}
+
+.inheritedTag {
+  font-style: italic;
+}
+
+.upgradeBox {
+  background: var(--unit-details-upgrade-bg);
+  border-radius: 4px;
+}
+
+.upgradeAbilityText {
+  line-height: 1.4;
+}
+
+.techIcon {
+  opacity: 0.6;
+}
