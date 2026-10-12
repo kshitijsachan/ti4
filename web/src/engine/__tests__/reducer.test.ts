@@ -10,7 +10,7 @@ const G = "pbd1";
 const ME = "u1";
 
 const state = (seq: number, stateVersion = seq, extra: Partial<GameState> = {}): GameState => ({
-  contract: 1, game: G, stateVersion, seq, phase: "action", round: 2, activePlayer: ME, speaker: null,
+  contract: 1, game: G, stateVersion, seq, phase: "action", ended: false, round: 2, activePlayer: ME, speaker: null,
   players: [
     { userId: ME, userName: "Me", faction: "arborec", color: "red" },
     { userId: "u2", userName: "Two", faction: "sol", color: "blue" },

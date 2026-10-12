@@ -97,6 +97,7 @@ const placeholderTile = (x: string) => {
 const KIND_SKIPS: [prefix: string, keys: string[]][] = [
   ["strategy_card.", ["unit", "holder"]],
   ["action_card.step", ["unit"]], // the option id's own unit token (gf or infantry)
+  ["setup.player", ["faction"]], // the drafted "keleres" before its flavour is chosen (setupStep2)
 ];
 
 const check: Record<Family, (x: unknown) => boolean> = {

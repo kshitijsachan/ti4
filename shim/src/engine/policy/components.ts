@@ -86,8 +86,12 @@ export function chooseComponents(d: ComponentsDecision, state: GameState | null,
       // Neuraloop replaces a public objective at the cost of a relic: not planned.
       if (typed[0]?.value?.source === "neuraloop" && typed[0]?.value?.step === 1) return decline("keep the objective");
       return pick(typed[0], "first offered") ?? decline("none");
-    case "choose.system":
     case "choose.unit":
+      // "Remove one <unit type>" lists (the plastic-limit warning, re-posted on every render): the rule table's answer
+      // was "Done Resolving"; the bot keeps its units (which copy of the warning, and which unit, is not ours to guess).
+      if (typed[0]?.value?.source === "remove_unit_type") return decline("over a unit limit warning: keep our units");
+      return pick(typed[0], "first offered") ?? decline("none");
+    case "choose.system":
       return pick(typed[0], "first offered") ?? decline("none");
     case "tech.step":
       return techStep(typed as Live<TechStep["options"][number]["value"]>, self, pick) ?? decline("not worth it now");

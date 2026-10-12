@@ -188,7 +188,9 @@ function roll(d: CombatRound, state: GameState | null, me: string, open: Decisio
   if (!front || !mine || !theirs || !mine.units.length || !theirs.units.length) return null;
   if (mine.roundsRolled > theirs.roundsRolled) return null;
   // Hits we owe come first (the next round is rolled after assigning).
-  if (open.some((x) => x.kind === "combat.hits" && x.target?.userId === me)) return null;
+  // (Only hits this bot can auto-assign: a BOMBARDMENT prompt has no auto option and must not stall the ground combat.)
+  if (open.some((x) => x.kind === "combat.hits" && x.target?.userId === me && x.options.some((o) => !o.disabled && o.value?.action === "auto")))
+    return null;
   // Space cannon defence before the first ground round, once.
   if (mine.roundsRolled === 0 && mine.abilities.includes("spacecannondefence") && !rolledSincePrompt("spacecannondefence")) {
     const scd = pick("spacecannondefence", holder);

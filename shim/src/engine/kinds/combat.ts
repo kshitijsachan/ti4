@@ -49,7 +49,18 @@ export type CombatHitsValue =
       sustainCancels: 1 | 2;
     }
   | { action: "cancel"; tile: TilePosition; holder: HolderName; source: HitSource; hits: number }
-  | { action: "assign_manual"; tile: TilePosition; assignType: string }
+  | {
+      action: "assign_manual";
+      tile: TilePosition;
+      assignType: string;
+      /** assignType "bombardment" only (that prompt has no auto option): hits owed (newest bombardment roll of this
+       * activation, null when unknown), the bombarded planet and the units there; answer with a combat plan. */
+      source?: "ground";
+      holder?: HolderName | null;
+      hits?: number | null;
+      units?: HittableUnit[];
+      sustainCancels?: 1 | 2;
+    }
   | CombatRollValue;
 
 export type CombatUnitPickValue =
