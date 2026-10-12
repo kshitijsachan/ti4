@@ -1,0 +1,79 @@
+{
+  "name": "trade-propose-rescind",
+  "description": "pbd23 r5 agenda phase: Nomad offers Mentak 2 TG for 1 TG (engine trade.propose vs legacy deal builder), then rescinds it through trade.offer_sent.",
+  "base": {
+    "recording": "pbd23",
+    "index": 583,
+    "repost": false
+  },
+  "steps": [
+    {
+      "gameAction": "trade.propose",
+      "as": "nomad",
+      "body": {
+        "to": "mentak",
+        "give": {
+          "tg": 2
+        },
+        "receive": {
+          "tg": 1
+        }
+      },
+      "legacy": [
+        {
+          "press": "offerToTransact_TGs_vapourwave_yellow_2",
+          "as": "nomad"
+        },
+        {
+          "press": "getNewTransaction_yellow_vapourwave",
+          "as": "nomad"
+        },
+        {
+          "press": "newTransact_TGs_yellow_vapourwave",
+          "as": "nomad"
+        },
+        {
+          "press": "offerToTransact_TGs_yellow_vapourwave_1",
+          "as": "nomad"
+        },
+        {
+          "press": "sendOffer_yellow",
+          "as": "nomad"
+        }
+      ]
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "trade.offer_sent",
+        "value": {
+          "action": "rescind",
+          "to": "mentak"
+        }
+      },
+      "as": "nomad"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[nomad].trade_goods",
+        "eq": "8"
+      },
+      {
+        "key": "player[mentak].trade_goods",
+        "eq": "12"
+      },
+      {
+        "key": "player[nomad].transaction_items",
+        "eq": ""
+      }
+    ]
+  }
+}

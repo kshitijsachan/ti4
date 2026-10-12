@@ -223,7 +223,7 @@ export const VOLATILE_GAME_KEYS = new Set([
  * engineExploreLog: the engine-int bot's explore/relic history for clients (ExploreLog, written by hooks in
  * ExploreService/RelicHelper on every path) — recordings made before it existed never carry it.
  * engineCombatLedger: the engine's persisted roll ledger (CombatSupport: once-per-activation space cannon / barrage). */
-export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^engineCombatLedger$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/];
+export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^engineCombatLedger$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/, /NothingMessage$/];
 
 /** The game's stored values: `check_reacts_info k1,v1:k2,v2:...` (see Game.getStoredValue). */
 export function storedValues(v: string): Map<string, string> {
