@@ -1,3 +1,5 @@
+import { planetName } from "../tactical/names";
+import { getAgendaData } from "@/entities/lookup/agendas";
 import type { StrategyCardPick } from "../../../../../shim/src/engine/types";
 import type {
   ConstructionBuild,
@@ -111,7 +113,7 @@ export function PlanetReadyView({ decision, answer }: RendererProps<PlanetReady>
       <div className={classes.choices}>
         {planets.map((o) => (
           <button key={o.id} type="button" className={classes.choice} disabled={full} onClick={() => pick(o.id)}>
-            {o.value!.planet}
+            {o.value!.planet ? planetName(o.value!.planet) : o.label}
             <Meta>
               {o.value && !o.value.done ? `${o.value.resources}/${o.value.influence}` : ""}
             </Meta>
@@ -156,9 +158,11 @@ export function AgendaView({ decision, answer }: RendererProps<PoliticsAgenda>) 
   }
   const v = opts[0]?.value;
   const agenda = v && v.action !== "draw" ? v.agenda : null;
+  const card = agenda ? getAgendaData(agenda) : undefined;
   return (
     <div className={classes.panel}>
-      <Title sub={agenda ?? undefined}>Politics: place this agenda</Title>
+      <Title sub={card ? `${card.name} (${card.type})` : (agenda ?? undefined)}>Politics: place this agenda</Title>
+      {card && <p className={classes.meta}>{[card.target, card.text1, card.text2].filter(Boolean).join(" ")}</p>}
       <div className={classes.choices}>
         {opts.map((o) => (
           <Choice key={o.id} option={o} onPick={answer} quiet={o.value!.action === "discard"}>
@@ -180,7 +184,7 @@ export function ConstructionPlaceView({ decision, answer }: RendererProps<Constr
       <div className={classes.choices}>
         {opts.map((o) => (
           <Choice key={o.id} option={o} onPick={answer}>
-            {o.value!.planet}
+            {planetName(o.value!.planet)}
             <Meta>
               {o.value!.resources}/{o.value!.influence}
               {o.value!.home ? " · home" : ""}

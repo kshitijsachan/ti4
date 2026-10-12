@@ -153,4 +153,33 @@ expect("reminder without a board: left alone", chooseUnitsRemove(reminder, ME, [
 const hitsMenu = { ...removal, progress: { flow: "assign", step: "assign", accumulated: {}, required: { hits: 1 }, canCommit: false } } as unknown as Decision;
 expect("hits owed: pickUnit still assigns", pick(hitsMenu, board(3, pbd114)), "FFCC_letnev_assignHits_307_1_ca_red");
 
+// BOMBARDMENT hits (combat.hits without an auto option; the manual option carries hits / planet / units): one plan.
+const bombHits = (hits: number | null, units: { holder: string; unit: string; count: number; damaged: number; sustain: boolean }[], sustainCancels = 1) =>
+  ({
+    id: "d11",
+    kind: "combat.hits",
+    scope: "player",
+    target: { userId: ME, faction: "letnev", color: "red", resolvedBy: "owner_prefix" },
+    window: null,
+    progress: null,
+    createdAt: 0,
+    options: [opt("FFCC_letnev_getDamageButtons_201_bombardment", { action: "assign_manual", tile: "201", assignType: "bombardment", source: "ground", holder: "jord", hits, units, sustainCancels })],
+  }) as unknown as Decision;
+const planOf = (d: Decision) => (chooseCombat(d, fight(1, 1), ME) as { act?: { action: string; body: { plan: unknown[] } } } | null)?.act;
+const jord = [
+  { holder: "jord", unit: "mf", count: 1, damaged: 0, sustain: true },
+  { holder: "jord", unit: "gf", count: 3, damaged: 0, sustain: false },
+];
+expect("bombardment: the mech sustains, then infantry die", JSON.stringify(planOf(bombHits(3, jord))), JSON.stringify({ action: "combat-plan", body: { plan: [
+  { holder: "jord", unit: "mf", damaged: false, action: "sustain", count: 1 },
+  { holder: "jord", unit: "gf", damaged: false, action: "destroy", count: 2 },
+] } }));
+expect("bombardment: 1 hit, a mech present: sustain only", JSON.stringify(planOf(bombHits(1, jord))?.body.plan), JSON.stringify([{ holder: "jord", unit: "mf", damaged: false, action: "sustain", count: 1 }]));
+expect("bombardment: a damaged mech dies after the infantry", JSON.stringify(planOf(bombHits(5, [{ holder: "jord", unit: "mf", count: 1, damaged: 1, sustain: true }, { holder: "jord", unit: "gf", count: 2, damaged: 0, sustain: false }]))?.body.plan), JSON.stringify([
+  { holder: "jord", unit: "gf", damaged: false, action: "destroy", count: 2 },
+  { holder: "jord", unit: "mf", damaged: true, action: "destroy", count: 1 },
+]));
+expect("bombardment: hits unknown: left alone", chooseCombat(bombHits(null, jord), fight(1, 1), ME), null);
+expect("bombardment: someone else's hits: never", chooseCombat({ ...bombHits(2, jord), target: { userId: OPP } } as unknown as Decision, fight(1, 1), ME), null);
+
 process.exit(failed ? 1 : 0);

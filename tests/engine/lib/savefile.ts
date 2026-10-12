@@ -223,7 +223,7 @@ export const VOLATILE_GAME_KEYS = new Set([
  * engineExploreLog: the engine-int bot's explore/relic history for clients (ExploreLog, written by hooks in
  * ExploreService/RelicHelper on every path) — recordings made before it existed never carry it.
  * engineCombatLedger: the engine's persisted roll ledger (CombatSupport: once-per-activation space cannon / barrage). */
-export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^engineCombatLedger$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/];
+export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^engineCombatLedger$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/, /NothingMessage$/];
 
 /** The game's stored values: `check_reacts_info k1,v1:k2,v2:...` (see Game.getStoredValue). */
 export function storedValues(v: string): Map<string, string> {
@@ -305,7 +305,10 @@ export function normalizeSave(text: string, o: NormalizeOpts = {}): string[] {
     const who = pl.kv.get("faction") && pl.kv.get("faction") !== "null" ? pl.kv.get("faction") : uid;
     for (const [k, v] of pl.kv) {
       if (VOLATILE_PLAYER_KEYS.has(k) || extra.has(`player.${k}`) || !/^[a-z0-9_]+$/.test(k)) continue;
-      out.push(`player[${who}].${k} ${fix(!o.keepHandles && CARD_HANDLE_KEYS.test(k) ? stripHandles(v) : v)}`);
+      // promptState_*: per-prompt UI bookkeeping (landing note, payment currency, CC panel origin) the engine-int bot
+      // writes on every path; recordings made before it never carry it.
+      const pv = k === "player_stored_values" ? v.split(";").filter((e) => e && !/^promptState(_|\{usc\})/.test(e)).join(";") : v;
+      out.push(`player[${who}].${k} ${fix(!o.keepHandles && CARD_HANDLE_KEYS.test(k) ? stripHandles(pv) : pv)}`);
     }
   }
   let tile = "";

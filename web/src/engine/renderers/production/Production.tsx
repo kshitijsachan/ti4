@@ -1,3 +1,4 @@
+import { planetName } from "../tactical/names";
 import { UnstyledButton } from "@mantine/core";
 import type { HolderName, Option, TilePosition, UnitId } from "../../../../../shim/src/engine/types";
 import type { ProductionPayload, ProductionPlaceValue, ProductionProduce, ProductionValue } from "../../../../../shim/src/engine/kinds/production";
@@ -79,7 +80,7 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
         {lines.map((l) => (
           <Stepper
             key={l.key}
-            label={`${UNIT_NAME[l.unit] ?? l.unit}${l.holder === "space" ? "" : ` on ${l.holder}`}`}
+            label={`${UNIT_NAME[l.unit] ?? l.unit}${l.holder === "space" ? "" : ` on ${planetName(l.holder)}`}`}
             value={counts[l.key] ?? 0}
             max={(counts[l.key] ?? 0) + room}
             onChange={(n) => setCounts((c) => ({ ...c, [l.key]: n }))}

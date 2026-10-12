@@ -1,0 +1,22 @@
+{
+  "name": "relic-draw",
+  "description": "relic.draw: Ral Nel presses Draw a Relic (drawRelic).",
+  "base": {
+    "recording": "pbd105",
+    "index": 174,
+    "repost": false
+  },
+  "setup": [],
+  "steps": [
+    {
+      "press": "drawRelic",
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

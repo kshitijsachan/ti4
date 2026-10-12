@@ -106,7 +106,7 @@ export function StatusHomeworkRenderer({ decision, state, answer }: StatusRender
           <p className={classes.done}>You are ready for the {next}.</p>
         ) : (
           <>
-            {!tokensSet && <p className={classes.hint}>Set your command tokens first; Ready ends your status phase.</p>}
+            {!tokensSet && <p className={classes.hint}>Set your command tokens above, then press Ready (it ends your status phase).</p>}
             {ready && (
               <Group>
                 <Button size="xs" variant={tokensSet ? "filled" : "default"} disabled={ready.disabled} onClick={() => answer(ready.id)}>

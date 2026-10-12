@@ -621,7 +621,7 @@ index a513e12..da1e360 100644
          StringBuilder message = new StringBuilder(
                  "🛑 Cannot deal secret objectives yet as some players still need to pick their starting technologies. If you wish to proceed anyways, just press the button again.");
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/other/DeleteButtonsButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/other/DeleteButtonsButtonHandler.java
-index e68223d..c3243e5 100644
+index e68223d..9e739be 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/other/DeleteButtonsButtonHandler.java
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/other/DeleteButtonsButtonHandler.java
 @@ -36,8 +36,10 @@ import ti4.helpers.ButtonHelperCommanders;
@@ -643,7 +643,7 @@ index e68223d..c3243e5 100644
  import ti4.service.turn.StartTurnService;
  import ti4.spring.service.gameevent.GameEventDraft;
  import ti4.spring.service.gameevent.GameEventService;
-@@ -66,21 +69,21 @@ class DeleteButtonsButtonHandler {
+@@ -66,21 +69,25 @@ class DeleteButtonsButtonHandler {
  
      @ButtonHandler("deleteButtons")
      public static void deleteButtons(ButtonInteractionEvent event, String buttonID, Game game, Player player) {
@@ -651,6 +651,10 @@ index e68223d..c3243e5 100644
 -        buttonID = buttonID.replace("deleteButtons_", "");
 +        // What this closer finishes (paying, producing, adjusting command tokens) is carried in its id, not its label.
 +        DoneRole role = DoneRole.of(buttonID);
++        // Untagged closers (prompts posted before the role suffix existed, recordings) keep the old label rule: an
++        // untagged "Done Producing Units" otherwise skipped the production bill (no payment prompt; verify-tech /
++        // payment-prod scenarios).
++        if (role == null) role = DoneRole.fromLegacyLabel(event.getButton() == null ? null : event.getButton().getLabel());
 +        boolean producing = role == DoneRole.PRODUCE;
 +        boolean paying = role == DoneRole.PAY;
 +        buttonID = DoneRole.strip(buttonID).replace("deleteButtons_", "");
@@ -676,7 +680,7 @@ index e68223d..c3243e5 100644
                  boolean cyber = false;
                  boolean malevolency = false;
                  int netGain = ButtonHelper.checkNetGain(player, shortCCs);
-@@ -165,7 +168,7 @@ class DeleteButtonsButtonHandler {
+@@ -165,7 +172,7 @@ class DeleteButtonsButtonHandler {
                  player.setTotalExpenses(player.getTotalExpenses() + netGain * 3);
              }
  
@@ -685,7 +689,7 @@ index e68223d..c3243e5 100644
                  MessageHelper.sendMessageToChannel(
                          player.getCorrectChannel(),
                          playerRep + ", your initial command token allocation was " + shortCCs
-@@ -185,18 +188,17 @@ class DeleteButtonsButtonHandler {
+@@ -185,18 +192,17 @@ class DeleteButtonsButtonHandler {
              }
              ButtonHelper.checkFleetInEveryTile(player, game);
          }
@@ -708,7 +712,7 @@ index e68223d..c3243e5 100644
                  String pos = buttonID.split("_")[1];
                  buttonID = buttonID.split("_")[0];
                  tile = game.getTileByPosition(pos);
-@@ -209,7 +211,7 @@ class DeleteButtonsButtonHandler {
+@@ -209,7 +215,7 @@ class DeleteButtonsButtonHandler {
                              MyrrBreakthroughHandler.PRODUCTION_USED_KEY + player.getFaction(), buttonID + "|" + pos);
                  }
              }
@@ -717,7 +721,7 @@ index e68223d..c3243e5 100644
                      && player.hasAbility("amalgamation")
                      && !game.getStoredValue("amalgAmount").isEmpty()) {
                  editedMessage = Helper.buildSpentThingsMessage(player, game, "res");
-@@ -218,13 +220,12 @@ class DeleteButtonsButtonHandler {
+@@ -218,13 +224,12 @@ class DeleteButtonsButtonHandler {
              if ("skarnathBuild".equalsIgnoreCase(buttonID)) {
                  ThronesThroneHandler.clearSkarnathDiscount(game, player);
              }
@@ -733,7 +737,7 @@ index e68223d..c3243e5 100644
                  CommanderUnlockCheckService.checkPlayer(player, "revenantponthous");
                  RevenantLeadersHandler.offerRevPonthousCommander(game, player, tile);
                  SvartalfheimLegendaryButtonHandler.offerAndvarisArtificing(event, game, player);
-@@ -312,7 +313,7 @@ class DeleteButtonsButtonHandler {
+@@ -312,7 +317,7 @@ class DeleteButtonsButtonHandler {
                          && !"solBtBuild".equalsIgnoreCase(buttonID)
                          && !buttonID.contains("integrated")) {
                      buttons.add(Buttons.red(
@@ -742,7 +746,7 @@ index e68223d..c3243e5 100644
                              "Exhaust AI Development Algorithm (" + ButtonHelper.getNumberOfUnitUpgrades(player) + "r)",
                              TechEmojis.WarfareTech));
                  }
-@@ -392,9 +393,9 @@ class DeleteButtonsButtonHandler {
+@@ -392,9 +397,9 @@ class DeleteButtonsButtonHandler {
                  }
                  Button doneExhausting;
                  if (!buttonID.contains("deleteButtons")) {
@@ -754,7 +758,7 @@ index e68223d..c3243e5 100644
                  }
                  if (warM) {
                      player.addSpentThing("warmachine");
-@@ -451,13 +452,13 @@ class DeleteButtonsButtonHandler {
+@@ -451,13 +456,13 @@ class DeleteButtonsButtonHandler {
                  }
              }
          }
@@ -771,7 +775,7 @@ index e68223d..c3243e5 100644
              EmergencyAppropriationsLLButtonHandler.clear(game, player);
              PriorityRequisitionLLButtonHandler.clear(game, player);
              SharedResourcesLLButtonHandler.clear(game, player);
-@@ -540,7 +541,7 @@ class DeleteButtonsButtonHandler {
+@@ -540,7 +545,7 @@ class DeleteButtonsButtonHandler {
          if ("diplomacy".equalsIgnoreCase(buttonID)) {
              ButtonHelper.sendMessageToRightStratThread(player, game, editedMessage, "diplomacy", null);
          }
@@ -1960,10 +1964,26 @@ index a11c931..0ece4a0 100644
          AddUnitService.addUnits(event, game.getTileByPosition(tilePos), game, player.getColor(), "warsun");
          RemoveUnitService.removeUnits(event, game.getTileByPosition(tilePos), game, player.getColor(), toRemove);
 diff --git a/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java b/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
-index 9f3070e..95b0096 100644
+index 9f3070e..5578578 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
-@@ -1493,23 +1493,35 @@ public final class ButtonHelperModifyUnits {
+@@ -527,6 +527,15 @@ public final class ButtonHelperModifyUnits {
+                 if (planetInvader != player && FoWHelper.playerHasUnitsOnPlanet(planetInvader, unitHolder)) {
+                     MonumentsPoKButtonHandler.addSheConsumesWorldsButton(
+                             buttons, game, planetInvader, tile, unitHolder);
++                    // L1Z1X Assimilate: the planet is taken now — replace the structures instead of removing them.
++                    if (planetInvader.hasAbility("assimilate")
++                            && (unitHolder.getUnitCount(UnitType.Pds, player.getColor()) > 0
++                                    || unitHolder.getUnitCount(UnitType.Spacedock, player.getColor()) > 0)) {
++                        buttons.add(Buttons.gray(
++                                planetInvader.factionButtonChecker() + "assimilate_" + unitHolder.getName(),
++                                "Assimilate Structures",
++                                FactionEmojis.L1Z1X));
++                    }
+                 }
+             }
+             buttons.add(Buttons.gray("deleteButtons", "Don't Remove Structures"));
+@@ -1493,23 +1502,35 @@ public final class ButtonHelperModifyUnits {
          return buttons;
      }
  
@@ -2008,7 +2028,7 @@ index 9f3070e..95b0096 100644
          TeHelperGeneral.addStationsToPlayArea(event, game, tile);
          for (UnitHolder unitHolder : tile.getPlanetUnitHolders()) {
              LoreService.showPlanetLore(player, game, unitHolder.getName(), LoreService.TRIGGER.MOVED);
-@@ -1594,7 +1606,8 @@ public final class ButtonHelperModifyUnits {
+@@ -1594,7 +1615,8 @@ public final class ButtonHelperModifyUnits {
                          && mechCount > 0
                          && !ButtonHelper.isLawInPlay(game, "articles_war")) {
                      List<Button> buttons = ButtonHelper.getExhaustButtonsWithTG(game, player, "inf");
@@ -2018,7 +2038,7 @@ index 9f3070e..95b0096 100644
                      buttons.add(DoneExhausting);
                      MessageHelper.sendMessageToChannel(
                              player.getCorrectChannel(),
-@@ -1950,8 +1963,6 @@ public final class ButtonHelperModifyUnits {
+@@ -1950,8 +1972,6 @@ public final class ButtonHelperModifyUnits {
  
      @ButtonHandler("retreatGroundUnits_")
      public static void retreatGroundUnits(String buttonID, ButtonInteractionEvent event, Game game, Player player) {
@@ -2027,7 +2047,7 @@ index 9f3070e..95b0096 100644
          String pos1 = buttonID.split("_")[1];
          String pos2 = buttonID.split("_")[2];
          int amount = Integer.parseInt(buttonID.split("_")[3]);
-@@ -1962,7 +1973,7 @@ public final class ButtonHelperModifyUnits {
+@@ -1962,7 +1982,7 @@ public final class ButtonHelperModifyUnits {
          Tile dest = game.getTileByPosition(pos2);
          UnitHolder sourceHolder = src.getUnitHolderFromPlanet(planet);
          Map<UnitKey, List<Integer>> beforeRetreat = GameEventDraft.snapshotRetreatUnits(player, sourceHolder);
@@ -2036,7 +2056,7 @@ index 9f3070e..95b0096 100644
          MoveUnitService.moveUnits(
                  event, src, game, player.getColor(), amount + " " + unitType + " " + planet, dest, "space", damaged);
          GameEventDraft.stageRetreat(game, player, pos1, planet, pos2, Constants.SPACE, beforeRetreat, sourceHolder);
-@@ -1976,10 +1987,7 @@ public final class ButtonHelperModifyUnits {
+@@ -1976,10 +1996,7 @@ public final class ButtonHelperModifyUnits {
                  event,
                  game,
                  player.getRepresentationNoPing() + " retreated " + amount + " " + unitType + " on " + planet + ".");
@@ -2048,7 +2068,7 @@ index 9f3070e..95b0096 100644
      }
  
      public static void retreatSpaceUnits(String buttonID, ButtonInteractionEvent event, Game game, Player player) {
-@@ -2037,8 +2045,27 @@ public final class ButtonHelperModifyUnits {
+@@ -2037,8 +2054,27 @@ public final class ButtonHelperModifyUnits {
      /**
       * Known sources: {@link Helper#getPlanetPlaceUnitButtons}
       */
@@ -2076,7 +2096,7 @@ index 9f3070e..95b0096 100644
          String unitNPlanet = buttonID.replace("place_", "");
          boolean placingParturitionMonument = unitNPlanet.startsWith("parturitionMonument_");
          String unitLong = placingParturitionMonument ? "monument" : unitNPlanet.substring(0, unitNPlanet.indexOf('_'));
-@@ -2325,7 +2352,7 @@ public final class ButtonHelperModifyUnits {
+@@ -2325,7 +2361,7 @@ public final class ButtonHelperModifyUnits {
              }
          }
          if (("sd".equalsIgnoreCase(unitID) || "pds".equalsIgnoreCase(unitLong) || "monument".equalsIgnoreCase(unitLong))
@@ -2085,7 +2105,7 @@ index 9f3070e..95b0096 100644
              if (game.isFowMode()
                      || (!"action".equalsIgnoreCase(game.getPhaseOfGame())
                              && !"statusScoring".equalsIgnoreCase(game.getPhaseOfGame()))) {
-@@ -2429,31 +2456,19 @@ public final class ButtonHelperModifyUnits {
+@@ -2429,31 +2465,19 @@ public final class ButtonHelperModifyUnits {
                  String producedInput = unitID + "_" + tile.getPosition() + "_" + planetName;
                  player.produceUnit(producedInput);
              }
@@ -2130,7 +2150,7 @@ index 9f3070e..95b0096 100644
          }
          if ("sd".equalsIgnoreCase(unitID)) {
              tile = game.getTileFromPlanet(planetName);
-@@ -2714,9 +2729,9 @@ public final class ButtonHelperModifyUnits {
+@@ -2714,9 +2738,9 @@ public final class ButtonHelperModifyUnits {
          }
          Button DoneExhausting;
          if (!buttonID.contains("deleteButtons")) {
@@ -2142,7 +2162,7 @@ index 9f3070e..95b0096 100644
          }
          buttons.add(DoneExhausting);
          if (!willSkipBuild) {
-@@ -3051,6 +3066,7 @@ public final class ButtonHelperModifyUnits {
+@@ -3051,6 +3075,7 @@ public final class ButtonHelperModifyUnits {
          List<Button> systemButtons = TacticalActionService.getLandingTroopsButtons(game, player, tile);
          String msg = player.getFactionEmojiOrColor() + " turned " + numff + " infantry into "
                  + StringHelper.pluralize(numff, "fighter") + " using Assault Machina, the Mirveda commander.";
@@ -2150,7 +2170,7 @@ index 9f3070e..95b0096 100644
          event.getMessage()
                  .editMessage(msg)
                  .setComponents(ButtonHelper.turnButtonListIntoActionRowList(systemButtons))
-@@ -3068,6 +3084,7 @@ public final class ButtonHelperModifyUnits {
+@@ -3068,6 +3093,7 @@ public final class ButtonHelperModifyUnits {
          List<Button> systemButtons = TacticalActionService.getLandingTroopsButtons(game, player, tile);
          String msg = player.getFactionEmojiOrColor() + " turned " + StringHelper.pluralize(numff, "fighter") + " into "
                  + numff + " infantry using their **Combat Drones** ability.";
@@ -2365,10 +2385,10 @@ index 1c6dee8..9294161 100644
                  player.getCorrectChannel(), "Please pay the 3 resources and 3 influence.", buttons);
 diff --git a/src/main/java/ti4/helpers/DoneRole.java b/src/main/java/ti4/helpers/DoneRole.java
 new file mode 100644
-index 0000000..46f7b0e
+index 0000000..ee14482
 --- /dev/null
 +++ b/src/main/java/ti4/helpers/DoneRole.java
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,92 @@
 +package ti4.helpers;
 +
 +import javax.annotation.Nullable;
@@ -2441,6 +2461,21 @@ index 0000000..46f7b0e
 +    }
 +
 +    /** The id without its role tag (unchanged when it has none). */
++    /** The role an untagged closer had by its label (the rule before roles were carried in the id). */
++    @Nullable
++    public static DoneRole fromLegacyLabel(@Nullable String label) {
++        if (label == null) return null;
++        return switch (label.trim()) {
++            case "Done Producing Units" -> PRODUCE;
++            case "Done Exhausting Planets" -> PAY;
++            case "Done Gaining Command Tokens" -> CC_GAIN;
++            case "Done Redistributing Command Tokens" -> CC_REDISTRIBUTE;
++            case "Done Losing Command Tokens" -> CC_LOSE;
++            case "Done Losing Fleet Tokens" -> FLEET_LOSE;
++            default -> null;
++        };
++    }
++
 +    public static String strip(@Nullable String id) {
 +        if (id == null) return null;
 +        return of(id) == null ? id : id.substring(0, id.lastIndexOf(SEPARATOR));
@@ -3107,10 +3142,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..af23cf5
+index 0000000..2193964
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,602 @@
+@@ -0,0 +1,603 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -3565,6 +3600,7 @@ index 0000000..af23cf5
 +    private static Decision runNative(Decision d, Plan plan, Game game, Player player, String userId, AnswerRequest req)
 +            throws MessageGone, MessageUnavailable {
 +        MessageSink sink = MessageSink.jda();
++        InteractionTracker.recordAnswer(userId, d.source().channelId(), d.source().messageId(), plan.componentId());
 +        switch (plan.type()) {
 +            case "button" -> {
 +                EngineInteraction ix = new EngineInteraction(
@@ -3715,10 +3751,10 @@ index 0000000..af23cf5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..be9f2e1
+index 0000000..98a8ec0
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,659 @@
+@@ -0,0 +1,710 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -4139,11 +4175,14 @@ index 0000000..be9f2e1
 +     */
 +    static boolean isInfoMenu(List<RawControl> controls, List<String> handlerIds) {
 +        boolean readOnlySeen = false;
++        boolean infoSeen = false; // a read-only option other than undo
++        boolean shortcutSeen = false; // an agent shortcut companion
 +        boolean aloneSeen = false;
 +        boolean companionSeen = false;
 +        for (int i = 0; i < controls.size(); i++) {
 +            String h = handlerIds.get(i);
 +            if (h == null) return false;
++            if (h.startsWith("exhaustAgent_") || h.startsWith("getAgentSelection_")) shortcutSeen = true;
 +            if (INFO_ALONE.contains(h)) {
 +                aloneSeen = true;
 +                continue;
@@ -4163,7 +4202,11 @@ index 0000000..be9f2e1
 +            }
 +            if (!readOnly) return false;
 +            readOnlySeen = true;
++            if (!h.startsWith("ultimateUndo")) infoSeen = true;
 +        }
++        // An agent offer with only an undo button next to it ("Use Hacan Agent" + UNDO) is a question, not the
++        // cards-info menu the shortcut companions are for (scenario faction-hacan: the offer was never captured).
++        if (shortcutSeen && !infoSeen) return false;
 +        if (readOnlySeen) return true;
 +        // Without a read-only option: only the stand-alone menus (plus a dismiss button) count.
 +        if (!aloneSeen) return false;
@@ -4173,10 +4216,54 @@ index 0000000..be9f2e1
 +
 +    static boolean obsolete(KindSpec spec, KindSpec.CaptureContext ctx) {
 +        try {
-+            return spec.obsolete(ctx);
++            return phasePassed(spec.kind(), ctx) || spec.obsolete(ctx);
 +        } catch (Exception e) {
 +            return false;
 +        }
++    }
++
++    private static boolean olderThan(String messageId, long ms) {
++        try {
++            long at = (Long.parseUnsignedLong(messageId) >>> 22) + 1420070400000L;
++            return System.currentTimeMillis() - at > ms;
++        } catch (Exception e) {
++            return false;
++        }
++    }
++
++    /** Agenda windows (not the in-advance preassign): only during the agenda phase. */
++    private static final java.util.Set<String> AGENDA_PHASE_KINDS = java.util.Set.of(
++            "agenda.when", "agenda.after", "agenda.shenanigans", "agenda.rider", "agenda.tiebreak", "agenda.vote",
++            "agenda.vote_step", "agenda.resolve", "agenda.next");
++    /** Status-phase steps (status.score_secret is not here: secrets are scored in the action phase too). */
++    private static final java.util.Set<String> STATUS_PHASE_KINDS =
++            java.util.Set.of("status.score", "status.homework", "status.reveal_objective", "status.advance");
++
++    /**
++     * The phase a decision belongs to is over: every answer would be refused, and it only fills the queue (stale-scan
++     * 03:40: ~400 open agenda/status/tactical decisions from earlier phases across live games). Generic rules by kind;
++     * kinds add their own via obsolete(). Game phases: agenda* (agenda, agendaVoting, agendawaiting, agendaEnd),
++     * status* (statusScoring, statusHomework), action, strategy.
++     */
++    static boolean phasePassed(String kind, KindSpec.CaptureContext ctx) {
++        ti4.game.Game game = ctx.game();
++        if (game == null) return false;
++        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame();
++        if (phase.isEmpty()) return false;
++        // Never on a fresh prompt: the bot may post a phase's first prompt just before it records the new phase / active
++        // player; these rules are for leftovers.
++        if (!olderThan(ctx.messageId(), 60_000)) return false;
++        if (AGENDA_PHASE_KINDS.contains(kind)) return !phase.startsWith("agenda");
++        if (STATUS_PHASE_KINDS.contains(kind)) return !phase.startsWith("status");
++        if (kind.startsWith("tactical.") || "turn.action".equals(kind)) {
++            if (!"action".equals(phase)) return true;
++            // Only the active player's turn prompts (Naalu's agent lets another seat act for them).
++            Player target = ctx.player();
++            Player active = game.getActivePlayer();
++            return target != null && active != null && !target.getUserID().equals(active.getUserID())
++                    && !game.isNaaluAgent();
++        }
++        return false;
 +    }
 +
 +    public static Target target(Player p, String how) {
@@ -5905,10 +5992,10 @@ index 0000000..85c4423
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/InteractionTracker.java b/src/main/java/ti4/selfhost/engine/InteractionTracker.java
 new file mode 100644
-index 0000000..149af12
+index 0000000..bff8f8e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/InteractionTracker.java
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,109 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.Map;
@@ -5962,6 +6049,18 @@ index 0000000..149af12
 +    /** Attribute messages sent under a pseudo token (engine answers have no interaction token) to a user. */
 +    public static void recordUser(String token, String userId) {
 +        byToken.put(token, new Info(userId, null, null, null, System.currentTimeMillis()));
++        prune();
++    }
++
++    /**
++     * An engine answer (native path: no Discord interaction) counts as a press in that channel, like a click would:
++     * {@link #latestInChannel} must see the answering player, not an older slash command or another player's press.
++     */
++    public static void recordAnswer(String userId, String channelId, String messageId, String customId) {
++        if (userId == null || channelId == null) return;
++        byToken.put(
++                "engine-answer:" + java.util.UUID.randomUUID(),
++                new Info(userId, channelId, messageId, customId, System.currentTimeMillis()));
 +        prune();
 +    }
 +
@@ -7461,10 +7560,10 @@ index 0000000..6d4295a
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/TradeEngine.java b/src/main/java/ti4/selfhost/engine/TradeEngine.java
 new file mode 100644
-index 0000000..f9e2a0c
+index 0000000..6344ad2
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/TradeEngine.java
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,224 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -7496,10 +7595,10 @@ index 0000000..f9e2a0c
 + * typed {@code trade.propose} action. Offers themselves are bot transactions ({@link TradeService#propose} writes the
 + * transaction items and calls the bot's own sendOffer), answered through the {@code trade.offer} decision.
 + *
-+ * <p>Rule (LRR 94): players transact only with neighbours, except in the agenda phase (anyone) and with an ability
-+ * that lifts it (Hacan Guild Ships, Trade Convoys in play, both own a space station, Age of Commerce). The bot's own
-+ * check is looser outside the action phase; {@link TradeState#mayTransactWith} is the strict one and
-+ * {@code trade.propose} enforces it.
++ * <p>Rule (LRR 94, as the bot's TransactionHelper.canTheseTwoTransact applies it): in the action phase players
++ * transact only with neighbours, unless an ability lifts it (Hacan Guild Ships, Trade Convoys in play, both own a space
++ * station, Age of Commerce); outside the action phase anyone may transact. {@link TradeState#mayTransactWith} and
++ * {@code trade.propose} apply the same rule.
 + */
 +public final class TradeEngine {
 +    private TradeEngine() {}
@@ -7514,7 +7613,7 @@ index 0000000..f9e2a0c
 +     *                          model, Hidden Agenda in the agenda phase, Policy - The People: Control)
 +     * @param me                what the viewer could put into an offer (own PNs / action cards: private)
 +     * @param partners          every other player: public counts, requestable PNs, the bot's {@code canTrade}
-+     * @param mayTransactWith   factions the viewer may transact with now under the strict neighbour rule
++     * @param mayTransactWith   factions the viewer may transact with now (neighbour rule in the action phase)
 +     * @param incoming          open, current offers to the viewer (answer via the trade.offer decision)
 +     * @param outgoing          open, current offers from the viewer
 +     */
@@ -7591,7 +7690,8 @@ index 0000000..f9e2a0c
 +    /** Neighbour rule exceptions (LRR 94 + the abilities the bot knows). */
 +    static boolean ruleExempt(Game game, Player a, Player b) {
 +        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame().toLowerCase(Locale.ROOT);
-+        if (phase.contains("agenda")) return true;
++        // Like TransactionHelper.canTheseTwoTransact: the neighbour rule only binds in the action phase.
++        if (!"action".equals(phase)) return true;
 +        if (game.isAgeOfCommerceMode()) return true;
 +        if (a.hasSpaceStation() && b.hasSpaceStation()) return true;
 +        for (Player p : List.of(a, b)) {
@@ -7642,7 +7742,7 @@ index 0000000..f9e2a0c
 +    // ------------------------------------------------------------------ action: trade.propose
 +
 +    /**
-+     * Proposes an offer as {@code userId}: takes the game's write lock, enforces the strict neighbour rule, writes the
++     * Proposes an offer as {@code userId}: takes the game's write lock, enforces the action-phase neighbour rule, writes the
 +     * transaction and sends it (receiver gets a trade.offer decision), saves.
 +     */
 +    public static ProposeResult propose(String gameName, String userId, ProposeRequest req) {
@@ -7671,7 +7771,7 @@ index 0000000..f9e2a0c
 +        if (them == null) them = game.getPlayer(req.to());
 +        if (them == null || them == me || !them.isRealPlayer()) return fail("refused", "Unknown trade partner: " + req.to());
 +        if (!me.isNeighboursWith(them) && !ruleExempt(game, me, them))
-+            return fail("refused", "You may only transact with neighbours outside the agenda phase.");
++            return fail("refused", "In the action phase you may only transact with neighbours.");
 +        try {
 +            ProposeResponse res = SERVICE.propose(game, me, req);
 +            return new ProposeResult(true, "done", null, res.offerNumber(), res.to(), res.items(),
@@ -10184,10 +10284,10 @@ index 0000000..396d372
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardSabotageKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardSabotageKind.java
 new file mode 100644
-index 0000000..6c495dd
+index 0000000..483e85c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardSabotageKind.java
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,223 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -10362,6 +10462,14 @@ index 0000000..6c495dd
 +        } catch (NumberFormatException e) {
 +            return false;
 +        }
++    }
++
++    /** Everyone in the window has reacted (or it is over): nothing is asked any more. */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        ReactionWindow w = window(ctx);
++        if (w == null || w.eligible().isEmpty()) return false;
++        return w.responded().containsAll(w.eligible());
 +    }
 +
 +    /** Engine answers count at once (WindowResponses), before the bot's reaction record catches up. */
@@ -19795,10 +19903,10 @@ index 0000000..6d71375
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PromissoryNotePlayKind.java b/src/main/java/ti4/selfhost/engine/kinds/PromissoryNotePlayKind.java
 new file mode 100644
-index 0000000..62d5f2d
+index 0000000..a63fb40
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/PromissoryNotePlayKind.java
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,82 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -19814,13 +19922,16 @@ index 0000000..62d5f2d
 +/**
 + * Play a promissory note: resolvePNPlay_&lt;pnId&gt; (PromissoryNoteHelper hand tray in the cards-info thread; the
 + * "reminder: this is the window to play X" offers with a Decline). Special ids: bmfNotHand (Black Market Forgery
-+ * from a component action, not from hand), ra_&lt;tech&gt; (Research Agreement for a technology).
++ * from a component action, not from hand), ra_&lt;tech&gt; (Research Agreement for a technology). Also
++ * useTA_&lt;ownerColor&gt; (ButtonHelper.resolveTACheck: "Use Trade Agreement" after the owner replenished; the
++ * generic Trade Agreement is never on the hand tray) = play &lt;ownerColor&gt;_ta.
 + *
 + * <p>Value: {promissoryNote, owner, playArea, fromHand, tech?}. owner = faction that owns the note (gets it back
 + * unless it goes to the player's play area). Other options (Decline / delete) are untyped.
 + */
 +public class PromissoryNotePlayKind implements KindSpec {
 +    static final String PREFIX = "resolvePNPlay_";
++    static final String TRADE_AGREEMENT = "useTA_";
 +
 +    @Override
 +    public String kind() {
@@ -19834,12 +19945,14 @@ index 0000000..62d5f2d
 +
 +    @Override
 +    public boolean matches(String handlerId) {
-+        return handlerId.startsWith(PREFIX);
++        return handlerId.startsWith(PREFIX) || handlerId.startsWith(TRADE_AGREEMENT);
 +    }
 +
 +    @Override
 +    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
-+        String id = handlerId.substring(PREFIX.length());
++        String id = handlerId.startsWith(TRADE_AGREEMENT)
++                ? handlerId.substring(TRADE_AGREEMENT.length()) + "_ta"
++                : handlerId.substring(PREFIX.length());
 +        Map<String, Object> v = new LinkedHashMap<>();
 +        boolean fromHand = true;
 +        String tech = null;
@@ -20113,14 +20226,16 @@ index 0000000..05cde67
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/RelicUseKind.java b/src/main/java/ti4/selfhost/engine/kinds/RelicUseKind.java
 new file mode 100644
-index 0000000..e14d73c
+index 0000000..ae59728
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/RelicUseKind.java
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,143 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
 +import java.util.Map;
++import ti4.game.Player;
++import javax.annotation.Nullable;
 +import ti4.selfhost.engine.EngineModels.Target;
 +import ti4.selfhost.engine.KindSpec;
 +
@@ -20213,7 +20328,49 @@ index 0000000..e14d73c
 +
 +    @Override
 +    public Target target(CaptureContext ctx, Target resolved) {
++        if (resolved != null && resolved.userId() != null && !"none".equals(resolved.resolvedBy())
++                && !"mixed_owners".equals(resolved.resolvedBy())) {
++            // owner prefix / mention / cards thread etc.: as resolved (explorer() keeps those too)
++            Target t = ExploreSupport.explorer(ctx, resolved);
++            if (t != null && !"recent_press".equals(t.resolvedBy()) && !"active_player".equals(t.resolvedBy()))
++                return t;
++        }
++        // Unowned relic buttons (prophetsTears_, resolveMaw, dominusOrb, exhaustRelic_x, ...): the relic's holder is
++        // the one who may use it -- not whoever last pressed or typed in the channel.
++        Player holder = holder(ctx);
++        if (holder != null) return ExploreSupport.target(holder, "relic_holder");
 +        return ExploreSupport.explorer(ctx, resolved);
++    }
++
++    @Nullable
++    private static Player holder(CaptureContext ctx) {
++        if (ctx.handlerIds() == null || ctx.game() == null) return null;
++        for (String h : ctx.handlerIds()) {
++            String relic = relicOf(h);
++            if (relic == null) continue;
++            Player found = null;
++            for (Player p : ctx.game().getRealPlayers()) {
++                if (p.getRelics().contains(relic)) {
++                    if (found != null) return null; // ambiguous
++                    found = p;
++                }
++            }
++            if (found != null) return found;
++        }
++        return null;
++    }
++
++    @Nullable
++    static String relicOf(String h) {
++        if (h == null) return null;
++        if (h.startsWith("exhaustRelic_")) return h.substring("exhaustRelic_".length());
++        if (h.startsWith("useRelic_")) return h.substring("useRelic_".length());
++        if (h.startsWith("prophetsTears_")) return "prophetstears";
++        if (h.equals("dominusOrb")) return "dominusorb";
++        if (h.equals("eyeOfVogul")) return "eyeofvogul";
++        if (h.equals("resolveMaw")) return "mawofworlds";
++        if (h.equals("resolveCrownOfE")) return "emphidia";
++        return null;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/RevealObjectivesKind.java b/src/main/java/ti4/selfhost/engine/kinds/RevealObjectivesKind.java
@@ -21255,10 +21412,10 @@ index 0000000..7801778
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusScoreSecretKind.java b/src/main/java/ti4/selfhost/engine/kinds/StatusScoreSecretKind.java
 new file mode 100644
-index 0000000..9b3aec0
+index 0000000..84c3c32
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StatusScoreSecretKind.java
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,99 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -21349,8 +21506,12 @@ index 0000000..9b3aec0
 +                return m.getName() + " is not scored in the status phase.";
 +        }
 +        int[] pr = StatusPhase.progress(game, answering, id);
++        // The original (SecretObjectiveHelper.scoreSO) scores without a condition check: players score by table
++        // agreement and the progress count can be wrong, so an "unmet" answer is accepted and only logged. Bot policy
++        // still only claims options whose value says met == true.
 +        if (pr[1] > 0 && !"dp".equals(id) && pr[0] < pr[1])
-+            return "You do not meet " + (m == null ? id : m.getName()) + " (" + pr[0] + "/" + pr[1] + ").";
++            ti4.logging.BotLogger.warning("engine: " + answering.getFaction() + " scored secret objective " + id
++                    + " in " + game.getName() + " that the progress check has at " + pr[0] + "/" + pr[1]);
 +        return null;
 +    }
 +}
@@ -25373,6 +25534,26 @@ index ade82fc..e6de162 100644
          CombatReplayService combatReplayService = SpringContext.getBean(CombatReplayService.class);
          boolean trackedCandidateRoll =
                  combatReplayService.isTrackedCandidateRoll(game, player, opponent, tile, rollType);
+diff --git a/src/main/java/ti4/service/combat/StartCombatService.java b/src/main/java/ti4/service/combat/StartCombatService.java
+index 8b1a9b8..5646294 100644
+--- a/src/main/java/ti4/service/combat/StartCombatService.java
++++ b/src/main/java/ti4/service/combat/StartCombatService.java
+@@ -2773,9 +2773,14 @@ public class StartCombatService {
+                         AeternaUnitsHandler.getMausoleumButton(p, otherP, tile, unitH, buttons);
+                     }
+                 }
+-                // Assimilate
++                // Assimilate: only once the planet is taken (L1Z1X gains control): no defending ground forces left
++                // and L1Z1X ground forces on it — not while the defender still has infantry there (live pbd161).
+                 if (p1.hasAbility("assimilate")
+                         && isGroundCombat
++                        && unitH.getUnitCount(Units.UnitType.Infantry, p2.getColor()) == 0
++                        && unitH.getUnitCount(Units.UnitType.Mech, p2.getColor()) == 0
++                        && (unitH.getUnitCount(Units.UnitType.Infantry, p1.getColor()) > 0
++                                || unitH.getUnitCount(Units.UnitType.Mech, p1.getColor()) > 0)
+                         && (unitH.getUnitCount(Units.UnitType.Spacedock, p2.getColor()) > 0
+                                 || unitH.getUnitCount(Units.UnitType.Pds, p2.getColor()) > 0)) {
+                     String id = p1.factionButtonChecker() + "assimilate_" + unitH.getName();
 diff --git a/src/main/java/ti4/service/explore/ExploreService.java b/src/main/java/ti4/service/explore/ExploreService.java
 index 948970e..bb0b2b7 100644
 --- a/src/main/java/ti4/service/explore/ExploreService.java
@@ -27015,10 +27196,10 @@ index 0000000..e09cc47
 +}
 diff --git a/src/main/java/ti4/spring/api/selfhost/TradeService.java b/src/main/java/ti4/spring/api/selfhost/TradeService.java
 new file mode 100644
-index 0000000..12dfc41
+index 0000000..026a8b7
 --- /dev/null
 +++ b/src/main/java/ti4/spring/api/selfhost/TradeService.java
-@@ -0,0 +1,692 @@
+@@ -0,0 +1,716 @@
 +package ti4.spring.api.selfhost;
 +
 +import java.lang.reflect.Method;
@@ -27274,12 +27455,14 @@ index 0000000..12dfc41
 +        int tg = nz(s.tg());
 +        if (tg < 0 || tg > me.getTg()) throw new TradeException("You have " + me.getTg() + " trade goods.");
 +        if (tg > 0) out.add(pre + "TGs_" + tg);
++        autoClearDebt(me, me, them, tg, out);
 +        int comms = nz(s.commodities());
 +        if (comms < 0 || comms > me.getCommodities())
 +            throw new TradeException("You have " + me.getCommodities() + " commodities.");
 +        if (comms > 0 && me.hasAbility("military_industrial_complex"))
 +            throw new TradeException("Military Industrial Complex: you can't trade commodities.");
 +        if (comms > 0) out.add(pre + "Comms_" + comms);
++        autoClearDebt(me, me, them, comms, out);
 +
 +        List<String> pns = list(s.promissoryNotes());
 +        if (pns.size() > 1) throw new TradeException("You may only send 1 promissory note per transaction.");
@@ -27311,7 +27494,27 @@ index 0000000..12dfc41
 +        int clear = nz(s.clearDebt());
 +        if (clear < 0 || clear > cp.debtIHold())
 +            throw new TradeException("You hold " + cp.debtIHold() + " of their debt tokens.");
-+        if (clear > 0) out.add(pre + "ClearDebt_" + clear);
++        addClearDebt(pre, clear, out);
++    }
++
++    /**
++     * TransactionHelper.resolveOfferToTransact: when {@code builder} prefers automatic debt clearance, sending TGs or
++     * commodities to a player who holds the sender's debt tokens also offers clearing min(debt, amount) of them.
++     */
++    private static void autoClearDebt(Player builder, Player sender, Player receiver, int amount, List<String> out) {
++        if (amount <= 0 || receiver.getDebtTokenCount(sender.getColor()) <= 0) return;
++        if (receiver.hasAbility("data_recovery")) return;
++        if (!ti4.settings.users.UserSettingsManager.get(builder.getUserID()).isPrefersAutoDebtClearance()) return;
++        String clear = prefix(receiver, sender) + "ClearDebt_"
++                + Math.min(receiver.getDebtTokenCount(sender.getColor()), amount);
++        if (!out.contains(clear)) out.add(clear);
++    }
++
++    /** An explicit clearDebt and the automatic one for the same pair: keep one (the client's amount wins). */
++    private static void addClearDebt(String pre, int clear, List<String> out) {
++        if (clear <= 0) return;
++        out.removeIf(x -> x.startsWith(pre + "ClearDebt_"));
++        out.add(pre + "ClearDebt_" + clear);
 +    }
 +
 +    private static void addReceive(
@@ -27321,12 +27524,14 @@ index 0000000..12dfc41
 +        int tg = nz(s.tg());
 +        if (tg < 0 || tg > them.getTg()) throw new TradeException("They have " + them.getTg() + " trade goods.");
 +        if (tg > 0) out.add(pre + "TGs_" + tg);
++        autoClearDebt(me, them, me, tg, out);
 +        int comms = nz(s.commodities());
 +        if (comms < 0 || comms > them.getCommodities())
 +            throw new TradeException("They have " + them.getCommodities() + " commodities.");
 +        if (comms > 0 && them.hasAbility("military_industrial_complex"))
 +            throw new TradeException("Military Industrial Complex: they can't trade commodities.");
 +        if (comms > 0) out.add(pre + "Comms_" + comms);
++        autoClearDebt(me, them, me, comms, out);
 +
 +        List<String> pns = list(s.promissoryNotes());
 +        if (pns.size() > 1) throw new TradeException("They may only send 1 promissory note per transaction.");
@@ -27359,7 +27564,7 @@ index 0000000..12dfc41
 +        int clear = nz(s.clearDebt());
 +        if (clear < 0 || clear > cp.debtTheyHold())
 +            throw new TradeException("They hold " + cp.debtTheyHold() + " of your debt tokens.");
-+        if (clear > 0) out.add(pre + "ClearDebt_" + clear);
++        addClearDebt(pre, clear, out);
 +    }
 +
 +    private static void addFragments(

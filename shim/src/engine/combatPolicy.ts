@@ -10,7 +10,7 @@ import type { CombatDecision, CombatHits, CombatRound, CombatAssignUnits, Combat
 import type { Decision, GameState, Option } from "./types.js";
 import { chooseCombatAutomate, chooseCombatModifier } from "./policy/units.js";
 
-export type CombatChoice = { option: Option<any>; why: string };
+export type CombatChoice = { option: Option<any>; why: string; act?: { action: string; body: Record<string, unknown> } };
 
 const isCombat = (d: Decision): d is CombatDecision => d.kind.startsWith("combat.");
 
@@ -106,8 +106,49 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
 function autoAssign(d: CombatHits, me: string): CombatChoice | null {
   if (d.scope !== "player" || d.target?.userId !== me) return null;
   const auto = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "auto");
-  if (!auto || auto.value?.action !== "auto" || auto.value.hits <= 0) return null;
+  if (!auto) return bombardmentPlan(d);
+  if (auto.value?.action !== "auto" || auto.value.hits <= 0) return null;
   return { option: auto, why: `combat: auto-assign ${auto.value.hits} ${auto.value.source} hit(s) owed` };
+}
+
+/**
+ * BOMBARDMENT hits (no auto option: the manual option carries hits, planet and units): one combat plan. Mechs (or any
+ * unit that can) sustain first, each sustain cancelling `sustainCancels` hits; then the cheapest units are destroyed,
+ * already damaged ones first. Unknown hits: left alone.
+ */
+export function bombardmentPlan(d: CombatHits): CombatChoice | null {
+  const manual = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "assign_manual" && o.value.assignType === "bombardment");
+  const v = manual?.value;
+  if (!manual || !v || v.action !== "assign_manual" || typeof v.hits !== "number" || v.hits <= 0 || !v.units?.length) return null;
+  const cancels = v.sustainCancels ?? 1;
+  let left = v.hits;
+  const plan: { holder: string; unit: string; damaged: boolean; action: "sustain" | "destroy"; count: number }[] = [];
+  const sustained = new Map<string, number>();
+  for (const u of v.units) {
+    const fresh = u.count - u.damaged;
+    if (!u.sustain || fresh <= 0 || left <= 0) continue;
+    const n = Math.min(fresh, Math.ceil(left / cancels));
+    plan.push({ holder: u.holder, unit: u.unit, damaged: false, action: "sustain", count: n });
+    sustained.set(`${u.holder}/${u.unit}`, n);
+    left -= n * cancels;
+  }
+  const byCost = [...v.units].sort((a, b) => cost(a.unit) - cost(b.unit));
+  for (const u of byCost) {
+    if (left <= 0) break;
+    const damaged = Math.min(u.damaged, left);
+    if (damaged > 0) {
+      plan.push({ holder: u.holder, unit: u.unit, damaged: true, action: "destroy", count: damaged });
+      left -= damaged;
+    }
+    const fresh = u.count - u.damaged - (sustained.get(`${u.holder}/${u.unit}`) ?? 0);
+    const n = Math.min(Math.max(0, fresh), left);
+    if (n > 0) {
+      plan.push({ holder: u.holder, unit: u.unit, damaged: false, action: "destroy", count: n });
+      left -= n;
+    }
+  }
+  const text = plan.map((e) => `${e.action} ${e.count} ${e.unit}${e.damaged ? " (damaged)" : ""}`).join(", ");
+  return { option: manual, act: { action: "combat-plan", body: { plan } }, why: `bombardment: ${v.hits} hit(s) on ${v.holder ?? "the planet"}: ${text || "nothing left to hit"}` };
 }
 
 /** A manual menu addressed to us (only if someone opened it): close it once the engine says the hits are assigned. */

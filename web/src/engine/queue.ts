@@ -4,6 +4,7 @@ import { openToAll } from "./reducer";
 import { factionName } from "./names";
 import { useEngine, useMyDecisions } from "./store";
 import { nothingToDecide, setupOnly } from "./optionKinds";
+import { readDecisionState } from "./draftState";
 
 /** Plain-words titles per kind; `legacy` (untyped) prompts take a title from their own text. */
 const TITLES: Record<string, string> = {
@@ -30,6 +31,16 @@ const TITLES: Record<string, string> = {
   "setup.deal_secrets": "Deal secret objectives",
   "setup.reveal_objectives": "Reveal objectives and start",
   "turn.action": "Your turn",
+  "choose.select": "Make a choice",
+  "faction.ability": "Faction ability",
+  "leader.use": "Use a leader",
+  "player.preference": "Preference",
+  "te.breach": "Breach",
+  "te.breakthrough": "Breakthrough",
+  "te.plot": "Plots",
+  "ui.undo_affordance": "Undo",
+  "ui.optional": "Optional",
+  "ui.info_menu": "Info",
   "tactical.activate": "Activate a system",
   "tactical.move": "Move ships",
   "tactical.land": "Land ground forces",
@@ -113,6 +124,11 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
       return mine ? `${card.name}: your primary` : `Follow ${card.name}?`;
     }
   }
+  if (d.kind === "strategy_card.pre_decline") {
+    const sc = d.options.map((o) => (o.value as { strategyCard?: number } | null)?.strategyCard).find((n) => typeof n === "number");
+    const card = sc !== undefined ? state?.strategyCards.find((c) => c.number === sc) : undefined;
+    if (card) return `Pre-decline ${card.name}`;
+  }
   const typed = TITLES[d.kind];
   if (typed) return typed;
   if (d.kind !== "legacy") {
@@ -134,6 +150,8 @@ export function decisionEyebrow(d: Decision): string | null {
 }
 
 const COMBAT = /^combat\./;
+const IN_ADVANCE_KINDS = new Set(["strategy_card.pre_decline", "strategy_card.queue_pick"]);
+const AGENDA_BLOCKING = new Set(["action_card.sabotage", "agenda.when", "agenda.after", "agenda.vote", "agenda.vote_step", "agenda.tiebreak", "agenda.resolve"]);
 /** Table-wide steps that move the phase on: after my own homework, so I'm not asked to start the next phase first. */
 const PHASE_STEP = new Set(["status.advance", "setup.deal_secrets", "setup.reveal_objectives", "status.reveal_objective", "agenda.next"]);
 const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/;
@@ -141,41 +159,66 @@ const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/
 
 /**
  * My decisions in the order to answer them (head first), and the background ones behind "Available now":
- * 1. the next step of what I just answered (pay after build, gain after pay), 2. combat, 3. trade offers to me,
- * 4. everything else oldest first, 5. table steps that move the phase on (after my homework), 6. my turn menu,
- * which stays up while what it spawned is answered, 7. untyped prompts (often leftovers). Prompts I hid are left out.
+ * 0. combat, 1. the next step of what I just answered (pay after build, gain after pay), 3. trade offers to me,
+ * 4. everything else oldest first (on my turn: then my turn menu, then reaction windows like follows), 5. table steps that move the phase on (after my
+ * homework), 6. the turn menu when it is not my turn, 7. untyped prompts (often leftovers). Perpetual action-card
+ * panels go behind "Available now"; prompts I hid are left out.
  */
 export function orderDecisions(
   mine: Decision[],
   answeredAtSeq: number | null,
   hidden?: ReadonlySet<string>,
   state?: GameState | null,
+  answeredKind?: string | null,
 ): { queue: Decision[]; offers: Decision[] } {
   /* Untyped leftovers the game never closed: setup prompts once the game is under way are dropped, info panels
      (nothing but utilities / undo) go behind "Available now". */
   const underWay = !!state && !state.setup && !(state.draft && state.draft.status === "drafting");
   /* A played strategy card is followed / resolved in the action phase only; a window left open past it is moot. */
   const actionPhase = !state || /^action/i.test(state.phase ?? "");
+  /* The status-phase secret list once I declared my secret (scored one, or none): the game leaves it open. */
+  const selfId = state?.players.find((p) => p.self)?.userId;
+  const secretDeclared = !!selfId && !!state?.status?.players[selfId]?.secretScored;
   const shown = dedupe(
     mine.filter(
       (d) =>
         !hidden?.has(d.id) &&
         !(d.kind === "legacy" && underWay && setupOnly(d.options)) &&
-        !(d.kind === "strategy_card.resolve" && !actionPhase),
+        !(d.kind === "strategy_card.resolve" && !actionPhase) &&
+        !(d.kind === "setup.game_settings" && (underWay || !!state?.draft)) &&
+        !(d.kind === "status.score_secret" && secretDeclared),
     ),
   );
-  const background = (d: Decision) => openToAll(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+  const nextStep = (d: Decision) => answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2;
+  /* Perpetual "play an action card" panels sit open all game: on offer, unless one is what my last answer opened. */
+  /* …a new card drawn (status phase) reopens it too: only "play an action card" from my turn menu or a card prompt brings it up. */
+  const askedForCards = !!answeredKind && (answeredKind === "turn.action" || answeredKind.startsWith("action_card."));
+  const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && !(nextStep(d) && askedForCards);
+  const background = (d: Decision) => openToAll(d) || perpetual(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+  const myFaction = state?.players.find((p) => p.self)?.faction;
+  const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
   const offers = shown.filter(background);
   const own = shown.filter((d) => !background(d));
   const homework = own.some((d) => HOMEWORK.test(d.kind) && !PHASE_STEP.has(d.kind));
   const rank = (d: Decision) => {
+    /* A combat under way is fought before anything else, even what my last answer opened (landing waits on it). */
+    if (COMBAT.test(d.kind)) return 0;
+    /* The agenda windows hold up the whole table: answered before anything else of mine. */
+    if (AGENDA_BLOCKING.has(d.kind)) return 0.5;
+    /* A step of a strategy card's primary (place a structure, choose a system…): before the card's own panel. */
+    if (d.kind.startsWith("strategy_card.") && !d.window && !IN_ADVANCE_KINDS.has(d.kind) && d.kind !== "strategy_card.pick") return 1.4;
+    /* The strategy card I just played: its primary is what I do now (before the turn menu that offers "End turn"). */
+    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryStarted(d) ? 4.6 : 1.5;
     /* Opened since my last answer (stream positions, not clocks): its next step. */
-    if (answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2) return 1;
+    if (nextStep(d)) return 1;
     /* Untyped prompts come last: the engine can't tell a live one from a leftover the game never closed. */
     if (d.kind === "legacy") return 7;
-    if (d.kind === "turn.action") return 6;
+    /* My turn: the table waits on it, so it goes before follows and other answer-any-time windows (after what is
+       already under way for me, like a payment). */
+    if (d.kind === "turn.action") return myTurn ? 4.4 : 6;
+    /* Reaction windows (follow a strategy card…) after my own prompts: the work under way for me comes first. */
+    if (d.window) return 4.5;
     if (PHASE_STEP.has(d.kind)) return homework ? 5 : 4;
-    if (COMBAT.test(d.kind)) return 2;
     if (d.kind === "trade.offer") return 3;
     return 4;
   };
@@ -184,6 +227,16 @@ export function orderDecisions(
     .sort((a, b) => a.r - b.r || a.d.createdAt - b.d.createdAt || a.d.seq - b.d.seq)
     .map((x) => x.d);
   return { queue, offers };
+}
+
+/**
+ * Whether I already did part of my card's primary (the engine's primaryDone, or a part pressed on this page): then the
+ * card's panel waits behind my turn menu instead of heading the queue for the rest of the round.
+ */
+function primaryStarted(d: Decision): boolean {
+  const done = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
+  if (Array.isArray(done) && done.length > 0) return true;
+  return (readDecisionState<string[]>(d.id, "pressed") ?? []).length > 0;
 }
 
 /** One prompt per played strategy card (its message and its thread can both carry it): the newest. */
@@ -206,7 +259,8 @@ function dedupe(list: Decision[]): Decision[] {
 export function useMyQueue(): Decision[] {
   const mine = useMyDecisions();
   const answeredAtSeq = useEngine((s) => s.lastAnswer?.seq ?? null);
+  const answeredKind = useEngine((s) => s.lastAnswer?.decision.kind ?? null);
   const hidden = useEngine((s) => s.hidden);
   const state = useEngine((s) => s.view.state);
-  return useMemo(() => orderDecisions(mine, answeredAtSeq, hidden, state).queue, [mine, answeredAtSeq, hidden, state]);
+  return useMemo(() => orderDecisions(mine, answeredAtSeq, hidden, state, answeredKind).queue, [mine, answeredAtSeq, hidden, state, answeredKind]);
 }

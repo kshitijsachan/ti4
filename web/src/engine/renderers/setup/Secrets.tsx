@@ -1,4 +1,4 @@
-import { getSecretObjectiveData } from "@/entities/lookup/secretObjectives";
+import { getSecretObjectiveByName, getSecretObjectiveData } from "@/entities/lookup/secretObjectives";
 import { Choice, ErrorLine, Waiting, useAnswer } from "./parts";
 import type { Renderer } from "./types";
 import classes from "./Setup.module.css";
@@ -18,17 +18,19 @@ export const SecretDiscardRenderer: Renderer<"secret_objective.discard"> = ({ de
   const current = options.find((o) => o.id === selected);
   const target = keepMode ? options.find((o) => o.id !== selected) : current;
   const name = (so?: string) => (so ? getSecretObjectiveData(so)?.name ?? so : undefined);
+  /* The card's name, from its id, else from the bot's "Discard (202) Mechanize the Military" label. */
+  const cardName = (o: (typeof options)[number]) => name(o.value!.secretObjective) ?? o.label.replace(/^(discard|swap( out)?)\s+/i, "").replace(/^\(\d+\)\s*/, "");
 
   return (
     <div className={classes.stack}>
       <p className={classes.title}>{keepMode ? "Keep one secret objective" : redraw ? "Swap a secret objective" : "Discard a secret objective"}</p>
       <div className={classes.stack}>
         {options.map((o) => {
-          const data = o.value!.secretObjective ? getSecretObjectiveData(o.value!.secretObjective) : undefined;
+          const data = o.value!.secretObjective ? getSecretObjectiveData(o.value!.secretObjective) : getSecretObjectiveByName(cardName(o));
           return (
             <Choice
               key={o.id}
-              name={data?.name ?? name(o.value!.secretObjective) ?? o.label}
+              name={data?.name ?? cardName(o)}
               sub={data?.text}
               selected={o.id === selected}
               disabled={o.disabled || !!pending}
@@ -40,7 +42,7 @@ export const SecretDiscardRenderer: Renderer<"secret_objective.discard"> = ({ de
       {current && target && (
         <div className={classes.row}>
           <Choice
-            name={keepMode ? `Keep ${name(current.value!.secretObjective) ?? current.label}` : `${redraw ? "Swap out" : "Discard"} ${name(current.value!.secretObjective) ?? current.label}`}
+            name={keepMode ? `Keep ${cardName(current)}` : `${redraw ? "Swap out" : "Discard"} ${cardName(current)}`}
             go
             disabled={!!pending}
             pending={pending === target.id}

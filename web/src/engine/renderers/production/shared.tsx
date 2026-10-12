@@ -47,7 +47,7 @@ export function Meter({ have, need, unit }: { have: number; need: number | null;
         <span>
           Selected <span className={classes.num}>{have}</span> {unit}
         </span>
-        <span className={classes.muted}>cost not stated by the game</span>
+        <span className={classes.muted}>you choose how much</span>
       </div>
     );
   }

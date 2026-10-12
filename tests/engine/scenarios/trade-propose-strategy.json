@@ -1,0 +1,56 @@
+{
+  "name": "trade-propose-strategy",
+  "description": "pbd75 r1 strategy phase: Keleres offers Argent 1 TG through trade.propose (legacy: the deal builder). The original lets anyone transact outside the action phase; trade.propose must not apply the neighbour rule there (bot v-trade 2368137). Argent accepts.",
+  "base": {
+    "recording": "pbd75",
+    "index": 46,
+    "repost": false
+  },
+  "steps": [
+    {
+      "gameAction": "trade.propose",
+      "as": "keleresm",
+      "body": {
+        "to": "argent",
+        "give": {
+          "tg": 1
+        }
+      },
+      "legacy": [
+        {
+          "press": "offerToTransact_TGs_jupiter_wasp_1",
+          "as": "keleresm"
+        },
+        {
+          "press": "sendOffer_wasp",
+          "as": "keleresm"
+        }
+      ]
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "trade.offer",
+        "value": {
+          "action": "accept",
+          "from": "keleresm"
+        }
+      },
+      "as": "argent"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[argent].trade_goods",
+        "eq": "1"
+      }
+    ]
+  }
+}

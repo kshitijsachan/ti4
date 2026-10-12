@@ -28,9 +28,9 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ENGINE_DIR, RECORDINGS_DIR, ensureRunDir, gameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
+import { ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, readGameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
 import { createFork, openFork, closeFork, clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
-import { gameChannels, loadRecording, recordingSaves } from "./lib/recording.ts";
+import { loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
 import { controlsOf } from "./lib/shim.ts";
 import { checkSnapshot } from "./lib/invariants.ts";
@@ -47,9 +47,12 @@ const short = (s, n = 110) => (String(s).length > n ? String(s).slice(0, n - 1) 
 
 /* ------------------------------------------------------------------ slash commands from the shim's registry */
 
+let commandCache = null;
 function commandSchema() {
+  // The registry does not change during a run; the full shim state is large and re-read after every shim save.
+  if (commandCache) return commandCache;
   const cmds = shimState().commands;
-  return Array.isArray(cmds) ? cmds : Object.values(cmds ?? {});
+  return (commandCache = Array.isArray(cmds) ? cmds : Object.values(cmds ?? {}));
 }
 
 if (flag("--commands")) {
@@ -117,7 +120,7 @@ function buildCommand(spec, ctx) {
 /* ------------------------------------------------------------------ seats, interpolation */
 
 function players(fork) {
-  return parseSave(readFileSync(gameFile(fork.game), "utf8")).players;
+  return parseSave(readGameFile(fork.game)).players;
 }
 
 function userOf(who, ctx) {
@@ -209,7 +212,7 @@ class Runner {
   }
 
   save() {
-    return readFileSync(gameFile(this.fork.game), "utf8");
+    return readGameFile(this.fork.game);
   }
 
   /** Runs one step; returns {ok, error?, detail}. */
@@ -245,6 +248,13 @@ class Runner {
     }
     if (st.press) return this.press(interp(st.press, this.ctx), user, st);
     if (st.answer) return this.answerStep(st.answer, user);
+    if (st.gameAction) {
+      // Game-level engine action (e.g. trade.propose): engine side only; the legacy fork runs the step's "legacy" presses.
+      if (this.via === "press") return { ok: false, error: `${st.gameAction}: game actions have no button equivalent; give the step a "legacy": [presses] list` };
+      const r = await engineApi(`/${encodeURIComponent(this.fork.game)}/actions/${st.gameAction}`, { userId: user, ...JSON.parse(interp(JSON.stringify(st.body ?? {}), this.ctx)) });
+      const ok = r.status === 200 && r.body?.ok !== false;
+      return ok ? { ok: true, detail: `${st.gameAction} ${r.body?.status ?? ""}` } : { ok: false, refused: true, error: `engine refused ${st.gameAction}: ${r.status} ${r.body?.status ?? ""} ${r.body?.error ?? JSON.stringify(r.body).slice(0, 200)}` };
+    }
     return { ok: false, error: `unknown step ${JSON.stringify(st)}` };
   }
 
@@ -267,6 +277,13 @@ class Runner {
       const a = await answer(this.fork.game, hit.d.id, user, { optionId: hit.o.id });
       return a.ok || a.status === "needs_input" ? { ok: true, detail: `${hit.d.kind}/${hit.o.id} ${a.path ?? ""}`, kind: hit.d.kind } : { ok: false, error: `engine refused ${hit.d.kind}/${hit.o.id}: ${a.httpStatus} ${a.status} ${a.error}`, refused: true };
     }
+    // A press chain (legacy: [...]) clicks the next button as soon as the previous click returns; give the bot's reply
+    // message a moment to arrive before falling back to a carrier reload (which reloads the fork's save and would undo
+    // a press whose save is still being written).
+    for (let i = 0; i < 20 && !carrier && st.carrier !== true; i++) {
+      await sleep(300);
+      carrier = this.carrying(customId, user);
+    }
     if (!carrier) carrier = await this.carrier(customId, user, st);
     if (!carrier) return { ok: false, error: `no message carries ${customId}` };
     const c = await clientFor(this.fork, user);
@@ -278,10 +295,23 @@ class Runner {
     const c = this.fork.clients.get(user);
     // Only this fork's channels: with --diff both forks seat the same users, so a client also sees the other
     // fork's messages (a legacy press must never click the engine fork's copy of a button, or vice versa).
-    const mine = gameChannels({ channels: Object.fromEntries(c?.channels ?? []) }, this.fork.game);
+    // A channel is skipped only when it is known to belong to ANOTHER game (its name or its parent's name carries
+    // that game's pbdN); channels/threads of unknown ownership stay eligible.
+    const chans = new Map(c?.channels ?? []);
+    // The client may not have been sent every thread; the shim's state file knows all channels.
+    try {
+      for (const ch of Object.values(shimState().channels ?? {})) if (ch?.id && !chans.has(ch.id)) chans.set(ch.id, ch);
+    } catch {}
+    const gameOf = (ch) => String(ch?.name ?? "").match(/(?:^|[^a-z0-9])(pbd\d+)(?![0-9])/i)?.[1]?.toLowerCase() ?? null;
+    const owner = (id) => {
+      const ch = chans.get(id);
+      return gameOf(ch) ?? (ch?.parent_id ? gameOf(chans.get(ch.parent_id)) : null);
+    };
+    const me = String(this.fork.game).toLowerCase();
     let best = null;
     for (const [chId, msgs] of c?.messages.entries() ?? []) {
-      if (mine.size && !mine.has(chId)) continue;
+      const o = owner(chId);
+      if (o && o !== me) continue;
       for (const m of msgs.values()) if (controlsOf(m.components).some((x) => x.id === customId) && (!best || BigInt(m.id) > BigInt(best.id))) best = m;
     }
     return best;

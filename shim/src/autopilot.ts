@@ -1572,7 +1572,7 @@ class SeatPilot {
         // out: one answer per option per seat. Every decision gets at most ENGINE_MAX_ANSWERS answers from this seat
         // (live pbd36: a press that never registered in the window was re-sent 142 times).
         const windowed = d.scope === "table" || !!d.window;
-        const what = pick.option ? pick.option.id : JSON.stringify(pick.payload);
+        const what = pick.option ? (pick.act ? `${pick.act.action}:${JSON.stringify(pick.act.body)}` : pick.option.id) : JSON.stringify(pick.payload);
         const key = windowed ? `${d.id}#${done?.options.length ?? 0}|${what}` : `${d.id}@${d.revision}#${done?.options.length ?? 0}|${what}`;
         if (this.engineTried.has(key)) continue;
         const attempts = (this.engineAttempts.get(d.id) ?? 0) + 1;
@@ -1594,7 +1594,11 @@ class SeatPilot {
         const req = pick.payload
           ? { payload: pick.payload, expectedSeq: d.seq, requestId, userId: this.userId }
           : { optionId: pick.option?.id, expectedSeq: d.seq, requestId, userId: this.userId };
-        const r = await this.mgr.serial(() => engine.answer(game, d.id, req));
+        // A kind's direct action (a combat plan for bombardment hits) instead of an answer.
+        const act = pick.option ? pick.act : undefined;
+        const r = act
+          ? await this.mgr.serial(() => engine.act(game, d.id, act.action, { ...act.body, expectedSeq: d.seq, userId: this.userId }))
+          : await this.mgr.serial(() => engine.answer(game, d.id, req));
         if (!r) return false;
         const line = `autopilot ${this.name}: engine ${d.kind} "${pick.option?.label ?? "payload"}" in ${game} (${pick.why}) -> ${r.status}${r.error ? `: ${r.error}` : ""}`;
         // Fallback answers are logged loudly: each one is a kind that wants a specific policy.
@@ -1713,7 +1717,15 @@ class SeatPilot {
         }
       },
       log: (text) => log.info(`autopilot ${self.name}: ${text}`),
-      engine: this.mgr.engine ? this.seatEngine(this.mgr.engine) : undefined,
+      // Read on use: pilots are created by the Autopilot constructor (sync), before index.ts assigns mgr.engine, so a
+      // value captured here was undefined for every seat seated at startup — the planner never took the typed
+      // tactical path (no "engine turn.action (tactical action…)" since 20:17 on 2026-10-11) and ran on buttons.
+      get engine() {
+        const engine = self.mgr.engine;
+        if (!engine) return undefined;
+        if (self.seatEngineFor?.client !== engine) self.seatEngineFor = { client: engine, api: self.seatEngine(engine) };
+        return self.seatEngineFor.api;
+      },
       engineOwns: (game, messageId) => self.mgr.engineOwns(game, messageId, self.userId),
       engineProduce: async (game, messageId, build) => {
         const engine = self.mgr.engine;
@@ -1728,6 +1740,8 @@ class SeatPilot {
       },
     };
   }
+
+  private seatEngineFor?: { client: EngineClient; api: SeatEngine };
 
   /** The planner's typed engine access as this seat (answers go through the same serial queue as presses). */
   private seatEngine(engine: EngineClient): SeatEngine {

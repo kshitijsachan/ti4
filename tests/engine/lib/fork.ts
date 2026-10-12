@@ -16,7 +16,7 @@
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readShimState } from "../../../shim/tools/read-state.mjs";
-import { BOT_STORAGE, BOT_URL, SHIM_STATE, SHIM_URL, ensureRunDir, gameFile, getJson, sleep, undoDir, undoFile, type Json } from "./env.ts";
+import { BOT_STORAGE, BOT_URL, SHIM_STATE, SHIM_URL, ensureRunDir, gameFile, readGameFile, getJson, sleep, undoDir, undoFile, type Json } from "./env.ts";
 import { GAME_CHANNEL_KEYS, PLAYER_CHANNEL_KEYS, isRealPlayer, parseSave, rewriteForFork, type ForkMap } from "./savefile.ts";
 import { ShimClient, controlsOf, type Msg } from "./shim.ts";
 
@@ -141,7 +141,7 @@ export async function createFork(n = 8, log: (s: string) => void = () => {}): Pr
   // Wait for the bot to have written the game with its channels.
   for (let i = 0; i < 60; i++) {
     try {
-      const p = parseSave(readFileSync(gameFile(game), "utf8"));
+      const p = parseSave(readGameFile(game));
       if (p.game.get("main_game_channel") && p.game.get("main_game_channel") !== "null" && latestUndo(game) >= 2) break;
     } catch {
       /* not yet */
@@ -154,7 +154,7 @@ export async function createFork(n = 8, log: (s: string) => void = () => {}): Pr
 
 export async function openFork(game: string): Promise<Fork> {
   const seats = await replaySeats();
-  const p = parseSave(readFileSync(gameFile(game), "utf8"));
+  const p = parseSave(readGameFile(game));
   const channels = new Map<string, string>();
   for (const k of GAME_CHANNEL_KEYS) if (p.game.has(k)) channels.set(k, p.game.get(k)!);
   return { game, seats, channels, actionsId: p.game.get("main_game_channel")!, clients: new Map() };
@@ -188,7 +188,7 @@ export function seatMap(fork: Fork, origText: string, usernames: Map<string, str
   });
   // An owner who is not seated keeps their id (the seat ids must map back one-to-one for comparisons).
   // The fork's current per-player threads, so a loaded save keeps using them instead of making new ones.
-  const forkNow = parseSave(readFileSync(gameFile(fork.game), "utf8"));
+  const forkNow = parseSave(readGameFile(fork.game));
   const playerChannels = new Map<string, Map<string, string>>();
   for (const s of fork.seats) {
     const fp = forkNow.players.find((x) => x.userId === s.user_id);
@@ -230,7 +230,7 @@ export type Carrier = { customId: string; label: string; faction?: string; chann
 
 /** The fork's current thread ids, so a loaded save keeps using them (the bot may have created threads meanwhile). */
 export function refreshThreads(fork: Fork, map: ForkMap) {
-  const forkNow = parseSave(readFileSync(gameFile(fork.game), "utf8"));
+  const forkNow = parseSave(readGameFile(fork.game));
   for (const fp of forkNow.players) {
     const m = map.playerChannels.get(fp.userId);
     if (m) for (const k of PLAYER_CHANNEL_KEYS) if (fp.kv.get(k) && fp.kv.get(k) !== "null") m.set(k, fp.kv.get(k)!);
@@ -300,5 +300,5 @@ export async function waitForSaves(game: string, since: number, timeoutMs = 2000
 }
 
 export async function readForkSave(game: string): Promise<string> {
-  return readFileSync(gameFile(game), "utf8");
+  return readGameFile(game);
 }

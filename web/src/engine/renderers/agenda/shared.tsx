@@ -1,3 +1,4 @@
+import { getAgendaData } from "@/entities/lookup/agendas";
 import cx from "clsx";
 import { Button, UnstyledButton } from "@mantine/core";
 import { getPlanetData } from "@/entities/lookup/planets";
@@ -33,6 +34,7 @@ export function userName(userId: string | null | undefined, state: GameState | n
 /** The agenda card header: name, type and target line. */
 export function AgendaHeader({ agenda }: { agenda: AgendaState | null | undefined }) {
   if (!agenda) return null;
+  const card = agenda.agendaId ? getAgendaData(agenda.agendaId) : undefined;
   return (
     <div className={classes.head}>
       <span className={classes.name}>{agenda.name ?? "Agenda"}</span>
@@ -40,6 +42,8 @@ export function AgendaHeader({ agenda }: { agenda: AgendaState | null | undefine
         {agenda.type} · {agenda.target}
         {agenda.number ? ` · #${agenda.number}` : ""}
       </span>
+      {card?.text1 && <span className={classes.cardText}>{card.text1}</span>}
+      {card?.text2 && <span className={classes.cardText}>{card.text2}</span>}
     </div>
   );
 }

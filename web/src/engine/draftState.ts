@@ -23,6 +23,11 @@ function write(key: string, value: unknown) {
   }
 }
 
+/** A decision's stored selection outside React (e.g. the queue asking whether a primary was started). */
+export function readDecisionState<T>(decisionId: string, name: string): T | undefined {
+  return read<T>(keyOf(decisionId, name))?.value;
+}
+
 /**
  * `useState` for a selection in progress on one decision (planets ticked, units counted, a form half filled), kept
  * in this tab's session storage so a reload or reconnect lands on the same half-made choice. Forgotten when the
