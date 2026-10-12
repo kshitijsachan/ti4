@@ -40,11 +40,26 @@ export class Steps {
     for (let i = prompts.length - 1; i >= 0; i--) {
       const p = prompts[i];
       if (!snowflakeAfter(p.m.id, after ?? this.since)) break;
-      if (this.gone.has(p.m.id) || !promptForMe(this.seat, p, faction)) continue;
+      if (this.gone.has(p.m.id) || !(promptForMe(this.seat, p, faction) || this.ours(p, faction))) continue;
       const c = p.controls.find((x) => (!lockOf(x.custom_id) || lockIs(x.custom_id, faction)) && match(baseId(x.custom_id), x));
       if (c) return { p, c };
     }
     return null;
+  }
+
+  /**
+   * A prompt this job already pressed (and not locked to another faction) stays ours after the bot edits it: a bill
+   * whose ping is gone after the first planet ("… exhausted the following: … WARNING: Have not spent enough"; posted
+   * for a typed production answer, so no `_prompted_for`) was never found again (live pbd158: 4 production bills
+   * stuck after one planet, the tactical action never concluded). Also a prompt that names only us (no ping).
+   */
+  private ours(p: Prompt, faction: string): boolean {
+    if (p.controls.some((c) => lockOf(c.custom_id) && !lockIs(c.custom_id, faction))) return false;
+    const prefix = `${p.m.id}:`;
+    for (const k of this.pressed.keys()) if (k.startsWith(prefix)) return true;
+    // Or it names only us, the bot's way ("<faction emoji>Bot Gamma 5 <colour emoji>**Black** …"), with no ping.
+    const content = String(p.m.content ?? "");
+    return !!this.seat.name && content.includes(`${this.seat.name} <:`) && !/<@!?\d+>/.test(content);
   }
 
   /** Presses unless we pressed this very control on this unchanged message moments ago (the bot has not answered). */
