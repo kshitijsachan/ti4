@@ -77,6 +77,10 @@ const diceOf = (text: string) => [...text.matchAll(DIE)].map((d) => (d[1] === "0
 
 export type ReplayOptions = {
   mode: "step" | "chain";
+  /** step mode: only replay steps whose custom id (or label) matches; the others are skipped without loading a save */
+  only?: RegExp;
+  /** step mode: only replay these step indexes (the rest are skipped without loading a save) */
+  steps?: Set<number>;
   from?: number;
   to?: number;
   resync?: boolean;
@@ -182,6 +186,10 @@ export async function replay(rec: Recording, fork: Fork, o: ReplayOptions): Prom
     mirrorUserSettings(map, rec.userSettings);
     const forkUser = a.user ? map.users.get(a.user.id) : undefined;
     const playable = a.replayable && (a.kind === "button" || a.kind === "hidden-button" || a.kind === "command") && !!forkUser;
+    if (playable && o.mode === "step" && ((o.only && !o.only.test(a.customId ?? a.label)) || (o.steps && !o.steps.has(cur.index)))) {
+      push({ ...base, why: "filtered (--only)" });
+      continue;
+    }
     if (!playable) {
       const why = a.why ?? (!forkUser ? "the acting person is not seated in the saved state" : `not replayable (${a.kind})`);
       if (o.mode === "chain") {
