@@ -39,7 +39,17 @@ export type ChoosePlayer = DecisionBase<"choose.player", ChooseBase & { faction:
 
 export type ChooseUnit = DecisionBase<
   "choose.unit",
-  ChooseBase & { unit: string; tile?: TilePosition; planet?: PlanetId; planetName?: string }
+  ChooseBase & {
+    unit: string;
+    tile?: TilePosition;
+    planet?: PlanetId;
+    planetName?: string;
+    /** source "remove_unit_type" (remove one unit of a type: the plastic-limit warning): "space" or a planet id. */
+    holder?: string;
+    /** remove_unit_type: the units' owner color; destroy: "destroy" when the removal destroys. */
+    color?: string;
+    destroy?: string;
+  }
 >;
 
 export type ChooseCard = DecisionBase<

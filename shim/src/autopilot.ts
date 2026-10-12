@@ -9,7 +9,7 @@ import type { Seat, SeatEngine } from "./botplay/seat.js";
 import { TradeDesk } from "./botplay/trade.js";
 import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
-import { chooseTyped, type TypedChoice } from "./engine/autopilot.js";
+import { chooseTyped, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
 import { productionPayload } from "./engine/policy/production.js";
@@ -101,8 +101,6 @@ type Rule = {
 
 /** Strategy cards an autopilot likes, best first (1 Leadership, 7 Technology, 8 Imperial, 6 Warfare, ...). */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
-/** How long a typed decision belongs to the engine path before the legacy rules may answer it (see engineOwns). */
-const ENGINE_GRACE_MS = 90_000;
 /** At most this many engine answers from one seat to one decision (multi-part answers walk a few options). */
 const ENGINE_MAX_ANSWERS = 8;
 /**
@@ -195,7 +193,9 @@ const RULES: Rule[] = [
   // Trades offered to us.
   { id: /^rejectOffer_/, score: 74, why: "reject transaction" },
   // Reaction windows everyone answers.
-  { id: /^sc_no_follow_\d+$/, score: 70, table: true, why: "strategy card: not following" },
+  // typed: strategy_card.resolve (kinds/strategyPolicy.ts declines or follows once per card); this rule only runs when
+  // the engine does not own the card (engine off/down, or the decision outlived its grace period). See engineOwns.
+  { id: /^sc_no_follow_\d+$/, score: 70, table: true, typed: true, why: "strategy card: not following" },
   // typed: the engine policy (policy/cards.ts) passes Sabotage windows; this rule only runs when the engine does not
   // own the window (engine off/down, or the typed decision outlived its grace period). See engineOwns.
   { id: /^no_sabotage$/, score: 70, table: true, typed: true, why: "no sabotage" },
@@ -207,10 +207,12 @@ const RULES: Rule[] = [
   // The table-wide "Start Strategy Phase" (posted after the last "Redistribute Command Tokens" when there is no agenda
   // phase): one autopilot presses it once every player said ready (see mayStartStrategy).
   { id: /^startStrategyPhase$/, score: 59, table: true, typed: true, phase: /^status/, why: "status: everyone is ready; start the strategy phase" },
-  // Prompts addressed to us: move on.
+  // Prompts addressed to us: move on. typed: never on a prompt the engine owns (its typed decision is answered by the
+  // engine policies; this catch-all pressed "Ready For Strategy Phase" / "Pass" / "Not Following" there as well).
   {
     label: /^(done|confirm|ready|no\b|decline|skip|pass\b|not following|end turn|continue|finish|none|no thanks)/i,
     score: 30,
+    typed: true,
     why: "decline / move on",
   },
 ];
@@ -368,31 +370,20 @@ export class Autopilot {
   }
 
   /**
-   * Whether the typed engine path owns this prompt, so the legacy rules / jobs must not press it as well. Mandatory
-   * fallback rule (every area): only when the engine is reachable (its event stream is live), the message is an open
-   * typed decision waiting on this seat, and the decision is younger than ENGINE_GRACE_MS (the typed policy had its
-   * chance; a prompt it leaves alone for longer goes back to the legacy rules). Engine off, down or restarting →
-   * false → the legacy paths play exactly as before.
+   * Whether the typed engine path owns this prompt, so the legacy rules / jobs / last resort must not press it as
+   * well (engine/autopilot.ts engineOwnership): while the engine stream is live, a message that is (or is about to be)
+   * a typed decision belongs to the engine policies — also once this seat answered it, while a policy holds its answer
+   * on purpose, and until the watchdog's fallback answers it — for ENGINE_GRACE_MS. Engine off, down or restarting
+   * (or its decisions unreadable) → false → the legacy paths play exactly as before.
    */
   async engineOwns(game: string, messageId: string, userId: string): Promise<boolean> {
     const engine = this.engine;
     if (!engine?.isLive) return false;
-    const open = (await engine.openDecisions(game)) ?? [];
+    const open = await engine.openDecisions(game);
+    if (!open) return false;
     const d = open.find((x) => x.source.messageId === messageId);
-    if (!d || d.kind === "legacy") return false;
-    // A Sabotage window this seat already answered, or was auto-passed in (no Sabotage feasible: the bot itself adds
-    // that faction's reaction, MessageHelper.sendMessageToChannelWithEmbedsAndFactionReact): nothing left to press.
-    // Without this the legacy "no_sabotage" rule pressed No Sabotage on the engine's behalf (live pbd161, Shields Holding).
-    if (d.kind === "action_card.sabotage" && d.window?.responded.includes(userId)) return true;
-    const state = await engine.state(game, userId, 2000);
-    if (d.scope === "player" ? d.target?.userId !== userId : !!d.window && !awaits(d, userId)) {
-      // Not awaited by the window, but ours to answer (the strategy card we played): still the engine's.
-      if (!answersOutsideWindow(d, userId, state)) return false;
-    }
-    // Typed, but no bot policy answers it (now): the legacy rules may, without waiting out the grace period.
-    const mine = open.filter((x) => x.id !== d.id && x.target?.userId === userId);
-    if (!chooseTyped(d, state, userId, { history: [], open: mine, all: open, waitedMs: Date.now() - d.createdAt })) return false;
-    return Date.now() - d.createdAt < ENGINE_GRACE_MS;
+    const state = d && d.kind !== "legacy" ? await engine.state(game, userId, 2000) : null;
+    return engineOwnership(d, messageId, userId, state, open, Date.now()).owned;
   }
 
   /**
@@ -1010,6 +1001,8 @@ class SeatPilot {
     }
     // Only for prompts clearly addressed to us: never one for another player, or locked to another faction.
     if (!ctx.strong || mentionsOther || lockedOther || answered || TAKE_BACK_TEXT.test(content)) return null;
+    // Nor one the typed engine path owns (its policies, or the watchdog's fallback, answer it).
+    if (owned ?? (await this.mgr.engineOwns(game, m.id, me))) return null;
     // A prompt certainly waiting on us that no rule covers: its first control (not one we just chose in a
     // similar prompt here, e.g. a second "choose a technology").
     // Optional abilities offered "just in case" (agents, commanders, promissory notes, "use X?") are not questions

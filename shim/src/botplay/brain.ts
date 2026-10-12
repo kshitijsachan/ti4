@@ -76,7 +76,8 @@ export class Brain {
     const stray = [newest].filter((p): p is Prompt => !!p && (!retired || BigInt(p.m.id) > BigInt(retired))).find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockIs(c.custom_id, faction) && /^(concludeMove_|landUnits_|doneLanding|doneWithTacticalAction|tacticalActionBuild_)/.test(baseId(c.custom_id))));
     const turnOver = prompts.some((p) => p.controls.some((c) => (lockIs(c.custom_id, faction) && baseId(c.custom_id) === "turnEnd")));
     const age = stray ? Date.now() - Date.parse(stray.m.edited_timestamp ?? stray.m.timestamp) : 0;
-    if (stray && !turnOver && age > 20000 && age < 600000) {
+    // (Not a step the typed engine path owns: engineRecover above finishes those.)
+    if (stray && !turnOver && age > 20000 && age < 600000 && !(await this.seat.engineOwns?.(game, String(stray.m.id)))) {
       const board = await this.seat.board(game, true);
       const me = board ? playerOf(board, this.seat.userId) : undefined;
       if (board && me && board.activePlayer === me.color && board.phase === "action") {
@@ -92,6 +93,9 @@ export class Brain {
   private async turn(game: string, faction: string, prompts: Prompt[]): Promise<boolean> {
     const turn = [...prompts].reverse().find((p) => p.controls.some((c) => (lockIs(c.custom_id, faction) && baseId(c.custom_id) === "tacticalAction")));
     if (!turn || this.handled.has(turn.m.id) || turn.m._presses?.[this.seat.userId]) return false;
+    // The typed turn menu (turn.action) is engineTurn's, also while its decision is still on its way to the mirror
+    // (live: the button path pressed "Tactical Action" and walked the whole action by buttons, ~15 presses an hour).
+    if (await this.seat.engineOwns?.(game, String(turn.m.id))) return false;
     const ids = turn.controls.map((c) => baseId(c.custom_id));
     // After an action the bot offers End Turn on the same kind of prompt; an unplayed card goes first.
     if (ids.some((b) => /^(turnEnd|endOfTurnAbilities|strategicAction_\d+)$/.test(b))) return false;

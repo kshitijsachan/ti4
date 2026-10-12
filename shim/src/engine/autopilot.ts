@@ -2,7 +2,7 @@
  * Autopilot policy over typed decisions. Pure: (decision, state) → option. Add a case per kind as kinds are typed;
  * return null to leave the decision to the legacy rule table in autopilot.ts.
  */
-import { awaits, type Decision, type GameState, type Option } from "./types.js";
+import { answersOutsideWindow, awaits, type Decision, type GameState, type Option } from "./types.js";
 import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
@@ -18,7 +18,7 @@ import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
 import { chooseComponents, isComponentsKind } from "./policy/components.js";
 import { chooseCommodities, choosePlacement, planPayment } from "./policy/production.js";
-import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
+import { chooseFallback, fallbackDue, mayPress, staleForBot } from "./policy/fallback.js";
 import { choosePerpetual } from "./policy/ui.js";
 import { chooseTurnAction } from "./policy/turn.js";
 import { chooseManualBuild, chooseUnitsModify } from "./policy/units.js";
@@ -175,5 +175,66 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
       return chooseManualBuild(d, me);
     default:
       return null;
+  }
+}
+
+/** How long a typed decision the engine can answer belongs to the engine path before the legacy rules may help. */
+export const ENGINE_GRACE_MS = 90_000;
+/**
+ * A message the engine has not (yet) captured as a decision: the bot posts it to the shim before the engine stream
+ * carries its decision, and the autopilot looks at the table every ~1 s. Legacy paths leave such a message alone for
+ * this long, so they never win the race against the typed decision (live: "Not Following", "Pass", the status
+ * homework and scoring prompts were pressed by the rule table / planner moments before the engine answered them).
+ */
+export const ENGINE_SETTLE_MS = 15_000;
+
+export type EngineOwnership = { owned: boolean; why: string };
+
+/**
+ * Whether the typed engine path owns a message for `me`, so the legacy rules / planner jobs / last resort must not
+ * press it (pure; Autopilot.engineOwns feeds it the live mirror). Only meaningful while the engine stream is live —
+ * the caller answers false when it is not, so with the engine off the legacy paths play exactly as before.
+ *
+ * - no decision for the message: owned while the message is younger than ENGINE_SETTLE_MS (its decision may not have
+ *   reached the mirror yet), then free (untyped prompt, or a decision already closed);
+ * - "legacy" (untyped): free;
+ * - a window `me` already answered: owned — there is nothing left for this seat to press, and a legacy press would
+ *   answer twice (live: "Not Following", "Ready For Strategy Phase", "No Public Objective Scored" pressed again);
+ * - another player's prompt: free (the legacy paths have their own owner checks);
+ * - for ENGINE_GRACE_MS from its creation: a window `me` is not asked in (and does not answer outside it) is owned
+ *   (nobody waits on us); otherwise owned while the engine has an answer for it — the specific policy, or the last-resort fallback the
+ *   watchdog forces (a policy that holds its answer on purpose, e.g. the turn planner's grace, still owns it); free
+ *   when no engine answer exists at all (optional offers). After the grace: free (the engine path failed to move it).
+ */
+export function engineOwnership(
+  d: Decision | undefined,
+  messageId: string,
+  me: string,
+  state: GameState | null,
+  open: Decision[],
+  now: number,
+): EngineOwnership {
+  if (!d) {
+    const age = now - snowflakeMs(messageId);
+    return age < ENGINE_SETTLE_MS ? { owned: true, why: `not captured yet (${Math.round(age / 1000)}s old)` } : { owned: false, why: "no typed decision" };
+  }
+  if (d.kind === "legacy") return { owned: false, why: "untyped" };
+  if (d.window?.responded.includes(me)) return { owned: true, why: "answered already" };
+  if (d.scope === "player" && !d.window && d.target?.userId !== me) return { owned: false, why: "another player's prompt" };
+  const age = now - d.createdAt;
+  if (age >= ENGINE_GRACE_MS) return { owned: false, why: `typed, but still open after ${Math.round(age / 1000)}s` };
+  if (d.window && !awaits(d, me) && !answersOutsideWindow(d, me, state)) return { owned: true, why: "not asked in this window" };
+  if (staleForBot(d, state, me)) return { owned: true, why: "stale for this seat" };
+  const mine = open.filter((x) => x.id !== d.id && x.target?.userId === me);
+  const pick = chooseTyped(d, state, me, { history: [], open: mine, all: open, waitedMs: age, force: true });
+  return pick ? { owned: true, why: pick.why } : { owned: false, why: "no engine answer" };
+}
+
+const DISCORD_EPOCH = 1420070400000;
+function snowflakeMs(id: string): number {
+  try {
+    return Number(BigInt(id) >> 22n) + DISCORD_EPOCH;
+  } catch {
+    return 0;
   }
 }
