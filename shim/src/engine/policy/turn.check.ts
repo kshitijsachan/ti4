@@ -1005,6 +1005,24 @@ check(
   },
 );
 
+// Folded end-of-turn menu (end-turn branch): plain End Turn, the end-of-turn abilities (untyped, e.g. the expedition)
+// and "take another action" (Master Plan in hand) on one menu: the bot ends its turn, never opens the abilities.
+check("folded end-of-turn menu: bot presses the plain End Turn", () => {
+  const KAPPA = "1559015287133700096";
+  const state = PBD181_STATE as unknown as GameState;
+  const d = clone(LIVE.pbd161.decision);
+  d.game = "pbd181";
+  d.createdAt = Date.now() - 5_000;
+  d.target = { userId: KAPPA, faction: "nomad", color: "yellow", resolvedBy: "owner_prefix" } as any;
+  const base = d.options[0];
+  d.options = [
+    { ...base, id: "FFCC_nomad_confirmSecondAction", label: "Use Ability To Do Another Action", handler: "confirmSecondAction", value: { action: "another_action", sources: ["Master Plan"] } },
+    { ...base, id: "FFCC_nomad_turnEnd", label: "End Turn", handler: "turnEnd", value: { action: "end_turn", abilities: false } },
+    { ...base, id: "FFCC_nomad_expeditionInfoAndButtons", label: "Do an Expedition (3 Remaining)", handler: "expeditionInfoAndButtons", value: null },
+  ] as any;
+  assert.equal(chooseTyped(d, state, KAPPA, { history: [], open: [], all: [d] })?.option?.id, "FFCC_nomad_turnEnd");
+});
+
 // Warfare primary follow-ups (offer, remove-a-token, token panel) keep the strategic action in flight.
 {
   const now = Date.now();

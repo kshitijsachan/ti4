@@ -111,10 +111,14 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
         return v.abilities ? "Pass (with abilities)" : "Pass";
       case "end_turn":
         return v.abilities ? "End turn (abilities first)" : "End turn";
+      case "another_action":
+        return v.sources?.length ? `Take another action (${v.sources.join(", ")})` : "Take another action";
     }
   };
   const variant = (o: Option<TurnAction["options"][number]["value"]>) =>
-    o.value!.action === "pass" || o.value!.action === "end_turn" ? "light" : "filled";
+    o.value!.action === "pass" || o.value!.action === "end_turn" || o.value!.action === "another_action"
+      ? "light"
+      : "filled";
   return (
     <div className={classes.panel}>
       <div className={classes.row}>
@@ -252,6 +256,7 @@ export function TacticalConcludeView({ decision, answer }: RendererProps<Tactica
     const v = o.value!;
     if (v.action === "produce") return `Produce in ${v.position} (${v.production} production)`;
     if (v.action === "rift") return "Roll for gravity rift";
+    if (v.endTurn) return "Conclude & end turn";
     return v.frontierExplore ? "Conclude (explores the frontier)" : "Conclude tactical action";
   };
   return (

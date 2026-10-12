@@ -27,7 +27,12 @@ export type TurnActionValue =
   /** abilities: opens the "pass with abilities" menu instead of passing now. */
   | { action: "pass"; abilities: boolean }
   /** abilities: opens the end-of-turn abilities menu (it carries a final end_turn with abilities=false). */
-  | { action: "end_turn"; abilities: boolean };
+  | { action: "end_turn"; abilities: boolean }
+  /**
+   * Take another action this turn (confirmSecondAction / doAnotherAction). Offered only when something allows it;
+   * sources names it (Master Plan, Minister of War, Fleet Logistics, Thunder's Edge, …).
+   */
+  | { action: "another_action"; sources: string[] };
 export type TurnAction = DecisionBase<"turn.action", TurnActionValue>;
 
 // ---------------------------------------------------------------- tactical.activate
@@ -111,8 +116,11 @@ export type TacticalLand = DecisionBase<"tactical.land", TacticalLandValue> & { 
 export type TacticalConcludeValue =
   | { action: "produce"; position: TilePosition; production: number }
   | { action: "rift"; position: TilePosition }
-  /** frontierExplore: concluding explores the system's frontier token (Dark Energy Tap). */
-  | { action: "conclude"; position: TilePosition; frontierExplore: boolean };
+  /**
+   * frontierExplore: concluding explores the system's frontier token (Dark Energy Tap). endTurn: "Conclude & End
+   * Turn" (offered only when the end-of-turn menu would hold nothing but End Turn).
+   */
+  | { action: "conclude"; position: TilePosition; frontierExplore: boolean; endTurn?: boolean };
 export type TacticalConclude = DecisionBase<"tactical.conclude", TacticalConcludeValue>;
 
 export type TacticalRiftValue =
