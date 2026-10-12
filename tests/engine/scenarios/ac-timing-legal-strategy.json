@@ -16,6 +16,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -35,6 +38,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -52,6 +58,9 @@
         "ac_id": "disgrace",
         "faction_or_color": "empyrean"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {

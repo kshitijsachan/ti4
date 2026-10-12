@@ -8,7 +8,7 @@
   },
   "setup": [
     "/player turn_start faction_or_color:ralnel",
-    "/player stats tg:1 faction_or_color:ralnel"
+    "/player stats trade_goods:1 faction_or_color:ralnel"
   ],
   "steps": [
     {
@@ -31,7 +31,7 @@
     {
       "command": "player stats",
       "options": {
-        "tg": "2",
+        "trade_goods": "2",
         "faction_or_color": "ralnel"
       }
     },

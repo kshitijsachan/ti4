@@ -19,11 +19,17 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "command": "ac draw_specific_ac",
       "options": {
         "ac_id": "sabo1",
         "faction_or_color": "muaat"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -52,6 +58,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -69,6 +78,9 @@
         "ac_id": "lost_star",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -90,6 +102,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -107,6 +122,9 @@
         "ac_id": "nav_suite",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -128,6 +146,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -145,6 +166,9 @@
         "ac_id": "rally",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -166,6 +190,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -183,6 +210,9 @@
         "ac_id": "war_machine1",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -204,6 +234,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -221,6 +254,9 @@
         "ac_id": "dh2",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -242,6 +278,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -259,6 +298,9 @@
         "ac_id": "intercept",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -280,6 +322,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -297,6 +342,9 @@
         "ac_id": "disable",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -318,6 +366,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -335,6 +386,9 @@
         "ac_id": "mjets1",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -356,6 +410,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -373,6 +430,9 @@
         "ac_id": "reveal_prototype",
         "faction_or_color": "mentak"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -394,6 +454,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -411,6 +474,9 @@
         "ac_id": "sh2",
         "faction_or_color": "muaat"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -432,6 +498,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -449,6 +518,9 @@
         "ac_id": "fsb",
         "faction_or_color": "muaat"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -470,6 +542,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -487,6 +562,9 @@
         "ac_id": "rescue",
         "faction_or_color": "muaat"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -508,6 +586,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -525,6 +606,9 @@
         "ac_id": "counterstroke",
         "faction_or_color": "muaat"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -546,6 +630,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -563,6 +650,9 @@
         "ac_id": "crisis",
         "faction_or_color": "muaat"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -584,6 +674,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -603,6 +696,9 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "answer": {
         "kind": "action_card.play",
         "value": {
@@ -620,6 +716,9 @@
         "ac_id": "puppetsonastring",
         "faction_or_color": "ghost"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {

@@ -1,9 +1,9 @@
 {
   "name": "ac-timing-legal-status",
-  "description": "Positive control for ActionCardTiming (audit-acs): STATUS window: Political Stability played by Empyrean in the status phase (pbd72 r3 statusHomework) must be ACCEPTED.",
+  "description": "Positive control for ActionCardTiming (audit-acs): STATUS window: Political Stability (already in Arborec's hand) played in the status phase (pbd72 r3 statusHomework, save 750) must be ACCEPTED. (A Morale Boost is drawn first so the bot reposts Arborec's hand tray.)",
   "base": {
     "recording": "pbd72",
-    "index": 737,
+    "index": 750,
     "repost": false
   },
   "setup": [],
@@ -11,9 +11,12 @@
     {
       "command": "ac draw_specific_ac",
       "options": {
-        "ac_id": "stability",
-        "faction_or_color": "empyrean"
+        "ac_id": "mb4",
+        "faction_or_color": "arborec"
       }
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
@@ -22,10 +25,7 @@
           "actionCard": "stability"
         }
       },
-      "as": "empyrean"
-    },
-    {
-      "wait": 800
+      "as": "arborec"
     }
   ],
   "expect": {
