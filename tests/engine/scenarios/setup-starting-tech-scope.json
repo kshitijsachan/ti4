@@ -1,0 +1,22 @@
+{
+  "name": "setup-starting-tech-scope",
+  "description": "Engine UI playtest 5 (pbd283): the Firmament's starting-technology prompt (tech.gain, starting) showed under 'Available now' as OPTIONAL and never opened by itself, while setup waited on it. Cause: the prompt was captured before the save that set the faction (no owner yet: scope 'table'); the dynamic retarget later found the player but kept scope 'table'. Fix (bot Engine.refresh): the scope is re-read with the target. Here (pbd47, before the Firmament's pick) the reposted starting-tech prompt must be the Firmament player's own (scope 'player'). The capture-ahead race itself is not reproducible from a save; this guards the end state.",
+  "base": {
+    "recording": "pbd47",
+    "index": 19
+  },
+  "steps": [
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": {
+      "kind": "tech.gain",
+      "as": "firmament",
+      "scope": "player",
+      "open": true
+    }
+  }
+}

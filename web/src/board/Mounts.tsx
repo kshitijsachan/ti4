@@ -1,6 +1,6 @@
 import { DecisionHost } from "@/decisions";
 import { CombatOutcome } from "@/decisions/renderers/combat/Outcome";
-import { EngineConnecting, EngineDecisionHost, useEngineMode } from "@/engine";
+import { EngineConnecting, EngineDecisionHost, useEngineMode, useEngineRestarting } from "@/engine";
 import { GameLog, type GameLogProps } from "@/gamelog";
 import { HandTray } from "@/hand";
 
@@ -12,6 +12,7 @@ import { HandTray } from "@/hand";
 /** The engine-driven popup when the engine flag is on and its stream is live; the legacy one otherwise. */
 export function DecisionSlot({ gameName, className, rightInset }: { gameName: string; className?: string; rightInset?: number }) {
   const mode = useEngineMode(gameName);
+  const restarting = useEngineRestarting(gameName);
   if (mode === "engine") {
     return (
       <>
@@ -21,7 +22,7 @@ export function DecisionSlot({ gameName, className, rightInset }: { gameName: st
       </>
     );
   }
-  if (mode === "waiting") return <EngineConnecting rightInset={rightInset} />;
+  if (mode === "waiting") return <EngineConnecting rightInset={rightInset} restarting={restarting} />;
   return <DecisionHost gameName={gameName} placement="contained" className={className} rightInset={rightInset} />;
 }
 

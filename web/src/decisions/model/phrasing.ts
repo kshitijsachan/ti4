@@ -120,6 +120,8 @@ function openingStep(id: string, label: string): Opening | undefined {
   }
   if (/^tacticalAction(?!Build)/.test(id)) return { now: "Choosing a system to activate…", undo: "Started a tactical action" };
   if (/^componentAction(?!Res)/.test(id)) return { now: "Choosing a component action…", undo: "Opened the component actions" };
+  /* "Score A Public" (Imperial) only lists the public objectives: nothing is scored until one is picked. */
+  if (/^scoreAnObjective$/.test(id)) return { now: "Choosing a public objective to score…", undo: "Opened public objective scoring" };
   if (/^get_so_score_buttons$/.test(id)) return { now: "Choosing a secret objective to score…", undo: "Opened secret objective scoring" };
   if (/^get_so_discard_buttons$|^getDiscardButtons/.test(id)) return { now: "Choosing a card to discard…", undo: "Opened the discard choice" };
   if (/^diploSystem$/.test(id)) return { now: "Choosing a system to protect…", undo: "Started choosing a system to protect" };

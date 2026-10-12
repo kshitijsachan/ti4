@@ -445,10 +445,13 @@ async function checkExpect(run, expect) {
     }
   }
   if (expect.decision) {
-    // { kind, as?, open: true|false }
+    // { kind, as?, scope?: "player"|"table", open: true|false }
     for (const e of [].concat(expect.decision)) {
-      const ds = (await openDecisions(run.fork.game)).filter((d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx)));
-      if ((e.open ?? true) !== ds.length > 0) fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}: expected ${(e.open ?? true) ? "open" : "closed"}`);
+      const ds = (await openDecisions(run.fork.game)).filter(
+        (d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx)) && (!e.scope || d.scope === e.scope),
+      );
+      if ((e.open ?? true) !== ds.length > 0)
+        fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}${e.scope ? ` (scope ${e.scope})` : ""}: expected ${(e.open ?? true) ? "open" : "closed"}`);
     }
   }
   return fails;

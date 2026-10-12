@@ -225,10 +225,14 @@ export function orderDecisions(
      "request all resolve now" is left, so it goes behind "Available now" and never takes the panel from my turn. */
   const finishedCard = (d: Decision) =>
     d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction && !primaryOpen(d);
+  /* A setup choice the table waits on (my starting technology): mine to answer now, never an optional offer, even
+     when the engine still has it as a table prompt (live pbd283: captured before my faction was known). */
+  const requiredSetup = (d: Decision) => requiredSetupChoice(d, state, selfId);
   const background = (d: Decision) =>
-    openToAll(d) ||
+    !requiredSetup(d) &&
+    (openToAll(d) ||
     lateSecretList(d) ||
-    finishedCard(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options));
+    finishedCard(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options)));
   /* Background prompts pile up (a new copy per round / per thread): one entry per title, the newest. Someone else's
      payment or production left open at the table is not on offer to me. */
   const newestByTitle = new Map<string, Decision>();
@@ -274,6 +278,18 @@ export function orderDecisions(
     .sort((a, b) => a.r - b.r || a.d.createdAt - b.d.createdAt || a.d.seq - b.d.seq)
     .map((x) => x.d);
   return { queue, offers };
+}
+
+/**
+ * A starting-technology prompt that is mine while setup waits on me for one: aimed at me, or (no target yet) offered
+ * while I am the one still owing starting technologies.
+ */
+export function requiredSetupChoice(d: Decision, state: GameState | null | undefined, selfId: string | undefined): boolean {
+  if (d.kind !== "tech.gain" || !selfId || !state?.setup) return false;
+  if (!d.options.some((o) => (o.value as { starting?: boolean } | null)?.starting)) return false;
+  const owing = state.setup.players.find((p) => p.userId === selfId)?.startingTechsNeeded ?? 0;
+  if (owing <= 0) return false;
+  return d.target?.userId === selfId || (!d.target?.userId && state.setup.players.filter((p) => p.startingTechsNeeded > 0).length === 1);
 }
 
 type ResolveValue = { who?: string; action?: string; part?: string | null; primaryParts?: string[] } | null;
