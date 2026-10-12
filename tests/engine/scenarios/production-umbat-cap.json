@@ -1,6 +1,7 @@
 {
   "name": "production-umbat-cap",
-  "description": "Umbat (Muaat agent): 'produce up to 2 units that each have a cost of 4 or less in a system that contains one of their war suns or flagship'. Muaat exhausts Umbat on itself at 304 (war sun there) and tries 3 units (2 dreadnoughts + 1 cruiser): both paths refuse the 3rd unit (bot handler: ephemeral refusal; engine: validate), then 2 dreadnoughts are produced and paid. War suns / flagships are never offered (cost > 4).",
+  "description": "Umbat (Muaat agent): 'produce up to 2 units that each have a cost of 4 or less in a system that contains one of their war suns or flagship'. Muaat exhausts Umbat on itself at 304 (war sun there) and tries 3 units (2 dreadnoughts + 1 cruiser): both paths refuse the 3rd unit (bot handler: ephemeral refusal; engine: validate), then 2 dreadnoughts are produced and paid. War suns / flagships are never offered (cost > 4). diffIgnore: the legacy path places the dreadnoughts one at a time, which sets the capacity/fleet marker stored.violatedSystems (Reset Build leaves it, as in the original); the engine refuses the whole payload, so it never sets it.",
+  "diffIgnore": ["stored.violatedSystems"],
   "base": { "recording": "pbd104", "index": 44, "repost": false },
   "setup": [
     "/add_units tile_name:304 unit_names:\"warsun\" faction_or_color:muaat",
@@ -27,7 +28,7 @@
       "legacy": [
         { "press": "FFCC_muaat_place_dreadnought_304" }, { "wait": 1500 },
         { "press": "FFCC_muaat_place_dreadnought_304" }, { "wait": 1500 },
-        { "press": "FFCC_muaat_deleteButtons_muaatagent_304" }
+        { "press": "FFCC_muaat_deleteButtons_muaatagent_304~prod" }
       ]
     }
   ],

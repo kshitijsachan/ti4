@@ -14,6 +14,7 @@
 //     trigger: { press: "<custom id>", as } | { command: "/…" } | { answer: {...} },
 //     steps:   [ { answer: { kind: "strategy_card.pick", option: "regex on option id/label", value: { strategyCard: 3 } }, as },
 //                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command } ],
+//     diffIgnore: [ "stored.violatedSystems" ]   (save keys --diff skips: game.<k> | stored.<k> | player.<k>)
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ] } }
 //   A step with "refused": true expects the engine to refuse it (the legacy fork must still end in the same state).
 //   "as": "seat1".."seat8" | a faction | a user id (default seat1). Strings may use ${seat1}…${seat8}, ${fork},
@@ -495,7 +496,7 @@ for (const { phase, st } of all) {
   }
   let diffs;
   if (diffMode) {
-    const [a, b] = runs.map((r) => normalizeSave(r.save(), { forkGame: r.fork.game, origGame: "fork" }));
+    const [a, b] = runs.map((r) => normalizeSave(r.save(), { forkGame: r.fork.game, origGame: "fork", extraVolatile: sc.diffIgnore ?? [] }));
     diffs = diffNormalized(a, b);
     if (diffs.length && !firstDiff) firstDiff = { step: n, phase, st, diffs: diffs.slice(0, 20) };
   }
