@@ -2252,6 +2252,18 @@ index 575a281..c10a0c1 100644
      public void setTileMap(Map<String, Tile> tileMap) {
          this.tileMap = tileMap;
          planets.clear();
+diff --git a/src/main/java/ti4/game/Player.java b/src/main/java/ti4/game/Player.java
+index f900bf0..96974c1 100644
+--- a/src/main/java/ti4/game/Player.java
++++ b/src/main/java/ti4/game/Player.java
+@@ -2407,6 +2407,7 @@ public class Player extends PlayerProperties implements StoredValueHelper {
+                 }
+                 game.setStoredValue("endTurnWhenSCFinished", "");
+                 Player p2 = game.getActivePlayer();
++                if (ti4.selfhost.engine.ScFollowGate.holdDeferredEnd(game, p2)) return; // self-host: mid-action
+                 EndTurnService.endTurnAndUpdateMap(event, game, p2);
+             }
+             if (game.getStoredValue("fleetLogWhenSCFinished")
 diff --git a/src/main/java/ti4/game/persistence/GameLoadService.java b/src/main/java/ti4/game/persistence/GameLoadService.java
 index 05ddef3..0658a64 100644
 --- a/src/main/java/ti4/game/persistence/GameLoadService.java
@@ -2385,7 +2397,7 @@ index 9b27bd5..cb00433 100644
                      + ", you would research a technology, but because of **Propagation**, you instead gain 3 command tokens."
                      + " Your current command tokens are " + player.getCCRepresentation()
 diff --git a/src/main/java/ti4/helpers/ButtonHelper.java b/src/main/java/ti4/helpers/ButtonHelper.java
-index d4c34fb..7738403 100644
+index d4c34fb..c4805cc 100644
 --- a/src/main/java/ti4/helpers/ButtonHelper.java
 +++ b/src/main/java/ti4/helpers/ButtonHelper.java
 @@ -131,6 +131,7 @@ import ti4.model.TechnologyModel.TechnologyType;
@@ -2811,7 +2823,15 @@ index d4c34fb..7738403 100644
          player.removeRelic("mawofworlds");
          player.removeExhaustedRelic("mawofworlds");
          for (String planet : player.getPlanets()) {
-@@ -8995,6 +9086,20 @@ public class ButtonHelper {
+@@ -8925,6 +9016,7 @@ public class ButtonHelper {
+         }
+         game.setStoredValue("endTurnWhenSCFinished", "");
+         Player p2 = game.getActivePlayer();
++        if (ti4.selfhost.engine.ScFollowGate.holdDeferredEnd(game, p2)) return; // self-host: mid-action
+         EndTurnService.endTurnAndUpdateMap(event, game, p2);
+     }
+ 
+@@ -8995,6 +9087,20 @@ public class ButtonHelper {
  
      @ButtonHandler("resolveCrownOfE")
      public static void resolveCrownOfE(Game game, Player player, ButtonInteractionEvent event) {
@@ -2832,7 +2852,7 @@ index d4c34fb..7738403 100644
          if (player.hasRelic("absol_emphidia")) {
              player.removeRelic("absol_emphidia");
              player.removeExhaustedRelic("absol_emphidia");
-@@ -9011,6 +9116,16 @@ public class ButtonHelper {
+@@ -9011,6 +9117,16 @@ public class ButtonHelper {
          Helper.checkEndGame(game, player);
      }
  
@@ -4759,10 +4779,10 @@ index 661fb78..40f97c4 100644
      public static List<Button> getPlanetSystemDiploButtons(Player player, Game game, boolean ac, Player mahact) {
 diff --git a/src/main/java/ti4/helpers/MitosisProductionRule.java b/src/main/java/ti4/helpers/MitosisProductionRule.java
 new file mode 100644
-index 0000000..be772c1
+index 0000000..c940894
 --- /dev/null
 +++ b/src/main/java/ti4/helpers/MitosisProductionRule.java
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,124 @@
 +package ti4.helpers;
 +
 +import java.util.List;
@@ -4819,9 +4839,19 @@ index 0000000..be772c1
 +        return v == null || v.isEmpty() ? null : v;
 +    }
 +
-+    /** PRODUCTION of the player's units in the system other than space docks. */
++    /**
++     * PRODUCTION of the player's units in the system other than space docks, not counting units produced during this
++     * production (a Letani Warrior just produced has PRODUCTION 1 but was not there when PRODUCTION resolved).
++     */
 +    public static int nonDockProduction(Player player, Tile tile) {
 +        int total = 0;
++        for (Map.Entry<String, Integer> e : player.getCurrentProducedUnits().entrySet()) {
++            String[] k = e.getKey().split("_");
++            if (k.length < 2 || !tile.getPosition().equals(k[1]) || "sd".equals(k[0])) continue;
++            List<UnitModel> models = player.getUnitsByAsyncID(k[0]);
++            if (!models.isEmpty() && models.getFirst().getProductionValue() > 0)
++                total -= models.getFirst().getProductionValue() * e.getValue();
++        }
 +        for (UnitHolder uh : tile.getUnitHolders().values()) {
 +            for (UnitKey key : uh.getUnitKeys()) {
 +                if (!player.unitBelongsToPlayer(key) || key.unitType() == UnitType.Spacedock) continue;
@@ -10035,10 +10065,10 @@ index 0000000..f641b0f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ScFollowGate.java b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
 new file mode 100644
-index 0000000..701330a
+index 0000000..0ea7268
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,257 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -10193,6 +10223,81 @@ index 0000000..701330a
 +        return out;
 +    }
 +
++    /** "End Turn When All Have Reacted" (upstream deferred end: Player.addFollowedSC ends the turn on the last answer). */
++    private static final Pattern DEFER = Pattern.compile("endTurnWhenAllReactedTo_\\d+");
++
++    /**
++     * Decisions of the holder's own action under way: while one is open the action is not over, so a deferred end
++     * must not end the turn (live pbd273: Bot Mu pressed the deferred end before its Thunder's Edge Warfare primary;
++     * the last follower's "Not Following" ended Mu's turn mid tactical action and Mu's move / land ran in Solo's turn).
++     */
++    private static final Pattern IN_FLIGHT = Pattern.compile(
++            "^(tactical\\.|production\\.|payment\\.spend$|combat\\.|explore\\.|relic\\.|units\\.|command_tokens\\.adjust$"
++                    + "|strategy_card\\.(diplomacy_system|construction_place|construction_build|politics_speaker|politics_agenda|strategic_action)$)");
++
++    private static final long IN_FLIGHT_MAX_AGE_MS = 10 * 60_000L;
++
++    /**
++     * Why {@code holder} is still in the middle of their action (a deferred end must wait), or null: a tactical action
++     * under way (an active system and the action not concluded yet), a card played this turn whose primary was not
++     * started, or one of the holder's own action steps still open (tactical / production / payment / combat / explore
++     * / a primary's follow-up prompt / the Leadership token panel).
++     */
++    @Nullable
++    public static String midAction(@Nullable Game game, @Nullable Player holder) {
++        if (game == null || holder == null) return null;
++        String active = game.getCurrentActiveSystem();
++        if (active != null
++                && !active.isEmpty()
++                && game.getStoredValue(ti4.helpers.ButtonHelperTacticalAction.TACTICAL_ACTION_LOGGED).isEmpty())
++            return "your tactical action is still under way";
++        for (int sc : playedThisTurn(game, holder)) {
++            List<String> parts =
++                    ti4.selfhost.engine.kinds.StrategyCardResolveKind.primaryParts(
++                            ti4.selfhost.engine.kinds.StrategyCards.automation(game, sc));
++            if (!parts.isEmpty() && ti4.helpers.ButtonHelperSCs.primaryDone(game, sc).isEmpty())
++                return "the primary ability of " + cardName(game, sc) + " is not resolved yet";
++        }
++        long now = System.currentTimeMillis();
++        for (EngineModels.Decision d : DecisionRegistry.openDecisions(game.getName())) {
++            if (d.target() == null || !holder.getUserID().equals(d.target().userId())) continue;
++            if (now - d.createdAt() > IN_FLIGHT_MAX_AGE_MS) continue;
++            if (IN_FLIGHT.matcher(d.kind()).find()) return "your action is still under way (" + d.kind() + ")";
++        }
++        return null;
++    }
++
++    /** turn.action end_turn_when_followed / the upstream button: refused while the holder is mid-action. */
++    @Nullable
++    public static String deferRefusal(@Nullable Game game, @Nullable Player holder) {
++        if (!enabled(game)) return null;
++        String why = midAction(game, holder);
++        return why == null
++                ? null
++                : "Finish your action first (" + why + "), then end your turn: \"End Turn When All Have Reacted\" only"
++                        + " ends a turn whose action is over.";
++    }
++
++    /**
++     * Player.addFollowedSC hook, right before the deferred end: the last player answered, but the holder is still
++     * mid-action, so the turn is NOT ended under them; they are told to end it themselves when done. True = hold.
++     */
++    public static boolean holdDeferredEnd(@Nullable Game game, @Nullable Player holder) {
++        try {
++            if (!enabled(game) || holder == null) return false;
++            String why = midAction(game, holder);
++            if (why == null) return false;
++            EngineMetrics.count("sc_follow.deferred_end_held");
++            ti4.message.MessageHelper.sendMessageToChannel(
++                    holder.getCorrectChannel(),
++                    holder.getRepresentation() + ", every player has answered your strategy card, but " + why
++                            + ". Your turn was not ended: end it yourself when your action is done.");
++            return true;
++        } catch (RuntimeException e) {
++            return false;
++        }
++    }
++
 +    /** Does this handler end the turn (or pass)? */
 +    public static boolean endsTurn(@Nullable String handlerId) {
 +        return handlerId != null && ENDS_TURN.matcher(handlerId).matches();
@@ -10204,11 +10309,13 @@ index 0000000..701330a
 +     */
 +    public static boolean refuse(ti4.discord.interactions.listeners.context.ButtonContext context) {
 +        try {
-+            if (!endsTurn(context.getComponentID())) return false;
++            String handler = context.getComponentID();
++            boolean defer = handler != null && DEFER.matcher(handler).matches();
++            if (!endsTurn(handler) && !defer) return false;
 +            Game game = context.getGame();
 +            Player player = context.getPlayer();
 +            if (game == null || player == null || !"action".equalsIgnoreCase(game.getPhaseOfGame())) return false;
-+            String msg = waitingMessage(game, player);
++            String msg = defer ? deferRefusal(game, player) : waitingMessage(game, player);
 +            if (msg == null) return false;
 +            context.setShouldSave(false);
 +            ti4.message.MessageHelper.sendEphemeralMessageToEventChannel(context.getEvent(), msg);
@@ -27793,10 +27900,10 @@ index 0000000..494a82e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TacticalMoveKind.java b/src/main/java/ti4/selfhost/engine/kinds/TacticalMoveKind.java
 new file mode 100644
-index 0000000..9895afe
+index 0000000..440c5f5
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TacticalMoveKind.java
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,143 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -27856,6 +27963,19 @@ index 0000000..9895afe
 +    @Override
 +    public boolean dynamic() {
 +        return true;
++    }
++
++    /**
++     * Movement belongs to an activated system: with none active (the activation was undone, e.g. ChooseDifferentDestination
++     * or the in-panel UNDO, or the action ended) the move prompt is a leftover. Found live (playtest 5, pbd273): it stayed
++     * open after Undo and the web map stayed in "Move into …" mode, so no system could be activated. A prompt posted
++     * mid-activation is captured ahead of its save and judged only once the activation is saved (DecisionCapture.AHEAD).
++     */
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        // getCurrentActiveSystem: getActiveSystem() falls back to the stored lastActiveSystem.
++        String active = ctx.game().getCurrentActiveSystem();
++        return active == null || active.isEmpty();
 +    }
 +
 +    /** Movement staged so far (Game.tacticalActionDisplacement), recomputed after every save. */
@@ -29748,10 +29868,10 @@ index 0000000..3cfacb3
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
 new file mode 100644
-index 0000000..6577993
+index 0000000..d487206
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,139 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -29870,7 +29990,14 @@ index 0000000..6577993
 +                String wait = ti4.selfhost.engine.ScFollowGate.waitingMessage(game, answering);
 +                if (wait != null && "action".equalsIgnoreCase(game.getPhaseOfGame())) return wait;
 +            }
-+            if ("end_turn".equals(action) || "end_turn_when_followed".equals(action) || "another_action".equals(action))
++            if ("end_turn_when_followed".equals(action)) {
++                // Only a turn whose action is over may be ended for the player (live pbd273: pressed before the
++                // Warfare primary, the last follow ended the turn mid tactical action).
++                if ("action".equalsIgnoreCase(game.getPhaseOfGame()))
++                    return ti4.selfhost.engine.ScFollowGate.deferRefusal(game, answering);
++                return null;
++            }
++            if ("end_turn".equals(action) || "another_action".equals(action))
 +                return null;
 +            if ("pass".equals(action)
 +                    && ti4.service.turn.PassService.passIsOutsideActionPhase(
