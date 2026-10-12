@@ -6,7 +6,7 @@
  * to roll, from the round trackers), never ahead of its opponent and never while it still owes hits; barrage and
  * space cannon once per prompt; it never bombards, retreats or cancels hits.
  */
-import type { CombatUnitPickValue, CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
+import type { CombatEngage, CombatUnitPickValue, CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
 import type { Decision, GameState, Option } from "./types.js";
 import { chooseCombatAutomate, chooseCombatModifier } from "./policy/units.js";
 
@@ -34,6 +34,8 @@ export function chooseCombat(d: Decision, state: GameState | null, me: string, o
       return noRetreat(d, me);
     case "combat.automate":
       return chooseCombatAutomate(d, me);
+    case "combat.engage":
+      return engage(d, me);
     case "combat.modifier":
       return chooseCombatModifier(d, me);
     default:
@@ -46,6 +48,15 @@ function bombardDone(d: CombatBombard, me: string): CombatChoice | null {
   if (d.target?.userId !== me) return null;
   const done = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.op === "done");
   return done ? { option: done, why: "bombardment: roll with the engine's assignment" } : null;
+}
+
+/** "Engage in Combat or coexist?": a bot engages (claims the planet when that is offered instead). pbd203: untyped, 122 s. */
+function engage(d: CombatEngage, me: string): CombatChoice | null {
+  if (d.target?.userId && d.target.userId !== me) return null;
+  if (!d.target?.userId && d.scope !== "player") return null;
+  const live = d.options.filter((o) => !o.disabled && !forDummy(o) && o.value);
+  const o = live.find((x) => x.value!.action === "engage") ?? live.find((x) => x.value!.action === "claim");
+  return o ? { option: o, why: `combat: ${o.value!.action} on ${o.value!.planet}` } : null;
 }
 
 /** A bot never retreats; a retreat prompt addressed to it (someone announced one for it) is closed. */
@@ -252,15 +263,20 @@ function roll(d: CombatRound, state: GameState | null, me: string, open: Decisio
   if (!w || w.kind !== "combat_roll" || !w.eligible.includes(me) || w.responded.includes(me)) return null;
   const combat = state?.combat;
   const self = state?.players.find((p) => p.userId === me);
-  if (!combat || !self?.faction) return null;
+  if (!self?.faction) return null;
   const rollType = String(w.subject.rollType ?? "");
   const holder = String(w.subject.holder ?? "");
+  // Waiting for hits / barrage (the engine says why): never roll ahead (pbd203).
+  if (w.subject.waitingFor) return null;
+  // state.combat describes the active system only: another system's combat (two at once, pbd203) is judged from the
+  // window alone (eligible / responded per round).
+  const sameTile = !!combat && (!w.subject.tile || combat.tile === String(w.subject.tile));
   const rolls = (o: Option<any>): o is Option<CombatControlValue & { action: "roll" }> =>
     !o.disabled && !forDummy(o) && o.value?.action === "roll";
   const options = d.options.filter(rolls);
   const pick = (type: string, h?: string) => options.find((o) => o.value!.rollType === type && (!h || o.value!.holder === h));
   const rolledSincePrompt = (type: string) =>
-    combat.rolls.some((r) => r.faction === self.faction && r.rollType === type && r.at >= d.createdAt);
+    !!combat?.rolls.some((r) => r.faction === self.faction && r.rollType === type && r.at >= d.createdAt);
 
   if (rollType === "afb" || rollType === "spacecannonoffence") {
     if (rolledSincePrompt(rollType)) return null;
@@ -269,6 +285,11 @@ function roll(d: CombatRound, state: GameState | null, me: string, open: Decisio
   }
   if (rollType !== "combat") return null;
   // Only while this fight is on: both sides still have units where it is fought.
+  if (!sameTile) {
+    if (open.some((x) => x.kind === "combat.hits" && x.target?.userId === me && x.options.some((o) => !o.disabled && o.value?.action === "auto"))) return null;
+    const o = pick("combat", holder);
+    return o ? { option: o, why: `combat: roll (${String(w.subject.tile)}, not the active system)` } : null;
+  }
   const front = combat.fronts.find((f) => f.holder === holder);
   const mine = front?.sides.find((s) => s.userId === me);
   const theirs = front?.sides.find((s) => s.userId !== me);

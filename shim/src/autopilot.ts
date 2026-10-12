@@ -948,7 +948,11 @@ class SeatPilot {
       // An extra roll (anti-fighter barrage, space cannon) whose button we pressed on this message is done, also across
       // restarts (the shim keeps who pressed what).
       const extraDone = (c: Control) => /^combatRoll_[^_]+_[^_]+_\w+/.test(c.custom_id) && !!m._presses?.[me];
-      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && !extraDone(c) && this.mayRoll(ch.id, c.custom_id, faction, round)));
+      // Rules order, as the engine enforces it (pbd203: this legacy path rolled round 1 before barrage): a combat round
+      // waits while the engine's roll window says why (hits owed / barrage first), and space round 1 waits for our own
+      // barrage when this combat offers one we have not pressed yet.
+      const held = await this.heldRounds(game, ch.id, controls, m, round);
+      controls = controls.filter((c) => !/^combatRoll_/.test(c.custom_id) || (fighting && !extraDone(c) && !held.has(c.custom_id) && this.mayRoll(ch.id, c.custom_id, faction, round)));
     }
 
     let phase: string | null | undefined;
@@ -1219,6 +1223,33 @@ class SeatPilot {
   private pressedRecently(m: StoredMessage, c: Control) {
     const at = this.recent.get(this.repostKey(m, c));
     return at !== undefined && Date.now() - at < REPOST_MS;
+  }
+
+  /** Combat-round roll ids (combatRoll_<pos>_<holder>) on this message that must wait (see the caller). */
+  private async heldRounds(game: string, channelId: string, controls: Control[], m: StoredMessage, round: number | null): Promise<Set<string>> {
+    const held = new Set<string>();
+    const rounds = controls.filter((c) => /^combatRoll_[^_]+_[^_]+$/.test(c.custom_id));
+    if (!rounds.length) return held;
+    const engine = this.mgr.engine;
+    if (engine?.isLive) {
+      const open = (await engine.openDecisions(game)) ?? [];
+      for (const d of open) {
+        if (!d.kind.startsWith("combat.") || !d.window?.subject?.waitingFor) continue;
+        for (const o of d.options) if (rounds.some((c) => c.custom_id === o.id)) held.add(o.id);
+      }
+    }
+    // Our barrage in this combat first (round 1 only): an anti-fighter barrage prompt here that we have not pressed.
+    if (round != null && round > 1) return held;
+    for (const c of rounds) {
+      if (held.has(c.custom_id) || !/_space$/.test(c.custom_id)) continue;
+      const afbId = `${c.custom_id}_afb`;
+      for (const other of this.store.messages(channelId)) {
+        if (other.id === m.id && !controls.some((x) => x.custom_id === afbId)) continue;
+        const has = (other.components ?? []).some((row: any) => (row.components ?? []).some((x: any) => x.custom_id === afbId));
+        if (has && !other._presses?.[this.userId] && !this.recent.has(`${channelId}:roll:afb`)) held.add(c.custom_id);
+      }
+    }
+    return held;
   }
 
   private mayRoll(channelId: string, customId: string, faction: string | undefined, round: number | null = null): boolean {

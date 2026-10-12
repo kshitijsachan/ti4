@@ -79,8 +79,11 @@ function Sides({ combat, holder, rollType, state }: { combat: CombatState; holde
  */
 export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<CombatRound>) {
   const self = me(state);
-  const combat = state?.combat ?? null;
   const w = d.window;
+  /* state.combat is the active system's combat only: another system's prompt (two combats at once, pbd203) must not be
+   * shown with this one's sides and header. */
+  const tile = str(w?.subject.tile, d.options.map((o) => (o.value as { tile?: string } | null)?.tile).find(Boolean) ?? state?.combat?.tile ?? "");
+  const combat = state?.combat && (!tile || state.combat.tile === tile) ? state.combat : null;
   const rollType = str(w?.subject.rollType, "combat");
   const holder = str(w?.subject.holder, "space");
   const mine = !!self && !!w && w.eligible.includes(self.userId) && !w.responded.includes(self.userId);
@@ -104,7 +107,7 @@ export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<C
       <div className={classes.head}>
         {ROLL_NAMES[rollType] ?? "Combat"}
         <span className={classes.sub}>
-          {combat?.tile ?? str(w?.subject.tile, "")} · {holderName(holder)}
+          {tile} · {holderName(holder)}
         </span>
       </div>
       {combat && <Sides combat={combat} holder={holder} rollType={rollType} state={state} />}
