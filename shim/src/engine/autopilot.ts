@@ -6,6 +6,10 @@ import { awaits, type Decision, type GameState, type Option } from "./types.js";
 import { chooseAgenda } from "./agendaPolicy.js";
 import { chooseCards } from "./policy/cards.js";
 import { chooseExplore } from "./policy/explore.js";
+import { chooseFaction } from "./policy/faction.js";
+import { chooseFactionGroupC } from "./policy/factionGroupC.js";
+import { chooseFactionB } from "./policy/factionB.js";
+import { choosePokFaction } from "./policy/factionPok.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
 import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
@@ -13,6 +17,8 @@ import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat } from "./combatPolicy.js";
 import { planPayment } from "./policy/production.js";
+import { chooseFallback, fallbackDue, mayPress } from "./policy/fallback.js";
+import { choosePerpetual } from "./policy/ui.js";
 
 /** Same order as autopilot.ts SC_PREFERENCE. */
 const SC_PREFERENCE = [1, 7, 8, 6, 5, 4, 3, 2];
@@ -25,10 +31,42 @@ export type TypedChoice =
   | { option: Option<any>; payload?: Record<string, unknown>; why: string }
   | { option?: undefined; payload: Record<string, unknown>; why: string };
 
+/**
+ * The bot's answer to a typed decision: the area's specific policy, else (for a decision that waits on this seat and
+ * that the game may wait on) the last-resort fallback (policy/fallback.ts) once it is due — after FALLBACK_GRACE_MS of
+ * waiting, or for kinds whose policy may hold an answer on purpose, when the shim watchdog forces it (ctx.force).
+ * A fallback answer's `why` starts with "fallback:" (logged, so a specific policy can be added for that kind).
+ */
 export function chooseTyped(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx = { history: [], open: [], all: [] }): TypedChoice | null {
+  let specific: TypedChoice | null = null;
+  let note = "";
+  try {
+    specific = chooseSpecific(d, state, me, ctx);
+  } catch (e) {
+    // A policy bug must never leave the seat silent: fall back (logged with the error).
+    note = ` (specific policy threw: ${(e as Error).message})`;
+  }
+  // Safety net over every policy: never another player's / faction's option.
+  if (specific?.option && !mayPress(specific.option, d, state, me)) {
+    note = ` (specific policy picked ${specific.option.id}, not ours)`;
+    specific = null;
+  }
+  if (specific) return specific;
+  if (!fallbackDue(d, me, { waitedMs: ctx.waitedMs, force: ctx.force })) return null;
+  // An option this seat already pressed on this decision is not pressed again by the fallback (multi-part answers
+  // are the specific policies' business), except the watchdog's forced re-evaluation.
+  const fb = chooseFallback(d, state, me);
+  if (!fb || (!ctx.force && ctx.history.includes(fb.option.id))) return null;
+  return note ? { ...fb, why: fb.why + note } : fb;
+}
+
+function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: PolicyCtx): TypedChoice | null {
   const all = ctx.all;
   // Combat (G4): ctx.open = this seat's other open decisions (no next roll while hits are owed).
   if (d.kind.startsWith("combat.")) return chooseCombat(d, state, me, ctx.open);
+  // Affordances (ui.*: never answered), preferences (defaults) and select-only prompts (c12).
+  const perpetual = choosePerpetual(d, state, me);
+  if (perpetual !== undefined) return perpetual;
   const setup = chooseSetup(d, state, me);
   if (setup !== undefined) return setup;
   if (isThundersEdgeKind(d)) return chooseThundersEdge(d, state, me);
@@ -37,6 +75,15 @@ export function chooseTyped(d: Decision, state: GameState | null, me: string, ct
   if (d.kind.startsWith("agenda.")) return awaits(d, me) ? chooseAgenda(d, state, me, all) : null;
   const cards = chooseCards(d, state, me, all);
   if (cards !== undefined) return cards;
+  // Faction leaders / abilities (shared kinds leader.use, faction.ability; phase C faction areas).
+  const groupC = chooseFactionGroupC(d, state, me); // Jol-Nar, Winnu, Xxcha, Yin, Yssaril, Keleres overrides
+  if (groupC !== undefined) return groupC;
+  const factionB = chooseFactionB(d, state, me);
+  if (factionB !== undefined) return factionB;
+  const pok = choosePokFaction(d, state, me, ctx.history);
+  if (pok !== undefined) return pok;
+  const faction = chooseFaction(d, state, me);
+  if (faction !== undefined) return faction;
   // Strategy cards (G2): the played card is a table window; its policy checks who may press what.
   // (command_tokens.adjust belongs to the status area; only its Leadership panel is answered here.)
   const kind: string = d.kind;

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planPayment, productionPayload } from "./production.js";
 import type { PaymentSpend, PaymentValue, ProductionProduce, ProductionValue } from "../kinds/production.js";
-import type { GameState, Option } from "../types.js";
+import type { GameState, Option, PlanetId } from "../types.js";
 
 const opt = <V>(id: string, value: V | null): Option<V> => ({ id, label: id, style: "danger", emoji: null, disabled: false, needsInput: false, handler: id, value });
 
@@ -17,7 +17,8 @@ function payment(values: (PaymentValue | null)[], cost: number | null, remaining
   } as PaymentSpend;
 }
 
-const planet = (id: string, resources: number, influence = 0): PaymentValue => ({ source: "planet", planet: id, resources, influence, techSpecialties: [], legendary: false });
+// Fixture planet ids ("a", "b", …) are not real ones: cast.
+const planet = (id: string, resources: number, influence = 0): PaymentValue => ({ source: "planet", planet: id as PlanetId, resources, influence, techSpecialties: [], legendary: false });
 const state = (tg: number, exhausted: string[] = [], commodities = 0) =>
   ({ players: [{ userId: "u", self: true, tg, commodities, exhaustedPlanets: exhausted }] }) as unknown as GameState;
 
