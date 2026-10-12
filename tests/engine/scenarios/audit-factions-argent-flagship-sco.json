@@ -1,0 +1,15 @@
+{
+  "name": "audit-factions-argent-flagship-sco",
+  "description": "Rules audit (factions): Quetzecoatl (Argent flagship) — other players cannot use SPACE CANNON against Argent's ships in its system. Argent flagship + destroyer in 210, ghost PDS on vorhal: ghost's SPACE CANNON OFFENCE roll is refused by the engine and by the legacy handler.",
+  "base": { "recording": "pbd118", "index": 140, "repost": false },
+  "setup": [
+    "/add_units tile_name:210 unit_names:\"flagship, dd\" faction_or_color:argent",
+    "/add_units tile_name:210 unit_names:\"pds vorhal\" faction_or_color:ghost"
+  ],
+  "steps": [
+    { "press": "combatRoll_210_space_spacecannonoffence", "as": "ghost", "refused": true,
+      "legacy": [ { "press": "combatRoll_210_space_spacecannonoffence", "as": "ghost" } ] },
+    { "wait": 1500 }
+  ],
+  "expect": { "invariants": true }
+}

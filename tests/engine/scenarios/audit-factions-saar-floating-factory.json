@@ -1,0 +1,15 @@
+{
+  "name": "audit-factions-saar-floating-factory",
+  "description": "Rules audit (factions): Saar Floating Factory — 'If this unit is blockaded, it is destroyed.' A Saar space dock alone in 314's space area with a Sol cruiser there is destroyed at the next blockade check (Done Landing; also after any movement and at end of action).",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "setup": [
+    "/add_units tile_name:314 unit_names:sd faction_or_color:saar",
+    "/add_units tile_name:314 unit_names:ca faction_or_color:sol"
+  ],
+  "trigger": { "press": "doneLanding_314", "as": "arborec" },
+  "steps": [ { "wait": 2000 } ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "tile 314: blk—sd", "exists": false }, { "key": "tile 314: jpt—ca", "exists": true } ]
+  }
+}

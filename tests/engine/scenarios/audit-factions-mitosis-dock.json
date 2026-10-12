@@ -1,0 +1,44 @@
+{
+  "name": "audit-factions-mitosis-dock",
+  "description": "Rules audit (factions): Mitosis — Arborec space docks cannot produce infantry. Arborec's home (301) without Letani Warriors: tactical production offers no infantry and a place_infantry press is refused (engine and legacy).",
+  "base": {
+    "recording": "pbd117",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/remove_units tile_name:301 unit_names:\"4 gf nestphar\" faction_or_color:arborec"
+  ],
+  "trigger": {
+    "press": "FFCC_arborec_tacticalActionBuild_301",
+    "as": "arborec"
+  },
+  "steps": [
+    {
+      "wait": 1500
+    },
+    {
+      "press": "FFCC_arborec_place_infantry_nestphar",
+      "as": "arborec",
+      "refused": true,
+      "legacy": [
+        {
+          "press": "FFCC_arborec_place_infantry_nestphar",
+          "as": "arborec"
+        }
+      ]
+    },
+    {
+      "wait": 1000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "tile 301: grn—gf",
+        "exists": false
+      }
+    ]
+  }
+}
