@@ -1,0 +1,32 @@
+{
+  "name": "rules-construction-pds-cap",
+  "description": "Rules audit (deliberate improvement over the original): a planet holds at most 2 PDS (unless Homeland Defense Act) and 1 space dock. The original placed a 3rd PDS through Construction and only warned afterwards. Naalu (pbd105) already has 2 PDS on Maaluuk (2 PDS added in setup); Construction primary 'Place 1 PDS' on that planet must be refused (engine: ConstructionPlaceKind.validate; bot: ButtonHelperModifyUnits.genericPlaceUnit ~construction).",
+  "base": {
+    "recording": "pbd105",
+    "index": 152
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_pds$"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.construction_place",
+        "option": "place_pds_maaluuk"
+      },
+      "as": "naalu",
+      "refused": true
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": []
+  },
+  "setup": [
+    "/add_units tile_name:maaluuk unit_names:\"2 pds maaluuk\" faction_or_color:naalu"
+  ]
+}

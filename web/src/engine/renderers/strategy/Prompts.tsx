@@ -189,6 +189,9 @@ export function ConstructionPlaceView({ decision, answer }: RendererProps<Constr
               {o.value!.resources}/{o.value!.influence}
               {o.value!.home ? " · home" : ""}
               {o.value!.pds ? ` · ${o.value!.pds} PDS` : ""}
+              {(o.value!.unit === "pds" && o.value!.pds >= 2) || (o.value!.unit === "spacedock" && o.value!.spaceDock >= 1)
+                ? " · at the limit"
+                : ""}
             </Meta>
           </Choice>
         ))}

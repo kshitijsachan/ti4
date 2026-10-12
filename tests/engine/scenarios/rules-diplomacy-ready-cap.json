@@ -1,0 +1,64 @@
+{
+  "name": "rules-diplomacy-ready-cap",
+  "description": "Rules audit (deliberate improvement over the original): Diplomacy readies 'up to 2 exhausted planets'. The original readied every planet pressed on the ready prompt. Muaat (pbd72 r4, all planets exhausted first) plays Diplomacy, picks a system, opens Ready Planets and readies 2 planets; the 3rd refresh_ must be refused (engine: PlanetReadyKind.validate; bot: PlanetExhaustButtonHandler.refresh) and that planet stays exhausted.",
+  "base": {
+    "recording": "pbd72",
+    "index": 833
+  },
+  "setup": [
+    {
+      "command": "planet exhaust_all",
+      "options": {
+        "faction_or_color": "muaat"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "diploSystem$"
+      },
+      "as": "muaat"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.diplomacy_system",
+        "option": "diplo_"
+      },
+      "as": "muaat"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^diploRefresh2$"
+      },
+      "as": "muaat"
+    },
+    {
+      "answer": {
+        "kind": "planet.ready",
+        "option": "refresh_muaat$"
+      },
+      "as": "muaat"
+    },
+    {
+      "answer": {
+        "kind": "planet.ready",
+        "option": "refresh_lazulrex$"
+      },
+      "as": "muaat"
+    },
+    {
+      "answer": {
+        "kind": "planet.ready",
+        "option": "refresh_(?!muaat$|lazulrex$)"
+      },
+      "as": "muaat",
+      "refused": true
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
