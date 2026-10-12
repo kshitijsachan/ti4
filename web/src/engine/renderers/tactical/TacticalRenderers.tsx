@@ -101,7 +101,8 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     const v = o.value!;
     switch (v.action) {
       case "tactical":
-        return `Tactical action (${v.tacticTokens ?? me?.commandTokens.tactic ?? "?"} tactic tokens)`;
+        // Live tokens first: the value is the count when the prompt was posted (a token gained since made it stale).
+        return `Tactical action (${me?.commandTokens.tactic ?? v.tacticTokens ?? "?"} tactic tokens)`;
       case "component":
         return "Component action";
       case "strategic":
