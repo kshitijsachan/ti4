@@ -13,6 +13,7 @@
  * may deliberately hold the answer (combat rolls ahead of the opponent, a strategy card primary waiting for its
  * sub-prompt, the tactical planner, payment / production).
  */
+import { turnStale, unplayedCards } from "./turn.js";
 import { awaits, optionsFor, type Decision, type DecisionKind, type GameState, type Option } from "../types.js";
 
 /** Kinds with no specific policy that would wait on purpose: answered by the fallback this soon. */
@@ -97,7 +98,10 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "action_card.resolve": "blocking",
   "action_card.target": "blocking",
   "action_card.preassign": "optional",
+  "action_card.step": "blocking", // C7: follow-up steps of a card already played (like action_card.target)
+  "action_card.when_after": "optional", // C7: non-queued agenda whens / afters (offers, like agenda.when / after)
   "promissory_note.play": "optional",
+  "promissory_note.resolve": "blocking", // C7: a played note's follow-up step (Acquiescence offer is declined)
   // G9 exploration
   "explore.planet": "blocking",
   "explore.card_pick": "blocking",
@@ -128,6 +132,27 @@ export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking
   "ui.optional": "optional",
   "ui.info_menu": "optional",
   "choose.select": "planner",
+  // C6 components: generic single-choice steps (the components policy answers our own at once); menus / relic offers
+  "choose.planet": "blocking",
+  "choose.system": "blocking",
+  "choose.player": "blocking",
+  "choose.unit": "blocking",
+  "choose.card": "blocking",
+  "choose.confirm": "blocking",
+  "component.action": "optional",
+  "relic.use": "optional",
+  // C8 core tails
+  "combat.bombard": "planner",
+  "units.remove": "planner", // an over-limit reminder is the unit-limit desk's (pbd114): the fallback only when forced
+  "production.place": "blocking",
+  "commodities.gain": "blocking",
+  // C6b tech follow-ups (the components policy answers our own: free gains taken, the rest declined)
+  "tech.step": "blocking",
+  // C8b
+  "units.modify": "optional", // Modify Units menu: opened by the player
+  "combat.automate": "blocking", // automate-ground-combat vote / confirm
+  "combat.modifier": "optional",
+  "strategy_card.construction_build": "blocking",
 };
 
 const WEAK_TARGET = new Set(["mention", "recent_press", "active_player", "none", "mixed_owners"]);
@@ -229,7 +254,21 @@ export function waitsOn(d: Decision, me: string): boolean {
 /** Is the decision one the game may wait on (not an optional offer)? */
 export function isBlocking(d: Decision): boolean {
   if (d.window) return true;
+  if (isBackgroundPanel(d)) return false;
   return (KIND_CLASS[d.kind] ?? "blocking") !== "optional";
+}
+
+/**
+ * A bookkeeping panel nobody waits on although its kind is otherwise blocking: the Firmament / Obsidian plot panel on
+ * the cards-info thread (te.plot, every typed option panel=true). It stays open for good (the cards-info message is
+ * edited in place), so the watchdog forced the fallback on it every FALLBACK_FORCE_MS (live pbd161: "Seethe" pressed
+ * 4x after 582 s, each press adding a puppet through the faction picker that followed). Neither the fallback nor the
+ * watchdog acts on it.
+ */
+export function isBackgroundPanel(d: Decision): boolean {
+  if (d.kind !== "te.plot") return false;
+  const typed = (d.options as Option<any>[]).filter((o) => o.value);
+  return typed.length > 0 && typed.every((o) => o.value.panel === true);
 }
 
 /**
@@ -245,9 +284,110 @@ export function fallbackDue(d: Decision, me: string, opts: { waitedMs?: number; 
   return KIND_CLASS[d.kind] === "planner" ? waited >= FALLBACK_FORCE_MS : waited >= FALLBACK_GRACE_MS;
 }
 
+/**
+ * A decision that still lists this seat but that the game no longer waits on (the engine has not closed it yet):
+ * - turn.action outside our own action-phase turn: another player active (pbd86, pbd160: "It is not your turn"),
+ *   another phase (pbd42: "The action phase is over"), or no state to tell (policy/turn.ts turnStale);
+ * - "Setup a Player" once we are seated; the draft-time Keleres preset once we play a flavour;
+ * - a bombardment / barrage hits opener once its fight has rolled a round;
+ * - an agent prompt once that agent of ours is exhausted;
+ * - a combat roll window whose fight is over or is not the combat on the board (pbd60: rounds of a finished space
+ *   combat stayed open with us "eligible"; the fallback pressed "Check Combat Action Cards" / rolled them).
+ * Neither the fallback nor the watchdog acts on it. Needs the state; without one nothing is stale.
+ */
+export function staleForBot(d: Decision, state: GameState | null, me: string): boolean {
+  // Turn menus: only during our own action-phase turn (policy/turn.ts; without a state, never).
+  if (d.kind === "turn.action") return turnStale(d, state, me);
+  if (!state) return false;
+  // The tactical action's own prompts (move / land / conclude / activate / rift) belong to the active player's turn: a
+  // copy left over after the turn ended (status phase, another player active, we passed) waits on nobody (live
+  // pbd181 02:11: "Conclude Tactical Action" / "Done moving" from the previous round pressed during the status phase).
+  if (d.kind.startsWith("tactical.")) {
+    if (state.phase !== "action" || state.activePlayer !== me) return true;
+    return !!state.players.find((p) => p.userId === me)?.passed;
+  }
+  // "Setup a Player" stays up after it is pressed: once we are seated it asks nothing of us (pbd147).
+  // Manual player setup needs a map ("After setting up the map, you may use this button"): on a fresh game the
+  // steward (solo.ts: expansion → Milty draft) is still choosing how to set up, and the bots must not race it (live
+  // pbd182: five bots pressed "Setup a Player" 13 times and all chose Arborec / green before any map existed).
+  if (d.kind === "setup.player" && !state.tiles.length) return true;
+  if (d.kind === "setup.player" && d.options.every((o) => !o.value || (o.value as { step?: string }).step === "start")) {
+    return !!state.players.find((p) => p.userId === me)?.faction;
+  }
+  // An agent prompt ("Use on <player>": exhaustAgent_<agent>_…) once that agent of ours is exhausted: each press
+  // re-runs the agent's effect (pbd31: the Winnu agent's buttons on a spent payment, pressed 783 times).
+  if (d.kind === "leader.use") {
+    const typed = d.options.filter((o) => o.value && !/^(deleteButtons|ultimateUndo)/.test(o.handler));
+    const agents = typed.map((o) => o.value as { step?: string; leader?: string });
+    if (!agents.length || agents.some((v) => v.step !== "exhaustAgent" || !v.leader)) return false;
+    const leaders = state.players.find((p) => p.userId === me)?.leaders ?? [];
+    return agents.every((v) => leaders.includes(`${v.leader}:exhausted` as never));
+  }
+  // The draft-time Keleres preset once we play a flavour (pbd175: still open in setup, reported as a stall).
+  if (d.kind === "setup.keleres_flavor" && d.options.some((o) => (o.value as { preset?: boolean } | null)?.preset)) {
+    const f: string = state.players.find((p) => p.userId === me)?.faction ?? "";
+    return f.startsWith("keleres") && f !== "keleres";
+  }
+  // Hits taken before a fight (bombardment before ground combat, anti-fighter barrage before space combat) are past
+  // once that fight has rolled a round in the system (pbd60: a bombardment opener re-pressed every minute after a
+  // 6-round ground combat). Same rule as the bot's UnitsRemoveKind.obsolete.
+  if (d.kind === "units.remove") {
+    const openers = d.options.filter((o) => (o.value as { action?: string } | null)?.action === "open").map((o) => o.value as { tile: string; assignType: string });
+    if (!openers.length || openers.some((v) => v.assignType !== "bombardment" && v.assignType !== "afb")) return false;
+    return openers.every((v) => {
+      const combat = state.combat;
+      if (!combat || combat.tile !== v.tile) return false;
+      const space = v.assignType === "afb";
+      return combat.fronts.some((f) => (f.holder === "space") === space && f.sides.some((side) => side.roundsRolled > 0));
+    });
+  }
+  // Secret objective list in the status phase once we declared this round's secret (or "none"): every option is
+  // refused, "You already declared your secret objective this round" (pbd160, re-pressed for 20 min).
+  if (d.kind === "status.score_secret" && state.status) {
+    const declared = state.status.players[me]?.secretScored;
+    if (declared !== null && declared !== undefined) return true;
+  }
+  if (d.kind === "combat.round") {
+    const w = d.window;
+    if (!w || w.kind !== "combat_roll") return false;
+    const subject = w.subject as Record<string, unknown>;
+    const combat = state.combat;
+    if (!combat || String(subject.tile ?? "") !== combat.tile) return true;
+    if (subject.rollType !== "combat") return false;
+    const front = combat.fronts.find((f) => f.holder === String(subject.holder ?? ""));
+    if (!front) return true;
+    return front.sides.length < 2 || front.sides.some((side) => !side.units.length);
+  }
+  return false;
+}
+
 /** The last-resort answer: a passive option, else the first legal non-destructive one; null when there is none. */
 export function chooseFallback(d: Decision, state: GameState | null, me: string): { option: Option<any>; why: string } | null {
-  const pick = fallbackCandidates(d, state, me)[0];
+  if (staleForBot(d, state, me)) return null;
+  // Turn menus: never start an unplanned tactical / component action, never pass with a strategy card unplayed.
+  if (d.kind === "turn.action") {
+    // (No `open` here: chooseFallback has no view of our other decisions; the shim's engineStep skips turn menus while
+    // an action is in flight or the planner is busy.)
+    const pick = fallbackCandidates(d, state, me).find((o) => {
+      const action = o.value?.action;
+      if (action === "end_turn" || action === "strategic") return true;
+      return action === "pass" && !unplayedCards(state, me).length;
+    });
+    return pick ? { option: pick, why: `fallback: no specific policy answered ${d.kind}; pressed "${pick.label || pick.id}"` } : null;
+  }
+  let candidates = fallbackCandidates(d, state, me);
+  // In the status phase only status-phase secrets score (the engine refuses action / agenda ones: "… is not scored in
+  // the status phase"); an objective the engine cannot judge (met: null) is not claimed blind either.
+  if (d.kind === "status.score_secret") {
+    candidates = candidates.filter((o) => o.value?.met === true && (!state?.status || o.value.phase === "status"));
+  }
+  // A combat round asks for dice: the fallback rolls the window's own roll or nothing (never "Check Combat Action
+  // Cards", "Repair Damage", "Declare Ready", another roll type).
+  if (d.kind === "combat.round" && d.window?.kind === "combat_roll") {
+    const rollType = String((d.window.subject as Record<string, unknown>).rollType ?? "");
+    candidates = candidates.filter((o) => o.value?.action === "roll" && o.value.rollType === rollType);
+  }
+  const pick = candidates[0];
   if (!pick) return null;
   return { option: pick, why: `fallback: no specific policy answered ${d.kind}; pressed "${pick.label || pick.id}"` };
 }

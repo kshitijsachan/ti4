@@ -14,6 +14,7 @@ const ACTION_LABEL: Record<string, string> = {
   action_cards: "Combat action cards",
   repair: "Repair damage",
   automate: "Automate combat",
+  temp_mod: "Use Supercharge (+1 next roll)",
 };
 
 const str = (v: unknown, fallback: string) => (typeof v === "string" ? v : fallback);
@@ -90,7 +91,8 @@ export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<C
   const rolls = options
     .filter((o): o is Option<CombatRollValue> => o.value?.action === "roll")
     .filter((o) => !(spaceFight && o.value?.rollType === "bombardment"));
-  const others = options.filter((o) => o.value?.action !== "roll");
+  // A temporary modifier (Supercharge) belongs to its owner and may be used whoever rolls next.
+  const others = options.filter((o) => o.value?.action !== "roll" && (o.value?.action !== "temp_mod" || !o.owner?.userId || o.owner.userId === self?.userId));
   const blocked = !!w && !mine;
   const names = waitingOn.map((u) => state?.players.find((p) => p.userId === u)?.userName ?? u);
 
@@ -115,7 +117,7 @@ export function CombatRoundPanel({ decision: d, state, answer }: RendererProps<C
           </Button>
         ))}
         {others.map((o) => (
-          <Button key={o.id} size="xs" variant="default" disabled={blocked} onClick={() => answer(o.id)}>
+          <Button key={o.id} size="xs" variant="default" disabled={blocked && o.value?.action !== "temp_mod"} onClick={() => answer(o.id)}>
             {ACTION_LABEL[String(o.value?.action)] ?? o.label}
           </Button>
         ))}

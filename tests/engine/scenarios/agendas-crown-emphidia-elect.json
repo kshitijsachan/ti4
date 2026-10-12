@@ -1,0 +1,30 @@
+{
+  "name": "agendas-crown-emphidia-elect",
+  "description": "The Crown of Emphidia (law) elects Winnu.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:crown_of_emphidia force:true"
+  ],
+  "steps": [
+    {
+      "press": "agendaResolution_winnu",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.law",
+        "match": "crown_of_emphidia"
+      }
+    ]
+  }
+}

@@ -330,6 +330,8 @@ export function cardIds(v: string | undefined): string[] {
 
 function checkSave(p: ParsedSave, web: Json | null, add: Add) {
   const g = p.game;
+  // -- content: web (self-hosted) games are official-only (bot ti4.selfhost.engine.WebContent; TI4_OFFICIAL_ONLY) --
+  for (const flag of homebrewFlags(g)) add("content.no-homebrew", "error", `homebrew / alternate mode on: ${flag}`);
   const real = p.players.filter((x) => x.kv.get("faction") && x.kv.get("faction") !== "null" && x.kv.get("faction") !== "neutral");
   const zoneCheck = (kind: string, zones: [string, string[]][], fullSize?: number) => {
     const where = new Map<string, string>();
@@ -392,6 +394,9 @@ function checkSave(p: ParsedSave, web: Json | null, add: Add) {
     ]) {
       for (const id of cardIds(x.kv.get(key))) {
         const here = `${x.kv.get("faction")}'s ${zone}`;
+        // The bot keeps a play-area note in the same player's hand map too (Player.addPromissoryNoteToPlayArea only
+        // adds to the play-area list; the hand tray skips it): that is one note in one place.
+        if (zone === "play area" && pnWhere.get(id) === `${x.kv.get("faction")}'s hand`) continue;
         if (pnWhere.has(id)) add("cards.promissory-unique", "error", `promissory note ${id} is both in ${pnWhere.get(id)} and in ${here}`);
         pnWhere.set(id, here);
       }
@@ -548,7 +553,26 @@ export function summarize(vs: Violation[]): Map<string, Violation[]> {
   return m;
 }
 
+/**
+ * Save-file flags that mean homebrew or an alternate game mode (mirror of bot ti4.selfhost.engine.WebContent.violations;
+ * the player count is not a criterion here, unlike Game.hasHomebrew()). Official: base, PoK, Thunder's Edge, codices.
+ */
+const OFFICIAL_MODE_FLAGS = new Set(["base_game_mode", "thunders_edge_mode", "no_swap_mode", "veiled_heart_mode", "lore_mode", "limited_whispers_mode", "beta_test_mode", "cpti_explore_mode"]);
+const OTHER_HOMEBREW_FLAGS = new Set(["twilight_kart", "tf_br", "twilight_ds", "tk_nova_cup", "tk_destroyer_cup"]);
+export function homebrewFlags(g: Map<string, string>): string[] {
+  const out: string[] = [];
+  for (const [k, v] of g) {
+    if (String(v) !== "true") continue;
+    if ((k.endsWith("_mode") && !OFFICIAL_MODE_FLAGS.has(k)) || OTHER_HOMEBREW_FLAGS.has(k)) out.push(k);
+  }
+  const spin = g.get("spin_mode");
+  if (spin && spin !== "OFF") out.push(`spin_mode=${spin}`);
+  if (String(g.get("ac_deck_id") ?? "").startsWith("action_deck_2")) out.push("ac_deck_id=action_deck_2");
+  return out;
+}
+
 export const INVARIANTS: { id: string; severity: Severity; what: string }[] = [
+  { id: "content.no-homebrew", severity: "error", what: "a web game has no homebrew or alternate mode on (save *_mode flags, spin, AC deck 2)" },
   { id: "identity.color / faction-unique", severity: "error", what: "after setup every player has a colour; factions and colours are distinct" },
   { id: "speaker.exactly-one / is-player", severity: "error", what: "exactly one speaker, and the save's speaker id is a seated player" },
   { id: "cc.pool-nonnegative", severity: "error", what: "tactic, fleet and strategy pools >= 0" },

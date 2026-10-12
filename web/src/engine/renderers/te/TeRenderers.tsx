@@ -50,7 +50,7 @@ function live<V>(d: { options: Option<V>[] }) {
 
 /** The prompt's dismiss / commit button (value null, handler deleteButtons). */
 function doneOf(d: Decision) {
-  return (d.options as Option<unknown>[]).find((o) => o.value === null && /^deleteButtons(_|$)/.test(o.handler));
+  return (d.options as Option<unknown>[]).find((o) => o.value === null && /^deleteButtons(_|~|$)/.test(o.handler));
 }
 
 function Choice(props: { onClick: () => void; disabled?: boolean; go?: boolean; back?: boolean; children: ReactNode; sub?: ReactNode }) {

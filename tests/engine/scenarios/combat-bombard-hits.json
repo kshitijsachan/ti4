@@ -1,0 +1,11 @@
+{
+  "name": "combat-bombard-hits",
+  "description": "BOMBARDMENT hits prompt (getDamageButtons_<pos>_bombardment, no auto option) is typed combat.hits (pbd161: untyped, the hit was lost): muaat opens the assignment menu after mentak's bombardment of andeara (pbd60@144), destroys 1 infantry, Done.",
+  "base": { "recording": "pbd60", "index": 144, "repost": false },
+  "trigger": { "press": "getDamageButtons_308_bombardment", "as": "muaat" },
+  "steps": [
+    { "press": "FFCC_muaat_assignHits_308_1_gf_andeara_bloodred", "as": "muaat" },
+    { "answer": { "kind": "combat.assign_units", "option": "deleteButtons" }, "as": "muaat", "legacy": [ { "press": "deleteButtons", "as": "muaat" } ] }
+  ],
+  "expect": { "invariants": true }
+}

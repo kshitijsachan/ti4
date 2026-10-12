@@ -32,7 +32,9 @@ export type CombatControlValue =
   /** The combat action-card window: playing the cards belongs to the action-card kinds (G8). */
   | { action: "action_cards"; tile: TilePosition | null }
   | { action: "repair"; tile: TilePosition }
-  | { action: "retreat"; tile: TilePosition; variant: "skilled" | "foresight" | "gheminabt" | string | null };
+  | { action: "retreat"; tile: TilePosition; variant: "skilled" | "foresight" | "gheminabt" | string | null }
+  /** A temporary modifier for the presser's next roll offered on the controls (Supercharge: source "tech", card "sc"). */
+  | { action: "temp_mod"; tile: TilePosition | null; source: "action_cards" | "tech" | string; card: string };
 
 export type CombatHitsValue =
   | {
@@ -47,7 +49,18 @@ export type CombatHitsValue =
       sustainCancels: 1 | 2;
     }
   | { action: "cancel"; tile: TilePosition; holder: HolderName; source: HitSource; hits: number }
-  | { action: "assign_manual"; tile: TilePosition; assignType: string }
+  | {
+      action: "assign_manual";
+      tile: TilePosition;
+      assignType: string;
+      /** assignType "bombardment" only (that prompt has no auto option): hits owed (newest bombardment roll of this
+       * activation, null when unknown), the bombarded planet and the units there; answer with a combat plan. */
+      source?: "ground";
+      holder?: HolderName | null;
+      hits?: number | null;
+      units?: HittableUnit[];
+      sustainCancels?: 1 | 2;
+    }
   | CombatRollValue;
 
 export type CombatUnitPickValue =
@@ -86,7 +99,48 @@ export type CombatHits = DecisionBase<"combat.hits", CombatHitsValue>;
 export type CombatAssignUnits = DecisionBase<"combat.assign_units", CombatUnitPickValue>;
 export type CombatRetreat = DecisionBase<"combat.retreat", CombatRetreatValue>;
 
-export type CombatDecision = CombatRound | CombatHits | CombatAssignUnits | CombatRetreat;
+/** BOMBARDMENT target step (bombarding player; edited in place). source: unit async id | plasmascoring | argentcommander. */
+export type CombatBombardValue =
+  | { op: "assign" | "unassign"; source: string; planet: string; galvanized: boolean; type: "UNIT" | "TECH" | "LEADER" }
+  | { op: "done"; tile: string | null };
+/** progress: flow "combat.bombard", accumulated.assigned = [{source, planet, galvanized, type}], canCommit always true. */
+export type CombatBombard = DecisionBase<"combat.bombard", CombatBombardValue>;
+
+/**
+ * A stand-alone opener of the per-unit removal menu (fleet pool / capacity violation, rift: "remove"; hits taken
+ * outside the combat controls: "bombardment", "afb", "pds", "spacecombat", "groundcombat"). "done" closes it.
+ */
+export type UnitsRemoveValue = { action: "open"; tile: string; assignType: string } | { action: "done"; tile: null; assignType: null };
+export type UnitsRemove = DecisionBase<"units.remove", UnitsRemoveValue>;
+
+/**
+ * "Automate the entire ground combat" on a message of its own: the vote (unconfirmed; no owner, table scope, no
+ * window: optional) and the opponent's confirmation (confirmed; owner = the opponent). factions = [p1, p2].
+ */
+export type CombatAutomateValue = { planet: string; factions: [FactionId, FactionId]; confirmed: boolean };
+export type CombatAutomate = DecisionBase<"combat.automate", CombatAutomateValue>;
+
+/**
+ * A temporary combat modifier for the next roll on a message of its own: "Resolve <action card>" right after playing
+ * Morale Boost / Fighter Prototype / Bunker / … (source "action_cards", card = the action card alias), or Supercharge
+ * (source "tech", card "sc"). One option; pressing it applies the modifier.
+ */
+export type CombatModifierValue = { source: "action_cards" | "tech" | string; card: string };
+export type CombatModifier = DecisionBase<"combat.modifier", CombatModifierValue>;
+
+export type CombatDecision = CombatRound | CombatHits | CombatAssignUnits | CombatRetreat | CombatBombard | CombatAutomate | CombatModifier;
+
+/**
+ * The "Modify Units" menu (a manual board edit opened from the turn-start / cards-info "Modify Units" button):
+ * system list (tile: genericModify_ = systems with your units, allTiles = every system; all_tiles = show every
+ * system), then build (opens production.produce, context "genericBuild") or remove (opens combat.assign_units) in that
+ * system; done closes the step. units = the owner's units in that system when captured.
+ */
+export type UnitsModifyValue =
+  | { action: "tile"; tile: string; allTiles: boolean; units: number }
+  | { action: "build" | "remove"; tile: string; units: number }
+  | { action: "all_tiles" | "done"; tile: null };
+export type UnitsModify = DecisionBase<"units.modify", UnitsModifyValue>;
 
 // ---------------------------------------------------------------- GameState.combat
 

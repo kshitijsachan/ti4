@@ -1,0 +1,27 @@
+{
+  "name": "status-stale-pass",
+  "description": "A stale action-phase Pass button pressed during status scoring (pbd105: l1z1x pressed passingAbilities/passForRound in statusScoring, each press restarting the status phase and re-posting the scoring prompt). Base: pbd72 save 736 (statusHomework). Run with --via press: the press must be refused, the phase unchanged. (Engine side: turn.action validate refuses pass outside the action phase.)",
+  "base": {
+    "recording": "pbd72",
+    "index": 736,
+    "repost": false
+  },
+  "steps": [
+    {
+      "press": "FFCC_empyrean_passForRound",
+      "as": "empyrean"
+    },
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.phase_of_game",
+        "eq": "statusHomework"
+      }
+    ]
+  }
+}

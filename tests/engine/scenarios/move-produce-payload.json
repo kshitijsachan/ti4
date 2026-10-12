@@ -1,0 +1,72 @@
+{
+  "name": "move-produce-payload",
+  "description": "pbd19@319: ralnel produces at 307 (PRODUCTION 4) after a tactical action. Engine: production.produce answered in one payload (carrier + destroyer in space, 3 infantry on Mez = 2gf + infantry presses = 5 units, over the limit); legacy: the place_ buttons one by one and Done Producing Units. The original only warns over the limit, so the engine must not refuse (regression: engine refused 'That is 5 units; the production limit here is 4').",
+  "base": {
+    "recording": "pbd19",
+    "index": 319
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "production.produce",
+        "payload": {
+          "units": [
+            {
+              "unit": "carrier",
+              "count": 1
+            },
+            {
+              "unit": "gf",
+              "holder": "mez",
+              "count": 3
+            },
+            {
+              "unit": "destroyer",
+              "tile": "307",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "as": "ralnel",
+      "legacy": [
+        {
+          "press": "FFCC_ralnel_place_carrier_307"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_ralnel_place_2gf_mez"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_ralnel_place_infantry_mez"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_ralnel_place_destroyer_307"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_ralnel_deleteButtons_tacticalAction_307"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[ralnel].produced_units",
+        "match": "dd_307_space,1"
+      }
+    ]
+  }
+}

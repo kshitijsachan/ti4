@@ -3,6 +3,7 @@
 //
 //   node tests/engine/scenario.mjs <scenario file|name> [--diff] [--via engine|press] [--forks pbdA,pbdB] [--keep]
 //        [--json] [--out report.json] [--quiet]
+//   --buttons [--values]: after every step print the prompts (decisions) it opened: kind, target, option ids (+ typed values)
 //   node tests/engine/scenario.mjs --list            scenarios in tests/engine/scenarios/
 //   node tests/engine/scenario.mjs --commands ac     the bot's slash commands (sub-commands, options) matching "ac"
 //
@@ -14,6 +15,7 @@
 //     steps:   [ { answer: { kind: "strategy_card.pick", option: "regex on option id/label", value: { strategyCard: 3 } }, as },
 //                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command } ],
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ] } }
+//   A step with "refused": true expects the engine to refuse it (the legacy fork must still end in the same state).
 //   "as": "seat1".."seat8" | a faction | a user id (default seat1). Strings may use ${seat1}…${seat8}, ${fork},
 //   ${faction:xxcha} (that faction's user id), ${color:red}.
 //
@@ -26,7 +28,7 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ENGINE_DIR, RECORDINGS_DIR, ensureRunDir, gameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
+import { ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
 import { createFork, openFork, closeFork, clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
 import { gameChannels, loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
@@ -45,9 +47,12 @@ const short = (s, n = 110) => (String(s).length > n ? String(s).slice(0, n - 1) 
 
 /* ------------------------------------------------------------------ slash commands from the shim's registry */
 
+let commandCache = null;
 function commandSchema() {
+  // The registry does not change during a run; the full shim state is large and re-read after every shim save.
+  if (commandCache) return commandCache;
   const cmds = shimState().commands;
-  return Array.isArray(cmds) ? cmds : Object.values(cmds ?? {});
+  return (commandCache = Array.isArray(cmds) ? cmds : Object.values(cmds ?? {}));
 }
 
 if (flag("--commands")) {
@@ -213,7 +218,9 @@ class Runner {
   /** Runs one step; returns {ok, error?, detail}. */
   async step(st) {
     const since = latestUndo(this.fork.game);
-    const r = await this.perform(this.via === "press" && st.legacy ? st.legacy : [st]);
+    if (flag("--buttons")) this.seenSeq = Math.max(0, ...(await openDecisions(this.fork.game).catch(() => [])).map((d) => d.seq ?? 0));
+    // legacy presses act as the step's seat unless they name their own
+    const r = await this.perform(this.via === "press" && st.legacy ? st.legacy.map((l) => ({ as: st.as, ...l })) : [st]);
     const s = await this.settle(since);
     return { ...r, saves: s.saves };
   }
@@ -241,6 +248,13 @@ class Runner {
     }
     if (st.press) return this.press(interp(st.press, this.ctx), user, st);
     if (st.answer) return this.answerStep(st.answer, user);
+    if (st.gameAction) {
+      // Game-level engine action (e.g. trade.propose): engine side only; the legacy fork runs the step's "legacy" presses.
+      if (this.via === "press") return { ok: false, error: `${st.gameAction}: game actions have no button equivalent; give the step a "legacy": [presses] list` };
+      const r = await engineApi(`/${encodeURIComponent(this.fork.game)}/actions/${st.gameAction}`, { userId: user, ...JSON.parse(interp(JSON.stringify(st.body ?? {}), this.ctx)) });
+      const ok = r.status === 200 && r.body?.ok !== false;
+      return ok ? { ok: true, detail: `${st.gameAction} ${r.body?.status ?? ""}` } : { ok: false, refused: true, error: `engine refused ${st.gameAction}: ${r.status} ${r.body?.status ?? ""} ${r.body?.error ?? JSON.stringify(r.body).slice(0, 200)}` };
+    }
     return { ok: false, error: `unknown step ${JSON.stringify(st)}` };
   }
 
@@ -262,6 +276,13 @@ class Runner {
       }
       const a = await answer(this.fork.game, hit.d.id, user, { optionId: hit.o.id });
       return a.ok || a.status === "needs_input" ? { ok: true, detail: `${hit.d.kind}/${hit.o.id} ${a.path ?? ""}`, kind: hit.d.kind } : { ok: false, error: `engine refused ${hit.d.kind}/${hit.o.id}: ${a.httpStatus} ${a.status} ${a.error}`, refused: true };
+    }
+    // A press chain (legacy: [...]) clicks the next button as soon as the previous click returns; give the bot's reply
+    // message a moment to arrive before falling back to a carrier reload (which reloads the fork's save and would undo
+    // a press whose save is still being written).
+    for (let i = 0; i < 20 && !carrier && st.carrier !== true; i++) {
+      await sleep(300);
+      carrier = this.carrying(customId, user);
     }
     if (!carrier) carrier = await this.carrier(customId, user, st);
     if (!carrier) return { ok: false, error: `no message carries ${customId}` };
@@ -289,6 +310,12 @@ class Runner {
     return loadSave(this.fork, this.save(), identityMap(this.fork), { customId, label: st.label ?? customId, faction, channelId: this.fork.actionsId, watcher: user });
   }
 
+  /** The holder of a played strategy card answers its primary outside the follow window (shim types.ts answersOutsideWindow). */
+  answersOutsideWindow(d, user) {
+    if (d.kind !== "strategy_card.resolve" || !d.window?.subject?.holder) return false;
+    return players(this.fork).find((p) => p.userId === user)?.kv.get("faction") === d.window.subject.holder;
+  }
+
   /** {kind, option?, value?, payload?, values?, inputs?, action?, body?} */
   async findDecision(spec, user, timeoutMs = 8000) {
     const kind = spec.kind instanceof RegExp ? spec.kind : spec.kind?.startsWith("/") ? new RegExp(spec.kind.slice(1, -1)) : spec.kind;
@@ -296,7 +323,7 @@ class Runner {
     while (true) {
       const ds = (await openDecisions(this.fork.game))
         .filter((d) => !kind || (typeof kind === "string" ? d.kind === kind : kind.test(d.kind)))
-        .filter((d) => (d.scope === "table" ? !d.window || d.window.eligible?.includes(user) : !d.target?.userId || d.target.userId === user))
+        .filter((d) => (d.scope === "table" ? !d.window || d.window.eligible?.includes(user) || this.answersOutsideWindow(d, user) : !d.target?.userId || d.target.userId === user))
         .sort((a, b) => b.seq - a.seq);
       if (ds.length) return ds;
       if (Date.now() > end) return [];
@@ -339,6 +366,12 @@ class Runner {
       return r.error ? { ok: false, error: `press ${o.id}: ${r.error}` } : { ok: true, detail: `press ${d.kind}/${o.id}`, kind: d.kind };
     }
     return { ok: false, error: `no ${spec.kind} option matches ${JSON.stringify(spec.option ?? spec.value)} (options: ${ds[0].options.map((o) => o.id).slice(0, 12).join(", ")})` };
+  }
+
+  /** --buttons: decisions opened by the last step (kind, target, every option id + typed value). */
+  async newPrompts() {
+    const ds = (await openDecisions(this.fork.game)).filter((d) => (d.seq ?? 0) > (this.seenSeq ?? 0)).sort((a, b) => a.seq - b.seq);
+    return ds.map((d) => ({ id: d.id, kind: d.kind, target: d.target?.faction ?? d.target?.userId ?? d.scope, options: d.options.map((o) => ({ id: o.id, label: o.label, value: o.value })) }));
   }
 
   invariants(id, label) {
@@ -443,6 +476,7 @@ for (const { phase, st } of all) {
   for (const r of runs) {
     // setup commands are the same on every fork (always commands / presses, never "the thing under test")
     const out = await r.step(st).catch((e) => ({ ok: false, error: e.message }));
+    if (flag("--buttons")) out.prompts = await r.newPrompts().catch((e) => [`(prompts: ${e.message})`]);
     const vs = r.invariants(`${phase}${n}`, JSON.stringify(st));
     res.push({ fork: r.fork.game, via: r.label, ...out, invariants: vs.map((v) => `${v.id}: ${v.message}`) });
   }
@@ -457,8 +491,17 @@ for (const { phase, st } of all) {
   const status = res.map((x) => `${x.via}:${x.ok ? "ok" : x.refused ? "REFUSED" : "ERR"}${x.saves != null ? `(${x.saves} saves)` : ""}`).join(" ");
   if (!quiet || res.some((x) => !x.ok) || diffs?.length) console.log(`${String(n).padStart(3)} ${phase.padEnd(7)} ${short(desc, 70).padEnd(70)} ${status}${diffs ? (diffs.length ? ` DIFF ${diffs.length}` : " same") : ""}`);
   for (const x of res) {
-    if (!x.ok) fail(`${phase} ${n} (${x.via}): ${x.error}`);
+    // "refused": true — the engine is expected to refuse this answer (stricter than the original code, which must then
+    // have left the same state: the --diff check below still compares both forks).
+    if (st.refused && x.via === "engine") {
+      if (!x.refused) fail(`${phase} ${n} (${x.via}): expected the engine to refuse, it answered`);
+    } else if (!x.ok) fail(`${phase} ${n} (${x.via}): ${x.error}`);
     for (const v of x.invariants) fail(`${phase} ${n} (${x.via}) invariant ${v}`);
+  }
+  if (flag("--buttons")) for (const x of res) for (const pr of x.prompts ?? []) {
+    if (typeof pr === "string") { console.log(`        [${x.via}] ${pr}`); continue; }
+    console.log(`        [${x.via}] ${pr.id} ${pr.kind} -> ${pr.target}: ${pr.options.map((o) => o.id).join(" | ")}`);
+    if (flag("--values")) for (const o of pr.options) if (o.value) console.log(`            ${o.id} = ${JSON.stringify(o.value)}`);
   }
   if (diffs?.length) for (const d of diffs.slice(0, 6)) console.log(`        ${d.key}${d.orderOnly ? " (order)" : ""}: legacy ${short(d.expected, 60)}  |  engine ${short(d.actual, 60)}`);
 }

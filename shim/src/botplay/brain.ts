@@ -1,5 +1,5 @@
 import { playerOf, type Board } from "./board.js";
-import { baseId, lockOf, type Prompt } from "./prompts.js";
+import { baseId, lockIs, lockOf, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { chooseGoal } from "./strategy.js";
 import { TACTICAL_ID, TacticalExecutor } from "./tactical.js";
@@ -7,6 +7,7 @@ import { CardPlanner } from "./cards.js";
 import { ViolationDesk } from "./violations.js";
 import { EngineTactical, TACTICAL_KINDS } from "./tacticalEngine.js";
 import type { Decision } from "../engine/types.js";
+import { passOption } from "../engine/policy/turn.js";
 
 /*
  * The planner of one autopilot seat: takes the decisions the rule table cannot (tactical actions, strategy card
@@ -15,8 +16,14 @@ import type { Decision } from "../engine/types.js";
  */
 export class Brain {
   private tactical: TacticalExecutor;
-  /** The same tactical action driven by typed engine decisions (preferred when the engine is up). */
-  private engineTactical: EngineTactical | null;
+  /** The same tactical action driven by typed engine decisions (preferred when the engine is up); made on first use. */
+  private engineTacticalFor: EngineTactical | null = null;
+  private get engineTactical(): EngineTactical | null {
+    const engine = this.seat.engine;
+    if (!engine) return null;
+    this.engineTacticalFor ??= new EngineTactical(this.seat, engine);
+    return this.engineTacticalFor;
+  }
   private cards: CardPlanner;
   private violations: ViolationDesk;
   /** Per game, the newest prompt when our last tactical action ended. */
@@ -26,9 +33,13 @@ export class Brain {
 
   constructor(private seat: Seat) {
     this.tactical = new TacticalExecutor(seat);
-    this.engineTactical = seat.engine ? new EngineTactical(seat, seat.engine) : null;
     this.cards = new CardPlanner(seat);
     this.violations = new ViolationDesk(seat);
+  }
+
+  /** The planner runs an action in this game (legacy or engine tactical job): the turn is not over. */
+  busy(game: string): boolean {
+    return this.tactical.owns(game) || !!this.engineTactical?.owns(game);
   }
 
   /** Prompts the rule table must leave alone in this game (the planner presses them). */
@@ -67,15 +78,20 @@ export class Brain {
       const menu = EngineTactical.turnMenu(decisions);
       if (menu) return this.engineTurn(game, menu);
     }
+    // The engine is reachable: turn menus and tactical steps are typed (turn.action, tactical.*) and run above
+    // (engineTurn / engineRecover / the turn policy). The button path below is the engine-off fallback only (live
+    // pbd158: after the turn policy passed, the button path started a Tactical Action on the old turn message).
+    if (decisions && this.engineTactical) return false;
     const prompts = this.seat.prompts(game);
     // A tactical action under way that we do not have a plan for (e.g. after a restart): finish it.
     const retired = this.retired.get(game);
     // Our newest prompt, if it belongs to a tactical action (a later turn prompt means that action is over).
-    const newest = [...prompts].reverse().find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockOf(c.custom_id) === faction));
-    const stray = [newest].filter((p): p is Prompt => !!p && (!retired || BigInt(p.m.id) > BigInt(retired))).find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockOf(c.custom_id) === faction && /^(concludeMove_|landUnits_|doneLanding|doneWithTacticalAction|tacticalActionBuild_)/.test(baseId(c.custom_id))));
-    const turnOver = prompts.some((p) => p.controls.some((c) => c.custom_id === `FFCC_${faction}_turnEnd`));
+    const newest = [...prompts].reverse().find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockIs(c.custom_id, faction)));
+    const stray = [newest].filter((p): p is Prompt => !!p && (!retired || BigInt(p.m.id) > BigInt(retired))).find((p) => this.tactical.forMe(p, faction) && p.controls.some((c) => lockIs(c.custom_id, faction) && /^(concludeMove_|landUnits_|doneLanding|doneWithTacticalAction|tacticalActionBuild_)/.test(baseId(c.custom_id))));
+    const turnOver = prompts.some((p) => p.controls.some((c) => (lockIs(c.custom_id, faction) && baseId(c.custom_id) === "turnEnd")));
     const age = stray ? Date.now() - Date.parse(stray.m.edited_timestamp ?? stray.m.timestamp) : 0;
-    if (stray && !turnOver && age > 20000 && age < 600000) {
+    // (Not a step the typed engine path owns: engineRecover above finishes those.)
+    if (stray && !turnOver && age > 20000 && age < 600000 && !(await this.seat.engineOwns?.(game, String(stray.m.id)))) {
       const board = await this.seat.board(game, true);
       const me = board ? playerOf(board, this.seat.userId) : undefined;
       if (board && me && board.activePlayer === me.color && board.phase === "action") {
@@ -89,8 +105,11 @@ export class Brain {
 
   /** Our action-phase turn prompt: start a tactical action when that is the plan (the rule table plays cards / passes). */
   private async turn(game: string, faction: string, prompts: Prompt[]): Promise<boolean> {
-    const turn = [...prompts].reverse().find((p) => p.controls.some((c) => c.custom_id === `FFCC_${faction}_tacticalAction`));
+    const turn = [...prompts].reverse().find((p) => p.controls.some((c) => (lockIs(c.custom_id, faction) && baseId(c.custom_id) === "tacticalAction")));
     if (!turn || this.handled.has(turn.m.id) || turn.m._presses?.[this.seat.userId]) return false;
+    // The typed turn menu (turn.action) is engineTurn's, also while its decision is still on its way to the mirror
+    // (live: the button path pressed "Tactical Action" and walked the whole action by buttons, ~15 presses an hour).
+    if (await this.seat.engineOwns?.(game, String(turn.m.id))) return false;
     const ids = turn.controls.map((c) => baseId(c.custom_id));
     // After an action the bot offers End Turn on the same kind of prompt; an unplayed card goes first.
     if (ids.some((b) => /^(turnEnd|endOfTurnAbilities|strategicAction_\d+)$/.test(b))) return false;
@@ -104,7 +123,7 @@ export class Brain {
       return false;
     }
     this.seat.log(goal.kind === "produce" ? goal.why : `planned ${goal.why}`);
-    const control = turn.controls.find((c) => c.custom_id === `FFCC_${faction}_tacticalAction`)!;
+    const control = turn.controls.find((c) => (lockIs(c.custom_id, faction) && baseId(c.custom_id) === "tacticalAction"))!;
     this.tactical.start(game, goal, String(BigInt(turn.m.id)));
     const err = await this.seat.press(turn, control, `plan: ${goal.kind} ${goal.target}`);
     if (err) {
@@ -140,8 +159,11 @@ export class Brain {
     const goal = chooseGoal(board, me);
     this.handled.add(key);
     if (goal.kind === "pass") {
-      this.seat.log(`passing: ${goal.why}`);
-      return false;
+      // No tactical job: pass now (policy/turn.ts would after its grace period; never with a strategy card unplayed).
+      const pass = passOption(menu.options);
+      if (!pass || me.scs.some((n) => !me.exhaustedSCs.includes(n))) return false;
+      const r = await this.seat.engine!.answer(game, menu, pass.id, `passing: ${goal.why}`);
+      return !!r?.ok;
     }
     this.seat.log(goal.kind === "produce" ? goal.why : `planned ${goal.why}`);
     return this.engineTactical!.start(game, menu, goal);

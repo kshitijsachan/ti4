@@ -2,6 +2,7 @@ import { planetName } from "../tactical/names";
 import { getAgendaData } from "@/entities/lookup/agendas";
 import type { StrategyCardPick } from "../../../../../shim/src/engine/types";
 import type {
+  ConstructionBuild,
   ConstructionPlace,
   DiplomacySystem,
   PlanetReady,
@@ -188,6 +189,28 @@ export function ConstructionPlaceView({ decision, answer }: RendererProps<Constr
               {o.value!.resources}/{o.value!.influence}
               {o.value!.home ? " · home" : ""}
               {o.value!.pds ? ` · ${o.value!.pds} PDS` : ""}
+            </Meta>
+          </Choice>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Construction (Thunder's Edge) "produce": the system whose space dock uses its PRODUCTION. */
+export function ConstructionBuildView({ decision, answer }: RendererProps<ConstructionBuild>) {
+  const opts = live(decision.options).filter((o) => o.value);
+  return (
+    <div className={classes.panel}>
+      <Title sub="Then choose the units to produce there.">Construction: produce at a space dock</Title>
+      <div className={classes.choices}>
+        {opts.map((o) => (
+          <Choice key={o.id} option={o} onPick={answer}>
+            {o.value!.tile}
+            <Meta>
+              {o.value!.productionLimit != null ? `PRODUCTION ${o.value!.productionLimit}` : "PRODUCTION ?"}
+              {o.value!.spaceDocks > 1 ? ` · ${o.value!.spaceDocks} docks (one counts)` : ""}
+              {o.value!.home ? " · home" : ""}
             </Meta>
           </Choice>
         ))}

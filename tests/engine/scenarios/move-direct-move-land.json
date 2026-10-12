@@ -1,0 +1,126 @@
+{
+  "name": "move-direct-move-land",
+  "description": "pbd28@54: deepwrought activates (trigger ringTile_209) 209 (Vorhal). Engine: direct /move (carrier, dreadnought, 2 fighters from 313 space, 2 infantry lifted off Ikatena) + direct /land (2 infantry on Vorhal). Legacy: the per-unit movement buttons, Done moving, Land 2 Infantry, Done Landing.",
+  "base": {
+    "recording": "pbd28",
+    "index": 54
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "313",
+              "holder": "space",
+              "unit": "cv",
+              "count": 1
+            },
+            {
+              "from": "313",
+              "holder": "space",
+              "unit": "dn",
+              "count": 1
+            },
+            {
+              "from": "313",
+              "holder": "space",
+              "unit": "ff",
+              "count": 2
+            },
+            {
+              "from": "313",
+              "holder": "ikatena",
+              "unit": "gf",
+              "count": 2
+            }
+          ]
+        }
+      },
+      "as": "deepwrought",
+      "legacy": [
+        {
+          "press": "FFCC_deepwrought_tacticalMoveFrom_313"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_deepwrought_unitTacticalMove_313_1_cv_navy"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_deepwrought_unitTacticalMove_313_1_dn_navy"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_deepwrought_unitTacticalMove_313_2_ff_navy"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_deepwrought_unitTacticalMove_313_2_gf_ikatena_navy"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_deepwrought_doneWithOneSystem_313"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_deepwrought_concludeMove_209"
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "tactical.land",
+        "action": "land",
+        "body": {
+          "landings": [
+            {
+              "planet": "vorhal",
+              "unit": "gf",
+              "count": 2
+            }
+          ]
+        }
+      },
+      "as": "deepwrought",
+      "legacy": [
+        {
+          "press": "FFCC_deepwrought_landUnits_209_2gf_vorhal_navy"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_deepwrought_doneLanding_209"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[deepwrought].planets",
+        "match": "vorhal"
+      }
+    ]
+  },
+  "trigger": {
+    "press": "FFCC_deepwrought_ringTile_209",
+    "as": "deepwrought"
+  }
+}

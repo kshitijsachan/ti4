@@ -1,5 +1,5 @@
 import { countUnit, playerOf, type Board, type PlayerView } from "./board.js";
-import { baseId, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
+import { baseId, lockIs, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { BuildJob } from "./production.js";
 import { promptForMe } from "./steps.js";
@@ -112,7 +112,7 @@ export class TacticalExecutor {
       const p = prompts[i];
       if (!snowflakeAfter(p.m.id, after ?? plan.since)) break;
       if (this.gone.has(p.m.id) || !this.forMe(p, faction)) continue;
-      const c = p.controls.find((x) => (!lockOf(x.custom_id) || lockOf(x.custom_id) === faction) && match(baseId(x.custom_id), x));
+      const c = p.controls.find((x) => (!lockOf(x.custom_id) || lockIs(x.custom_id, faction)) && match(baseId(x.custom_id), x));
       if (c) return { p, c };
     }
     return null;
@@ -202,7 +202,7 @@ export class TacticalExecutor {
     const menu = this.find(faction, (b) => /^(ringTile_|ring_|getTilesThisFarAway_)/.test(b));
     if (!menu) return false;
     const target = plan.target!;
-    const ids = menu.p.controls.filter((c) => !lockOf(c.custom_id) || lockOf(c.custom_id) === faction);
+    const ids = menu.p.controls.filter((c) => !lockOf(c.custom_id) || lockIs(c.custom_id, faction));
     const direct = ids.find((c) => baseId(c.custom_id) === `ringTile_${target}`);
     if (direct) return this.press(menu.p, direct, `activate ${target}`);
     const ring = ringButton(ids, target, plan.ringsTried);

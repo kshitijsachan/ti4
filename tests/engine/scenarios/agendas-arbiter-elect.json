@@ -1,0 +1,30 @@
+{
+  "name": "agendas-arbiter-elect",
+  "description": "Imperial Arbiter (law) elects Mahact.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:arbiter force:true"
+  ],
+  "steps": [
+    {
+      "press": "agendaResolution_mahact",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.law",
+        "match": "arbiter"
+      }
+    ]
+  }
+}
