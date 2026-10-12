@@ -54,6 +54,11 @@ const SOURCE_NAMES: Record<string, string> = {
   colonial_redistribution: "Colonial Redistribution: give the planet to",
   remove_cc: "Remove one of your command tokens",
   return_play_area_pn: "Return a play-area promissory note",
+  mahactagent: "Mahact agent: follow without a strategy token",
+  scepter_of_emelpar: "Scepter of Emelpar: follow without a strategy token",
+  cognitive_parallax_engine: "Cognitive Parallax Engine: follow without a strategy token",
+  cavalry: "The Cavalry: the ship that becomes the Cavalry",
+  refit: "Refit Troops: replace an infantry with a mech",
 };
 
 export const sourceName = (s: string | undefined | null) =>
@@ -136,6 +141,10 @@ function confirmText(a: Record<string, unknown>, state: GameState | null): strin
       return a.confirm ? "Swap strategy cards" : "Decline";
     case "minister_peace":
       return "End the active player's turn";
+    case "mahactagent":
+    case "scepter_of_emelpar":
+    case "cognitive_parallax_engine":
+      return `Follow ${sc(a.strategyCard)}`;
     case "ixthian_artifact":
       return a.choice === "ignore_speaker" ? "Roll anyway" : "Roll";
     case "pay_debt": {
@@ -170,7 +179,7 @@ function chooseText(kind: string, v: ChooseValue, state: GameState | null): stri
     case "choose.player":
       return playerText(a, state);
     case "choose.unit":
-      return `${str(a.unit)}${at(str(a.planetName) || str(a.tile))}`;
+      return `${a.damaged ? "Damaged " : ""}${str(a.unit)}${at(str(a.planetName) || str(a.tile))}`;
     case "choose.card":
       return cardText(a);
     case "choose.confirm":

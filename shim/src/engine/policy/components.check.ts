@@ -58,6 +58,9 @@ assert.equal(pick(base("choose.confirm", [opt("rollIxthian", { source: "ixthian_
 assert.equal(pick(base("choose.player", [opt("me", { source: "checks_and_balances", faction: "hacan", strategyCard: 2 }), opt("x", { source: "checks_and_balances", faction: "sol", strategyCard: 2 })], { target: { userId: "u1", faction: "hacan", color: "yellow", resolvedBy: "mention" } })), "x");
 assert.equal(pick(base("choose.player", [opt("c", { source: "colonial_redistribution", faction: "sol", planet: "rokha" })])), "c");
 assert.equal(pick(base("choose.system", [opt("a", { source: "remove_cc", choice: "ministerOfWar", tile: "101", faction: "hacan" }), opt("b", { source: "remove_cc", choice: "ministerOfWar", tile: "202", faction: "hacan" })])), "a");
+assert.equal(pick(base("choose.confirm", [opt("m", { source: "mahactagent", confirm: true, strategyCard: 6 }), opt("deleteButtons", null)])), "deleteButtons");
+assert.equal(pick(base("choose.unit", [opt("c", { source: "cavalry", unit: "cruiser" }), opt("d", { source: "cavalry", unit: "carrier", damaged: "damaged" })])), "c");
+assert.equal(pick(base("choose.unit", [opt("r", { source: "refit", unit: "mech", tile: "313", holder: "jord", planet: "jord" })])), "r");
 // Always answers when only untyped options remain; never answers someone else's prompt.
 assert.equal(pick(base("choose.system", [opt("deleteButtons", null)])), "deleteButtons");
 assert.equal(pick(base("choose.card", [opt("one", { source: "codex", cardType: "action_card" })], { target: { userId: "u2", faction: "sol", color: "red", resolvedBy: "owner_prefix" } })), undefined);

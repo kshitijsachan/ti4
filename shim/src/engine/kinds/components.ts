@@ -69,6 +69,8 @@ export type ChooseUnit = DecisionBase<
     /** remove_unit_type: the units' owner color; destroy: "destroy" when the removal destroys. */
     color?: string;
     destroy?: string;
+    /** cavalry: "damaged" when the chosen copy is damaged. */
+    damaged?: string;
   }
 >;
 
@@ -98,6 +100,8 @@ export type ChooseConfirm = DecisionBase<
   ChooseBase & {
     confirm: boolean;
     choice?: string;
+    /** mahactagent / scepter_of_emelpar / cognitive_parallax_engine: the played card followed without a token. */
+    strategyCard?: number;
     /** pay_debt (choice comm | tg | debt): the creditor and how many. */
     faction?: FactionId;
     amount?: number;
