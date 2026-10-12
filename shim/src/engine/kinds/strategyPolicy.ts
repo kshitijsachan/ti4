@@ -11,6 +11,7 @@
  *    edit-in-place panel is not answered again until the engine re-captured it (revision moved).
  */
 import { researchable, TECH_PREFERENCE } from "../../botplay/techs.js";
+import { overSupply } from "../policy/fallback.js";
 import type { Decision, GameState, Option, PlayerState } from "../types.js";
 import type {
   ConstructionBuild,
@@ -75,7 +76,7 @@ export function chooseStrategy(d: Decision, state: GameState | null, me: string,
     case "strategy_card.politics_agenda":
       return agenda(d as PoliticsAgenda);
     case "strategy_card.construction_place":
-      return constructionPlace(d as ConstructionPlace);
+      return constructionPlace(d as ConstructionPlace, state, me);
     case "strategy_card.construction_build":
       return constructionBuild(d as ConstructionBuild);
     case "command_tokens.adjust":
@@ -95,7 +96,7 @@ function resolveCard(d: StrategyCardResolve, state: GameState | null, self: Play
   // The thread copy carries the same buttons: answer the main message when it is open too.
   if (any.copy && ctx.open.some((x) => x.kind === "strategy_card.resolve" && x.id !== d.id && x.options.some((o) => o.value && !o.value.copy && o.value.strategyCard === sc))) return null;
   const holder = self.strategyCards.includes(sc) || any.holder === self.faction;
-  if (holder) return holderPart(d, opts, self, ctx);
+  if (holder) return holderPart(d, opts, self, ctx, state);
   // A follower answers the card once: decline, or press the secondary directly (it spends the token itself).
   const status = d.window?.responses?.[me] ?? state?.strategyCards.find((c) => c.number === sc)?.reactions.find((r) => r.faction === self.faction)?.status;
   if (ctx.history.length || (status && status !== "pending")) return null;
@@ -124,7 +125,7 @@ function resolveCard(d: StrategyCardResolve, state: GameState | null, self: Play
 }
 
 /** The holder: the next primary part not yet pressed on this message, in the card's checklist order. */
-function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["options"][number]["value"]>[], self: PlayerState, ctx: PolicyCtx): StrategyChoice | null {
+function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["options"][number]["value"]>[], self: PlayerState, ctx: PolicyCtx, state: GameState | null = null): StrategyChoice | null {
   const v = opts[0].value!;
   const mine = opts.filter((o) => o.value!.who !== "others");
   // This seat's presses (in memory) or the engine's record (survives a shim restart: live pbd114 re-resolved every
@@ -144,8 +145,12 @@ function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["op
       // Space dock first when there is room to build one away from home, then a PDS (the second structure is
       // always a PDS).
       const first = pressed("structure") === 0;
-      const want = first && self.planets.length >= 4 ? "spacedock" : "pds";
+      // Never past the unit supply (live pbd171: Hacan got a 4th space dock; the bot re-posted the plastic-limit
+      // warning). Without a board we cannot count: PDS only.
+      const room = { spacedock: !!state && !overSupply("spacedock", state, self.userId), pds: !overSupply("pds", state, self.userId) };
+      const want = first && self.planets.length >= 4 && room.spacedock ? "spacedock" : "pds";
       candidates = candidates.filter((o) => o.value!.unit === want).concat(candidates.filter((o) => o.value!.unit === "pds"));
+      candidates = candidates.filter((o) => room[o.value!.unit as "spacedock" | "pds"] ?? true);
     }
     if (part === "imperial") candidates = candidates.filter((o) => (holdsMecatol ? o.value!.action === "score_imperial" : o.value!.action === "draw_secret"));
     if (part === "warfare_primary") continue; // removing a command token from the board is not planned yet
@@ -198,10 +203,11 @@ function agenda(d: PoliticsAgenda): StrategyChoice | null {
   return top && v && v.action !== "draw" ? { option: top, why: `Politics: ${v.agenda ?? "agenda"} on top` } : null;
 }
 
-function constructionPlace(d: ConstructionPlace): StrategyChoice | null {
+function constructionPlace(d: ConstructionPlace, state: GameState | null, me: string): StrategyChoice | null {
   const opts = live(d).filter((o) => o.value);
   if (!opts.length) return null;
   const unit = opts[0].value!.unit;
+  if (overSupply(unit, state, me)) return null; // never past the unit supply (pbd171)
   const score = (o: (typeof opts)[number]) => {
     const v = o.value!;
     if (unit === "spacedock") return (v.home ? -50 : 0) - v.spaceDock * 100 + v.resources * 2 + v.influence;
