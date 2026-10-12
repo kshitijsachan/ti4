@@ -1,0 +1,33 @@
+{
+  "name": "ac-timing-offswitch",
+  "description": "ActionCardTiming per-game off switch (audit-acs): the base is pbd72 save 815 (action phase, Winnu active, no active system) with the stored value acTimingGate=off added (no seat holds the bothelper role needed for /bothelper edit_stored_value, so the switch is in the base save). Imperial Rider, refused in ac-timing-windows from the same state, must be ACCEPTED: the original behaviour.",
+  "base": {
+    "save": "tests/engine/scenarios/ac-timing-offswitch.save.txt"
+  },
+  "setup": [
+    "/ac discard action_card_id:49 faction_or_color:winnu",
+    "/ac discard action_card_id:805 faction_or_color:winnu",
+    "/ac discard action_card_id:810 faction_or_color:winnu",
+    "/ac discard action_card_id:368 faction_or_color:winnu",
+    "/ac discard action_card_id:431 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:imp_rider faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:summit faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:mb1 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:fs1 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:economic_initiative faction_or_color:winnu"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "imp_rider"
+        }
+      },
+      "as": "winnu"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
