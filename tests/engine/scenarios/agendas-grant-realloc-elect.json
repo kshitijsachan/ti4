@@ -1,0 +1,24 @@
+{
+  "name": "agendas-grant-realloc-elect",
+  "description": "Research Grant Reallocation elects Winnu: tech prompt.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:grant_reallocation force:true"
+  ],
+  "steps": [
+    {
+      "press": "agendaResolution_winnu",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "agendas-censure-elect",
+  "description": "Political Censure (law) elects Naaz.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:censure force:true"
+  ],
+  "steps": [
+    {
+      "press": "agendaResolution_naaz",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

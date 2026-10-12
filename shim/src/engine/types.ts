@@ -479,6 +479,14 @@ export function awaits(d: Decision, userId: UserId): boolean {
 }
 
 /**
+ * The player may answer a player-scoped decision targeted at someone else (KindSpec.answersForTarget): unowned table
+ * buttons the original code lets anyone press, which the engine routes to the speaker (agenda.resolve, agenda.next).
+ */
+export function answersForTarget(d: Decision): boolean {
+  return d.scope === "player" && (d.kind === "agenda.resolve" || d.kind === "agenda.next") && d.target?.resolvedBy === "speaker";
+}
+
+/**
  * The player may answer although the window does not await them (KindSpec.answersOutsideWindow): the holder of a
  * played strategy card resolves its primary on the card's message (strategy_card.resolve windows list followers only).
  */
