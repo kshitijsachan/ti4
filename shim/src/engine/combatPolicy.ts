@@ -25,7 +25,9 @@ export function chooseCombat(d: Decision, state: GameState | null, me: string, o
     case "combat.hits":
       return autoAssign(d, me);
     case "combat.assign_units":
-      return finishMenu(d, me) ?? closeRemovalList(d, state, me) ?? pickUnit(d, me);
+      // pickUnit only where hits are owed (engine progress): an over-limit removal list is the unit-limit desk's
+      // (botplay/violations.ts); pressing its Done first brought back the pbd114 Remove/Done loop.
+      return finishMenu(d, me) ?? closeRemovalList(d, state, me) ?? (d.progress ? pickUnit(d, me) : null);
     case "combat.bombard":
       return bombardDone(d, me);
     case "combat.retreat":
@@ -88,6 +90,9 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
   const opener = live.find((o) => o.value!.action === "open" && o.value!.assignType !== "remove");
   if (opener && !history.includes(opener.id)) return { option: opener, why: `units: assign ${opener.value!.assignType} hits` };
   const anyOpen = live.find((o) => o.value!.action === "open");
+  // A fleet pool / capacity reminder ("remove"): the unit-limit desk removes what is over; dismissing it first left a
+  // bot over its fleet pool.
+  if (live.some((o) => o.value!.action === "open" && o.value!.assignType === "remove")) return null;
   if (done) return { option: done, why: "units: nothing left to remove" };
   if (anyOpen && !history.includes(anyOpen.id)) return { option: anyOpen, why: "units: open the removal menu" };
   return null;
