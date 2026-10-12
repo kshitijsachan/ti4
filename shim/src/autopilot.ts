@@ -2,6 +2,7 @@ import type { Hub } from "./hub.js";
 import type { Clients } from "./clients.js";
 import type { Json, StoredMessage } from "./store.js";
 import { log } from "./log.js";
+import { activity, Slicer } from "./lag.js";
 import { Brain } from "./botplay/brain.js";
 import { parseBoard, type Board } from "./botplay/board.js";
 import { controlsOf, type Control, type Prompt } from "./botplay/prompts.js";
@@ -295,6 +296,10 @@ const TURN_ID = /^FFCC_[^_]+_(tacticalAction|componentAction|turnEnd|endOfTurnAb
 const UNTYPED_STALL_MS = 120_000;
 /** The same button on the same message: at most this many presses per seat (see pressCount). */
 const MAX_SAME_PRESS = 3;
+/** decide(): a game with no new or edited message for this long is idle ... */
+const IDLE_GAME_MS = 10 * 60_000;
+/** ... and is looked through at most this often per seat (the timed rules wait 60 s or more anyway). */
+const IDLE_SCAN_MS = 60_000;
 const BUSY_TEXT = /hasn't finished processing the last task/i;
 
 export class Autopilot {
@@ -341,6 +346,30 @@ export class Autopilot {
 
   name(userId: string) {
     return this.hub.store.state.users[userId]?.global_name ?? userId;
+  }
+
+  private byGame = new Map<string, Json[]>();
+  private byGameAt = 0;
+  private byGameGen = -1;
+
+  /**
+   * Every channel of a game (its channels and their threads, any type, in state order), from an index rebuilt when
+   * channels or permissions change (Store.viewGeneration) and at least every 10 s: the loops that need one game's
+   * channels walked all 3600+ channels of every game for it.
+   */
+  gameChannels(game: string): Json[] {
+    const store = this.hub.store;
+    if (this.byGameGen !== store.viewGeneration || Date.now() - this.byGameAt > 10_000) {
+      const s = store.state;
+      this.byGame = new Map();
+      for (const ch of Object.values(s.channels)) {
+        const g = gameOf(ch, s.channels);
+        if (g) (this.byGame.get(g) ?? this.byGame.set(g, []).get(g)!).push(ch);
+      }
+      this.byGameAt = Date.now();
+      this.byGameGen = store.viewGeneration;
+    }
+    return this.byGame.get(game) ?? [];
   }
 
   serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -618,17 +647,23 @@ class SeatPilot {
   /** When the current think() began: one hung far longer than any step should is abandoned (never a silent seat). */
   private busySince = 0;
 
+  /** What the current think() is doing (named in the "hung" warning and the event-loop lag monitor). */
+  private stage = "";
+
   private async think() {
     if (this.busy && Date.now() - this.busySince > 120000) {
-      log.warn(`autopilot ${this.name}: a decision has hung for 2 minutes; starting over`);
+      log.warn(`autopilot ${this.name}: a decision has hung for 2 minutes (at: ${this.stage}); starting over`);
       this.busy = false;
     }
     if (this.busy || this.stopped || !this.mgr.hub.gateway.botReady) return;
     this.busySince = Date.now();
     if (Date.now() < this.restUntil) return;
     this.busy = true;
+    const done = activity(`autopilot ${this.name}: think`);
     try {
+      this.stage = "live games";
       for (const game of await this.liveGames()) {
+        this.stage = `planner / trade desk in ${game}`;
         // A planner error must never keep the rule table from answering (it would stall the game).
         const acted = async (name: string, fn: () => Promise<boolean>) => {
           try {
@@ -644,21 +679,32 @@ class SeatPilot {
           return;
         }
       }
+      this.stage = "engine step";
       if (await this.engineStep()) {
         this.busy = false;
         this.schedule();
         return;
       }
-      const choice = (await this.stalledPrompt()) ?? (await this.decide());
+      this.stage = "stalled prompt";
+      const stalled = await this.stalledPrompt();
+      this.stage = "decide";
+      const choice = stalled ?? (await this.decide());
       if (!choice) {
+        this.stage = "recover turns";
         await this.recoverTurns();
         return;
       }
-      await this.mgr.serial(() => this.press(choice));
+      const what = `press "${choice.control.label ?? choice.control.custom_id}" in #${this.store.channel(choice.msg.channel_id)?.name ?? choice.msg.channel_id}`;
+      this.stage = `${what} (queued behind the table's presses)`;
+      await this.mgr.serial(() => {
+        this.stage = `${what} (waiting for the bot)`;
+        return this.press(choice);
+      });
     } catch (e) {
       log.error(`autopilot ${this.name}: ${(e as Error).stack}`);
     } finally {
       this.busy = false;
+      done();
     }
     this.schedule();
   }
@@ -677,9 +723,8 @@ class SeatPilot {
   private async recoverTurns() {
     if (Date.now() - this.lastRecover < 15000) return;
     this.lastRecover = Date.now();
-    const s = this.store.state;
-    for (const ch of Object.values(s.channels)) {
-      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? "")) || !this.store.canView(this.userId, ch.id)) continue;
+    for (const ch of this.store.visibleChannels(this.userId)) {
+      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? ""))) continue;
       const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
       // Only live games (something happened in the last hour).
       const last = this.store.messages(ch.id).at(-1);
@@ -739,8 +784,8 @@ class SeatPilot {
       const turn = st.phase === "action" ? TURN_ID : st.phase === "strategy" ? /_scPick_\d+$/ : null;
       if (!turn) continue;
       let found: { m: StoredMessage; ch: Json } | null = null;
-      for (const ch of Object.values(s.channels)) {
-        if (![0, 11, 12].includes(ch.type) || !this.store.canView(me, ch.id) || gameOf(ch, s.channels) !== game) continue;
+      for (const ch of this.mgr.gameChannels(game)) {
+        if (![0, 11, 12].includes(ch.type) || !this.store.canView(me, ch.id)) continue;
         for (const m of this.store.messages(ch.id).slice(-WINDOW)) {
           if ((m._ephemeral_for && m._ephemeral_for !== me) || !s.users[m.author?.id]?.bot) continue;
           const content = String(m.content ?? "");
@@ -791,26 +836,53 @@ class SeatPilot {
 
   // ---- deciding ----
 
+  /** Per game, when decide() last looked through it although it was idle (see IDLE_GAME_MS). */
+  private idleScans = new Map<string, number>();
+
   private async decide(): Promise<Choice | null> {
     const s = this.store.state;
     const me = this.userId;
     const choices: Choice[] = [];
-    for (const ch of Object.values(s.channels)) {
-      if (![0, 11, 12].includes(ch.type) || !this.store.canView(me, ch.id)) continue;
+    const now = Date.now();
+    // This seat's game channels, by game. A game with no new or edited message for IDLE_GAME_MS is looked through at
+    // most every IDLE_SCAN_MS: a pass over every game a seat ever sat in (most of them ended or abandoned) took up to
+    // 1 s of uninterrupted CPU per seat (Bot Alpha, live 15:15 with 218 games), with 86 seats each passing every ~1 s.
+    const games = new Map<string, { chans: Json[]; newest: number }>();
+    for (const ch of this.store.visibleChannels(me)) {
+      if (![0, 11, 12].includes(ch.type)) continue;
       const game = gameOf(ch, s.channels);
       if (!game) continue;
-      const list = this.store.messages(ch.id);
-      for (const m of list.slice(-WINDOW)) {
-        if (NUDGE.test(String(m.content ?? "")) && (!m._ephemeral_for || m._ephemeral_for === me) && (ch.type === 12 || String(m.content).includes(`<@${me}>`))) {
-          const at = Date.parse(m.timestamp);
-          if (at > (this.nudges.get(ch.id) ?? 0)) this.nudges.set(ch.id, at);
+      const g = games.get(game) ?? games.set(game, { chans: [], newest: 0 }).get(game)!;
+      g.chans.push(ch);
+      const last = this.store.messages(ch.id).at(-1);
+      if (last) g.newest = Math.max(g.newest, Date.parse(last.edited_timestamp ?? last.timestamp) || 0, Date.parse(last.timestamp) || 0);
+    }
+    if (this.idleScans.size > 2 * games.size + 100) for (const k of this.idleScans.keys()) if (!games.has(k)) this.idleScans.delete(k);
+    // Yields to the event loop every ~20 ms: consider() rarely really awaits, so the pass would otherwise hold up
+    // every HTTP request (bot REST, /healthz) until it ends.
+    const slicer = new Slicer(`autopilot ${this.name}: decide`);
+    for (const [game, { chans, newest }] of games) {
+      if (now - newest > IDLE_GAME_MS) {
+        if (now - (this.idleScans.get(game) ?? 0) < IDLE_SCAN_MS) continue;
+        this.idleScans.set(game, now);
+      }
+      for (const ch of chans) {
+        const list = this.store.messages(ch.id);
+        for (const m of list.slice(-WINDOW)) {
+          if (NUDGE.test(String(m.content ?? "")) && (!m._ephemeral_for || m._ephemeral_for === me) && (ch.type === 12 || String(m.content).includes(`<@${me}>`))) {
+            const at = Date.parse(m.timestamp);
+            if (at > (this.nudges.get(ch.id) ?? 0)) this.nudges.set(ch.id, at);
+          }
+        }
+        for (const m of list.slice(-WINDOW)) {
+          await slicer.tick();
+          const c = await this.consider(m, ch, game);
+          if (c && !(await this.mgr.ended(game))) choices.push(c);
         }
       }
-      for (const m of list.slice(-WINDOW)) {
-        const c = await this.consider(m, ch, game);
-        if (c && !(await this.mgr.ended(game))) choices.push(c);
-      }
     }
+    const busy = slicer.done();
+    if (busy > 500) log.warn(`autopilot ${this.name}: decide took ${Math.round(busy)}ms of CPU over ${games.size} games`);
     if (!choices.length) return null;
     choices.sort((a, b) => b.score - a.score || (BigInt(b.msg.id) > BigInt(a.msg.id) ? 1 : -1));
     const best = choices[0];
@@ -860,7 +932,8 @@ class SeatPilot {
     controls = controls.filter((c) => !this.invertsRecentPress(m.channel_id, c));
     // A galvanize menu (Bastion agent: "choose the unit that should be galvanized") stays up after a press, edited to
     // offer the next unit: one galvanize per menu is the answer, never a run through every unit.
-    if ((m._presses?.[me] || [...this.pressed].some((k) => k.startsWith(`${m.id}:`))) && controls.some((c) => /(^|_)galvanize_/i.test(c.custom_id))) {
+    // (The cheap test first: spreading `pressed` for every message was a large share of each decide() pass.)
+    if (controls.some((c) => /(^|_)galvanize_/i.test(c.custom_id)) && (m._presses?.[me] || [...this.pressed].some((k) => k.startsWith(`${m.id}:`)))) {
       controls = controls.filter((c) => !/(^|_)(un)?galvanize_/i.test(c.custom_id));
     }
 
@@ -1124,9 +1197,7 @@ class SeatPilot {
       if (id === this.userId || p.faction.startsWith("sardakk") || p.faction.startsWith("keleres")) continue;
       if (p.techs < 1) return false;
     }
-    const s = this.store.state;
-    for (const ch of Object.values(s.channels)) {
-      if (gameOf(ch, s.channels) !== game) continue;
+    for (const ch of this.mgr.gameChannels(game)) {
       for (const m of this.store.messages(ch.id).slice(-WINDOW)) {
         if (m._ephemeral_for && m._ephemeral_for !== this.userId) continue;
         if (controlsOf(m.components).some((c) => /(^|_)(getTech_.+__noPay|acquireAFreeTech$|getAllTechOfType_)/.test(c.custom_id) && !c.custom_id.includes("keleres"))) {
@@ -1163,7 +1234,7 @@ class SeatPilot {
   private async mayStartStrategy(m: StoredMessage, game: string) {
     if (Date.now() - (this.mgr.lastStrategyStart.get(game) ?? 0) < 300000) return false;
     const s = this.store.state;
-    const channels = Object.values(s.channels).filter((ch) => gameOf(ch, s.channels) === game && [0, 11, 12].includes(ch.type));
+    const channels = this.mgr.gameChannels(game).filter((ch) => [0, 11, 12].includes(ch.type));
     const all = channels.flatMap((ch) => this.store.messages(ch.id)).filter((x) => !x._ephemeral_for);
     if (all.some((x) => BigInt(x.id) > BigInt(m.id) && controlsOf(x.components).some((c) => c.custom_id === "startStrategyPhase"))) return false;
     const windows = all.filter((x) => controlsOf(x.components).some((c) => c.custom_id === "pass_on_abilities") || /^Ready For Strategy Phase/i.test(controlsOf(x.components).map((c) => c.label).join(" ")));
@@ -1187,7 +1258,7 @@ class SeatPilot {
 
   /** The game this table window belongs to has been silent for 3 minutes (nothing new in its actions channel). */
   private tableStalled(m: StoredMessage, game: string) {
-    const actions = Object.values(this.store.state.channels).find((c) => c.name === `${game}-actions`);
+    const actions = this.mgr.gameChannels(game).find((c) => c.name === `${game}-actions`);
     const last = actions ? this.store.messages(actions.id).at(-1) : undefined;
     const lastAt = last ? Date.parse(last.edited_timestamp ?? last.timestamp) : 0;
     return Date.now() - Math.max(lastAt, Date.parse(m.edited_timestamp ?? m.timestamp)) > 180000;
@@ -1794,8 +1865,8 @@ class SeatPilot {
   /** Games with activity in the last hour that have not ended. */
   private async liveGames(): Promise<string[]> {
     const out: string[] = [];
-    for (const ch of Object.values(this.store.state.channels)) {
-      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? "")) || !this.store.canView(this.userId, ch.id)) continue;
+    for (const ch of this.store.visibleChannels(this.userId)) {
+      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? ""))) continue;
       const last = this.store.messages(ch.id).at(-1);
       if (!last || Date.now() - Date.parse(last.timestamp) > 3600000) continue;
       const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
@@ -1812,8 +1883,8 @@ class SeatPilot {
     const collect = (game: string, withControls: boolean): Prompt[] => {
       const s = self.store.state;
       const out: Prompt[] = [];
-      for (const ch of Object.values(s.channels)) {
-        if (![0, 11, 12].includes(ch.type) || !self.store.canView(self.userId, ch.id) || gameOf(ch, s.channels) !== game) continue;
+      for (const ch of self.mgr.gameChannels(game)) {
+        if (![0, 11, 12].includes(ch.type) || !self.store.canView(self.userId, ch.id)) continue;
         for (const m of self.store.messages(ch.id).slice(-WINDOW)) {
           if (m._ephemeral_for && m._ephemeral_for !== self.userId) continue;
           if (!s.users[m.author?.id]?.bot) continue;
