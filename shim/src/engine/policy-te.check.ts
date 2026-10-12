@@ -1,6 +1,7 @@
 /** Sanity checks for the Thunder's Edge policy: `npx tsx src/engine/policy-te.check.ts` (exits 1 on failure). */
 import assert from "node:assert/strict";
 import { chooseTyped } from "./autopilot.js";
+import { fallbackDue, isBlocking } from "./policy/fallback.js";
 import type { Decision, GameState, Option } from "./types.js";
 
 const ME = "u1";
@@ -136,5 +137,16 @@ const picker = base("te.plot", [opt("addFactionTokenToPlot_assail_sol", plotStep
   target: { userId: ME, faction: "crimson", color: "red", resolvedBy: "cards_thread" },
 });
 assert.equal(chooseTyped(picker, vpState, ME)?.option.id, "addFactionTokenToPlot_assail_hacan");
+// pbd161: the shim watchdog forced the fallback on the background panel every minute ("Seethe" pressed 4x, a puppet
+// added each time). The panel is not blocking: no watchdog clock, no forced fallback.
+assert.equal(isBlocking(panel), false);
+assert.equal(fallbackDue(panel, ME, { force: true, waitedMs: 600_000 }), false);
+assert.equal(chooseTyped(panel, vpState, ME, { history: [], open: [], all: [], force: true, waitedMs: 600_000 }), null);
+assert.equal(isBlocking(picker), true);
+// Only ourselves left on the picker: decline, never puppet ourselves.
+const selfOnly = base("te.plot", [opt("addFactionTokenToPlot_seethe_crimson", plotStep("addFactionTokenToPlot", { plot: "seethe", target: "crimson", panel: false })), opt("deleteButtons", null)], {
+  target: { userId: ME, faction: "crimson", color: "red", resolvedBy: "cards_thread" },
+});
+assert.equal(chooseTyped(selfOnly, vpState, ME)?.option.id, "deleteButtons");
 
 console.log("policy-te: all checks passed");

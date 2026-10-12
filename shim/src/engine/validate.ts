@@ -70,14 +70,35 @@ const KEYED_MAPS: Record<string, Family> = {
   produced: "unit",
 };
 
+/**
+ * Arrays of card references ({id, name, text?, ownerFaction?, …}: TradeModels.CardRef in trade.me / counterparties):
+ * the element's `id` is the id, not a key of a map. The same field names hold id-keyed maps in Hand.
+ */
+const REF_ARRAYS: Record<string, Family> = {
+  actionCards: "actionCard",
+  promissoryNotes: "promissoryNote",
+  secretObjectives: "secretObjective",
+  relics: "relic",
+};
+
 /** Values that are not ids but legitimately sit in an id field. */
 const ALLOWED = new Set(["none", "any", "pending"]);
 
+/** Map-template placeholder tiles (a seat's colour + 1–6 or "blank") sit on the board until the draft fills it. */
+const placeholderTile = (x: string) => {
+  const m = /^([a-z]+?)([1-6]|blank)$/.exec(x);
+  return !!m && is.color(m[1]);
+};
+
 /**
  * Fields that hold another vocabulary in some kinds (strategy_card.resolve unit: "spacedock" / "facility", holder:
- * the holder's faction; strategy_card.construction_place unit: "pds"). Keyed by decision-kind prefix.
+ * the holder's faction; strategy_card.construction_place unit: "pds"; action_card.step unit: long names). Keyed by decision-kind prefix.
  */
-const KIND_SKIPS: [prefix: string, keys: string[]][] = [["strategy_card.", ["unit", "holder"]]];
+const KIND_SKIPS: [prefix: string, keys: string[]][] = [
+  ["strategy_card.", ["unit", "holder"]],
+  ["action_card.step", ["unit"]], // the option id's own unit token (gf or infantry)
+  ["setup.player", ["faction"]], // the drafted "keleres" before its flavour is chosen (setupStep2)
+];
 
 const check: Record<Family, (x: unknown) => boolean> = {
   ...is,
@@ -115,7 +136,7 @@ export function createValidator(report: DriftReporter, enabled = defaultEnabled(
     if (node === null || node === undefined || depth > 12) return;
     if (typeof node === "string") {
       const family = skip.has(key) ? undefined : STRING_FIELDS[key];
-      if (family && !ALLOWED.has(node) && !check[family](node)) flag(family, node, path);
+      if (family && !ALLOWED.has(node) && !check[family](node) && !(family === "tile" && placeholderTile(node))) flag(family, node, path);
       return;
     }
     if (typeof node === "number") {
@@ -123,7 +144,19 @@ export function createValidator(report: DriftReporter, enabled = defaultEnabled(
       return;
     }
     if (Array.isArray(node)) {
-      node.forEach((x, i) => walk(x, `${path}[${i}]`, key, skip, depth + 1));
+      const refFamily = skip.has(key) ? undefined : REF_ARRAYS[key];
+      node.forEach((x, i) => {
+        if (refFamily && x && typeof x === "object" && !Array.isArray(x)) {
+          // A card reference: check its id, walk its other fields (ownerFaction, ownerColor) by their own names.
+          for (const [k, v] of Object.entries(x as Record<string, unknown>)) {
+            if (k === "id") {
+              if (typeof v === "string" && !ALLOWED.has(v) && !check[refFamily](v)) flag(refFamily, v, `${path}[${i}].id`);
+            } else walk(v, `${path}[${i}].${k}`, k, skip, depth + 2);
+          }
+          return;
+        }
+        walk(x, `${path}[${i}]`, key, skip, depth + 1);
+      });
       return;
     }
     if (typeof node !== "object") return;

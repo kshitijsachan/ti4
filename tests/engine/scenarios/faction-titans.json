@@ -1,0 +1,18 @@
+{
+  "name": "faction-titans",
+  "description": "Titans: Terragenesis (putSleeperOnPlanet_), Awaken (replaceSleeperWith_mech_<planet>), Ouranos flagship (replacePDSWithFS_), Terraform PN played by holder (terraformPlanet_), hero Ul (titansHeroPlanet_), mech DEPLOY via Construction (titansConstructionMechDeployStep2_)",
+  "base": { "recording": "pbd104", "index": 44, "repost": false },
+  "setup": [
+    "/pn send promissory_note_id:terraform target_faction_or_color:xxcha faction_or_color:titans",
+    "/add_units tile_name:313 unit_names:\"pds elysium\" faction_or_color:titans"
+  ],
+  "trigger": { "press": "FFCC_titans_putSleeperOnPlanet_elysium", "as": "titans" },
+  "steps": [
+    { "press": "FFCC_titans_replaceSleeperWith_mech_elysium", "as": "titans" },
+    { "press": "FFCC_titans_replacePDSWithFS_elysium", "as": "titans" },
+    { "press": "terraformPlanet_archonren", "as": "xxcha" },
+    { "press": "titansHeroPlanet_elysium", "as": "titans" },
+    { "press": "FFCC_titans_titansConstructionMechDeployStep2_elysium", "as": "titans" }
+  ],
+  "expect": { "invariants": true }
+}

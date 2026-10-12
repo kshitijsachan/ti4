@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ActionIcon, Button, Group } from "@mantine/core";
 import type { Option } from "../../../../../shim/src/engine/types";
 import type {
@@ -10,6 +9,8 @@ import type {
 } from "../../../../../shim/src/engine/kinds/status";
 import { OptionButtons, Waiting, me, myStatus, type StatusRendererProps } from "./shared";
 import classes from "./Status.module.css";
+import { DecisionFooter } from "../../ui/Popup";
+import { useDecisionState } from "../../draftState";
 
 const POOLS: (keyof CommandTokenPools)[] = ["tactic", "fleet", "strategy"];
 const total = (p: CommandTokenPools) => p.tactic + p.fleet + p.strategy;
@@ -24,8 +25,8 @@ type EditorProps = {
 };
 
 /** Set the final tactic / fleet / strategy pools in one go, within base + gain (and no losses for Deliberate Action). */
-export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm }: EditorProps) {
-  const [pools, setPools] = useState<CommandTokenPools>(start);
+export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, draftKey }: EditorProps & { draftKey?: string }) {
+  const [pools, setPools] = useDecisionState<CommandTokenPools>(draftKey ?? "tokens", "pools", start);
   const left = maxTotal - total(pools);
   const step = (k: keyof CommandTokenPools, d: number) => setPools((p) => ({ ...p, [k]: p[k] + d }));
   return (
@@ -50,14 +51,16 @@ export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm }: 
           </div>
         ))}
       </div>
-      <Group gap={6}>
-        <Button size="xs" disabled={left < 0} onClick={() => onConfirm(pools)}>
-          Confirm {pools.tactic}/{pools.fleet}/{pools.strategy}
-        </Button>
-        <Button size="xs" variant="subtle" onClick={() => setPools(base)}>
-          Reset
-        </Button>
-      </Group>
+      <DecisionFooter>
+        <Group gap={6}>
+          <Button size="xs" disabled={left < 0} onClick={() => onConfirm(pools)}>
+            Confirm {pools.tactic}/{pools.fleet}/{pools.strategy}
+          </Button>
+          <Button size="xs" variant="subtle" onClick={() => setPools(base)}>
+            Reset
+          </Button>
+        </Group>
+      </DecisionFooter>
     </div>
   );
 }
@@ -87,6 +90,7 @@ export function StatusHomeworkRenderer({ decision, state, answer }: StatusRender
         {!isReady && st && tokens?.value?.action === "command_tokens" && tokens.value.payload && (
           <TokenEditor
             key={tokensSet ? "set" : "unset"}
+            draftKey={`${decision.id}:${tokensSet ? "set" : "unset"}`}
             base={st.tokensBase}
             start={tokensSet ?? st.tokensBase}
             maxTotal={st.tokenMaxTotal}
@@ -126,6 +130,7 @@ export function CommandTokensAdjustRenderer({ decision, state, answer }: StatusR
   if (payloadOption && st) {
     return (
       <TokenEditor
+        draftKey={decision.id}
         base={st.tokensBase}
         start={st.tokensConfirmed ?? st.tokensBase}
         maxTotal={st.tokenMaxTotal}

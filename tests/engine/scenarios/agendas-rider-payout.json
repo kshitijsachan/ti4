@@ -1,0 +1,42 @@
+{
+  "name": "agendas-rider-payout",
+  "description": "Leadership Rider (Winnu) and Trade Rider (Naaz) on Nekro, then Minister of War elects Nekro: rider payouts.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:minister_war force:true"
+  ],
+  "steps": [
+    {
+      "press": "FFCC_winnu_rider_player;nekro_Leadership Rider",
+      "as": "winnu"
+    },
+    {
+      "press": "FFCC_naaz_rider_player;nekro_Trade Rider",
+      "as": "naaz"
+    },
+    {
+      "press": "FFCC_mahact_rider_player;winnu_Imperial Rider",
+      "as": "mahact"
+    },
+    {
+      "press": "agendaResolution_nekro",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "game.law",
+        "match": "minister_war"
+      }
+    ]
+  }
+}

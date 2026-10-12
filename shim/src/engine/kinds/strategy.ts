@@ -132,8 +132,18 @@ export type ConstructionPlace = DecisionBaseOf<
   }
 >;
 
+/**
+ * Thunder's Edge Construction primary, "produce" part: the system whose space dock uses its PRODUCTION (one option per
+ * system with the holder's docks; no decline). Opens production.produce (context "construction").
+ */
+export type ConstructionBuild = DecisionBaseOf<
+  "strategy_card.construction_build",
+  { tile: string; home: boolean; productionLimit: number | null; spaceDocks: number }
+>;
+
 export type StrategyDecision =
   | StrategyCardResolve
+  | ConstructionBuild
   | StrategyCardQueuePick
   | StrategicAction
   | DiplomacySystem
@@ -158,4 +168,5 @@ export const STRATEGY_KINDS = [
   "strategy_card.politics_speaker",
   "strategy_card.politics_agenda",
   "strategy_card.construction_place",
+  "strategy_card.construction_build",
 ] as const;

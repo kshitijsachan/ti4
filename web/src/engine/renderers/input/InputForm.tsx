@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { Button, Group, MultiSelect, Select, Stack, Text, TextInput, Textarea } from "@mantine/core";
 import type { Decision, InputField, InputSchema } from "../../../../../shim/src/engine/types";
 import classes from "./input.module.css";
+import { useDecisionState } from "../../draftState";
 
 /** Answer payload for typed inputs: a select (`values`) or a form submit (`inputs`). */
 export type InputAnswer = { optionId: string; values?: string[]; inputs?: Record<string, string> };
@@ -84,14 +84,17 @@ export function SchemaForm({
   submitLabel,
   submit,
   cancel,
+  draftKey,
 }: {
   schema: InputSchema;
   busy: boolean;
   submitLabel: string;
   submit: (values: Values) => void;
   cancel?: () => void;
+  /** The decision this form answers: its half-filled values survive a reload. */
+  draftKey?: string;
 }) {
-  const [values, setValues] = useState<Values>(() => initialValues(schema));
+  const [values, setValues] = useDecisionState<Values>(draftKey ?? `form:${schema.id}`, schema.id, () => initialValues(schema));
   const errors = schema.fields.map((f) => fieldError(f, values[f.id] ?? []));
   const ok = errors.every((e) => e === null);
   return (
@@ -136,6 +139,7 @@ export function InputFormRenderer({ decision, answer, pendingOptionId }: InputRe
   };
   return (
     <SchemaForm
+      draftKey={decision.id}
       schema={schema}
       busy={busy}
       submitLabel="Submit"
@@ -159,6 +163,7 @@ export function SelectInputs({ decision, answer, pendingOptionId }: InputRendere
       {selects.map((s) => (
         <SchemaForm
           key={s.id}
+          draftKey={decision.id}
           schema={s}
           busy={busy}
           submitLabel="Choose"

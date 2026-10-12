@@ -1,0 +1,56 @@
+{
+  "name": "payment-production-nothing-left",
+  "description": "Production payment with nothing left to spend (pbd105 r1, Naalu tactical build at 310, every Naalu planet exhausted, Sarween Tools owned): the payment prompt is only Reset Spent Planets / Use Sarween Tools / Done Exhausting Planets (resetSpend_res, useTech_st, deleteButtons_tacticalAction), which used to be legacy. Produce one destroyer (cost 1) and pay it with Sarween Tools alone through payment.spend {planets: [], sarween: true}.",
+  "base": {
+    "recording": "pbd105",
+    "index": 212
+  },
+  "setup": [
+    "/player stats faction_or_color:naalu trade_goods:0"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "production.produce",
+        "option": "place_destroyer"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "production.produce",
+        "option": "deleteButtons_tacticalAction"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [],
+          "sarween": true
+        }
+      },
+      "as": "naalu",
+      "legacy": [
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "useTech_st"
+          },
+          "as": "naalu"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
+          "as": "naalu"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

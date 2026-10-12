@@ -1,5 +1,5 @@
 import { countUnit, isShip, myUnits, playerOf, type Board, type PlayerView } from "./board.js";
-import { baseId, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
+import { baseId, lockIs, lockOf, snowflakeAfter, type Control, type Prompt } from "./prompts.js";
 import type { Seat } from "./seat.js";
 import { promptForMe } from "./steps.js";
 import { statsOf } from "./units.js";
@@ -126,7 +126,7 @@ export class ViolationDesk {
     return (
       !!job.openedAt &&
       snowflakeAfter(p.m.id, job.warning) &&
-      p.controls.some((c) => lockOf(c.custom_id) === faction && baseId(c.custom_id).startsWith(`assignHits_${job.pos}_`))
+      p.controls.some((c) => lockIs(c.custom_id, faction) && baseId(c.custom_id).startsWith(`assignHits_${job.pos}_`))
     );
   }
 
@@ -184,5 +184,5 @@ export function excess(board: Board, me: PlayerView, pos: string): { ships: numb
 /** A "Remove 1 <unit>" button for one of our units in the system's space (not on a planet). */
 function spaceRemoval(list: Prompt, pos: string, unit: string, faction: string): Control | undefined {
   const re = new RegExp(`^assignHits_${pos}_1_${unit}_`);
-  return list.controls.find((c) => lockOf(c.custom_id) === faction && re.test(baseId(c.custom_id)) && /^remove 1 /i.test(c.label.trim()) && !/ from /i.test(c.label));
+  return list.controls.find((c) => lockIs(c.custom_id, faction) && re.test(baseId(c.custom_id)) && /^remove 1 /i.test(c.label.trim()) && !/ from /i.test(c.label));
 }

@@ -1,0 +1,23 @@
+{
+  "name": "combat-hits-afb",
+  "description": "Anti-fighter barrage hits auto-assigned: muaat gets 3 fighters in 306, takes 2 AFB hits.",
+  "base": {
+    "recording": "pbd60",
+    "index": 165
+  },
+  "setup": [
+    "/add_units tile_name:306 unit_names:\"3 ff\" faction_or_color:muaat"
+  ],
+  "trigger": {
+    "press": "FFCC_muaat_autoAssignAFBHits_306_2",
+    "as": "muaat"
+  },
+  "steps": [
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

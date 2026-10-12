@@ -45,7 +45,7 @@ test("already counted spend is subtracted; nothing due → empty payment", () =>
 
 test("commodities only with the Keleres agent", () => {
   const vals = [planet("a", 1), { source: "tg", amount: 1 } as PaymentValue, { source: "commodities", amount: 1 } as PaymentValue];
-  assert.equal(planPayment(payment(vals, 3, 3), state(0, [], 5), "u"), null);
+  assert.deepEqual(planPayment(payment(vals, 3, 3), state(0, [], 5), "u")?.payload, { planets: ["a"] }); // no agent: commodities never spent
   const p = planPayment(payment(vals, 3, 3, { keleresAgent: true } as Partial<PaymentValue>), state(0, [], 5), "u");
   assert.equal(p?.payload.commodities, 2);
 });
@@ -55,8 +55,24 @@ test("Sarween is used when offered", () => {
   assert.deepEqual(planPayment(d, state(0), "u")?.payload, { planets: ["a"], sarween: true });
 });
 
-test("cannot cover → null (the engine refuses underpay)", () => {
-  assert.equal(planPayment(payment([planet("a", 1)], 5, 5), state(0), "u"), null);
+test("cannot cover → spend everything offered (the engine lets Done finish)", () => {
+  assert.deepEqual(planPayment(payment([planet("a", 1)], 5, 5), state(0), "u")?.payload, { planets: ["a"] });
+});
+
+test("production payment with nothing left to spend (Reset / Sarween / Done only)", () => {
+  const sarween: PaymentValue = { source: "discount", discount: "sarween" };
+  assert.deepEqual(planPayment(payment([{ action: "reset" }, sarween], 3, 3), state(0), "u")?.payload, { planets: [], sarween: true });
+  assert.deepEqual(planPayment(payment([{ action: "reset" }], null, null), state(0), "u")?.payload, { planets: [] });
+  // Unknown cost with something to spend stays the planner's.
+  assert.equal(planPayment(payment([planet("a", 2)], null, null), state(0), "u"), null);
+});
+
+test("plain planets before tech-skip planets, trade goods last", () => {
+  const skip: PaymentValue = { source: "planet", planet: "s" as PlanetId, resources: 2, influence: 0, techSpecialties: ["warfare"], legendary: false };
+  const d = payment([skip, planet("p", 2), { source: "tg", amount: 1 }], 2, 2);
+  assert.deepEqual(planPayment(d, state(3), "u")?.payload, { planets: ["p"] });
+  const big = payment([planet("a", 3), { source: "tg", amount: 1 }], 1, 1);
+  assert.deepEqual(planPayment(big, state(3), "u")?.payload, { planets: ["a"] });
 });
 
 test("production payload groups units, ground forces on a planet", () => {
@@ -69,4 +85,31 @@ test("production payload groups units, ground forces on a planet", () => {
   const d = { kind: "production.produce", options: places.map((v, i) => opt(`p${i}`, v)) } as unknown as ProductionProduce;
   assert.deepEqual(productionPayload(d, ["cv", "gf", "gf", "ws"]).units, [{ unit: "cv", count: 1 }, { unit: "gf", count: 2, holder: "lodor" }]);
   assert.deepEqual(productionPayload(d, []).units, []);
+});
+
+// Live (pbd36 / pbd60 / pbd88 / pbd90 / pbd92 / pbd105): unpriced Leadership / Technology bills waited out the 60 s
+// fallback ("Done Exhausting Planets") and stalled the seat.
+const withCards = (cards: { card: string; holder: string; played: boolean }[]) =>
+  ({ ...state(0), strategyCards: cards.map((c, i) => ({ number: i + 1, tradeGoods: 0, name: c.card, holderFaction: null, reactions: [], ...c })) }) as unknown as GameState;
+
+test("leadership bill (cost null): buys no extra tokens, finishes at once", () => {
+  const d = payment([planet("a", 1, 4)], null, null, { context: "leadership", for: "inf", currency: "inf" } as Partial<PaymentValue>);
+  const p = planPayment(d, withCards([]), "u");
+  assert.deepEqual(p?.payload, { planets: [] });
+  assert.match(p!.why, /leadership: nothing to pay/);
+});
+
+test("technology bill (cost null): free for the Technology holder's research", () => {
+  const d = payment([planet("a", 4)], null, null, { context: "technology", for: "restech", tech: true } as Partial<PaymentValue>);
+  assert.deepEqual(planPayment(d, withCards([{ card: "pok7technology", holder: "u", played: true }]), "u")?.payload, { planets: [] });
+});
+
+test("technology bill (cost null): a follower pays 4 resources", () => {
+  const d = payment([planet("a", 4), planet("b", 1)], null, null, { context: "technology", for: "restech", tech: true } as Partial<PaymentValue>);
+  assert.deepEqual(planPayment(d, withCards([{ card: "pok7technology", holder: "x", played: true }]), "u")?.payload, { planets: ["a"] });
+});
+
+test("technology bill (cost null) with no Technology card played: left to the caller", () => {
+  const d = payment([planet("a", 4)], null, null, { context: "technology", for: "restech", tech: true } as Partial<PaymentValue>);
+  assert.equal(planPayment(d, withCards([]), "u"), null);
 });

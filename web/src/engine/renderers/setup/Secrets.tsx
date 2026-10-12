@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { getSecretObjectiveData } from "@/entities/lookup/secretObjectives";
 import { Choice, ErrorLine, Waiting, useAnswer } from "./parts";
 import type { Renderer } from "./types";
 import classes from "./Setup.module.css";
+import { useDecisionState } from "../../draftState";
 
 /**
  * Secret objectives in hand. With exactly two at setup you choose the one to KEEP (the other is discarded);
@@ -10,7 +10,7 @@ import classes from "./Setup.module.css";
  */
 export const SecretDiscardRenderer: Renderer<"secret_objective.discard"> = ({ decision, answer }) => {
   const { pending, error, press } = useAnswer(answer);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useDecisionState<string | null>(decision.id, "selected", null);
   const options = decision.options.filter((o) => o.value);
   const extra = decision.options.filter((o) => !o.value);
   const redraw = options.some((o) => o.value!.redraw);

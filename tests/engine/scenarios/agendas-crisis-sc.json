@@ -1,0 +1,24 @@
+{
+  "name": "agendas-crisis-sc",
+  "description": "Galactic Crisis Pact elects strategy card 2 (Diplomacy): secondary prompts for everyone.",
+  "base": {
+    "recording": "pbd33",
+    "index": 158,
+    "repost": false
+  },
+  "setup": [
+    "/agenda reveal_specific agenda_id:crisis force:true"
+  ],
+  "steps": [
+    {
+      "press": "agendaResolution_2",
+      "as": "nekro"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

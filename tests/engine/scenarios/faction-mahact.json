@@ -1,0 +1,39 @@
+{
+  "name": "faction-mahact",
+  "description": "Mahact: Edict (mahactStealCC_<color>), Imperia (loseMahactCC_<color>), mech Starlancer (mahactMechHit_<pos>_<color>), hero Airo Shir Aur (benedictionStep1_<pos> -> mahactBenedictionFrom_), commander (mahactCommander)",
+  "base": {
+    "recording": "pbd101",
+    "index": 44,
+    "repost": false
+  },
+  "setup": [
+    "/leaders unlock leader:mahacthero faction_or_color:mahact",
+    "/leaders unlock leader:mahactcommander faction_or_color:mahact",
+    "/add_units tile_name:316 unit_names:\"mech ixth\" faction_or_color:mahact"
+  ],
+  "trigger": {
+    "press": "FFCC_mahact_mahactStealCC_ruby",
+    "as": "mahact"
+  },
+  "steps": [
+    {
+      "press": "FFCC_mahact_loseMahactCC_ruby",
+      "as": "mahact"
+    },
+    {
+      "press": "FFCC_mahact_mahactMechHit_316_gold",
+      "as": "mahact"
+    },
+    {
+      "press": "FFCC_mahact_benedictionStep1_316",
+      "as": "mahact"
+    },
+    {
+      "press": "FFCC_mahact_mahactCommander",
+      "as": "mahact"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

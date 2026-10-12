@@ -1,0 +1,55 @@
+{
+ "name": "sc-politics",
+ "description": "Politics played by Yssaril (pbd28 r1): the holder draws 2 ACs (primary part), Mahact spends a token then draws (regression: the engine refused the draw after following, 409 already responded), presses Draw again (legacy no-op), Naaz declines, Deepwrought draws without pressing follow (token spent by the draw). (Draw after declining: legacy draws for free, the engine refuses on purpose \u2014 not in this scenario.)",
+ "base": {
+  "recording": "pbd28",
+  "index": 65
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_ac_draw$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_follow_3$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_ac_draw$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_ac_draw$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_3$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_ac_draw$"
+   },
+   "as": "deepwrought"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}
