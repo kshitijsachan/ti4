@@ -1,6 +1,6 @@
 {
   "name": "sc-follow-blocks-turn",
-  "description": "Strategy-card follows hold the turn (rules; user report: 'following Leadership doesn't block, the game just says my turn'). pbd28 r1: Mahact (Bot Gamma, a bot seat) plays Leadership; Yssaril and Naaz decline at once (bots), Deepwrought (mapclicker, the human seat) has not answered. Mahact's End Turn (folded menu: turnEnd) is refused (engine: turn.action validate 'Waiting for \u2026 to follow Leadership'; legacy: ButtonProcessor hook, nothing changes) until Deepwrought declines; then the turn ends and Deepwrought's turn menu opens.",
+  "description": "Strategy-card follows hold the turn (rules; user report: 'following Leadership doesn't block, the game just says my turn'). pbd28 r1: Mahact (Bot Gamma, a bot seat) plays Leadership; Yssaril and Naaz decline at once (bots), Deepwrought (mapclicker, the human seat) has not answered. Mahact's End Turn (folded menu: turnEnd) is refused (engine: turn.action validate 'Waiting for \u2026 to follow Leadership'; legacy: ButtonProcessor hook, nothing changes) until Deepwrought declines; then the turn ends and Deepwrought's turn menu opens. The holder first resolves Leadership's mandatory primary (gain 3 tokens + Done): since pt9 End Turn also waits on the played card's mandatory primary parts, so the refusals here are the follow gate's only.",
   "base": {
     "recording": "pbd28",
     "index": 46
@@ -13,6 +13,41 @@
     "as": "mahact"
   },
   "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "leadershipGenerateCCButtons$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_tactic_cc$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_strategy_cc$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "deleteButtons_leadership"
+      },
+      "as": "mahact"
+    },
     {
       "answer": {
         "kind": "strategy_card.resolve",

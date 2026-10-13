@@ -198,7 +198,7 @@ void test("my starting technology is a required setup step even while the engine
 
 const optV = (id: string, value: unknown) => ({ id, label: id, style: "primary", emoji: null, disabled: false, needsInput: false, handler: id, value });
 
-void test("Imperial's score list with nothing left to score never takes the head from my turn (it goes on offer)", () => {
+void test("Imperial's score list with nothing left to score never takes the head from my turn (pt9: and is not on offer)", () => {
   const turn = dec("turn.action");
   const imperial = dec("status.score", {
     options: [
@@ -208,7 +208,7 @@ void test("Imperial's score list with nothing left to score never takes the head
   } as Partial<Decision>);
   const r = orderDecisions([turn, imperial], 0, undefined, state({ publicObjectives: { lead: [ME] } } as Partial<GameState>));
   assert.deepEqual(kinds(r), ["turn.action"]);
-  assert.ok(r.offers.some((d) => d.kind === "status.score"));
+  assert.ok(!r.offers.some((d) => d.kind === "status.score"), "spent outside the status phase: dropped (pt9 150)");
   const open = orderDecisions([turn, imperial], 0, undefined, state());
   assert.deepEqual(kinds(open), ["status.score", "turn.action"]);
 });
@@ -355,4 +355,32 @@ void test("pt8: stacked Pillage offers collapse to the newest per neighbour; ans
   assert.deepEqual(r.queue.map((d) => d.id), [a2.id, b1.id]);
   const after = orderDecisions([a1, b1], null, undefined, state(), null, { superseded: new Set([a1.id]) });
   assert.deepEqual(after.queue.map((d) => d.id), [b1.id]);
+});
+
+void test("pt9: my post-action turn menu waits behind a step of my tactical action (Thunder's Edge Warfare)", () => {
+  const menu = dec("turn.action", { options: [optV("end", { action: "end_turn", abilities: false, waitingFor: [], overLimits: [] })] } as Partial<Decision>);
+  const move = dec("tactical.move");
+  const r = orderDecisions([menu, move], null, undefined, state());
+  assert.deepEqual(kinds(r), ["tactical.move"]);
+  assert.ok(r.offers.some((d) => d.kind === "turn.action"));
+  const after = orderDecisions([menu], null, undefined, state());
+  assert.deepEqual(kinds(after), ["turn.action"]);
+});
+
+void test("pt9: a start-of-turn menu is not moved aside by an open tactical step", () => {
+  const menu = dec("turn.action", { options: [optV("tac", { action: "tactical", tacticTokens: 3 }), optV("pass", { action: "pass", abilities: false })] } as Partial<Decision>);
+  const activate = dec("tactical.activate");
+  const r = orderDecisions([menu, activate], null, undefined, state());
+  assert.ok(kinds(r).includes("turn.action"));
+});
+
+void test("pt9: a payment I opened keeps the panel when a follow prompt opens meanwhile", () => {
+  const pay = dec("payment.spend");
+  const follow = dec("strategy_card.resolve", {
+    window: { kind: "strategy_card.resolve", eligible: [ME], responded: [], responses: {}, subject: { strategyCard: 5, holder: "sol" } },
+    options: [optV("f", { action: "follow", who: "others", strategyCard: 5 })],
+  } as unknown as Partial<Decision>);
+  const s = state({ strategyCards: [{ number: 5, name: "Trade", holder: "u2", played: true, reactions: [{ faction: "arborec", status: "pending", canFollow: true }] }] } as unknown as Partial<GameState>);
+  const r = orderDecisions([follow, pay], null, undefined, s);
+  assert.equal(r.queue[0].kind, "payment.spend");
 });

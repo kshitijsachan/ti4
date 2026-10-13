@@ -1,0 +1,95 @@
+{
+ "name": "pt9-legacy-primary-warfare",
+ "description": "pt9 gate, legacy path (soak pbd906: a button press of Politics' draw never recorded primaryDone and End Turn was refused for 38 min): Yssaril plays Warfare (pbd28@89; the card moved to Yssaril by setup in place of its Politics, so it holds this card and Imperial), every other player declines, the holder resolves the primary's mandatory part by clicking the original buttons (sub-prompts answered), and End Turn is accepted. The part is recorded by the press itself (StrategyCardResolveKind.recordPress, ButtonProcessor hook) on either path.",
+ "base": {
+  "recording": "pbd28",
+  "index": 89
+ },
+ "setup": [
+  {
+   "command": "player sc_unplay",
+   "options": {
+    "strategy_card": "6",
+    "faction_or_color": "mahact"
+   }
+  },
+  {
+   "command": "player sc_unpick",
+   "options": {
+    "strategy_card": "6",
+    "faction_or_color": "mahact"
+   }
+  },
+  {
+   "command": "player sc_unpick",
+   "options": {
+    "strategy_card": "3",
+    "faction_or_color": "yssaril"
+   }
+  },
+  {
+   "command": "player sc_pick",
+   "options": {
+    "strategy_card": "6",
+    "faction_or_color": "yssaril"
+   }
+  },
+  {
+   "command": "player turn_start",
+   "options": {
+    "faction_or_color": "yssaril"
+   }
+  }
+ ],
+ "steps": [
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "strategicAction_6$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_6$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_6$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_6$"
+   },
+   "as": "deepwrought"
+  },
+  {
+   "press": "primaryOfTeWarfare",
+   "as": "yssaril",
+   "click": true
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "turnEnd$"
+   },
+   "as": "yssaril"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

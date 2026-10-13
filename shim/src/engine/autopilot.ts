@@ -12,7 +12,7 @@ import { chooseFactionB } from "./policy/factionB.js";
 import { choosePokFaction } from "./policy/factionPok.js";
 import { chooseStatus } from "./policy/status.js";
 import { chooseThundersEdge, isThundersEdgeKind } from "./policy-te.js";
-import { chooseResearch, chooseStrategy, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
+import { chooseResearch, chooseStrategy, holderPrimaryPending, STRATEGY_POLICY_KINDS, type PolicyCtx } from "./kinds/strategyPolicy.js";
 import { chooseSetup } from "./policy/setup.js";
 import { chooseTrade } from "./tradePolicy.js";
 import { chooseCombat, chooseUnitsRemove } from "./combatPolicy.js";
@@ -163,7 +163,13 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "turn.action":
       // The action-phase turn policy (policy/turn.ts): end turn / play the strategy card / finish passing at once;
       // the start-of-turn menu is the planner's (brain.ts) for TURN_PLANNER_GRACE_MS, then pass.
-      return chooseTurnAction(d, state, me, { waitedMs: ctx.waitedMs, force: ctx.force, open: ctx.open, history: ctx.history });
+      return chooseTurnAction(d, state, me, {
+        waitedMs: ctx.waitedMs,
+        force: ctx.force,
+        open: ctx.open,
+        history: ctx.history,
+        primaryPending: holderPrimaryPending(state, me, ctx.open),
+      });
     case "tactical.rift": {
       // The planner never paths through gravity rifts; a rift prompt outside its plan has nothing to roll.
       const done = d.options.find((o) => !o.disabled && o.value?.op === "done");
@@ -253,7 +259,9 @@ function turnHeld(d: Decision, state: GameState | null, me: string, open: Decisi
   if (state.phase !== "action" || state.activePlayer !== me) return "not our turn";
   if (state.players.find((p) => p.userId === me)?.passed) return "we passed";
   const busy = actionInFlight(me, open, now);
-  return busy ? `our action is under way (${busy})` : null;
+  if (busy) return `our action is under way (${busy})`;
+  const primary = holderPrimaryPending(state, me, open, now);
+  return primary ? `our strategic action is under way (${primary})` : null;
 }
 
 export function engineOwnership(
