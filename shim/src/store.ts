@@ -88,11 +88,28 @@ export type State = {
 export const PERMS_ALL = "2251799813685247";
 export const PERMS_EVERYONE = "1071698660929";
 
-/** Longest a canView answer is reused (see Store.canView); permission changes invalidate them at once. */
-const VIEW_TTL_MS = 10_000;
+/**
+ * Longest a canView answer is reused (see Store.canView); permission changes invalidate them at once, so this is only a
+ * safety net. It was 10 s: with 180 seats x 9000 channels every seat rebuilt its whole list every 10 s (~20 ms each,
+ * a third of the shim's CPU in the pbd539 soak), on top of every full invalidation.
+ */
+const VIEW_TTL_MS = 120_000;
 
-/** One user's cached visibility answers (see Store.canView). */
-type ViewCache = { gen: number; at: number; ok: Map<string, boolean>; base?: bigint; list?: Json[] };
+/** Channel-scoped view changes kept for catching up (see Store.invalidateChannels); older caches start over. */
+const VIEW_LOG_MAX = 1000;
+
+/** One user's cached visibility answers (see Store.canView). seq: the last channel-scoped change applied. */
+type ViewCache = {
+  gen: number;
+  at: number;
+  seq: number;
+  ok: Map<string, boolean>;
+  base?: bigint;
+  list?: Json[];
+  listIds?: Set<string>;
+  listObjs?: Set<Json>;
+  listSeq?: number;
+};
 
 /** How often the verifier re-checks a slice of the files for unmarked changes (see ShardStore.verifySome). */
 const VERIFY_EVERY_MS = 5000;
@@ -352,7 +369,7 @@ export class Store {
       delete ch.topic;
     }
     this.state.channels[id] = ch;
-    this.invalidateViews();
+    this.invalidateChannels([id]);
     this.state.messages[id] ??= [];
     this.scheduleSave(id);
     return ch;
@@ -419,15 +436,35 @@ export class Store {
    */
   private views = new Map<string, ViewCache>();
   private viewGen = 0;
+  /** Channel-scoped changes (invalidateChannels), oldest first, numbered by viewSeq. */
+  private viewLog: { seq: number; ids: string[] }[] = [];
+  private viewSeq = 0;
+  /** Changes whenever any channel was added, removed or changed in a way that may matter to visibility or grouping. */
+  private chanGen = 0;
 
   private viewsOf(userId: string): ViewCache {
     const now = Date.now();
     let v = this.views.get(userId);
-    if (!v || v.gen !== this.viewGen || now - v.at > VIEW_TTL_MS) {
-      v = { gen: this.viewGen, at: now, ok: new Map() };
+    if (!v || v.gen !== this.viewGen || now - v.at > VIEW_TTL_MS || (v.seq !== this.viewSeq && !this.catchUp(v))) {
+      v = { gen: this.viewGen, at: now, seq: this.viewSeq, ok: new Map() };
       this.views.set(userId, v);
     }
     return v;
+  }
+
+  /**
+   * Applies the channel-scoped changes since v.seq to one user's cache: drops those channels' answers and, when one of
+   * them joined or left the user's visible list, the list (rebuilt on demand from the remaining answers). False when
+   * the log no longer reaches back to v.seq (start over).
+   */
+  private catchUp(v: ViewCache): boolean {
+    const first = this.viewLog[0];
+    if (!first || first.seq > v.seq + 1) return false;
+    const changed = new Set<string>();
+    for (const c of this.viewLog) if (c.seq > v.seq) for (const id of c.ids) changed.add(id);
+    v.seq = this.viewSeq;
+    for (const id of changed) v.ok.delete(id);
+    return true;
   }
 
   canView(userId: string, channelId: string): boolean {
@@ -446,23 +483,73 @@ export class Store {
    */
   visibleChannels(userId: string): Json[] {
     const v = this.viewsOf(userId);
+    if (v.list && v.listIds && v.listSeq !== v.seq) {
+      // Channel-scoped changes since the list was built: keep it unless one of them joined or left it (or was replaced).
+      let keep = true;
+      for (const c of this.viewLog) {
+        if (c.seq <= (v.listSeq ?? 0) || !keep) continue;
+        for (const id of c.ids) {
+          const ch = this.state.channels[id];
+          const now = !!ch && this.canView(userId, id);
+          if (now !== v.listIds.has(id) || (now && !v.listObjs?.has(ch))) {
+            keep = false;
+            break;
+          }
+        }
+      }
+      if (!keep || (this.viewLog[0]?.seq ?? Infinity) > (v.listSeq ?? 0) + 1) v.list = undefined;
+      else v.listSeq = v.seq;
+    }
     if (!v.list) {
       const list: Json[] = [];
       for (const ch of Object.values(this.state.channels)) if (this.canView(userId, ch.id)) list.push(ch);
       v.list = list;
+      v.listIds = new Set(list.map((c) => c.id));
+      v.listObjs = new Set(list);
+      v.listSeq = v.seq;
     }
     return v.list;
   }
 
-  /** Changes whenever cached views are dropped (channels or permissions changed). */
+  /** Changes whenever all cached views are dropped (permissions changed guild-wide, members, roles). */
   get viewGeneration() {
     return this.viewGen;
   }
 
-  /** Forget cached canView answers (channel / thread / member / role / overwrite changed). */
+  /** Changes whenever a channel was created, deleted or changed (or all views were dropped): per-game channel indexes. */
+  get channelGeneration() {
+    return this.chanGen;
+  }
+
+  /** Forget every cached canView answer (member / role / guild-wide change, or a change whose reach is unknown). */
   invalidateViews() {
     this.viewGen++;
+    this.chanGen++;
     this.views.clear();
+    this.viewLog = [];
+  }
+
+  /**
+   * Only these channels' visibility may have changed (created, deleted, moved, renamed, overwrites, thread members):
+   * every user's cached answers for them, and for the threads under them (a thread is visible where its parent is), are
+   * dropped lazily on the user's next lookup. Everything else stays cached: a full invalidation per thread created
+   * made every seat rebuild its list over all 9000 channels (~3.7 s of CPU per change with 180 seats).
+   */
+  invalidateChannels(ids: Iterable<string>) {
+    const set = new Set<string>();
+    let parents = false;
+    for (const id of ids) {
+      if (!id) continue;
+      set.add(id);
+      const ch = this.state.channels[id];
+      if (!ch || ![10, 11, 12].includes(ch.type)) parents = true;
+    }
+    if (!set.size) return;
+    if (parents) for (const ch of Object.values(this.state.channels)) if ((ch.type === 10 || ch.type === 11) && ch.parent_id && set.has(ch.parent_id)) set.add(ch.id);
+    this.chanGen++;
+    this.viewSeq++;
+    this.viewLog.push({ seq: this.viewSeq, ids: [...set] });
+    if (this.viewLog.length > VIEW_LOG_MAX) this.viewLog.splice(0, this.viewLog.length - VIEW_LOG_MAX);
   }
 
   private computeCanView(userId: string, channelId: string, v?: ViewCache): boolean {

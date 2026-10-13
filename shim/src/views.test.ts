@@ -63,3 +63,75 @@ test("Slicer yields to the event loop during a long loop", async () => {
   assert.ok(timerRan, "a timer got to run while the loop was going");
   assert.ok(slicer.busyMs > 0);
 });
+
+test("invalidateChannels: only the changed channel (and its threads) is re-checked; answers match a fresh store's", () => {
+  const { s, done } = store();
+  try {
+    const g = s.state.guild_id;
+    const users = Array.from({ length: 20 }, (_, i) => s.addUser(`q${i}`).id);
+    const role = "901";
+    s.state.roles[role] = { id: role, name: "players", permissions: "0" };
+    for (const u of users.slice(0, 10)) s.state.members[u].roles.push(role);
+    s.invalidateViews();
+    const ows = [{ id: g, type: 0, allow: "0", deny: "1024" }, { id: role, type: 0, allow: "1024", deny: "0" }];
+    const chans = Array.from({ length: 300 }, (_, i) => s.createChannel({ type: 0, name: `pbd${i}-actions`, permission_overwrites: ows.map((o) => ({ ...o })) }));
+    const before = users.map((u) => s.visibleChannels(u));
+    assert.equal(before[0].length, 300);
+    assert.equal(before[15].length, 0);
+    // A public thread under a game channel: in its viewers' lists at once, nobody else's list rebuilt.
+    const listOf15 = s.visibleChannels(users[15]);
+    const th = s.createChannel({ type: 11, name: "pbd3-round-1-Politics", parent_id: chans[3].id });
+    assert.ok(s.visibleChannels(users[0]).some((c) => c.id === th.id));
+    assert.equal(s.visibleChannels(users[15]), listOf15, "an unrelated user's list is kept");
+    // Overwrites of the parent change (REST PUT /channels/:c/permissions): parent and thread follow for everyone.
+    chans[3].permission_overwrites.push({ id: users[15], type: 1, allow: "1024", deny: "0" });
+    s.invalidateChannels([chans[3].id]);
+    assert.equal(s.canView(users[15], chans[3].id), true);
+    assert.equal(s.canView(users[15], th.id), true);
+    assert.deepEqual(s.visibleChannels(users[15]).map((c) => c.id), [chans[3].id, th.id]);
+    // Private thread members (Hub.addThreadMember) and a deleted channel.
+    const priv = s.createChannel({ type: 12, name: "Cards Info-pbd5-q1", parent_id: chans[5].id });
+    assert.equal(s.canView(users[1], priv.id), false);
+    s.state.thread_members[priv.id].push(users[1]);
+    s.invalidateChannels([priv.id]);
+    assert.equal(s.canView(users[1], priv.id), true);
+    delete s.state.channels[chans[7].id];
+    s.invalidateChannels([chans[7].id]);
+    assert.ok(!s.visibleChannels(users[0]).some((c) => c.id === chans[7].id));
+    // Same answers as recomputing everything.
+    const scoped = users.map((u) => s.visibleChannels(u).map((c) => c.id));
+    s.invalidateViews();
+    assert.deepEqual(users.map((u) => s.visibleChannels(u).map((c) => c.id)), scoped);
+    // channelGeneration moves with every channel change (per-game channel indexes), viewGeneration only with full drops.
+    const cg = s.channelGeneration;
+    const vg = s.viewGeneration;
+    s.createChannel({ type: 11, name: "pbd9-combat", parent_id: chans[9].id });
+    assert.notEqual(s.channelGeneration, cg);
+    assert.equal(s.viewGeneration, vg);
+  } finally {
+    done();
+  }
+});
+
+test("Slicer: many loops slicing at once still let the event loop turn every slice (one slice per turn)", async () => {
+  let worst = 0;
+  let last = performance.now();
+  const timer = setInterval(() => {
+    const now = performance.now();
+    worst = Math.max(worst, now - last);
+    last = now;
+  }, 1);
+  const loops = Array.from({ length: 30 }, async (_, i) => {
+    const slicer = new Slicer(`loop ${i}`, 10);
+    const end = performance.now() + 400;
+    while (performance.now() < end) {
+      for (let k = 0; k < 1e3; k++);
+      await slicer.tick();
+    }
+    slicer.done();
+  });
+  await Promise.all(loops);
+  clearInterval(timer);
+  // 30 loops x 10 ms slices back to back would hold timers for ~300 ms per turn.
+  assert.ok(worst < 120, `a timer waited ${Math.round(worst)}ms`);
+});

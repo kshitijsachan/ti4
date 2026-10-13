@@ -46,6 +46,34 @@ export function syncSpan<T>(label: string, fn: () => T): T {
 }
 
 /**
+ * Slicers waiting to continue, resumed one per event-loop turn. A plain setImmediate per slicer let every waiting
+ * slicer run in the same check phase: with ~90 autopilot seats deciding at once, 50 x 20 ms slices ran back to back
+ * before the loop polled I/O again, so a click's HTTP request (and the bot's REST calls under the game lock) waited
+ * 1-3 s (pbd539: event loop blocked >= 1 s 596 times in 3 h). An immediate scheduled from the check phase runs in the
+ * next turn, after timers and I/O, so this bounds the slicers' share of each turn to one slice.
+ */
+const turnQueue: (() => void)[] = [];
+let turnScheduled = false;
+
+function runTurn() {
+  const next = turnQueue.shift();
+  if (turnQueue.length) setImmediate(runTurn);
+  else turnScheduled = false;
+  next?.();
+}
+
+/** Resolves on a later event-loop turn, in FIFO order with every other waiting slicer (one per turn). */
+export function nextTurn(): Promise<void> {
+  return new Promise((resolve) => {
+    turnQueue.push(resolve);
+    if (!turnScheduled) {
+      turnScheduled = true;
+      setImmediate(runTurn);
+    }
+  });
+}
+
+/**
  * For long loops in async code whose iterations rarely really await (an `await` on an already-settled promise does not
  * let timers or I/O run): `await slicer.tick()` in the loop yields to the event loop once the current slice has run
  * for `budgetMs`, and records the slices. `busyMs` is the loop's total synchronous time so far.
@@ -62,7 +90,7 @@ export class Slicer {
     const now = performance.now();
     if (now - this.start < this.budgetMs) return;
     this.close(now);
-    await new Promise((r) => setImmediate(r));
+    await nextTurn();
     this.start = performance.now();
   }
 

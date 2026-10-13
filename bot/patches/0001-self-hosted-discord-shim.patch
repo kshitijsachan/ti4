@@ -12324,10 +12324,10 @@ index 0000000..be3157a
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/TacticalController.java b/src/main/java/ti4/selfhost/engine/TacticalController.java
 new file mode 100644
-index 0000000..91ef65c
+index 0000000..14c41e0
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/TacticalController.java
-@@ -0,0 +1,477 @@
+@@ -0,0 +1,484 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -12459,11 +12459,18 @@ index 0000000..91ef65c
 +        // The undo step's words (the web reads "you moved ships" / "you skipped moving"), not the kind id.
 +        boolean moves = req.units() != null && req.units().stream().anyMatch(u -> u != null && u.count() > 0);
 +        String label = moves ? "Move ships" : Boolean.TRUE.equals(req.conclude()) ? "Skip moving and conclude" : "Skip moving";
-+        return ActionInvoker.asOneUndoStep(
-+                gameName, userId, label, decisionId, () -> moveSteps(gameName, decisionId, userId, req));
++        long[] staged = {-1};
++        AnswerResult r = ActionInvoker.asOneUndoStep(
++                gameName, userId, label, decisionId, () -> moveSteps(gameName, decisionId, userId, req, staged));
++        if (staged[0] < 0 || !r.ok()) return r;
++        // Staged only: wait for the fresh movement prompt OUTSIDE the game lock. It comes from message capture, which
++        // takes no game lock; waiting for it under the lock (up to 3 s) held every other click in this game.
++        awaitOpened(gameName, staged[0], userId, "tactical.move");
++        return done(gameName, decisionId, staged[0]);
 +    }
 +
-+    private static AnswerResult moveSteps(String gameName, String decisionId, String userId, MoveRequest req) {
++    private static AnswerResult moveSteps(
++            String gameName, String decisionId, String userId, MoveRequest req, long[] staged) {
 +        Decision d = DecisionRegistry.get(decisionId);
 +        AnswerResult bad = check(d, gameName, decisionId, userId, "tactical.move", req.expectedSeq());
 +        if (bad != null) return bad;
@@ -12517,10 +12524,10 @@ index 0000000..91ef65c
 +            if (!r.ok()) return r;
 +            return done(gameName, decisionId, before);
 +        }
-+        // Staged only: the engine posted a fresh movement prompt; retire the old one.
++        // Staged only: the engine posted a fresh movement prompt; retire the old one. move() awaits the new one.
 +        deleteMessage(channelId, messageId);
-+        awaitOpened(gameName, before, userId, "tactical.move");
-+        return done(gameName, decisionId, before);
++        staged[0] = before;
++        return new AnswerResult(true, "done", null, decisionId, DecisionRegistry.currentSeq(), 0, List.of());
 +    }
 +
 +    /** Validates one move order against the board and adds it to the displacement (states: healthy first). */

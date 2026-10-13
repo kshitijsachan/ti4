@@ -571,7 +571,7 @@ export class Hub {
     delete this.store.state.channels[ch.id];
     delete this.store.state.messages[ch.id];
     delete this.store.state.thread_members[ch.id];
-    this.store.invalidateViews();
+    this.store.invalidateChannels([ch.id]);
     this.store.scheduleSave(ch.id);
     this.gateway.dispatch(
       isThread ? "THREAD_DELETE" : "CHANNEL_DELETE",
@@ -588,7 +588,7 @@ export class Hub {
     const list = (this.store.state.thread_members[threadId] ??= []);
     if (list.includes(userId)) return;
     list.push(userId);
-    this.store.invalidateViews();
+    this.store.invalidateChannels([threadId]);
     const ch = this.store.channel(threadId);
     if (ch) ch.member_count = list.length;
     this.store.scheduleSave(threadId);
@@ -614,7 +614,7 @@ export class Hub {
     const i = list.indexOf(userId);
     if (i < 0) return;
     list.splice(i, 1);
-    this.store.invalidateViews();
+    this.store.invalidateChannels([threadId]);
     this.store.scheduleSave(threadId);
     this.gateway.dispatch("THREAD_MEMBERS_UPDATE", {
       id: threadId,
