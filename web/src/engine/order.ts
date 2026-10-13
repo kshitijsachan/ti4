@@ -176,6 +176,14 @@ function chooseTitle(d: Decision): string {
   return sourceName(source);
 }
 
+/** A turn menu that starts an action (or passes), as opposed to the "end turn" menu once the action is taken. */
+export function startsAction(d: Decision): boolean {
+  return d.options.some((o) => {
+    const a = (o.value as { action?: string } | null)?.action;
+    return a === "tactical" || a === "component" || a === "strategic" || a === "pass";
+  });
+}
+
 /** The redistribute offer of Warfare (before / after its tactical action), no other choice on it. */
 function warfareRedistribute(d: Decision): boolean {
   if (d.kind !== "choose.confirm") return false;
@@ -259,6 +267,9 @@ export function orderDecisions(
         !(d.kind === "strategy_card.pre_decline" && (preDeclinesMine(d, state, selfId) || preDeclinePlayed(d, state))) &&
         /* My played card once its primary is done and every other player answered it: nothing left on it (pt7). */
         !(d.kind === "strategy_card.resolve" && !!myFactionOf(state) && d.window?.subject?.holder === myFactionOf(state) && !primaryOpen(d) && !(myTurnOf(state) && optionalRepeatLeft(d) && !deferred?.has(d.id)) && settledWindow(d)) &&
+        /* Imperial's score list once nothing on it scores, outside the status phase: spent, not an offer (pt9 150:
+           it lingered under "Available now" as "Score objectives — You meet none…"). */
+        !(d.kind === "status.score" && d.scope === "player" && !!state && !state.status && !publicScorable(d, state, selfId)) &&
         /* A turn menu left open from my last turn: not mine while someone else is taking theirs. */
         !(d.kind === "turn.action" && !!state?.activePlayer && !!selfId && state.activePlayer !== selfId),
     ),
@@ -303,11 +314,15 @@ export function orderDecisions(
   /* While I take a tactical action, a token editor (Warfare's redistribute) waits behind "Available now": it never pops
      up over a step of the action (pt8: it opened over the landing step). */
   const tokensDuringAction = (d: Decision) => tacticalOpen && d.kind === "command_tokens.adjust" && !state?.status;
+  /* My turn menu while a step of my tactical action is open (Thunder's Edge Warfare posts "End turn" before its
+     tactical action): the action leads, the menu waits behind "Available now" with End turn greyed (pt9 058). */
+  const menuDuringAction = (d: Decision) => tacticalOpen && d.kind === "turn.action" && myTurn && !startsAction(d);
   const background = (d: Decision) =>
     !requiredSetup(d) &&
     (deferred?.has(d.id) ||
     autoDeclined(d) ||
     tokensDuringAction(d) ||
+    menuDuringAction(d) ||
     (tacticalOpen && warfareRedistribute(d)) ||
     openToAll(d) ||
     lateSecretList(d) ||
@@ -330,6 +345,10 @@ export function orderDecisions(
     if (COMBAT.test(d.kind)) return 0;
     /* The agenda windows hold up the whole table: answered before anything else of mine. */
     if (AGENDA_BLOCKING.has(d.kind)) return 0.5;
+    /* A step of something I am in the middle of (paying for research, placing a structure, producing): it keeps the
+       panel; a follow prompt that opens meanwhile waits right behind it (pt9 015 / 017: a new follow pushed aside the
+       Pay and PDS placement panels I had open). */
+    if (inProgressStep(d)) return 0.7;
     /* A strategy card I still owe a follow / decline on: the next turn cannot begin until I answer (rules), so it
        heads the queue, before my own turn menu. */
     if (owesFollow(d, selfId, myFaction)) return 0.8;
@@ -364,6 +383,24 @@ export function orderDecisions(
     .sort((a, b) => a.r - b.r || a.d.createdAt - b.d.createdAt || a.d.seq - b.d.seq)
     .map((x) => x.d);
   return { queue, offers };
+}
+
+/** Steps of an answer already under way (what I opened: a payment, a placement, a technology pick, a production). */
+const IN_PROGRESS = new Set([
+  "payment.spend",
+  "production.produce",
+  "production.place",
+  "strategy_card.construction_place",
+  "strategy_card.construction_build",
+  "strategy_card.diplomacy_system",
+  "tech.gain",
+  "tech.choose_type",
+  "planet.ready",
+]);
+
+/** One of my own in-progress steps (player-scoped, no reaction window). */
+function inProgressStep(d: Decision): boolean {
+  return IN_PROGRESS.has(d.kind) && d.scope === "player" && !d.window;
 }
 
 /** See orderDecisions: what besides my decisions decides their order. */
