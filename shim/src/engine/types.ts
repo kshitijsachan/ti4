@@ -207,6 +207,10 @@ export interface ScReaction {
   status: "holder" | "pending" | "followed" | "declined";
   /** Pending players only. */
   canFollow: boolean;
+  /**
+   * Pending: why they cannot follow now. Declined: why the game declined it for them without asking when the card was
+   * played (PlayStrategyCardService auto-decline); null when they declined themselves.
+   */
   cantFollowReason: "no_strategy_token" | "no_home_space_dock" | "all_secrets_scored" | null;
 }
 

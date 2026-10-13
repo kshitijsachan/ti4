@@ -10,7 +10,8 @@ import { usePlay, usePlayConnection } from "@/discord";
 import type { Decision, GameState } from "./contract";
 import { forgetClosedDrafts } from "./draftState";
 import { useEngineAnswer } from "./link";
-import { decisionEyebrow, decisionTitle, orderDecisions } from "./queue";
+import { decisionEyebrow, decisionTitle, orderDecisions, useOrderExtras } from "./queue";
+import { isPaymentDone } from "./renderers/production/model";
 import { rendererFor } from "./registry";
 import { engineStore, useEngine, useMyDecisions } from "./store";
 import { DecisionFooter, FooterSlot, PopupLayer, popupClasses as classes, usePeek, useScrollEdges } from "./ui/Popup";
@@ -103,9 +104,10 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const hidden = useEngine((s) => s.hidden);
   const answer = useEngineAnswer();
   const answeredKind = useEngine((s) => s.lastAnswer?.decision.kind ?? null);
+  const extra = useOrderExtras();
   const ordered = useMemo(
-    () => orderDecisions(decisions, answeredAtSeq, hidden, state, answeredKind),
-    [decisions, answeredAtSeq, hidden, state, answeredKind],
+    () => orderDecisions(decisions, answeredAtSeq, hidden, state, answeredKind, extra),
+    [decisions, answeredAtSeq, hidden, state, answeredKind, extra],
   );
   /* While the draft runs, the draft board (the table's takeover) is where picks are made: no popup on top of it. */
   const drafting = state?.draft?.status === "drafting";
@@ -120,10 +122,27 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
         (d) =>
           !(drafting && BOARD_KINDS.has(d.kind)) &&
           d.kind !== mapKind &&
+          /* The free first technology's "0 of 0" payment: answered for me (below), never shown. */
+          !freeResearchPayment(d) &&
+          /* While the map answers a step of my tactical action, no token editor pops up over it. */
+          !(movement.step && d.kind === "command_tokens.adjust") &&
           !(mapKind && d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction),
       ),
-    [drafting, ordered.queue, mapKind, myFaction],
+    [drafting, ordered.queue, mapKind, myFaction, movement.step],
   );
+  /* The Technology holder's first research is free: its payment has nothing to pay, so it is finished for me (one
+     click less: pt8 showed an empty "0 of 0 resources" screen). Once per decision. */
+  const autoPaid = useRef(new Set<string>());
+  useEffect(() => {
+    for (const d of decisions) {
+      if (!freeResearchPayment(d) || autoPaid.current.has(d.id) || pending[d.id]) continue;
+      const done = d.options.find((o) => isPaymentDone(o.value as never) && !o.disabled);
+      if (!done) continue;
+      autoPaid.current.add(d.id);
+      answer(d, { optionId: done.id, payload: { planets: [] } });
+    }
+    /* `answer` is a new function every render: run on the decisions only. */
+  }, [decisions, pending]);
   const offers = ordered.offers;
 
   const [jumpId, setJumpId] = useState<string | null>(null);
@@ -494,6 +513,8 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
             ref={setBodyEl}
             className={classes.body}
             hidden={collapsed}
+            onClickCapture={(e) => markPressed(e.target, shown.id)}
+            aria-busy={shownPending || undefined}
             data-more-above={edges.above || undefined}
             data-more-below={edges.below || undefined}
           >
@@ -526,3 +547,30 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
 }
 
 export { DecisionFooter };
+
+/** A payment with nothing to pay for the Technology holder's free first research. */
+function freeResearchPayment(d: Decision): boolean {
+  if (d.kind !== "payment.spend") return false;
+  const req = (d.progress?.required ?? {}) as { cost?: number | null; costSource?: string | null };
+  return req.cost === 0 && req.costSource === "technology";
+}
+
+/**
+ * The button I just clicked shows it is working at once (a spinner, a busy cursor) until the engine answers, so a
+ * slow server never looks like a missed click (pt8: 5+ s with no sign of life). Cleared when the answer settles, or
+ * shortly after when the click sent nothing (a stepper, a checkbox).
+ */
+function markPressed(target: EventTarget | null, decisionId: string) {
+  const el = (target as HTMLElement | null)?.closest?.("button");
+  if (!el || el.disabled) return;
+  el.setAttribute("data-engine-pressing", "");
+  const clear = () => el.removeAttribute("data-engine-pressing");
+  window.setTimeout(() => {
+    if (!engineStore.getState().view.pending[decisionId]) return clear();
+    const stop = engineStore.subscribe((s) => {
+      if (s.view.pending[decisionId]) return;
+      stop();
+      clear();
+    });
+  }, 250);
+}

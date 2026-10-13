@@ -391,15 +391,16 @@ export function MapActionsLayer({
   }, [chip, picker]);
 
   /*
-   * Systems a click answers right now (a system/planet decision, or the "activate a system" step itself): lit at rest,
-   * not only under the cursor. On my plain turn menu activation stays a hover affordance (the whole map would light).
+   * Systems a click answers right now (a system/planet decision, or activating a system — from my turn menu as well as
+   * from the activation step itself): lit at rest, not only under the cursor (playtest 8: on the turn menu nothing was
+   * lit, so the map did not read as clickable).
    */
   const pickTargets = useMemo(
     () => [
       ...new Set([
         ...Object.keys(engineTargets ?? {}),
         ...Object.keys(pick?.byPosition ?? {}),
-        ...(step.kind === "choose"
+        ...(step.kind === "choose" || step.kind === "turn"
           ? Object.entries(activation)
               .filter(([, a]) => a.ok)
               .map(([pos]) => pos)

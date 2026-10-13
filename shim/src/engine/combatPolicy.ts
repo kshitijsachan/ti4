@@ -108,6 +108,10 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
   const reminder = live.find((o) => o.value!.action === "open" && o.value!.assignType === "remove");
   if (reminder && reminder.value!.action === "open") {
     const lim = unitLimits(reminder.value!.tile, state, me);
+    // The engine says the system is still over (Dismiss blocked) though our count says otherwise (fleet bonuses,
+    // dock fighters): open the removal menu so the units go — never wait on a Dismiss that is refused (pbd540).
+    const blocked = live.some((o) => o.value!.action === "done" && !!(o.value as { blocked?: string | null }).blocked);
+    if (blocked && !(lim?.over ?? false)) return history.includes(reminder.id) ? null : { option: reminder, why: `units: the engine holds ${reminder.value!.tile} over its limits; open the removal menu` };
     if (!lim || lim.over) return null;
     return done ? { option: done, why: `units: within limits in ${reminder.value!.tile} (${lim.summary}); dismiss` } : null;
   }
