@@ -48,10 +48,12 @@ type EditorProps = {
   /** Status homework: every gained token must be placed (Confirm is greyed out with the reason until then; skipping
    * the gain on purpose is the separate "Ready without taking my new tokens" button). */
   requireAll?: boolean;
+  /** What the gain is (default "this round": the status phase's gain). */
+  gainWhat?: string;
 };
 
 /** Set the final tactic / fleet / strategy pools in one go, within base + gain (and no losses for Deliberate Action). */
-export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, onConfirmAndReady, readyLabel, requireAll, draftKey }: EditorProps & { draftKey?: string }) {
+export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, onConfirmAndReady, readyLabel, requireAll, draftKey, gainWhat }: EditorProps & { draftKey?: string }) {
   const [pools, setPools] = useDecisionState<CommandTokenPools>(draftKey ?? "tokens", "pools", start);
   const left = maxTotal - total(pools);
   const step = (k: keyof CommandTokenPools, d: number) => setPools((p) => ({ ...p, [k]: p[k] + d }));
@@ -61,7 +63,7 @@ export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, on
   return (
     <div className={classes.section}>
       <p className={classes.hint}>
-        Gain {gain} this round · {left > 0 ? `${left} left to place` : left === 0 ? "all placed" : `${-left} too many`}
+        {gain > 0 || !gainWhat ? `Gain ${gain} ${gainWhat ?? "this round"}` : "Move tokens between pools"} · {left > 0 ? `${left} left to place` : left === 0 ? "all placed" : `${-left} too many`}
       </p>
       <div className={classes.pools}>
         {POOLS.map((k) => (
@@ -223,6 +225,28 @@ export function CommandTokensAdjustRenderer({ decision, state, answer }: StatusR
   // refuses more, so the "gain" buttons are greyed out with the reason once it is reached (or reinforcements run out).
   const cap = commandTokensGainCap(decision);
   const reinforcements = commandTokensReinforcements(decision);
+  /* Outside the status phase, a panel with a known grant (Warfare's redistribution: 0, Leadership: 3 + …) is the same
+     one-go editor: the engine reaches the pools with the panel's own steps, then presses its Done (pt7). */
+  const editorOption = decision.options.find((o) => o.value?.action === "adjust" && (o.value as { editor?: boolean }).editor);
+  const now: CommandTokenPools | null =
+    acc && typeof acc.tactic === "number" && typeof acc.fleet === "number" && typeof acc.strategy === "number"
+      ? { tactic: acc.tactic, fleet: acc.fleet, strategy: acc.strategy }
+      : null;
+  if (editorOption && cap && now) {
+    const left = Math.max(0, Math.min(cap.limit - cap.gained, reinforcements ?? Infinity));
+    return (
+      <TokenEditor
+        draftKey={decision.id}
+        base={now}
+        start={now}
+        maxTotal={total(now) + left}
+        gain={left}
+        gainWhat={cap.label ? `with ${cap.label}` : "now"}
+        noLoss={false}
+        onConfirm={(pools) => answer({ optionId: editorOption.id, payload: { ...pools } })}
+      />
+    );
+  }
   const capReached = !!cap && cap.gained >= cap.limit;
   const noneLeft = reinforcements !== null && reinforcements <= 0;
   const blockReason = capReached

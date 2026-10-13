@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
 import { Tooltip, UnstyledButton } from "@mantine/core";
 import { IconAlertTriangle, IconBolt, IconChevronDown, IconChevronUp, IconEye, IconEyeOff, IconLoader2, IconMap, IconX } from "@tabler/icons-react";
 import cx from "clsx";
@@ -145,6 +145,15 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
     setSeenHead(headId);
     if (headId && offerId) setOfferId(null);
   }
+  /* A prompt folded away with Esc stays folded only until something new is asked of me: a decision joining my queue
+     (or one re-asked on the same message) unfolds the panel (pt7: the folded panel hid the next required step). */
+  const queueKey = queue.map((d) => `${d.id}@${d.createdAt}`).join(",");
+  const seenQueue = useRef<Set<string>>(new Set(queueKey ? queueKey.split(",") : []));
+  useEffect(() => {
+    const ids = queueKey ? queueKey.split(",") : [];
+    if (ids.some((k) => !seenQueue.current.has(k))) setCollapsedId(null);
+    seenQueue.current = new Set(ids);
+  }, [queueKey]);
   const openOffer = offers.find((d) => d.id === offerId);
   const shown = openOffer ?? queue.find((d) => d.id === jumpId) ?? queue[0];
   const more = queue.filter((d) => d.id !== shown?.id).length;

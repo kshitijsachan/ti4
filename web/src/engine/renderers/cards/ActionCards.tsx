@@ -34,7 +34,9 @@ export function ActionCardPlay({ decision, state, answer, pendingOptionId }: Pro
           </div>
         ))}
       </div>
-      <ExtraOptions options={decision.options} pendingOptionId={pendingOptionId} onAnswer={answer} />
+      {/* A play button left on the tray for a card no longer in my hand (discarded: the engine can't type it) is not
+          an option (pt7: a stray "(803) Construction Rider" after a discard). */}
+      <ExtraOptions options={decision.options.filter((o) => o.value || !o.handler?.startsWith("ac_play_from_hand_"))} pendingOptionId={pendingOptionId} onAnswer={answer} />
     </div>
   );
 }

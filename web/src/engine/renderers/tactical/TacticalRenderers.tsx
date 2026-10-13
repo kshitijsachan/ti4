@@ -229,10 +229,15 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
 
 /** The bot's system menu (rings, then systems) is answered by clicking the map; the panel only says so. */
 export function TacticalActivateView({ decision, answer }: RendererProps<TacticalActivate>) {
+  /* Warfare (Thunder's Edge) and other token-free activations: no tactic token, a system with my token is fine. */
+  const free = decision.options.some((o) => !o.disabled && o.value?.token === false);
   return (
     <div className={classes.panel}>
       <p className={classes.hint} data-map-activate-hint>
-        Click a system on the map to activate it (−1 tactic token). Systems you can't activate are greyed, with the reason on hover.
+        {free
+          ? "Click a lit system on the map to activate it (no command token is placed, so a system with your token is fine)."
+          : "Click a lit system on the map to activate it (−1 tactic token)."}{" "}
+        Systems you can't activate are greyed, with the reason on hover.
       </p>
       <Extras options={decision.options} answer={answer} />
     </div>
