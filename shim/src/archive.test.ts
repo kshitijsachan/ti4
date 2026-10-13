@@ -121,3 +121,52 @@ test("the bot down: every game counts as unreachable, nothing changes", async ()
   }
   done();
 });
+
+test("sweep: a finished game's role is parked with its channels; a rewind brings the same role back to its holders", async () => {
+  const { hub, store, sent, act, done } = setup();
+  const s = store.state;
+  const alice = Object.keys(s.members).find((id) => id !== s.bot_id) ?? "1000000000000000001";
+  s.members[alice] ??= { user_id: alice, roles: [], nick: null, joined_at: "" };
+  const role = { id: "1559230000000000777", name: "pbd346", permissions: "0", position: 5, mentionable: true };
+  s.roles[role.id] = role as any;
+  s.members[alice].roles.push(role.id);
+  const other = { id: "1559230000000000778", name: "pbd3460", permissions: "0", position: 6 };
+  s.roles[other.id] = other as any;
+  let restore = phaseFetch("finished");
+  try {
+    await hub.sweepEndedGames("http://bot");
+    assert.equal(s.roles[role.id], undefined);
+    assert.ok(s.roles[other.id], "only the game's own role");
+    assert.ok(!s.members[alice].roles.includes(role.id));
+    assert.ok(sent.some(([t, d]) => t === "GUILD_ROLE_DELETE" && d.role_id === role.id));
+    assert.equal(act._parked_roles.length, 1);
+    await hub.sweepEndedGames("http://bot"); // idempotent
+    assert.equal(act._parked_roles.length, 1);
+  } finally {
+    restore();
+  }
+  restore = phaseFetch("action");
+  try {
+    sent.length = 0;
+    await hub.sweepEndedGames("http://bot");
+    assert.deepEqual(s.roles[role.id], role);
+    assert.ok(s.members[alice].roles.includes(role.id));
+    assert.ok(sent.some(([t, d]) => t === "GUILD_ROLE_CREATE" && d.role.id === role.id));
+    assert.equal(act._parked_roles, undefined);
+  } finally {
+    restore();
+  }
+  done();
+});
+
+test("restore: a game whose role the bot deleted at End Game gets a new one for its players", () => {
+  const { hub, store, act, tt, done } = setup();
+  const s = store.state;
+  const ids = Object.keys(s.members);
+  assert.equal(hub.restoreGameRole("pbd346", [tt, act], ids), true);
+  const r = Object.values(s.roles).find((x) => x.name === "pbd346")!;
+  assert.ok(r);
+  for (const id of ids) assert.ok(s.members[id].roles.includes(r.id));
+  assert.equal(hub.restoreGameRole("pbd346", [tt, act], ids), false);
+  done();
+});
