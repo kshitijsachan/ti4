@@ -21,3 +21,15 @@ void test("ring menu is choose, the turn menu is turn", () => {
   assert.deepEqual(stepKindOf(["ring_3", "ring_2"], null), { kind: "choose" });
   assert.deepEqual(stepKindOf(["tacticalAction", "componentAction"], null), { kind: "turn" });
 });
+
+void test("the Thunder's Edge Warfare system menu (no system active) is the choose step (pbd436)", () => {
+  const ids = ["ringTile_000", "ringTile_301", "ring_1", "ring_2", "ring_3", "ring_corners", "ultimateUndo_247"];
+  assert.deepEqual(stepKindOf(ids, null), { kind: "choose" });
+  /* A leftover active system from an earlier action this round does not turn it into a move step. */
+  assert.deepEqual(stepKindOf(ids, "211"), { kind: "choose" });
+});
+
+void test("the Warfare offer itself (redistribute / perform tactical action) is no tactical step", () => {
+  assert.equal(stepKindOf(["redistributeCCButtons_deleteThisButton", "beginTacticalTeWarfare"], null), null);
+  assert.equal(stepKindOf(["redistributeCCButtons_deleteThisButton", "ultimateUndo_10"], null), null);
+});

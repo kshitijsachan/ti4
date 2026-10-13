@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Decision, GameState } from "../contract";
-import { orderDecisions } from "../order";
+import { decisionTitle, orderDecisions } from "../order";
 
 const G = "pbd1";
 const ME = "u1";
@@ -220,4 +220,33 @@ void test("a pre-decline offer for a strategy card I hold is dropped", () => {
   assert.equal(r.queue.length + r.offers.length, 0);
   const other = orderDecisions([pre], null, undefined, state({ strategyCards: [{ number: 8, name: "Imperial", holder: "u2" }] as unknown as GameState["strategyCards"] }));
   assert.equal(other.queue.length + other.offers.length, 1);
+});
+
+void test("TE Warfare: a redistribute offer left open waits behind the activation step it would block (pbd436)", () => {
+  const redistribute = dec("choose.confirm", {
+    options: [opt("FFCC_arborec_redistributeCCButtons_deleteThisButton", { source: "warfare", confirm: true, choice: "redistribute" })],
+    revision: 2,
+  });
+  const activate = dec("tactical.activate", { options: [opt("FFCC_arborec_ringTile_000", { step: "system", position: "000", tileId: "112", token: false })] });
+  const turn = dec("turn.action");
+  const r = orderDecisions([redistribute, activate, turn], 0, undefined, state());
+  assert.equal(r.queue[0].kind, "tactical.activate");
+  assert.ok(!r.queue.includes(redistribute));
+  assert.ok(r.offers.includes(redistribute), "still on offer behind Available now");
+  /* No tactical step open (after the Warfare action ends): the offer is mine to answer. */
+  const after = orderDecisions([redistribute, turn], 0, undefined, state());
+  assert.ok(after.queue.includes(redistribute));
+});
+
+void test("choose.* titles name what asks, not the raw kind", () => {
+  const offer = dec("choose.confirm", {
+    options: [
+      opt("r", { source: "warfare", confirm: true, choice: "redistribute" }),
+      opt("t", { source: "warfare", confirm: true, choice: "tactical" }),
+    ],
+  });
+  assert.equal(decisionTitle(offer), "Warfare: your primary");
+  assert.equal(decisionTitle(dec("choose.confirm", { options: [opt("r", { source: "warfare", confirm: true, choice: "redistribute" })] })), "Warfare: redistribute command tokens?");
+  assert.equal(decisionTitle(dec("choose.confirm", { options: [opt("c", { source: "crownofemphidia", confirm: true })] })), "Crown of Emphidia");
+  assert.equal(decisionTitle(dec("choose.confirm")), "Choose confirm");
 });

@@ -2,18 +2,22 @@ import type { PlayerData, PlayerDataResponse } from "@/entities/data/types";
 import type { Tile } from "@/entities/game/types";
 import { getTileById } from "@/entities/lookup/systems";
 import type { TacticalStep } from "./context";
+import { offeredActivation, type EngineActivation } from "./activateOffer";
 
 export type Activation = { ok: true } | { ok: false; reason: string };
 
 /**
  * Whether I can activate a system from the map right now, and if not, why (shown in the hover tooltip). The bot
  * still decides: this only mirrors its menu (`ButtonHelper.canActivateTile`) closely enough to light the right hexes.
+ * With the engine's activation menu open (`offer`), its systems are the answer (Warfare: no tactic token needed, my
+ * own token no obstacle).
  */
 export function activationOf(
   tile: Tile,
   me: PlayerData | undefined,
   web: PlayerDataResponse | undefined,
   step: TacticalStep,
+  offer?: EngineActivation | null,
 ): Activation {
   const info = getTileById(tile.systemId);
   if (info?.isHyperlane)
@@ -26,11 +30,13 @@ export function activationOf(
       return { ok: false, reason: "Finish your current tactical action first" };
     return { ok: false, reason: "Not your turn" };
   }
-  if (me.tacticalCC < 1)
-    return { ok: false, reason: "No command tokens in your tactic pool" };
   const ccs =
     web?.tileUnitData?.[tile.position]?.ccs ?? tile.commandCounters ?? [];
-  if (ccs.includes(me.color) || ccs.includes(me.faction))
+  const hasMyToken = ccs.includes(me.color) || ccs.includes(me.faction);
+  if (offer) return offeredActivation(tile.position, offer, { hasMyToken, tacticTokens: me.tacticalCC });
+  if (me.tacticalCC < 1)
+    return { ok: false, reason: "No command tokens in your tactic pool" };
+  if (hasMyToken)
     return { ok: false, reason: "Your command token is already here" };
   if (info?.id?.toLowerCase() === "silver_flame")
     return { ok: false, reason: "This system can't be activated" };

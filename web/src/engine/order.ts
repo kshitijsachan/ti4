@@ -4,6 +4,7 @@ import { factionName } from "./names";
 import { nothingToDecide, setupOnly } from "./optionKinds";
 import { readDecisionState } from "./draftState";
 import { owesFollow } from "./follows";
+import { sourceName } from "./sourceNames";
 
 /** Plain-words titles per kind; `legacy` (untyped) prompts take a title from their own text. */
 const TITLES: Record<string, string> = {
@@ -131,6 +132,10 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
     const card = sc !== undefined ? state?.strategyCards.find((c) => c.number === sc) : undefined;
     if (card) return `Pre-decline ${card.name}`;
   }
+  if (d.kind.startsWith("choose.")) {
+    const title = chooseTitle(d);
+    if (title) return title;
+  }
   const typed = TITLES[d.kind];
   if (typed) return typed;
   if (d.kind !== "legacy") {
@@ -138,6 +143,30 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
   return promptTitle(d.prompt) || (d.scope === "table" ? "Open to everyone" : "Your move");
+}
+
+type ChooseTitleValue = { source?: unknown; choice?: unknown } | null;
+
+/**
+ * A choose.* step's title from what asks it (its options' `source`), not the raw kind ("Choose confirm"): Warfare's
+ * offers say what they are, others name their card / ability.
+ */
+function chooseTitle(d: Decision): string {
+  const values = d.options.map((o) => o.value as ChooseTitleValue).filter((v): v is NonNullable<ChooseTitleValue> => !!v);
+  const source = values.map((v) => v.source).find((x): x is string => typeof x === "string" && !!x);
+  if (!source) return "";
+  if (source === "warfare") {
+    const tactical = values.some((v) => v.source === "warfare" && v.choice === "tactical");
+    return tactical ? "Warfare: your primary" : "Warfare: redistribute command tokens?";
+  }
+  return sourceName(source);
+}
+
+/** The redistribute offer of Warfare (before / after its tactical action), no other choice on it. */
+function warfareRedistribute(d: Decision): boolean {
+  if (d.kind !== "choose.confirm") return false;
+  const values = d.options.map((o) => o.value as ChooseTitleValue).filter((v): v is NonNullable<ChooseTitleValue> => !!v);
+  return values.length > 0 && values.every((v) => v.source === "warfare" && v.choice === "redistribute");
 }
 
 /** The small line above the title: who it is for when it is not just me. */
@@ -233,9 +262,13 @@ export function orderDecisions(
   /* Imperial's "score a public" list once nothing on it scores (I scored one, or meet none): finished, so it never
      takes the panel back from what I'm doing (it stays under "Available now"). */
   const finishedImperial = (d: Decision) => d.kind === "status.score" && d.scope === "player" && !publicScorable(d, state, selfId);
+  /* A Warfare redistribute offer while a step of my tactical action is open: optional, it waits behind "Available now"
+     so the step leads (playtest 7, pbd436: it sat in front of "Activate a system"). */
+  const tacticalOpen = shown.some((d) => TACTICAL_STEP.test(d.kind) && d.scope === "player" && !staleStep(d));
   const background = (d: Decision) =>
     !requiredSetup(d) &&
-    (openToAll(d) ||
+    ((tacticalOpen && warfareRedistribute(d)) ||
+    openToAll(d) ||
     lateSecretList(d) ||
     finishedImperial(d) ||
     finishedCard(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options)));
