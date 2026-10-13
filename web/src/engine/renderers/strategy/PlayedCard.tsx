@@ -3,7 +3,9 @@ import type { PrimaryPart, StrategyCardResolve } from "../../../../../shim/src/e
 import { Choice, live, Meta, playerName, Title, viewer, type RendererProps } from "./shared";
 import classes from "./strategy.module.css";
 import { useDecisionState } from "../../draftState";
-import { engineStore } from "../../store";
+import { engineStore, useEngine } from "../../store";
+import { useEffect } from "react";
+import { displayLabel } from "@/decisions/model/phrasing";
 
 type Value = NonNullable<StrategyCardResolve["options"][number]["value"]>;
 type Opt = Option<Value>;
@@ -51,6 +53,11 @@ export function PlayedCard({ decision, state, answer }: RendererProps<StrategyCa
     setPressed((p) => [...p, id]);
     answer(id);
   };
+  /* A press the engine refused did not happen: it no longer counts toward the checklist. */
+  const error = useEngine((s) => s.view.errors[decision.id]);
+  useEffect(() => {
+    if (error) setPressed((p) => p.slice(0, -1));
+  }, [error, setPressed]);
 
   return (
     <div className={classes.panel}>
@@ -119,7 +126,14 @@ function Primary({
       done.filter((p) => p === part).length,
       pressed.filter((id) => mine.find((o) => o.id === id)?.value?.part === part).length,
     );
-  const pressedCount = (id: string) => pressed.filter((p) => p === id).length;
+  const needed = (part: PrimaryPart) => parts.filter((p) => p === part).length;
+  /* A part done as often as the checklist lists it: greyed (the engine refuses a repeat; pt9 150: "pressed ×2" stayed
+     enabled). Technology's research keeps its optional second press. */
+  const partDone = (o: Opt) => {
+    const part = o.value!.part;
+    if (!part || part === "research" || !needed(part)) return false;
+    return doneCount(part) >= needed(part);
+  };
   const seen = new Map<PrimaryPart, number>();
   const checklist = parts.map((part) => {
     const n = (seen.get(part) ?? 0) + 1;
@@ -144,13 +158,15 @@ function Primary({
       )}
       <div className={classes.choices}>
         {mine.map((o) => {
-          const blocked = imperialBlock(o, mecatol);
+          const blocked = imperialBlock(o, mecatol) ?? (partDone(o) ? "done" : null);
+          const part = o.value!.part;
+          const partial = !!part && needed(part) > 1 && doneCount(part) > 0 && doneCount(part) < needed(part);
           return (
             <Choice key={o.id} option={blocked ? { ...o, disabled: true } : o} onPick={onPick} quiet={o.value!.action === "request_all"} title={blocked ?? undefined}>
-              {repeat && o.value!.action === "research" ? "Research another technology" : o.label}
+              {repeat && o.value!.action === "research" ? "Research another technology" : displayLabel(o.handler, o.label)}
               {repeat && o.value!.action === "research" && <Meta>6 resources</Meta>}
               {blocked && <Meta>{blocked}</Meta>}
-              {pressedCount(o.id) > 0 && <Meta>pressed ×{pressedCount(o.id)}</Meta>}
+              {partial && part && <Meta>{doneCount(part)} of {needed(part)} done</Meta>}
             </Choice>
           );
         })}

@@ -3,6 +3,7 @@ import { Loader, UnstyledButton } from "@mantine/core";
 import cx from "clsx";
 import type { Option } from "../../contract";
 import classes from "./Cards.module.css";
+import { displayLabel } from "@/decisions/model/phrasing";
 
 type Tone = "go" | "stop" | "plain";
 
@@ -53,7 +54,7 @@ export function ExtraOptions({
         <AnswerButton
           key={o.id}
           option={o}
-          label={o.label || "Choose"}
+          label={displayLabel(o.handler, o.label) || "Choose"}
           pendingOptionId={pendingOptionId}
           onAnswer={onAnswer}
         />
