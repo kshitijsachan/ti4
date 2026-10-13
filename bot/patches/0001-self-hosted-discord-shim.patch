@@ -29565,10 +29565,10 @@ index 0000000..3d95df7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
 new file mode 100644
-index 0000000..c1a3576
+index 0000000..f029a43
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
-@@ -0,0 +1,602 @@
+@@ -0,0 +1,603 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -29714,7 +29714,8 @@ index 0000000..c1a3576
 +    public static List<List<String>> mandatoryMissingGroups(Game game, int sc) {
 +        List<List<String>> groups = MANDATORY.get(StrategyCards.automation(game, sc));
 +        List<List<String>> out = new ArrayList<>();
-+        if (groups == null) return out;
++        // A card not (or no longer) played owes no primary (un-played by command, an undo).
++        if (groups == null || !game.getPlayedSCs().contains(sc)) return out;
 +        Player holder = StrategyCards.holder(game, sc);
 +        List<String> done = ButtonHelperSCs.primaryDone(game, sc);
 +        for (List<String> g : groups) {
