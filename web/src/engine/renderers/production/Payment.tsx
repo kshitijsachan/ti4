@@ -37,7 +37,7 @@ function BillPayment({ decision, state, answer, pendingOptionId }: AreaRendererP
   const doneOpt = options.find((o) => isPaymentDone(o.value));
   const done = doneOpt && isPaymentDone(doneOpt.value) ? doneOpt.value : undefined;
   const me = selfOf(state);
-  const req = (decision.progress?.required ?? {}) as { cost?: number | null; remaining?: number | null };
+  const req = (decision.progress?.required ?? {}) as { cost?: number | null; remaining?: number | null; costSource?: string | null };
   const cost = req.cost ?? done?.cost ?? null;
   const inf = done?.currency === "inf";
   const unit = inf ? "influence" : "resources";
@@ -66,7 +66,8 @@ function BillPayment({ decision, state, answer, pendingOptionId }: AreaRendererP
     (pick.commodities ?? 0) >= commMax &&
     (!sarweenOffered || !!pick.sarween);
   const short = cost !== null && total < cost;
-  const blocked = short && !spendsAll;
+  /* A Technology-card research is paid in full (pt9 014: "Pay all you have (1 resources short)" kept the technology). */
+  const blocked = short && (!spendsAll || req.costSource === "technology");
   const busy = !!pendingOptionId;
   const extras = options.filter((o) => !o.value && !o.disabled);
   const reset = options.find((o) => o.value && "action" in o.value && o.value.action === "reset");
