@@ -6,6 +6,7 @@ import { useDecisionFocus, useWaitingOnMe } from "@/decisions/model/focus";
 import { useMovementUI } from "@/mapactions/store";
 import { mapTargets, useEngineMapPick } from "@/mapactions/enginePick";
 import { useReserveRect } from "@/state/reservedArea";
+import { usePlay, usePlayConnection } from "@/discord";
 import type { Decision, GameState } from "./contract";
 import { forgetClosedDrafts } from "./draftState";
 import { useEngineAnswer } from "./link";
@@ -137,13 +138,38 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const cardRef = useReserveRect("decision-card");
   const offersRef = useReserveRect("decision-offers");
 
+  /* A new decision the game waits on takes the panel back from an optional offer I had open (required leads). */
+  const headId = queue[0]?.id ?? null;
+  const [seenHead, setSeenHead] = useState<string | null>(headId);
+  if (headId !== seenHead) {
+    setSeenHead(headId);
+    if (headId && offerId) setOfferId(null);
+  }
   const openOffer = offers.find((d) => d.id === offerId);
   const shown = openOffer ?? queue.find((d) => d.id === jumpId) ?? queue[0];
   const more = queue.filter((d) => d.id !== shown?.id).length;
   const collapsed = !!shown && collapsedId === shown.id && !errors[shown.id];
   const over = useMemo(() => gameOverView(state, Object.values(openIds)), [state, openIds]);
-  const stalled = useTurnStalled(over ? null : state, !shown && queue.length === 0);
+  /* Empty means nothing at all is open for me: not a step the map is answering (move / land), not one in flight. */
+  const nothingOpen = !shown && ordered.queue.length === 0 && !movement.step && Object.keys(pending).length === 0;
+  const stalled = useTurnStalled(over ? null : state, nothingOpen);
   const [overFolded, setOverFolded] = useState(false);
+  /* The game's actions channel: where `/game end` runs when the end-of-game prompt was dismissed. */
+  const conn = usePlayConnection();
+  const actionsChannel = usePlay((s) => Object.values(s.channels).find((c) => c.name === `${gameName}-actions`)?.id ?? null);
+  const endByCommand = (rematch: boolean) => {
+    if (!actionsChannel) return;
+    conn.runCommand(actionsChannel, "game", [
+      {
+        type: 1,
+        name: "end",
+        options: [
+          { type: 3, name: "confirm", value: "YES" },
+          { type: 5, name: "rematch", value: rematch },
+        ],
+      },
+    ]);
+  };
 
   /* The header's "Your move" pill: what is really waiting on me (background prompts never count). */
   const publishWaiting = useWaitingOnMe((s) => s.set);
@@ -292,7 +318,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
               </div>
             </header>
             <div className={classes.body} hidden={overFolded}>
-              <WinnerPanel view={over} answer={answer} pendingOptionId={endPending} />
+              <WinnerPanel view={over} answer={answer} pendingOptionId={endPending} endByCommand={actionsChannel ? endByCommand : undefined} />
             </div>
             {endError && over.endPrompt && (
               <div className={classes.error} role="alert">
@@ -356,9 +382,21 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
               </div>
               {more > 0 && (
                 <span className={classes.moreWrap} data-engine-menu>
-                  <UnstyledButton className={classes.moreText} onClick={() => setQueueOpen((v) => !v)} aria-expanded={queueOpen}>
-                    {more === 1 ? "1 more after this" : `${more} more waiting`}
-                  </UnstyledButton>
+                  {openOffer && queue[0] ? (
+                    /* An optional offer is open: what the game waits on leads, one click back to it. */
+                    <UnstyledButton
+                      className={classes.moreText}
+                      onClick={() => (more === 1 ? setOfferId(null) : setQueueOpen((v) => !v))}
+                      aria-expanded={more === 1 ? undefined : queueOpen}
+                      data-engine-required={more}
+                    >
+                      {more === 1 ? `Waiting on you: ${decisionTitle(queue[0], state)}` : `${more} waiting on you`}
+                    </UnstyledButton>
+                  ) : (
+                    <UnstyledButton className={classes.moreText} onClick={() => setQueueOpen((v) => !v)} aria-expanded={queueOpen}>
+                      {more === 1 ? "1 more after this" : `${more} more waiting`}
+                    </UnstyledButton>
+                  )}
                   {queueOpen && (
                     <span className={classes.queueList} role="menu" aria-label="Decisions waiting">
                       {queue.filter((d) => d.kind === "legacy").length >= 3 && (

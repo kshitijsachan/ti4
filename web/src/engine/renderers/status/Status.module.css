@@ -114,5 +114,8 @@
 .delta {
   font-family: var(--font-data);
   font-size: 11px;
+  /* The line is reserved while empty, so the +/- buttons don't jump when a change appears. */
+  line-height: 14px;
+  min-height: 14px;
   color: rgb(var(--play-green));
 }

@@ -105,6 +105,10 @@ export type ChooseConfirm = DecisionBase<
     /** pay_debt (choice comm | tg | debt): the creditor and how many. */
     faction?: FactionId;
     amount?: number;
+    /** spend_objective_tokens (choice split): the objective paid and how many tokens come from each pool. */
+    objective?: "lead" | "galvanize";
+    strategy?: number;
+    tactic?: number;
   }
 >;
 

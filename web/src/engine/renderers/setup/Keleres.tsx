@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Choice, ErrorLine, FactionIcon, Waiting, useAnswer, useFactionName } from "./parts";
 import type { Renderer } from "./types";
 import classes from "./Setup.module.css";
@@ -41,6 +42,9 @@ export const KeleresFlavorRenderer: Renderer<"setup.keleres_flavor"> = ({ decisi
   );
 };
 
+/** Keleres tech prompts already asked for (once per prompt; the button stays as the retry). */
+const autoPressed = new Set<string>();
+
 /** Keleres takes its two starting technologies from the other players'; only once they have chosen. */
 export const KeleresTechRenderer: Renderer<"setup.keleres_tech"> = ({ decision, state, answer }) => {
   const { pending, error, press } = useAnswer(answer);
@@ -49,11 +53,22 @@ export const KeleresTechRenderer: Renderer<"setup.keleres_tech"> = ({ decision, 
     .filter((p) => p.userId !== self && (p.keleresFlavorPending || (p.startingTechsNeeded > 0 && !p.faction?.startsWith("keleres"))))
     .map((p) => p.userId);
   const option = decision.options.find((o) => o.value);
+  /* Nothing to decide here: once nobody is still choosing, the options are fetched at once (no extra click). */
+  const ready = !!option && !option.disabled && !waiting.length && !pending && !error;
+  useEffect(() => {
+    if (!ready || !option || autoPressed.has(decision.id)) return;
+    autoPressed.add(decision.id);
+    void press(option.id);
+  }, [ready, option, decision.id, press]);
   if (!option) return null;
   return (
     <div className={classes.stack}>
       <p className={classes.title}>Keleres starting technologies</p>
-      <p className={classes.hint}>You choose two technologies that other players own, so wait until everyone has theirs.</p>
+      <p className={classes.hint}>
+        {waiting.length
+          ? "You choose two technologies that other players own, so wait until everyone has theirs."
+          : "Everyone has their technologies: your options open here in a moment."}
+      </p>
       <Waiting state={state} users={waiting} label="Still choosing" />
       <div className={classes.row}>
         <Choice

@@ -101,6 +101,15 @@
   stroke-width: 7;
 }
 
+/* A system a click answers now (place a PDS, pick a system): an edge that reads without hovering. */
+.hexPickable {
+  fill: rgba(var(--map-action-target-rgb), 0.1);
+  stroke: rgb(var(--map-action-target-rgb));
+  stroke-width: 7;
+  stroke-opacity: 0.9;
+  filter: drop-shadow(0 0 6px rgba(var(--map-action-target-rgb), 0.7));
+}
+
 .hexConfirm {
   fill: rgba(var(--play-yellow), 0.12);
   stroke: rgb(var(--play-yellow));

@@ -54,7 +54,7 @@ function applyEvent(view: EngineView, e: EngineEvent): EngineView {
   const held = decisions[e.decision.id];
   if (e.type === "decision.closed") delete decisions[e.decision.id];
   else if (!held || (e.decision.revision ?? 0) >= (held.revision ?? 0)) decisions[e.decision.id] = e.decision;
-  return { ...view, seq: e.seq, decisions };
+  return { ...view, seq: e.seq, decisions, errors: clearTransient(view.errors, e.decision.id) };
 }
 
 /**
@@ -74,6 +74,18 @@ export function awaits(d: Decision, userId: string): boolean {
  */
 const AFFORDANCES = new Set<string>(["ui.undo_affordance", "ui.optional", "ui.info_menu"]);
 
+/** Answer failures that say the server was away (a bot restart), not that the answer was wrong. */
+const TRANSIENT = /did not answer|engine is off|unreachable|not reachable|timed? ?out|restarting|offline|ECONNREFUSED|fetch failed/i;
+
+/** The server is back (a fresh snapshot, or the decision itself came again): "it did not answer" no longer holds. */
+function clearTransient(errors: Record<string, string>, only?: string): Record<string, string> {
+  const ids = Object.keys(errors).filter((id) => (!only || id === only) && TRANSIENT.test(errors[id]));
+  if (!ids.length) return errors;
+  const next = { ...errors };
+  for (const id of ids) delete next[id];
+  return next;
+}
+
 /** Drops in-flight / error marks of decisions that are gone. */
 function prune(view: EngineView): EngineView {
   const open = (rec: Record<string, unknown>) => Object.keys(rec).every((id) => view.decisions[id]);
@@ -92,6 +104,7 @@ export function reduce(view: EngineView, frame: EngineFrame): EngineView {
         seq: frame.seq,
         state: withoutNeutral(frame.state),
         decisions: Object.fromEntries(frame.decisions.map((d) => [d.id, d])),
+        errors: clearTransient(view.errors),
       });
     case "events":
       if (frame.game !== view.game) return view;
@@ -100,7 +113,7 @@ export function reduce(view: EngineView, frame: EngineFrame): EngineView {
       return prune(applyEvent(view, frame.event));
     case "state":
       if (frame.game !== view.game) return view;
-      return { ...view, state: newerState(view.state, frame.state) };
+      return { ...view, state: newerState(view.state, frame.state), errors: clearTransient(view.errors) };
     case "unavailable":
       if (frame.game !== view.game) return view;
       return { ...view, status: "unavailable" };
