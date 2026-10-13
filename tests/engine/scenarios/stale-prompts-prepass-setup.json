@@ -1,0 +1,20 @@
+{
+  "name": "stale-prompts-prepass-setup",
+  "description": "Regression (rollback of stale-prompts at 07:50): the replay backtest found pbd106@38, Deepwrought's 'Pass on Next Turn' (resolvePreassignment_Pre Pass) pressed in round 1 playerSetup, refused by the engine ('Pre-passing is only for your next turn in the action phase'); the original accepts a pre-pass in any phase. Fix (bot stale-prompts d885f93): Pre Pass is refused only once the player passed this round. Legacy press vs engine answer must match.",
+  "base": {
+    "recording": "pbd106",
+    "index": 37
+  },
+  "steps": [
+    {
+      "press": "resolvePreassignment_Pre Pass deepwrought",
+      "as": "deepwrought"
+    }
+  ],
+  "expect": {
+    "invariants": true
+  },
+  "invariantsIgnore": [
+    "content.no-homebrew"
+  ]
+}
