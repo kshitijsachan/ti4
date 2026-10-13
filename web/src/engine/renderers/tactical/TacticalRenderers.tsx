@@ -18,6 +18,7 @@ import { followHolds, followsOwed, owesFollow } from "../../follows";
 import { useMyDecisions } from "../../store";
 import { useEngineAnswer } from "../../link";
 import { factionName } from "../../names";
+import { displayLabel } from "@/decisions/model/phrasing";
 
 /**
  * A direct action payload for `answer`: the decision's kind-specific endpoint (`POST …/decisions/{id}/{action}`)
@@ -186,6 +187,16 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     ((waits.length > 0 || overLimit.length > 0) && ends(o)) ||
     ((midAction || !!primaryMissing) && endsTurn(o));
   const pending = waits.flatMap((w) => w.userIds.map((id, i) => state?.players.find((p) => p.userId === id)?.userName ?? factionName(w.factions[i] ?? id)));
+  /* One click to the missing part: that part's own buttons from my played card's panel (pt9 soak pbd821: the holder
+     waited on End turn without knowing where the primary was). */
+  const missingValue = opts.map((o) => (o.value!.action === "end_turn" ? o.value! : null)).find((v) => !!v?.primaryMissing);
+  const missingParts = missingValue && "primaryMissingParts" in missingValue ? (missingValue.primaryMissingParts ?? []) : [];
+  const missingCard = missingValue && "primaryMissingCard" in missingValue ? missingValue.primaryMissingCard : null;
+  const cardPanel = missingCard == null ? undefined : mine.find((d) => d.kind === "strategy_card.resolve" && d.options.some((o) => (o.value as { strategyCard?: number; who?: string } | null)?.strategyCard === missingCard && (o.value as { who?: string }).who !== "others"));
+  const partButtons = (cardPanel?.options ?? []).filter((o) => {
+    const v = o.value as { part?: string | null; who?: string } | null;
+    return !o.disabled && !!v?.part && v.who !== "others" && missingParts.includes(v.part);
+  });
   const reminders = waits
     .map((w) => {
       const panel = mine.find((d) => d.kind === "strategy_card.resolve" && d.options.some((o) => (o.value as { action?: string; strategyCard?: number } | null)?.action === "request_all" && (o.value as { strategyCard?: number }).strategyCard === w.strategyCard));
@@ -243,6 +254,12 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
             </Button>
           ))}
         {defer && waits.length > 0 && <OptionButton id={defer.id} label={turnLabel(defer, undefined)} answer={answer} variant="filled" />}
+        {cardPanel &&
+          partButtons.map((o) => (
+            <Button key={o.id} size="xs" variant="filled" onClick={() => answerOther(cardPanel, o.id)}>
+              {displayLabel(o.handler, o.label)}
+            </Button>
+          ))}
         {reminders.map((r) => (
           <Button key={r.option.id} size="xs" variant="subtle" onClick={() => answerOther(r.panel, r.option.id)}>
             Remind them ({r.name})
