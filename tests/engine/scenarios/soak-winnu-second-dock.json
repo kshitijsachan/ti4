@@ -1,0 +1,35 @@
+{
+  "name": "soak-winnu-second-dock",
+  "description": "Soak pbd540 (bot 948252f): Winnu's structure ability (winnuStructure_sd_andeara) placed a 2nd space dock on Andeara; the 'too many space docks' reminder then held End Turn (fleet-limit enforcement) and no bot policy removed it: the game stalled. Fix (bot fuzz-triage-2): every place_ / winnuStructure_ placement refuses a 2nd dock / 3rd PDS on a planet (ButtonHelperModifyUnits.constructionStructureLimit), the Winnu offer greys those buttons; structure problems never hold Dismiss / End Turn / Pass (only fleet pool and capacity do); the bot opens the removal menu when the engine holds a system it counts as legal. Base: pinned pbd540 saves 300 (Andeara has its dock; +301: the same prompt pressed again).",
+  "base": {
+    "save": "saves/soak-pbd540-300.txt",
+    "next": "saves/soak-pbd540-301.txt"
+  },
+  "steps": [
+    {
+      "press": "winnuStructure_sd_andeara",
+      "as": "winnu"
+    },
+    {
+      "wait": 1500,
+      "expect": {
+        "state": [
+          {
+            "path": "tiles[position=211].holders[name=andeara].units[unit=sd].count",
+            "eq": 1
+          }
+        ],
+        "decision": [
+          {
+            "kind": "units.remove",
+            "as": "winnu",
+            "open": false
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
