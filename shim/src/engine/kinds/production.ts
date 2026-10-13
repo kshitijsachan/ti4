@@ -91,6 +91,11 @@ export type ProductionPlaceValue = {
    * limited (fighters, infantry, structures) or an older bot. The engine refuses producing more than this.
    */
   remaining?: number | null;
+  /**
+   * Non-fighter ships that still fit the fleet pool in this tile (a ship option only; may be negative; null / absent:
+   * not a ship, or no limit known). Going over is allowed (the excess is removed afterwards): the web warns.
+   */
+  fleetRoom?: number | null;
 };
 export type ProductionResetValue = { action: "reset" };
 export type ProductionDoneValue = {

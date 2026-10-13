@@ -23,7 +23,19 @@ const UNIT_NAME: Record<string, string> = {
 } satisfies Partial<Record<UnitId, string>>;
 
 /** remaining: units of this type left in reinforcements (component limit), null = not limited. */
-type Line = { key: string; unit: UnitId; holder: HolderName; tile: TilePosition | null; cost: number | null; step: number; remaining: number | null };
+type Line = { key: string; unit: UnitId; holder: HolderName; tile: TilePosition | null; cost: number | null; step: number; remaining: number | null; fleetRoom: number | null };
+
+/** Tiles where the ships picked go over the fleet room the engine reported (tile, ships over). */
+function fleetOver(lines: Line[], counts: Record<string, number>): [string, number][] {
+  const byTile = new Map<string, { room: number; picked: number }>();
+  for (const l of lines) {
+    if (l.fleetRoom === null || !l.tile) continue;
+    const t = byTile.get(l.tile) ?? { room: l.fleetRoom, picked: 0 };
+    t.picked += counts[l.key] ?? 0;
+    byTile.set(l.tile, t);
+  }
+  return [...byTile.entries()].filter(([, t]) => t.picked > 0 && t.picked > t.room).map(([tile, t]) => [tile, t.picked - t.room] as [string, number]);
+}
 
 /** One line per unit + place; the engine's "2 at once" buttons only change the step, not the line. */
 function linesOf(options: Option<ProductionValue>[]): Line[] {
@@ -34,7 +46,7 @@ function linesOf(options: Option<ProductionValue>[]): Line[] {
     const key = `${v.unit}@${v.holder}@${v.tile ?? ""}`;
     const prev = byKey.get(key);
     const perUnit = v.cost === null ? null : v.cost;
-    if (!prev) byKey.set(key, { key, unit: v.unit, holder: v.holder, tile: v.tile, cost: perUnit, step: 1, remaining: v.remaining ?? null });
+    if (!prev) byKey.set(key, { key, unit: v.unit, holder: v.holder, tile: v.tile, cost: perUnit, step: 1, remaining: v.remaining ?? null, fleetRoom: v.fleetRoom ?? null });
     else if (prev.cost === null) prev.cost = perUnit;
   }
   /* Ground forces: onto a planet first, into space after (both are legal; the planet is the usual choice). */
@@ -79,6 +91,8 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
       lines.some((l) => (counts[l.key] ?? 0) > 0 && capExcludes(cap, l.unit, l.cost) !== null));
   const over = (limit !== null && already + picked > limit) || overCap;
   const room = limit === null ? 20 : Math.max(0, limit - already - picked);
+  /* Fleet pool: ships picked beyond the room left in their system are allowed (removed afterwards), but said. */
+  const fleetWarnings = fleetOver(lines, counts).map(([tile, n]) => `This will exceed your fleet pool in ${tile} by ${n}: you will have to remove ${n === 1 ? "a ship" : `${n} ships`} before the turn ends.`);
   const extras = options.filter((o) => !o.value && !o.disabled);
 
   const commit = (units: ProductionPayload["units"]) => {
@@ -122,6 +136,11 @@ export function ProductionRenderer({ decision, answer, pendingOptionId }: AreaRe
           );
         })}
       </div>
+      {fleetWarnings.map((w) => (
+        <span key={w} className={classes.short}>
+          {w}
+        </span>
+      ))}
       {over && <span className={classes.short}>{overCap && cap ? `Over the cap — ${cap.label}.` : `Over the production limit of ${limit}.`}</span>}
       <ExtraOptions options={extras} answer={answer} busy={busy} />
       <div className={classes.row}>

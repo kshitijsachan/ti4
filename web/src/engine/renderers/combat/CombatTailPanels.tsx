@@ -60,16 +60,25 @@ export function UnitsRemovePanel({ decision: d, answer }: RendererProps<UnitsRem
   const options = d.options.filter(live);
   const open = options.find((o) => o.value?.action === "open");
   const type = open?.value?.assignType ?? "remove";
+  const reminder = options.some((o) => o.value?.action === "open" && o.value.reminder);
+  const doneValue = options.find((o) => o.value?.action === "done")?.value;
+  const blocked = doneValue?.action === "done" ? (doneValue.blocked ?? null) : null;
   return (
     <div className={classes.panel}>
       <div className={classes.head}>{ASSIGN_TITLES[type] ?? "Remove units"}</div>
       <div className={classes.actions}>
-        {options.map((o) => (
-          <Button key={o.id} size="xs" variant={o.value!.action === "open" ? "filled" : "default"} onClick={() => answer(o.id)}>
-            {o.value!.action === "open" ? `Choose units${o.value!.tile ? ` in ${o.value!.tile}` : ""}` : "Done"}
-          </Button>
-        ))}
+        {options.map((o) => {
+          const v = o.value!;
+          /* A fleet-pool / capacity reminder's Dismiss is refused while the system is still over (engine "blocked"). */
+          const blocked = v.action === "done" ? (v.blocked ?? null) : null;
+          return (
+            <Button key={o.id} size="xs" variant={v.action === "open" ? "filled" : "default"} disabled={!!blocked} title={blocked ?? undefined} onClick={() => answer(o.id)}>
+              {v.action === "open" ? `Choose units${v.tile ? ` in ${v.tile}` : ""}` : reminder ? "Dismiss" : "Done"}
+            </Button>
+          );
+        })}
       </div>
+      {blocked && <div className={classes.warn}>{blocked.charAt(0).toUpperCase() + blocked.slice(1)}.</div>}
     </div>
   );
 }

@@ -31,9 +31,10 @@ export type TurnActionValue =
   | { action: "component" }
   | { action: "strategic"; strategyCard: StrategyCardNumber }
   /** abilities: opens the "pass with abilities" menu instead of passing now. waitingFor: see FollowWait. */
-  | { action: "pass"; abilities: boolean; waitingFor?: FollowWait[] }
+  /** overLimits: systems over the fleet pool / capacity ("1 over the fleet limit in 209 (3) — remove ships first"); the engine refuses end_turn / pass while any. */
+  | { action: "pass"; abilities: boolean; waitingFor?: FollowWait[]; overLimits?: string[] }
   /** abilities: opens the end-of-turn abilities menu (it carries a final end_turn with abilities=false). */
-  | { action: "end_turn"; abilities: boolean; waitingFor?: FollowWait[] }
+  | { action: "end_turn"; abilities: boolean; waitingFor?: FollowWait[]; overLimits?: string[] }
   /** "End Turn When All Have Reacted": the turn ends by itself once every player answered the card's follow window. */
   | { action: "end_turn_when_followed"; strategyCard: StrategyCardNumber; waitingFor?: FollowWait[] }
   /**
