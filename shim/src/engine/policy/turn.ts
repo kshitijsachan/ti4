@@ -147,6 +147,8 @@ export function chooseTurnAction(
     // The primary is part of the strategic action: resolve it before the turn ends (playtest 9 pbd539: End Turn went
     // in between a stale "Score A Public" and its retry, and Imperial scored after the turn).
     if (timing.primaryPending) return null;
+    // The engine says a mandatory primary part is left (it refuses the end): resolve it first.
+    if (end.some((o) => o.value!.action === "end_turn" && o.value!.primaryMissing)) return null;
     const pick =
       end.find((o) => o.value!.action === "end_turn" && !o.value!.abilities) ??
       end[0];
