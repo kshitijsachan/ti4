@@ -343,6 +343,10 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     if (/\bit is now your turn\b/i.test(m.content) && mentionsMe(m)) return true;
     return choicesOf(m).some((c) => /^tacticalAction(?!Build)/.test(baseId(c.customId)) && idFaction(c.customId) === opts.faction);
   });
+  /* My newest message carrying my faction's Tactical Action button (the turn menu itself, not the ping before it). */
+  const newestTurnButtons = [...ids].reverse().find((id) =>
+    choicesOf(data.byId[id]).some((c) => /^tacticalAction(?!Build)/.test(baseId(c.customId)) && !!opts.faction && idFaction(c.customId) === opts.faction),
+  );
   const newestCombat = opts.combat
     ? [...ids].reverse().find((id) => choicesOf(data.byId[id]).some((c) => COMBAT_ID.test(c.customId ?? "")))
     : undefined;
@@ -487,7 +491,13 @@ function scanChannel(state: PlayState, channelId: string, where: string, opts: S
     const rider = forwardChoices(m).some((c) => /^rider_/.test(baseId(c.customId)));
     /* Hits I must assign wait on me however much the opponent posts after them in the combat thread. */
     const myHits = mineByFaction(m) && !otherFaction(m) && forwardChoices(m).some((c) => /^(autoAssign\w*Hits|assignHits|assignDamage)_/.test(baseId(c.customId)));
-    if (reason !== "role" && reason !== "combat" && reason !== "ephemeral" && reason !== "reply" && !rider && !myHits && !after(id, newestOtherPrompt)) return;
+    /*
+     * My newest turn menu waits on me however much other players post after it (playtest 8, pbd469: Naalu's Imperial
+     * "score an objective" prompt, left up after my turn began, hid my turn menu and the map lit nothing). A spent
+     * one is retired by the action log (spentTurnMenu), not by someone else's prompt.
+     */
+    const myTurnMenu = id === newestTurnButtons;
+    if (reason !== "role" && reason !== "combat" && reason !== "ephemeral" && reason !== "reply" && !rider && !myHits && !myTurnMenu && !after(id, newestOtherPrompt)) return;
     items.push({ message: m, channelId, where, reason });
   });
   return items;

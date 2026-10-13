@@ -186,6 +186,22 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
       return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow ${waits.map((w) => w.name).join(" and ")}`;
     return turnLabel(o, me?.commandTokens.tactic);
   };
+  /*
+   * The tactical action starts on the map, so this line stands in for its button: never hidden on a menu that starts an
+   * action, greyed with the reason while it can't be taken (UI principle: show it greyed, say why).
+   */
+  const startsAction = opts.some((o) => o.value!.action === "component" || o.value!.action === "strategic" || o.value!.action === "pass");
+  const tacticalNote: { live: boolean; text: string } | null = tactical
+    ? tokens === 0
+      ? { live: false, text: "Tactical action: no command tokens in your tactic pool." }
+      : owed.length > 0
+        ? { live: false, text: `Tactical action: follow ${owed.map((f) => f.name).join(" and ")} first.` }
+        : tactical.disabled
+          ? { live: false, text: "Tactical action: not available right now." }
+          : { live: true, text: `Tactical action: click a system on the map to activate it (${tokens ?? "?"} tactic token${tokens === 1 ? "" : "s"}).` }
+    : startsAction
+      ? { live: false, text: "Tactical action: not offered on this menu (the game did not include it)." }
+      : null;
   const variant = (o: TurnOpt) =>
     o.value!.action === "pass" || o.value!.action === "end_turn" || o.value!.action === "another_action" ? "light" : "filled";
   return (
@@ -196,11 +212,9 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
           Waiting for {pending.join(", ")} to follow {waits.map((w) => w.name).join(" and ")}. Your turn ends once every player has answered.
         </span>
       )}
-      {tactical && (
-        <p className={tactical.disabled || tokens === 0 ? classes.muted : classes.hint} data-map-activate-hint>
-          {tactical.disabled || tokens === 0
-            ? "Tactical action: no command tokens in your tactic pool."
-            : `Tactical action: click a system on the map to activate it (${tokens ?? "?"} tactic token${tokens === 1 ? "" : "s"}).`}
+      {tacticalNote && (
+        <p className={tacticalNote.live ? classes.hint : classes.muted} data-map-activate-hint data-tactical-blocked={tacticalNote.live ? undefined : ""}>
+          {tacticalNote.text}
         </p>
       )}
       <div className={classes.row}>
