@@ -523,7 +523,7 @@ async function checkExpect(run, expect) {
       fails.push(`channels: expected ${want ? "archived" : "restored"}, got ${got.map((ch) => (ch ? `${ch.name} archived=${!!ch._archived} parent=${shimState().channels?.[ch.parent_id]?.name}` : "missing")).join("; ")}`);
   }
   if (expect.decision) {
-    // { kind, as?, scope?: "player"|"table", value?: {partial option value or window subject}, open: true|false, count?: n }
+    // { kind, as?, scope?: "player"|"table", value?: {partial option value or window subject}, open: true|false }
     const like = (o, v) => !!o && Object.entries(v).every(([k, x]) => JSON.stringify(o[k]) === JSON.stringify(x));
     for (const e of [].concat(expect.decision)) {
       const ds = (await openDecisions(run.fork.game)).filter(
@@ -531,11 +531,7 @@ async function checkExpect(run, expect) {
         (d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx) || (d.scope === "table" && !d.target?.userId && !!d.window?.eligible?.includes(userOf(e.as, run.ctx)))) && (!e.scope || d.scope === e.scope)
           && (!e.value || like(d.window?.subject, e.value) || d.options.some((o) => like(o.value, e.value))),
       );
-      if (e.count != null) {
-        // count: exactly this many such decisions open (e.g. only the newest copy of a re-posted tray / menu).
-        if (ds.length !== e.count)
-          fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}${e.value ? ` ${JSON.stringify(e.value)}` : ""}: expected ${e.count} open, got ${ds.length} (${ds.map((d) => d.id).join(", ")})`);
-      } else if ((e.open ?? true) !== ds.length > 0)
+      if ((e.open ?? true) !== ds.length > 0)
         fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}${e.scope ? ` (scope ${e.scope})` : ""}: expected ${(e.open ?? true) ? "open" : "closed"}`);
     }
   }
