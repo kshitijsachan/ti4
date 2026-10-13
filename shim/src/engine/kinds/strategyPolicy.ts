@@ -166,25 +166,18 @@ function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["op
 
 /** Own primary prompts older than this are leftovers (an earlier turn's card), never what holds the turn. */
 const PRIMARY_MAX_AGE_MS = 10 * 60_000;
-const PRIMARY_SUB_PROMPTS = new Set([
-  "strategy_card.diplomacy_system",
-  "strategy_card.construction_place",
-  "strategy_card.construction_build",
-  "strategy_card.politics_speaker",
-  "strategy_card.politics_agenda",
-]);
 
 /**
  * Why `me` must not end the turn yet because the primary of the card it played is not resolved, or null: a part the
  * holder policy would still press (Imperial's score / secret: playtest 9 pbd539, End Turn went in between a stale
- * "Score A Public" and its retry, so the card scored after the turn), or one of the primary's own sub-prompts open.
+ * "Score A Public" and its retry, so the card scored after the turn).
  * Rules: the primary is part of the strategic action, which is over before the turn ends.
  */
 export function holderPrimaryPending(state: GameState | null, me: string, open: Decision[], now = Date.now()): string | null {
   const self = state?.players.find((p) => p.userId === me) ?? null;
   if (!self) return null;
-  const sub = open.find((x) => PRIMARY_SUB_PROMPTS.has(x.kind) && x.target?.userId === me && now - x.createdAt < PRIMARY_MAX_AGE_MS);
-  if (sub) return `${sub.kind} open`;
+  // (An open picker of the primary never holds the turn by itself: the engine reports a mandatory part still missing
+  // in the end_turn value's primaryMissing, which the turn policy waits on; soak pbd1029.)
   for (const x of open) {
     if (x.kind !== "strategy_card.resolve" || now - x.createdAt >= PRIMARY_MAX_AGE_MS) continue;
     const d = x as StrategyCardResolve;
