@@ -152,8 +152,10 @@ async function createForkLocked(n: number, log: (s: string) => void): Promise<Fo
   const c = await ShimClient.connect(seats[0].token);
   const before = new Set([...c.channels.values()].filter((ch) => /^pbd\d+-actions$/.test(ch.name)).map((ch) => ch.id));
   const launch = c.waitFrame(
-    (f) => f.t === "message_create" && f.message.channel_id === lobby && controlsOf(f.message.components).some((x) => x.id === "launchGame") && seats.every((s) => String(f.message.content).includes(s.user_id)),
-    60000,
+    (f) => f.t === "message_create" && f.message.channel_id === lobby && controlsOf(f.message.components).some((x) => x.id === "launchGame") && seats.every((s) => String(f.message.content).includes(s.user_id)) && String(f.message.content).includes(nonce),
+    // the launch post names the game (fun name = this call's nonce): never click another creation's Launch button
+    // (14:21: a run whose post came late after a bot restart had its game launched by the next run)
+    180000,
   );
   log(`creating a fork game for ${seats.map((s) => s.name).join(", ")}`);
   const options = [
