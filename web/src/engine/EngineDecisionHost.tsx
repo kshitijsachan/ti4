@@ -125,7 +125,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
           /* The free first technology's "0 of 0" payment: answered for me (below), never shown. */
           !freeResearchPayment(d) &&
           /* While the map answers a step of my tactical action, no token editor pops up over it. */
-          !(movement.step && (d.kind === "command_tokens.adjust" || d.kind === "turn.action")) &&
+          !(movement.step && d.kind === "command_tokens.adjust") &&
           !(mapKind && d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction),
       ),
     [drafting, ordered.queue, mapKind, myFaction, movement.step],
