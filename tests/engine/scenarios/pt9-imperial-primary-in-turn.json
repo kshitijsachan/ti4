@@ -1,0 +1,100 @@
+{
+ "name": "pt9-imperial-primary-in-turn",
+ "description": "Playtest 9 pbd539 (06:40): Bot Alpha's Imperial 'Score A Public' went stale twice, End Turn was accepted in between, and 3 s later the primary scored and paid in the next player's turn. The primary is part of the strategic action (rules), so (bot pt9-followups): End Turn is refused until every MANDATORY part of the primary is done (StrategyCardResolveKind.MANDATORY: Imperial = score a public + Mecatol point / secret; the turn.action value carries primaryMissing and the web greys End turn with it) (ScFollowGate.endTurnRefusal, every follower already answered here); once the holder's turn is over a primary part is refused (StrategyCardResolveKind.validate: playTurnOver) and Imperial's score list closes (StatusScoreKind.imperialSpent). The bot policy waits on its own primary before End Turn (shim holderPrimaryPending). Base: pbd28@89 (r1, Yssaril's turn menu; Yssaril holds Imperial without Mecatol Rex): the play happens in the scenario, so ScFollowGate records it (a base after the play, from before the gate existed, carries no play record and nothing is gated). Steps: End Turn refused before the primary; Score A Public; End Turn still refused (secret not drawn); draw the secret; End Turn accepted; a primary press after the turn is refused.",
+ "base": {
+  "recording": "pbd28",
+  "index": 89
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "strategicAction_8$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_follow_8$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_8$"
+   },
+   "as": "deepwrought"
+  },
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "turnEnd$"
+   },
+   "as": "yssaril",
+   "refused": true
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^scoreAnObjective$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "turnEnd$"
+   },
+   "as": "yssaril",
+   "refused": true
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "turnEnd$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^scoreAnObjective$"
+   },
+   "as": "yssaril",
+   "refused": true
+  }
+ ],
+ "expect": {
+  "invariants": true,
+  "decision": [
+   {
+    "kind": "status.score",
+    "as": "yssaril",
+    "open": false
+   }
+  ]
+ }
+}
