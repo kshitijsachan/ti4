@@ -14,7 +14,9 @@
 //     trigger: { press: "<custom id>", as } | { command: "/…" } | { answer: {...} },
 //     steps:   [ { answer: { kind: "strategy_card.pick", option: "regex on option id/label", value: { strategyCard: 3 } }, as },
 //                { answer: { kind: "payment.spend", payload: {...} }, as, legacy: [ { press: "…" } ] }, { press }, { command },
-//                { mark: "name" } (remember the latest save), { rewind: "name" | N } (the web rewind to a mark / N saves back) ],
+//                { mark: "name" } (remember the latest save), { rewind: "name" | N } (the web rewind to a mark / N saves back),
+//                { engine: "rebuild" | "recover" } (the engine's restart-time rebuild / prompt recovery),
+//                { answerOn: "<custom id>", pick?: "oldest" } (answer the on-screen message carrying it, no re-post) ],
 //     diffIgnore: [ "stored.violatedSystems" ]   (save keys --diff skips: game.<k> | stored.<k> | player.<k>)
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ],
 //                channels: { archived: true|false } } }
@@ -32,7 +34,7 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BOT_URL, ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, readGameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
+import { BOT_URL, SHIM_URL, botToken, ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, readGameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
 import { createFork, openFork, closeFork, clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
 import { loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
@@ -271,6 +273,22 @@ class Runner {
       });
       return r.ok ? { ok: true, detail: `rewind to ${index}` } : { ok: false, error: `rewind to ${index}: ${r.status} ${(await r.text()).slice(0, 200)}` };
     }
+    if (st.engine) {
+      // { engine: "rebuild" | "recover" }: the engine's restart-time rebuild (re-captures every prompt still on
+      // screen) / prompt recovery, as after a bot restart.
+      const r = await engineApi(`/${encodeURIComponent(this.fork.game)}/${st.engine}`, {});
+      return r.status === 200 ? { ok: true, detail: `${st.engine} ${JSON.stringify(r.body)}` } : { ok: false, error: `${st.engine}: ${r.status} ${JSON.stringify(r.body).slice(0, 200)}` };
+    }
+    if (st.answerOn) {
+      // { answerOn: "<custom id>", pick?: "oldest" | "newest" }: answer the decision of a message already on screen
+      // carrying this id (d<message id>) with that option, without re-posting it: a stale prompt (an earlier round's)
+      // must not be open, so the engine refuses (give the step "refused": true).
+      const id = interp(st.answerOn, this.ctx);
+      const m = await this.onScreen(id, st.pick === "oldest");
+      if (!m) return { ok: false, error: `no message on screen carries ${id}` };
+      const a = await answer(this.fork.game, `d${m.id}`, user, { optionId: id });
+      return a.ok || a.status === "needs_input" ? { ok: true, detail: `d${m.id}/${id} ${a.path ?? ""}` } : { ok: false, refused: true, error: `engine refused d${m.id}/${id}: ${a.httpStatus} ${a.status} ${a.error}` };
+    }
     if (st.press) return this.press(interp(st.press, this.ctx), user, st);
     if (st.answer) return this.answerStep(st.answer, user);
     if (st.gameAction) {
@@ -314,6 +332,23 @@ class Runner {
     const c = await clientFor(this.fork, user);
     const r = await c.click(carrier.channel_id, carrier.id, customId);
     return r.error ? { ok: false, error: `press ${customId}: ${r.error}` } : { ok: true, detail: `press ${customId}` };
+  }
+
+  /** The oldest / newest message carrying this id in the fork's actions channel or its threads, read from the shim. */
+  async onScreen(customId, oldest) {
+    const get = async (path) => {
+      const r = await fetch(`${SHIM_URL}/api/v10${path}`, { headers: { authorization: `Bot ${botToken()}` } });
+      return r.ok ? r.json() : [];
+    };
+    const threads = ((await get(`/guilds/0/threads/active`)).threads ?? []).filter((t) => t.parent_id === this.fork.actionsId);
+    let best = null;
+    for (const ch of [this.fork.actionsId, ...threads.map((t) => t.id)]) {
+      for (const m of await get(`/channels/${ch}/messages?limit=100`)) {
+        if (!controlsOf(m.components).some((x) => x.id === customId)) continue;
+        if (!best || (oldest ? BigInt(m.id) < BigInt(best.id) : BigInt(m.id) > BigInt(best.id))) best = m;
+      }
+    }
+    return best;
   }
 
   carrying(customId, user) {
@@ -486,10 +521,13 @@ async function checkExpect(run, expect) {
       fails.push(`channels: expected ${want ? "archived" : "restored"}, got ${got.map((ch) => (ch ? `${ch.name} archived=${!!ch._archived} parent=${shimState().channels?.[ch.parent_id]?.name}` : "missing")).join("; ")}`);
   }
   if (expect.decision) {
-    // { kind, as?, scope?: "player"|"table", open: true|false }
+    // { kind, as?, scope?: "player"|"table", value?: {partial option value or window subject}, open: true|false }
+    const like = (o, v) => !!o && Object.entries(v).every(([k, x]) => JSON.stringify(o[k]) === JSON.stringify(x));
     for (const e of [].concat(expect.decision)) {
       const ds = (await openDecisions(run.fork.game)).filter(
-        (d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx)) && (!e.scope || d.scope === e.scope),
+        // as: the player's own decision, or a table decision whose window lists them as eligible.
+        (d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx) || (d.scope === "table" && !d.target?.userId && !!d.window?.eligible?.includes(userOf(e.as, run.ctx)))) && (!e.scope || d.scope === e.scope)
+          && (!e.value || like(d.window?.subject, e.value) || d.options.some((o) => like(o.value, e.value))),
       );
       if ((e.open ?? true) !== ds.length > 0)
         fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}${e.scope ? ` (scope ${e.scope})` : ""}: expected ${(e.open ?? true) ? "open" : "closed"}`);
