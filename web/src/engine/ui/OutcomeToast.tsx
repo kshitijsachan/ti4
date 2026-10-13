@@ -44,6 +44,15 @@ export function answerOutcome(a: LastAnswer, state: GameState | null): string | 
     if (value.action === "follow") return `Following ${value.name}`;
     if (value.action === "decline") return `Not following ${value.name}`;
   }
+  if (d.kind === "tactical.rift" && value) {
+    if (value.op === "done") return "Done with the gravity rift";
+    if (value.op === "roll_all") return "Rolled for every unit in the gravity rift";
+    if (value.op === "roll") return `Rolled the gravity rift for ${String(value.count)} ${String(value.unit)}`;
+  }
+  /* Warfare's offer opens the token editor: nothing is redistributed until it is confirmed (pt9). */
+  if (d.kind === "choose.confirm" && value?.choice === "redistribute") return "Choosing command tokens…";
+  if (d.kind === "action_card.discard" && option?.label && !/^discard/i.test(option.label.trim()))
+    return `Discarded ${option.label.replace(/^\(\s*\d+\s*\)\s*/, "").trim()}`;
   if (!option) return a.optionId === "submit" || !a.optionId ? `${decisionTitle(d, state)}: sent` : undefined;
   if (option.needsInput) return undefined;
   const hash = option.id.indexOf("#");
@@ -51,9 +60,34 @@ export function answerOutcome(a: LastAnswer, state: GameState | null): string | 
   return buttonOutcome(handler ?? "", option.label ?? "", d.prompt);
 }
 
-/** Strategy cards the game declined for me without asking (no strategy token, no home space dock…). */
+/** How long a "not following X" notice stays up (the card's own follow line keeps the reason after that). */
+const NOTICE_MS = 10_000;
+const SEEN_KEY = "ti4online.engine.autoDeclineSeen";
+
+function readSeen(): Record<string, number> {
+  try {
+    return JSON.parse(window.localStorage.getItem(SEEN_KEY) ?? "{}") as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+function writeSeen(seen: Record<string, number>) {
+  try {
+    const recent = Object.entries(seen).sort((a, b) => b[1] - a[1]).slice(0, 200);
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(Object.fromEntries(recent)));
+  } catch {
+    /* storage unavailable: notices expire for this page only */
+  }
+}
+
+/**
+ * Strategy cards the game declined for me without asking (no strategy token, no home space dock…): each notice is up
+ * for NOTICE_MS from when this browser first showed it, or until dismissed (pt9: they piled up for the whole game).
+ */
 function useAutoDeclines(state: GameState | null) {
   const [dismissed, setDismissed] = useState<string[]>([]);
+  const [now, setNow] = useState(() => Date.now());
   const me = state?.players.find((p) => p.self)?.faction;
   const notices = useMemo(() => {
     if (!state || !me) return [];
@@ -69,7 +103,22 @@ function useAutoDeclines(state: GameState | null) {
       return [{ id: `${state.round}:${card.number}`, text: `Not following ${card.name}: ${why}.` }];
     });
   }, [state, me]);
-  return { notices: notices.filter((n) => !dismissed.includes(n.id)), dismiss: (id: string) => setDismissed((l) => [...l, id]) };
+  const seen = useRef<Record<string, number>>(typeof window === "undefined" ? {} : readSeen());
+  useEffect(() => {
+    const fresh = notices.filter((n) => seen.current[n.id] === undefined);
+    if (!fresh.length) return;
+    const at = Date.now();
+    for (const n of fresh) seen.current[n.id] = at;
+    writeSeen(seen.current);
+  }, [notices]);
+  const live = notices.filter((n) => !dismissed.includes(n.id) && now - (seen.current[n.id] ?? now) < NOTICE_MS);
+  const nextExpiry = live.length ? Math.min(...live.map((n) => (seen.current[n.id] ?? now) + NOTICE_MS)) : null;
+  useEffect(() => {
+    if (nextExpiry === null) return;
+    const t = window.setTimeout(() => setNow(Date.now()), Math.max(0, nextExpiry - Date.now()) + 50);
+    return () => window.clearTimeout(t);
+  }, [nextExpiry]);
+  return { notices: live, dismiss: (id: string) => setDismissed((l) => [...l, id]) };
 }
 
 /**
@@ -123,7 +172,8 @@ export function EngineOutcomeToast({ gameName, rightInset }: { gameName: string;
     setShown((list) => {
       const same = list.find((x) => x.key === note.key);
       if (same && same.text === note.text) return list;
-      return [...list.filter((x) => x.key !== note.key), note].slice(-3);
+      /* The same words for two answers (research, then its payment: "researched Bio-Stims" twice): shown once. */
+      return [...list.filter((x) => x.key !== note.key && x.text !== note.text), note].slice(-3);
     });
     window.clearTimeout(timers.current.get(note.key));
     timers.current.set(
