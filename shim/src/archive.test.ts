@@ -20,9 +20,10 @@ function setup() {
   return { dir, store, hub, sent, cat, tt, act, thread, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
+const calls: string[] = [];
 const phaseFetch = (phase: string) => {
   const orig = globalThis.fetch;
-  globalThis.fetch = (async () => new Response(JSON.stringify({ gameState: { phase } }))) as any;
+  globalThis.fetch = (async (u: string) => (calls.push(String(u)), new Response(JSON.stringify({ gameState: { phase } })))) as any;
   return () => (globalThis.fetch = orig);
 };
 
@@ -45,7 +46,7 @@ test("a channel moved into the archive is archived; moved back out, it is restor
 });
 
 test("sweep: a not-finished game's archived channels go back to its PBD category and are not re-archived", async () => {
-  const { hub, sent, cat, tt, act, done } = setup();
+  const { hub, store, sent, cat, tt, act, done } = setup();
   const limbo = hub.ensureArchiveCategory();
   for (const ch of [tt, act]) {
     ch.parent_id = limbo.id;
@@ -54,14 +55,16 @@ test("sweep: a not-finished game's archived channels go back to its PBD category
   const restore = phaseFetch("action");
   try {
     sent.length = 0;
-    assert.equal(await hub.sweepEndedGames("http://bot"), 2);
+    assert.deepEqual(await hub.sweepEndedGames("http://bot"), { archived: 0, restored: 2, unreachable: 0 });
     for (const ch of [tt, act]) {
       assert.equal(ch._archived, undefined);
       assert.equal(ch.parent_id, cat.id);
     }
+    assert.match(String(store.messages(act.id).at(-1)?.content), /on again/);
+    assert.ok(calls.some((u) => u.endsWith("/engine/pbd346/recover")));
     assert.equal(sent.filter(([t]) => t === "CHANNEL_CREATE").length, 2);
     sent.length = 0;
-    assert.equal(await hub.sweepEndedGames("http://bot"), 0);
+    assert.deepEqual(await hub.sweepEndedGames("http://bot"), { archived: 0, restored: 0, unreachable: 0 });
     assert.ok(!sent.some(([t]) => t === "CHANNEL_DELETE"));
   } finally {
     restore();
@@ -73,12 +76,12 @@ test("sweep: a finished game's channels are archived (and stay so)", async () =>
   const { hub, tt, act, cat, done } = setup();
   const restore = phaseFetch("finished");
   try {
-    assert.equal(await hub.sweepEndedGames("http://bot"), 2);
+    assert.deepEqual(await hub.sweepEndedGames("http://bot"), { archived: 2, restored: 0, unreachable: 0 });
     for (const ch of [tt, act]) {
       assert.equal(ch._archived, true);
       assert.equal(ch._archive_parent, cat.id);
     }
-    assert.equal(await hub.sweepEndedGames("http://bot"), 0);
+    assert.deepEqual(await hub.sweepEndedGames("http://bot"), { archived: 0, restored: 0, unreachable: 0 });
   } finally {
     restore();
   }
@@ -93,7 +96,25 @@ test("an unknown game (web-data fails) is left alone", async () => {
   const orig = globalThis.fetch;
   globalThis.fetch = (async () => new Response("no", { status: 404 })) as any;
   try {
-    await hub.sweepEndedGames("http://bot");
+    assert.equal((await hub.sweepEndedGames("http://bot")).unreachable, 0); // 404: answered, nothing to retry
+    assert.equal(act._archived, true);
+  } finally {
+    globalThis.fetch = orig;
+  }
+  done();
+});
+
+test("the bot down: every game counts as unreachable, nothing changes", async () => {
+  const { hub, act, done } = setup();
+  const limbo = hub.ensureArchiveCategory();
+  act.parent_id = limbo.id;
+  hub.archiveChannel(act);
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new Error("ECONNREFUSED");
+  }) as any;
+  try {
+    assert.deepEqual(await hub.sweepEndedGames("http://bot"), { archived: 0, restored: 0, unreachable: 1 });
     assert.equal(act._archived, true);
   } finally {
     globalThis.fetch = orig;

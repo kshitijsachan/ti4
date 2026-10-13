@@ -345,11 +345,14 @@ export class Hub {
    * (a rewind past its End Game) gets its channels back (unarchiveGameChannels), so the sweep never re-archives a
    * game that is live again. Non-game channels in the archive category are archived. Keeps the guild under
    * Discord's 500-channel limit for good (live 10:05: "481 / 500 channels", no new game could be created).
-   * Returns the count of channels archived or restored.
+   * Returns the channels archived and restored, and how many games the bot could not answer for (down, restarting,
+   * 5xx: the caller retries the sweep until that is 0).
    */
-  async sweepEndedGames(botApi: string): Promise<number> {
+  async sweepEndedGames(botApi: string): Promise<{ archived: number; restored: number; unreachable: number }> {
     const cat = this.ensureArchiveCategory();
     let n = 0;
+    let restored = 0;
+    let unreachable = 0;
     const games = new Map<string, Json[]>();
     for (const ch of Object.values(this.store.state.channels)) {
       if ([1, 4, 10, 11, 12].includes(ch.type)) continue;
@@ -365,12 +368,18 @@ export class Hub {
     for (const [game, chans] of games) {
       try {
         const res = await fetch(`${botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(5000) });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          if (res.status >= 500) unreachable++;
+          continue;
+        }
         const data = (await res.json()) as Json;
         const phase = data?.gameState?.phase;
         if (!phase) continue;
         if (phase !== "finished") {
-          if (chans.some((c) => c._archived || c.parent_id === cat.id)) n += this.unarchiveGameChannels(game, chans);
+          if (chans.some((c) => c._archived || c.parent_id === cat.id)) {
+            restored += this.unarchiveGameChannels(game, chans);
+            await this.resumeRestoredGame(botApi, game, chans);
+          }
           continue;
         }
         for (const ch of chans) {
@@ -385,10 +394,10 @@ export class Hub {
           n++;
         }
       } catch {
-        /* the bot is busy or restarting: next sweep */
+        unreachable++; // the bot is busy or restarting: the caller sweeps again
       }
     }
-    return n;
+    return { archived: n, restored, unreachable };
   }
 
   /** Whether a channel is parented to the archive category. */
@@ -445,6 +454,33 @@ export class Hub {
     const cat = this.store.createChannel({ type: 4, name, position: 1000 });
     this.channelCreate(cat);
     return cat;
+  }
+
+  /**
+   * A game the sweep restored (un-ended by a rewind before its channels came back) was idle since: the autopilots
+   * only look at games with a message in the last hour, and a prompt the game waits for may be gone (live 22:28:
+   * pbd303 / pbd346 restored, open tactical.conclude for an autopilot seat, nobody moved). Say so in the actions
+   * channel (fresh activity) and ask the bot to re-post any prompt the game waits for (engine /recover).
+   */
+  async resumeRestoredGame(botApi: string, game: string, chans: Json[]) {
+    const actions = chans.find((c) => c.type === 0 && /-actions$/i.test(String(c.name ?? "")));
+    if (actions) {
+      const msg = this.buildMessage(actions.id, this.store.state.bot_id, {
+        content: "This game is on again (a rewind un-ended it): its channels are back from the archive.",
+      });
+      this.postMessage(msg);
+    }
+    // Give the bot a moment to take the CHANNEL_CREATEs in before it posts anything there.
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      await fetch(`${botApi}/api/public/selfhost/engine/${encodeURIComponent(game)}/recover`, {
+        method: "POST",
+        headers: { authorization: `Bot ${this.store.state.bot_token}` },
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      /* the open prompts still stand; the autopilots look again on the fresh activity */
+    }
   }
 
   /** Moves a game's archived channels back to its normal category and restores them. Returns how many. */

@@ -29,6 +29,12 @@ function commandTokensReinforcements(d: { progress?: { required?: unknown } | nu
 const POOLS: (keyof CommandTokenPools)[] = ["tactic", "fleet", "strategy"];
 const total = (p: CommandTokenPools) => p.tactic + p.fleet + p.strategy;
 
+/** The homework editor's starting point: the round's gain already placed in tactic, so the one click is e.g. 3/3/0. */
+const withGainInTactic = (base: CommandTokenPools, maxTotal: number): CommandTokenPools => ({
+  ...base,
+  tactic: base.tactic + Math.max(0, maxTotal - total(base)),
+});
+
 type EditorProps = {
   base: CommandTokenPools;
   start: CommandTokenPools;
@@ -39,13 +45,19 @@ type EditorProps = {
   /** Status homework: the main button also says ready (one click); `onConfirm` then only sets the tokens. */
   onConfirmAndReady?: (pools: CommandTokenPools) => void;
   readyLabel?: string;
+  /** Status homework: every gained token must be placed (Confirm is greyed out with the reason until then; skipping
+   * the gain on purpose is the separate "Ready without taking my new tokens" button). */
+  requireAll?: boolean;
 };
 
 /** Set the final tactic / fleet / strategy pools in one go, within base + gain (and no losses for Deliberate Action). */
-export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, onConfirmAndReady, readyLabel, draftKey }: EditorProps & { draftKey?: string }) {
+export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, onConfirmAndReady, readyLabel, requireAll, draftKey }: EditorProps & { draftKey?: string }) {
   const [pools, setPools] = useDecisionState<CommandTokenPools>(draftKey ?? "tokens", "pools", start);
   const left = maxTotal - total(pools);
   const step = (k: keyof CommandTokenPools, d: number) => setPools((p) => ({ ...p, [k]: p[k] + d }));
+  // pbd387 (playtest 6): "Confirm 2/3/0" with 1 left to place silently forfeited the token.
+  const blocked = left < 0 || (!!requireAll && left > 0);
+  const why = left < 0 ? `${-left} too many` : blocked ? `${left} left to place` : undefined;
   return (
     <div className={classes.section}>
       <p className={classes.hint}>
@@ -72,15 +84,15 @@ export function TokenEditor({ base, start, maxTotal, gain, noLoss, onConfirm, on
         <Group gap={6}>
           {onConfirmAndReady ? (
             <>
-              <Button size="xs" disabled={left < 0} onClick={() => onConfirmAndReady(pools)}>
+              <Button size="xs" disabled={blocked} title={why} onClick={() => onConfirmAndReady(pools)}>
                 Confirm {pools.tactic}/{pools.fleet}/{pools.strategy} · {readyLabel ?? "ready"}
               </Button>
-              <Button size="xs" variant="default" disabled={left < 0} onClick={() => onConfirm(pools)} title="Set the tokens without saying ready yet">
+              <Button size="xs" variant="default" disabled={blocked} onClick={() => onConfirm(pools)} title={why ?? "Set the tokens without saying ready yet"}>
                 Set only
               </Button>
             </>
           ) : (
-            <Button size="xs" disabled={left < 0} onClick={() => onConfirm(pools)}>
+            <Button size="xs" disabled={blocked} title={why} onClick={() => onConfirm(pools)}>
               Confirm {pools.tactic}/{pools.fleet}/{pools.strategy}
             </Button>
           )}
@@ -132,8 +144,9 @@ export function StatusHomeworkRenderer({ decision, state, answer }: StatusRender
             key={tokensSet ? "set" : "unset"}
             draftKey={`${decision.id}:${tokensSet ? "set" : "unset"}`}
             base={st.tokensBase}
-            start={tokensSet ?? st.tokensBase}
+            start={tokensSet ?? withGainInTactic(st.tokensBase, st.tokenMaxTotal)}
             maxTotal={st.tokenMaxTotal}
+            requireAll
             gain={st.tokenGain}
             noLoss={st.noTokenLoss}
             onConfirm={(pools) => answer({ optionId: tokens.id, payload: { ...pools } })}
