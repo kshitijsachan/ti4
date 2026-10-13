@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Decision, GameState } from "../contract";
-import { orderDecisions } from "../order";
+import { decisionTitle, orderDecisions } from "../order";
 
 const G = "pbd1";
 const ME = "u1";
@@ -220,4 +220,139 @@ void test("a pre-decline offer for a strategy card I hold is dropped", () => {
   assert.equal(r.queue.length + r.offers.length, 0);
   const other = orderDecisions([pre], null, undefined, state({ strategyCards: [{ number: 8, name: "Imperial", holder: "u2" }] as unknown as GameState["strategyCards"] }));
   assert.equal(other.queue.length + other.offers.length, 1);
+});
+
+void test("TE Warfare: a redistribute offer left open waits behind the activation step it would block (pbd436)", () => {
+  const redistribute = dec("choose.confirm", {
+    options: [opt("FFCC_arborec_redistributeCCButtons_deleteThisButton", { source: "warfare", confirm: true, choice: "redistribute" })],
+    revision: 2,
+  });
+  const activate = dec("tactical.activate", { options: [opt("FFCC_arborec_ringTile_000", { step: "system", position: "000", tileId: "112", token: false })] });
+  const turn = dec("turn.action");
+  const r = orderDecisions([redistribute, activate, turn], 0, undefined, state());
+  assert.equal(r.queue[0].kind, "tactical.activate");
+  assert.ok(!r.queue.includes(redistribute));
+  assert.ok(r.offers.includes(redistribute), "still on offer behind Available now");
+  /* No tactical step open (after the Warfare action ends): the offer is mine to answer. */
+  const after = orderDecisions([redistribute, turn], 0, undefined, state());
+  assert.ok(after.queue.includes(redistribute));
+});
+
+void test("choose.* titles name what asks, not the raw kind", () => {
+  const offer = dec("choose.confirm", {
+    options: [
+      opt("r", { source: "warfare", confirm: true, choice: "redistribute" }),
+      opt("t", { source: "warfare", confirm: true, choice: "tactical" }),
+    ],
+  });
+  assert.equal(decisionTitle(offer), "Warfare: your primary");
+  assert.equal(decisionTitle(dec("choose.confirm", { options: [opt("r", { source: "warfare", confirm: true, choice: "redistribute" })] })), "Warfare: redistribute command tokens?");
+  assert.equal(decisionTitle(dec("choose.confirm", { options: [opt("c", { source: "crownofemphidia", confirm: true })] })), "Crown of Emphidia");
+  assert.equal(decisionTitle(dec("choose.confirm")), "Choose confirm");
+});
+
+void test("pt7: the hand panel reopened by a discard never leads the required token editor or End turn", () => {
+  const tokens = dec("command_tokens.adjust");
+  const play = dec("action_card.play", {
+    options: [{ id: "p1", label: "Play", style: "primary", emoji: null, disabled: false, needsInput: false, handler: "ac_play_from_hand_5", value: { handle: 5, actionCard: "flank_speed", window: null } } as any],
+  });
+  const r = orderDecisions([tokens, play], 0, undefined, state(), "action_card.discard");
+  assert.deepEqual(kinds(r), ["command_tokens.adjust"]);
+  assert.ok(r.offers.some((d) => d.kind === "action_card.play"));
+});
+
+void test("pt7: a hand panel with every card greyed stays on offer, even right after my turn menu", () => {
+  const turn = dec("turn.action");
+  const play = dec("action_card.play", {
+    options: [{ id: "p1", label: "Play", style: "primary", emoji: null, disabled: false, needsInput: false, handler: "ac_play_from_hand_5", value: { handle: 5, actionCard: "imperial_rider", window: null } } as any],
+  });
+  const s = state();
+  (s.players[0] as unknown as { hand: unknown }).hand = { actionCards: {}, secretObjectives: {}, promissoryNotes: {}, closedActionCards: { imperial_rider: "agenda only" } };
+  const r = orderDecisions([turn, play], 0, undefined, s, "turn.action");
+  assert.deepEqual(kinds(r), ["turn.action"]);
+});
+
+void test("pt7: a pre-decline offer for a card already played is moot", () => {
+  const pre = dec("strategy_card.pre_decline", {
+    options: [{ id: "x", label: "Pre-decline", style: "primary", emoji: null, disabled: false, needsInput: false, handler: "h", value: { strategyCard: 6 } } as any],
+  });
+  const s = state({ strategyCards: [{ number: 6, holder: "u2", played: true, name: "Warfare" }] as unknown as GameState["strategyCards"] });
+  const r = orderDecisions([pre, dec("turn.action")], null, undefined, s);
+  assert.ok(!r.offers.some((d) => d.kind === "strategy_card.pre_decline") && !kinds(r).includes("strategy_card.pre_decline"));
+});
+
+/* ---- playtest 8 */
+
+void test("pt8: the follow-up of the decision I just answered leads, not that decision re-sent (Warfare → token editor; Imperial list → Pay)", () => {
+  const warfare = dec("choose.confirm", { options: [opt("t", { source: "warfare", confirm: true, choice: "tactical" })] });
+  const tokens = dec("command_tokens.adjust");
+  /* I answered the Warfare panel at seq 0; the engine re-sent it (revision 2) and opened the token editor. */
+  const resent = { ...warfare, seq: 50, revision: 2 } as Decision;
+  const opened = { ...tokens, seq: 51 } as Decision;
+  const r = orderDecisions([resent, opened, dec("turn.action")], 0, undefined, state(), "choose.confirm", { answeredId: warfare.id });
+  assert.equal(r.queue[0].kind, "command_tokens.adjust");
+  const list = dec("status.score", { options: [optV("sway", { action: "score_public", objective: "sway_council", eligible: [ME] })] } as Partial<Decision>);
+  const pay = dec("payment.spend");
+  const r2 = orderDecisions([{ ...list, seq: 60, revision: 2 } as Decision, { ...pay, seq: 61 } as Decision], 0, undefined, state(), "status.score", { answeredId: list.id });
+  assert.equal(r2.queue[0].kind, "payment.spend");
+});
+
+void test("pt8: a token editor never pops up over a step of my tactical action", () => {
+  const tokens = dec("command_tokens.adjust");
+  const land = dec("tactical.land");
+  const r = orderDecisions([tokens, land], 0, undefined, state());
+  assert.ok(!r.queue.includes(tokens));
+  assert.ok(r.offers.includes(tokens));
+  assert.ok(orderDecisions([tokens], 0, undefined, state()).queue.includes(tokens), "no action under way: mine to answer");
+});
+
+void test("pt8: Construction's second structure leads right after the first, until set aside", () => {
+  const parts = ["structure", "structure"];
+  const c = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), subject: { strategyCard: 4, name: "Construction", holder: "arborec", primaryDone: ["structure"] } } as unknown as Decision["window"],
+    options: [opt("pds", { who: "anyone", action: "construction_structure", part: "structure", primaryParts: parts })],
+  });
+  const turn = dec("turn.action");
+  assert.deepEqual(kinds(orderDecisions([turn, c], 0, undefined, state(), "strategy_card.construction_place")), ["strategy_card.resolve", "turn.action"]);
+  const aside = orderDecisions([turn, c], 0, undefined, state(), "strategy_card.construction_place", { deferred: new Set([c.id]) });
+  assert.deepEqual(kinds(aside), ["turn.action"]);
+  assert.ok(aside.offers.includes(c));
+});
+
+void test("pt8: Technology's second research (6) stays offered after the free one, on my turn", () => {
+  const parts = ["research"];
+  const t = dec("strategy_card.resolve", {
+    scope: "table",
+    window: { ...win(["u2"]), responded: ["u2"], subject: { strategyCard: 7, name: "Technology", holder: "arborec", primaryDone: ["research"] } } as unknown as Decision["window"],
+    options: [opt("tech", { who: "anyone", action: "research", part: "research", primaryParts: parts })],
+  });
+  const turn = dec("turn.action");
+  assert.deepEqual(kinds(orderDecisions([turn, t], 0, undefined, state(), "payment.spend")), ["strategy_card.resolve", "turn.action"]);
+  const twice = { ...t, window: { ...t.window!, subject: { ...t.window!.subject, primaryDone: ["research", "research"] } } } as Decision;
+  const r = orderDecisions([turn, twice], 0, undefined, state(), "payment.spend");
+  assert.deepEqual(kinds(r), ["turn.action"]);
+});
+
+void test("pt8: a card the game declined for me (no strategy token) is on offer with its follow greyed, never in front", () => {
+  const s = state({
+    activePlayer: "u2",
+    strategyCards: [
+      { number: 7, holder: "u2", played: true, name: "Technology", card: "pok7technology", holderFaction: "sol", blocksTurn: false,
+        reactions: [{ faction: "sol", status: "holder", canFollow: false, cantFollowReason: null }, { faction: "arborec", status: "declined", canFollow: false, cantFollowReason: "no_strategy_token" }] },
+    ] as unknown as GameState["strategyCards"],
+  });
+  const card = dec("strategy_card.resolve", { scope: "table", window: { ...win([ME]), responded: [ME], subject: { strategyCard: 7, holder: "sol" } } as unknown as Decision["window"] });
+  const r = orderDecisions([card], 0, undefined, s);
+  assert.equal(r.queue.length, 0);
+  assert.ok(r.offers.includes(card));
+});
+
+void test("pt8: stacked Pillage offers collapse to the newest per neighbour; answered ones' older copies are superseded", () => {
+  const pill = (target: string) => dec("faction.ability", { options: [opt(`p${target}`, { id: "pillage", target, action: "use", step: "use" }), opt(`d${target}`, { id: "pillage", target, action: "skip", step: "skip" })] });
+  const a1 = pill("purple"), a2 = pill("purple"), b1 = pill("emerald");
+  const r = orderDecisions([a1, a2, b1], null, undefined, state());
+  assert.deepEqual(r.queue.map((d) => d.id), [a2.id, b1.id]);
+  const after = orderDecisions([a1, b1], null, undefined, state(), null, { superseded: new Set([a1.id]) });
+  assert.deepEqual(after.queue.map((d) => d.id), [b1.id]);
 });

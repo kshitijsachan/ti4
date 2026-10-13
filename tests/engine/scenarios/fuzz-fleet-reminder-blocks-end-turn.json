@@ -1,0 +1,88 @@
+{
+  "name": "fuzz-fleet-reminder-blocks-end-turn",
+  "description": "Fuzz pbd385 / pbd386 and playtest 8 pbd469 (Mentak: 4 ships at fleet pool 3 after producing a destroyer; 'Dismiss These Buttons' closed the reminder with nothing removed and End Turn went through). Fix (bot fuzz-triage-2): while ButtonHelper.fleetReport says the system is over its limits, the reminder's Dismiss is refused (units.remove validate + the deleteButtons handler; value.blocked carries the reason for the web) and turn.action End Turn / Pass are refused, judged on the board whether or not a reminder is open (value.overLimits); removing the excess lets the turn end. Base: pinned pbd385 saves 141 (+142: Xxcha's End Turn prompt; cv, 2 ca, fs at 313 with fleet pool 3); one more destroyer added there posts the reminder. A legacy End Turn click (the button itself, not an engine answer) is refused the same way (ScFollowGate.refuse hook: turnEnd, endOfTurnAbilities, passForRound, passingAbilities, concludeAndEndTurn).",
+  "base": {
+    "save": "saves/fuzz-pbd385-141.txt",
+    "next": "saves/fuzz-pbd385-142.txt"
+  },
+  "steps": [
+    {
+      "wait": 1500,
+      "expect": {
+        "decision": [
+          {
+            "kind": "units.remove",
+            "as": "xxcha",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "units.remove",
+        "value": {
+          "action": "done"
+        }
+      },
+      "as": "xxcha",
+      "refused": true,
+      "legacy": [
+        {
+          "press": "deleteButtons",
+          "as": "xxcha"
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "xxcha",
+      "refused": true
+    },
+    {
+      "press": "FFCC_xxcha_turnEnd",
+      "as": "xxcha",
+      "click": true,
+      "expect": {
+        "decision": [
+          {
+            "kind": "turn.action",
+            "as": "xxcha",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "command": "/remove_units tile_name:313 unit_names:\"dd, ca\" faction_or_color:xxcha"
+    },
+    {
+      "wait": 2500,
+      "expect": {
+        "decision": [
+          {
+            "kind": "units.remove",
+            "as": "xxcha",
+            "open": false
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "xxcha"
+    }
+  ],
+  "expect": {
+    "invariants": false
+  },
+  "setup": [
+    "/add_units tile_name:313 unit_names:dd faction_or_color:xxcha"
+  ]
+}

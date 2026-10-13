@@ -1,0 +1,110 @@
+{
+  "name": "pt8-tech-followups",
+  "description": "Playtest 8 follow-ups on pbd28 r1 (Naaz's turn, before Technology is played). Deepwrought has no strategy token: Technology's play auto-declines it and the engine keeps why (reactions[].cantFollowReason no_strategy_token, so the web greys the follow instead of hiding it). Naaz may not play Reparations on its own turn nor Sabotage with no Sabotage window (ActionCardTiming). Naaz researches the free first technology, then a second one (the engine used to refuse the second press: 'already resolved that part'); its payment is open (6 resources).",
+  "base": {
+    "recording": "pbd28",
+    "index": 94
+  },
+  "setup": [
+    "/player stats strategy_cc:0 faction_or_color:deepwrought",
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "reparations",
+        "faction_or_color": "naaz"
+      }
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "sabo1",
+        "faction_or_color": "naaz"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "option": "Reparations"
+      },
+      "as": "naaz",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "option": "Sabotage"
+      },
+      "as": "naaz",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "turn.action",
+        "option": "strategicAction_7$"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^acquireATechWithSC_first$"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "_getTech_nm$"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": []
+        }
+      },
+      "as": "naaz",
+      "legacy": [
+        {
+          "press": "deleteButtons"
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^acquireATechWithSC_first$"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "_getTech_amd$"
+      },
+      "as": "naaz"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "strategyCards[number=7].reactions[faction=deepwrought].status",
+        "eq": "declined"
+      },
+      {
+        "path": "strategyCards[number=7].reactions[faction=deepwrought].cantFollowReason",
+        "eq": "no_strategy_token"
+      }
+    ],
+    "decision": {
+      "kind": "payment.spend",
+      "as": "naaz",
+      "open": true
+    }
+  }
+}

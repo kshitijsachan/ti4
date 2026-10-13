@@ -79,7 +79,8 @@ function pickUnit(d: CombatAssignUnits, me: string): CombatChoice | null {
   if (d.target?.userId !== me) return null;
   const live = d.options.filter((o) => !o.disabled && !forDummy(o) && o.value);
   const left = Number((d.progress?.required as Record<string, unknown> | undefined)?.hits ?? 0);
-  const done = live.find((o) => o.value!.action === "done");
+  // A reminder's Dismiss the engine refuses while the system is still over its limits (value.blocked) is no option.
+  const done = live.find((o) => o.value!.action === "done" && !(o.value as { blocked?: string | null }).blocked);
   if (!d.progress || left <= 0) return done ? { option: done, why: "combat: nothing owed; close the menu" } : null;
   const units = live.filter((o) => o.value!.action === "sustain" || o.value!.action === "destroy") as Option<Extract<CombatAssignUnits["options"][number]["value"], { unit: string }>>[];
   const sustain = units.find((o) => o.value!.action === "sustain" && !o.value!.damaged);
@@ -107,6 +108,10 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
   const reminder = live.find((o) => o.value!.action === "open" && o.value!.assignType === "remove");
   if (reminder && reminder.value!.action === "open") {
     const lim = unitLimits(reminder.value!.tile, state, me);
+    // The engine says the system is still over (Dismiss blocked) though our count says otherwise (fleet bonuses,
+    // dock fighters): open the removal menu so the units go — never wait on a Dismiss that is refused (pbd540).
+    const blocked = live.some((o) => o.value!.action === "done" && !!(o.value as { blocked?: string | null }).blocked);
+    if (blocked && !(lim?.over ?? false)) return history.includes(reminder.id) ? null : { option: reminder, why: `units: the engine holds ${reminder.value!.tile} over its limits; open the removal menu` };
     if (!lim || lim.over) return null;
     return done ? { option: done, why: `units: within limits in ${reminder.value!.tile} (${lim.summary}); dismiss` } : null;
   }

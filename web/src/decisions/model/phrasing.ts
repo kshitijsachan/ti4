@@ -21,6 +21,7 @@ const PAST: Record<string, string> = {
   conclude: "Concluded",
   confirm: "Confirmed",
   decline: "Declined",
+  dismiss: "Dismissed",
   deploy: "Deployed",
   discard: "Discarded",
   draw: "Drew",
@@ -101,6 +102,12 @@ export function cleanButtonLabel(label: string): string {
   return systemName(text) ?? text;
 }
 
+/**
+ * Public objectives paid in planets / trade goods when scored (ObjectiveSpendService.COST): picking one only opens its
+ * payment. (Lead from the Front / Galvanize score at once unless the token split is a choice: not listed.)
+ */
+const SPEND_OBJECTIVES = /^(erect a monument|found a golden age|sway the council|manipulate galactic law|amass wealth|hold vast reserves)$/i;
+
 /** Presses that only open the next step: what is being chosen now, and what undoing the press takes back. */
 type Opening = { now: string; undo: string };
 
@@ -119,6 +126,11 @@ function openingStep(id: string, label: string): Opening | undefined {
     return { now: `Choosing a planet for the ${name}…`, undo: `Started placing a ${name}` };
   }
   if (/^tacticalAction(?!Build)/.test(id)) return { now: "Choosing a system to activate…", undo: "Started a tactical action" };
+  /* "Build in This System (4 PRODUCTION value)": opens the production panel; nothing is built yet. */
+  if (/^tacticalActionBuild/.test(id) || /^build in this system\b/i.test(label)) return { now: "Choosing units to produce…", undo: "Started producing units" };
+  /* A spend objective (Sway the Council…): picking it opens its payment; it is scored once paid. */
+  const objective = cleanButtonLabel(label);
+  if (/^po_scoring_\d+$/.test(id) && SPEND_OBJECTIVES.test(objective)) return { now: `Paying for ${objective}…`, undo: `Started scoring ${objective}` };
   if (/^componentAction(?!Res)/.test(id)) return { now: "Choosing a component action…", undo: "Opened the component actions" };
   /* "Score A Public" (Imperial) only lists the public objectives: nothing is scored until one is picked. */
   if (/^scoreAnObjective$/.test(id)) return { now: "Choosing a public objective to score…", undo: "Opened public objective scoring" };
@@ -167,9 +179,25 @@ function doneOutcome(id: string, label: string, content: string | undefined): st
   if (/^no secret objective scored$/i.test(label)) return "Didn't score a secret";
   if (/^no public objective scored$/i.test(label)) return "Didn't score a public objective";
   if (/^done (redistributing|gaining|losing) command tokens$/i.test(label)) return "Command tokens confirmed";
+  if (/^dismiss( these)? buttons?$/i.test(label) || /^deleteButtons$/.test(id)) return "Dismissed a prompt";
+  const words = ID_WORDS.find(([re]) => re.test(id));
+  if (words) return typeof words[1] === "string" ? words[1] : words[1](id.match(words[0])!);
   if (/^ready for (?:the )?(.+)$/i.test(label)) return `Marked ready for the ${label.replace(/^ready for (?:the )?/i, "").toLowerCase()}`;
   return undefined;
 }
+
+/**
+ * Buttons known by their id (wordless steppers "+" / "−", or ids whose label says nothing): what the press did. One
+ * table for the outcome toast, the Undo button and the game log.
+ */
+const ID_WORDS: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
+  [/^increase_(tactic|fleet|strategy)_cc$/, (m) => `Added 1 ${m[1]} token`],
+  [/^decrease_(tactic|fleet|strategy)_cc$/, (m) => `Removed 1 ${m[1]} token`],
+  [/^resetCCs$/, "Reset command tokens"],
+  [/^resetSpend/, "Started paying over"],
+  [/^declinePillage_/, "Didn't pillage"],
+  [/^pillage_\w+_unchecked$/, "Started pillaging"],
+];
 
 /** Milty draft buttons carry only an emoji ("sliceD", "position3"): their words. */
 function draftPick(id: string, label: string): string | undefined {
@@ -187,19 +215,70 @@ export function secretName(label: string) {
 }
 
 /** A label read as something done: "End Turn" → "Ended turn", "Don't score" → "Didn't score", "Xxcha" → "Chose Xxcha". */
+/** Engine answers logged by their kind ("tactical.move") instead of a button's words: what they did. */
+const KIND_PAST: Record<string, string> = {
+  "tactical.activate": "Activated a system",
+  "tactical.move": "Moved ships",
+  "tactical.land": "Landed ground forces",
+  "tactical.rift": "Rolled for the gravity rift",
+  "tactical.conclude": "Finished the tactical action",
+  "production.produce": "Produced units",
+  "production.place": "Placed units",
+  "payment.spend": "Paid",
+  "command_tokens.adjust": "Placed command tokens",
+  "status.homework": "Placed command tokens",
+  "planet.ready": "Readied planets",
+  "agenda.vote": "Voted",
+  "agenda.vote_step": "Voted",
+  "combat.assign_hits": "Assigned hits",
+  "combat.hits": "Assigned hits",
+  "combat.assign_units": "Chose units",
+  "explore.planet": "Explored",
+  "trade.offer": "Answered a trade offer",
+  "tactical.activate_system": "Activated a system",
+  "strategy_card.construction_place": "Placed a structure",
+  "strategy_card.construction_build": "Placed a structure",
+  "strategy_card.diplomacy_system": "Chose a system for Diplomacy",
+  "tech.gain": "Researched a technology",
+  "tech.choose_type": "Chose a technology type",
+  "units.remove": "Removed units",
+  "units.modify": "Changed units",
+  "combat.round": "Rolled for combat",
+  "combat.retreat": "Answered the retreat",
+  "status.score": "Scored an objective",
+  "trade.offer_sent": "Sent a trade offer",
+  "action_card.play": "Played an action card",
+  "action_card.discard": "Discarded an action card",
+};
+
+/** A kind id never reads as an id ("strategy_card.foo_bar" → "Answered foo bar"). */
+function kindWords(kind: string): string {
+  const last = kind.split(".").pop() ?? kind;
+  return `Answered ${last.replace(/_/g, " ")}`;
+}
+
 export function pastTense(label: string): string {
   const text = cleanButtonLabel(label);
   if (!text) return "";
+  const kind = KIND_PAST[text.trim()];
+  if (kind) return kind;
+  /* An engine kind with no plain words yet ("strategy_card.construction_place"): say it as words, not as an id. */
+  if (/^[a-z_]+(\.[a-z_]+)+$/.test(text.trim())) return kindWords(text.trim());
+  /* A stepper's "-" / "+" (no words): nothing to say; the caller says a button was pressed. */
+  if (!/[\p{L}\p{N}]/u.test(text)) return "";
   const negated = text.match(/^(?:don['’]?t|do not)\s+(.*)$/i);
   if (negated) return `Didn't ${negated[1].charAt(0).toLowerCase()}${negated[1].slice(1)}`;
-  /* "Done Exhausting Planets", "No Sabotage": a status, said in sentence case. */
-  if (/^no\b/i.test(text) || /^done\b/i.test(text)) return text.charAt(0) + text.slice(1).toLowerCase();
+  /* "Done Landing Troops" → "Finished landing troops"; a bare "Done" → "Finished". */
+  const done = text.match(/^done\b\s*(.*)$/i);
+  if (done) return done[1] ? `Finished ${done[1].toLowerCase()}` : "Finished";
+  /* "No Sabotage": a status, said in sentence case. */
+  if (/^no\b/i.test(text)) return text.charAt(0) + text.slice(1).toLowerCase();
   if (/^ready\b/i.test(text)) return text.length > 5 ? text.charAt(0) + text.slice(1).toLowerCase() : "Marked ready";
   /* A system or a planet ("Nestphar (3/2)") is a name, not a command. */
   if (/^system \d/.test(text) || /\(\d+\/\d+\)\s*$/.test(label)) return `Chose ${text}`;
   const [first, ...rest] = text.split(" ");
   const past = PAST[first.toLowerCase()];
-  if (!past) return `Chose “${text}”`;
+  if (!past) return `Chose ${text}`;
   const tail = rest.join(" ");
   if (!tail) return past;
   /* "End Turn" → "Ended turn"; keep proper names ("Keep Strengthen Bonds") as written. */
@@ -230,4 +309,16 @@ export function buttonUndoPhrase(id: string, label: string): string | undefined 
 /** "Readied Nestphar" → "readied Nestphar" (after "you" or a player's name). */
 export function lowerFirst(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+/**
+ * A saved action's label as words: "Alice pressed “command_tokens.adjust”" → "Alice placed command tokens", without
+ * the engine's "(engine)" / "(engine answer)" marks. `id` is the pressed button's id when known.
+ */
+export function humanActionLabel(label: string, id = ""): string {
+  const text = label.replace(/\s*\((?:engine|engine answer)\)\s*$/i, "").trim();
+  const m = /^(.*?) pressed “(.*)”$/.exec(text);
+  if (!m) return text;
+  const phrase = buttonUndoPhrase(plainId(id), m[2]) ?? doneOutcome(plainId(id), "", undefined);
+  return `${m[1]} ${phrase ? lowerFirst(phrase) : "made a choice"}`;
 }

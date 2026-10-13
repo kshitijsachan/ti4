@@ -161,7 +161,17 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   const waits = followWaits(opts, state);
   const defer = opts.find((o) => o.value!.action === "end_turn_when_followed");
   const ends = (o: TurnOpt) => o.value!.action === "end_turn" || o.value!.action === "pass";
-  const disabled = (o: TurnOpt) => owed.length > 0 || (waits.length > 0 && ends(o));
+  /* Rules (fleet pool, capacity): units over the limit go before the turn ends. The engine judges the board itself
+     (a dismissed reminder changes nothing) and refuses End Turn / Pass while any system is over. */
+  const overLimit = [
+    ...new Set(
+      opts.flatMap((o) => {
+        const v = o.value as { action?: string; overLimits?: string[] } | null;
+        return (v?.action === "end_turn" || v?.action === "pass") && v.overLimits ? v.overLimits : [];
+      }),
+    ),
+  ];
+  const disabled = (o: TurnOpt) => owed.length > 0 || ((waits.length > 0 || overLimit.length > 0) && ends(o));
   const pending = waits.flatMap((w) => w.userIds.map((id, i) => state?.players.find((p) => p.userId === id)?.userName ?? factionName(w.factions[i] ?? id)));
   const reminders = waits
     .map((w) => {
@@ -171,10 +181,27 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     })
     .filter((x) => x !== null);
   const label = (o: TurnOpt) => {
+    if (overLimit.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${overLimit.join("; ")}`;
     if (waits.length && ends(o))
       return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow ${waits.map((w) => w.name).join(" and ")}`;
     return turnLabel(o, me?.commandTokens.tactic);
   };
+  /*
+   * The tactical action starts on the map, so this line stands in for its button: never hidden on a menu that starts an
+   * action, greyed with the reason while it can't be taken (UI principle: show it greyed, say why).
+   */
+  const startsAction = opts.some((o) => o.value!.action === "component" || o.value!.action === "strategic" || o.value!.action === "pass");
+  const tacticalNote: { live: boolean; text: string } | null = tactical
+    ? tokens === 0
+      ? { live: false, text: "Tactical action: no command tokens in your tactic pool." }
+      : owed.length > 0
+        ? { live: false, text: `Tactical action: follow ${owed.map((f) => f.name).join(" and ")} first.` }
+        : tactical.disabled
+          ? { live: false, text: "Tactical action: not available right now." }
+          : { live: true, text: `Tactical action: click a system on the map to activate it (${tokens ?? "?"} tactic token${tokens === 1 ? "" : "s"}).` }
+    : startsAction
+      ? { live: false, text: "Tactical action: not offered on this menu (the game did not include it)." }
+      : null;
   const variant = (o: TurnOpt) =>
     o.value!.action === "pass" || o.value!.action === "end_turn" || o.value!.action === "another_action" ? "light" : "filled";
   return (
@@ -185,11 +212,9 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
           Waiting for {pending.join(", ")} to follow {waits.map((w) => w.name).join(" and ")}. Your turn ends once every player has answered.
         </span>
       )}
-      {tactical && (
-        <p className={tactical.disabled || tokens === 0 ? classes.muted : classes.hint} data-map-activate-hint>
-          {tactical.disabled || tokens === 0
-            ? "Tactical action: no command tokens in your tactic pool."
-            : `Tactical action: click a system on the map to activate it (${tokens ?? "?"} tactic token${tokens === 1 ? "" : "s"}).`}
+      {tacticalNote && (
+        <p className={tacticalNote.live ? classes.hint : classes.muted} data-map-activate-hint data-tactical-blocked={tacticalNote.live ? undefined : ""}>
+          {tacticalNote.text}
         </p>
       )}
       <div className={classes.row}>
@@ -214,10 +239,15 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
 
 /** The bot's system menu (rings, then systems) is answered by clicking the map; the panel only says so. */
 export function TacticalActivateView({ decision, answer }: RendererProps<TacticalActivate>) {
+  /* Warfare (Thunder's Edge) and other token-free activations: no tactic token, a system with my token is fine. */
+  const free = decision.options.some((o) => !o.disabled && o.value?.token === false);
   return (
     <div className={classes.panel}>
       <p className={classes.hint} data-map-activate-hint>
-        Click a system on the map to activate it (−1 tactic token). Systems you can't activate are greyed, with the reason on hover.
+        {free
+          ? "Click a lit system on the map to activate it (no command token is placed, so a system with your token is fine)."
+          : "Click a lit system on the map to activate it (−1 tactic token)."}{" "}
+        Systems you can't activate are greyed, with the reason on hover.
       </p>
       <Extras options={decision.options} answer={answer} />
     </div>

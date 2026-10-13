@@ -3,7 +3,8 @@ import { openToAll } from "./reducer";
 import { factionName } from "./names";
 import { nothingToDecide, setupOnly } from "./optionKinds";
 import { readDecisionState } from "./draftState";
-import { owesFollow } from "./follows";
+import { autoDeclinedFollow, owesFollow } from "./follows";
+import { sourceName } from "./sourceNames";
 
 /** Plain-words titles per kind; `legacy` (untyped) prompts take a title from their own text. */
 const TITLES: Record<string, string> = {
@@ -98,6 +99,20 @@ const TITLES: Record<string, string> = {
   "token_ingress.png": "Place an ingress token",
   "input.form": "Fill in",
   "game.end": "End the game",
+  "units.remove": "Remove units",
+  "units.modify": "Change units",
+  "production.place": "Place units",
+  "action_card.step": "Resolve an action card",
+  "action_card.when_after": "Action card window",
+  "combat.automate": "Automate combat",
+  "combat.bombard": "Bombardment",
+  "combat.modifier": "Combat modifiers",
+  "commodities.gain": "Gain commodities",
+  "component.action": "Component action",
+  "promissory_note.resolve": "Resolve a promissory note",
+  "relic.use": "Use a relic",
+  "strategy_card.construction_build": "Construction: place a structure",
+  "tech.step": "Technology",
 };
 
 /** First line of an untyped prompt's text as a title: no markdown, mentions or emoji; empty when there is none. */
@@ -131,6 +146,10 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
     const card = sc !== undefined ? state?.strategyCards.find((c) => c.number === sc) : undefined;
     if (card) return `Pre-decline ${card.name}`;
   }
+  if (d.kind.startsWith("choose.")) {
+    const title = chooseTitle(d);
+    if (title) return title;
+  }
   const typed = TITLES[d.kind];
   if (typed) return typed;
   if (d.kind !== "legacy") {
@@ -138,6 +157,30 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
   return promptTitle(d.prompt) || (d.scope === "table" ? "Open to everyone" : "Your move");
+}
+
+type ChooseTitleValue = { source?: unknown; choice?: unknown } | null;
+
+/**
+ * A choose.* step's title from what asks it (its options' `source`), not the raw kind ("Choose confirm"): Warfare's
+ * offers say what they are, others name their card / ability.
+ */
+function chooseTitle(d: Decision): string {
+  const values = d.options.map((o) => o.value as ChooseTitleValue).filter((v): v is NonNullable<ChooseTitleValue> => !!v);
+  const source = values.map((v) => v.source).find((x): x is string => typeof x === "string" && !!x);
+  if (!source) return "";
+  if (source === "warfare") {
+    const tactical = values.some((v) => v.source === "warfare" && v.choice === "tactical");
+    return tactical ? "Warfare: your primary" : "Warfare: redistribute command tokens?";
+  }
+  return sourceName(source);
+}
+
+/** The redistribute offer of Warfare (before / after its tactical action), no other choice on it. */
+function warfareRedistribute(d: Decision): boolean {
+  if (d.kind !== "choose.confirm") return false;
+  const values = d.options.map((o) => o.value as ChooseTitleValue).filter((v): v is NonNullable<ChooseTitleValue> => !!v);
+  return values.length > 0 && values.every((v) => v.source === "warfare" && v.choice === "redistribute");
 }
 
 /** The small line above the title: who it is for when it is not just me. */
@@ -165,6 +208,8 @@ const IN_ADVANCE_KINDS = new Set(["strategy_card.pre_decline", "strategy_card.qu
 const AGENDA_BLOCKING = new Set(["action_card.sabotage", "agenda.when", "agenda.after", "agenda.vote", "agenda.vote_step", "agenda.tiebreak", "agenda.resolve"]);
 /** Table-wide steps that move the phase on: after my own homework, so I'm not asked to start the next phase first. */
 const PHASE_STEP = new Set(["status.advance", "setup.deal_secrets", "setup.reveal_objectives", "status.reveal_objective", "agenda.next"]);
+/** Hand upkeep answers: what they reopen (the hand panel) is not something I asked to play from. */
+const CARD_UPKEEP = new Set(["action_card.discard", "action_card.draw"]);
 const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/;
 
 
@@ -181,7 +226,9 @@ export function orderDecisions(
   hidden?: ReadonlySet<string>,
   state?: GameState | null,
   answeredKind?: string | null,
+  extra: OrderExtras = {},
 ): { queue: Decision[]; offers: Decision[] } {
+  const { answeredId = null, deferred, superseded } = extra;
   /* Untyped leftovers the game never closed: setup prompts once the game is under way are dropped, info panels
      (nothing but utilities / undo) go behind "Available now". */
   const underWay = !!state && !state.setup && !(state.draft && state.draft.status === "drafting");
@@ -193,10 +240,11 @@ export function orderDecisions(
   const secretDeclared = !!selfId && !!state?.status?.players[selfId]?.secretScored;
   /* Politics: once the agendas are drawn (a placement prompt is open), the "draw 2 agendas" prompt is done. */
   const agendasDrawn = mine.some((d) => d.kind === "strategy_card.politics_agenda" && d.options.some((o) => politicsPlacement(o.value)));
-  const shown = dedupe(
+  const shown = dedupeOffers(dedupe(
     mine.filter(
       (d) =>
         !hidden?.has(d.id) &&
+        !superseded?.has(d.id) &&
         !(d.kind === "legacy" && underWay && setupOnly(d.options)) &&
         !(d.kind === "strategy_card.resolve" && !actionPhase) &&
         !(d.kind === "setup.game_settings" && (underWay || !!state?.draft)) &&
@@ -206,17 +254,29 @@ export function orderDecisions(
         !(AGENDA_LIVE.has(d.kind) && !agendaPhase) &&
         !(d.kind === "agenda.when" && !!state?.agenda?.whensResolved) &&
         !(d.kind === "agenda.after" && !!state?.agenda?.aftersResolved) &&
-        /* Pre-declining a card I hold now (an offer left from before I took it): never mine to follow. */
-        !(d.kind === "strategy_card.pre_decline" && preDeclinesMine(d, state, selfId)) &&
+        /* Pre-declining a card I hold now (an offer left from before I took it): never mine to follow. Nor a card
+           already played: its follow window is what I answer now (pt7: "Pre-decline Warfare" stayed on offer). */
+        !(d.kind === "strategy_card.pre_decline" && (preDeclinesMine(d, state, selfId) || preDeclinePlayed(d, state))) &&
+        /* My played card once its primary is done and every other player answered it: nothing left on it (pt7). */
+        !(d.kind === "strategy_card.resolve" && !!myFactionOf(state) && d.window?.subject?.holder === myFactionOf(state) && !primaryOpen(d) && !(myTurnOf(state) && optionalRepeatLeft(d) && !deferred?.has(d.id)) && settledWindow(d)) &&
         /* A turn menu left open from my last turn: not mine while someone else is taking theirs. */
         !(d.kind === "turn.action" && !!state?.activePlayer && !!selfId && state.activePlayer !== selfId),
     ),
-  );
-  const nextStep = (d: Decision) => answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2;
+  ));
+  /* What my last answer opened. Not the decision I answered itself, re-sent with that answer applied (Warfare's panel
+     minus "Redistribute", Imperial's score list): its follow-up leads, not the panel I just used (pt8). */
+  const nextStep = (d: Decision) =>
+    answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2 && d.id !== answeredId;
   /* Perpetual "play an action card" panels sit open all game: on offer, unless one is what my last answer opened. */
   /* …a new card drawn (status phase) reopens it too: only "play an action card" from my turn menu or a card prompt brings it up. */
-  const askedForCards = !!answeredKind && (answeredKind === "turn.action" || answeredKind.startsWith("action_card."));
-  const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && !(nextStep(d) && askedForCards);
+  /* (Not a discard or a draw: the hand panel reopening after one is not a request to play — pt7 status phase.) */
+  const askedForCards =
+    !!answeredKind && (answeredKind === "turn.action" || (answeredKind.startsWith("action_card.") && !CARD_UPKEEP.has(answeredKind)));
+  /* A hand with nothing playable now (every card greyed) is never what I must do: it stays on offer. */
+  const closedCards: Partial<Record<string, string>> = state?.players.find((p) => p.self)?.hand?.closedActionCards ?? {};
+  const nothingPlayable = (d: Decision) =>
+    d.options.filter((o) => o.value).every((o) => o.disabled || !!closedCards[(o.value as { actionCard?: string }).actionCard ?? ""]);
+  const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && (nothingPlayable(d) || !(nextStep(d) && askedForCards));
   const myFaction = state?.players.find((p) => p.self)?.faction;
   const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
   /* A step of a tactical action is only live while it is my turn (else a leftover of an earlier one). */
@@ -225,17 +285,31 @@ export function orderDecisions(
   const lateSecretList = (d: Decision) => d.kind === "status.score_secret" && !!state && !state.status;
   /* My played card with nothing left to press (Trade resolves when played; every part of the checklist done): only
      "request all resolve now" is left, so it goes behind "Available now" and never takes the panel from my turn. */
-  const finishedCard = (d: Decision) =>
-    d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction && !primaryOpen(d);
+  const holdingCard = (d: Decision) => d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction;
+  /* Only an optional repeat left (Technology's second research): open on my turn until I say I am done with it. */
+  const repeatOffered = (d: Decision) => myTurn && optionalRepeatLeft(d) && !deferred?.has(d.id);
+  const finishedCard = (d: Decision) => holdingCard(d) && !primaryOpen(d) && !repeatOffered(d);
+  /* A card I can't follow that the game declined for me (no strategy token…): on offer with the follow greyed and why. */
+  const autoDeclined = (d: Decision) => autoDeclinedFollow(d, state);
   /* A setup choice the table waits on (my starting technology): mine to answer now, never an optional offer, even
      when the engine still has it as a table prompt (live pbd283: captured before my faction was known). */
   const requiredSetup = (d: Decision) => requiredSetupChoice(d, state, selfId);
   /* Imperial's "score a public" list once nothing on it scores (I scored one, or meet none): finished, so it never
      takes the panel back from what I'm doing (it stays under "Available now"). */
   const finishedImperial = (d: Decision) => d.kind === "status.score" && d.scope === "player" && !publicScorable(d, state, selfId);
+  /* A Warfare redistribute offer while a step of my tactical action is open: optional, it waits behind "Available now"
+     so the step leads (playtest 7, pbd436: it sat in front of "Activate a system"). */
+  const tacticalOpen = shown.some((d) => TACTICAL_STEP.test(d.kind) && d.scope === "player" && !staleStep(d));
+  /* While I take a tactical action, a token editor (Warfare's redistribute) waits behind "Available now": it never pops
+     up over a step of the action (pt8: it opened over the landing step). */
+  const tokensDuringAction = (d: Decision) => tacticalOpen && d.kind === "command_tokens.adjust" && !state?.status;
   const background = (d: Decision) =>
     !requiredSetup(d) &&
-    (openToAll(d) ||
+    (deferred?.has(d.id) ||
+    autoDeclined(d) ||
+    tokensDuringAction(d) ||
+    (tacticalOpen && warfareRedistribute(d)) ||
+    openToAll(d) ||
     lateSecretList(d) ||
     finishedImperial(d) ||
     finishedCard(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options)));
@@ -263,7 +337,13 @@ export function orderDecisions(
     if (d.kind.startsWith("strategy_card.") && !d.window && !IN_ADVANCE_KINDS.has(d.kind) && d.kind !== "strategy_card.pick") return 1.4;
     /* The strategy card I played: a part of its primary not done yet is what I do now (before the turn menu that
        offers "End turn"); with only an optional repeat left it waits behind the turn menu. */
-    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) return primaryPartMissing(d) ? 1.5 : 4.6;
+    if (d.kind === "strategy_card.resolve" && myFaction && d.window?.subject?.holder === myFaction) {
+      if (primaryPartMissing(d)) return 1.5;
+      /* Only a repeat left (Construction's second structure, Technology's second research): it leads right after I
+         resolved the first one (pt8: it queued behind "Your turn"), until "Done" sets it aside. */
+      if (myTurn && !deferred?.has(d.id) && continuesCard(d, answeredId, answeredKind)) return 1.5;
+      return 4.6;
+    }
     /* Opened since my last answer (stream positions, not clocks): its next step. */
     /* (Not the turn menu: it reopens after everything, and waits behind what the action just started.) */
     if (nextStep(d) && d.kind !== "turn.action" && d.kind !== "trade.offer") return 1;
@@ -284,6 +364,30 @@ export function orderDecisions(
     .sort((a, b) => a.r - b.r || a.d.createdAt - b.d.createdAt || a.d.seq - b.d.seq)
     .map((x) => x.d);
   return { queue, offers };
+}
+
+/** See orderDecisions: what besides my decisions decides their order. */
+export type OrderExtras = {
+  /** The decision my last answer was on. */
+  answeredId?: string | null;
+  /** Prompts I set aside for now: behind "Available now". */
+  deferred?: ReadonlySet<string>;
+  /** Older copies of a prompt I answered a newer copy of: left out. */
+  superseded?: ReadonlySet<string>;
+};
+
+/** Steps a strategy card's primary opens (pick the planet, the technology, pay): answering one continues the card. */
+const CARD_STEPS = new Set(["strategy_card.construction_place", "strategy_card.construction_build", "tech.gain", "tech.choose_type", "payment.spend"]);
+
+/** My last answer was on this card, or on a step its primary opened. */
+function continuesCard(d: Decision, answeredId: string | null, answeredKind: string | null | undefined): boolean {
+  if (answeredId === d.id) return true;
+  return !!answeredKind && CARD_STEPS.has(answeredKind) && doneCounts(d).size > 0;
+}
+
+function myTurnOf(state: GameState | null | undefined): boolean {
+  const me = state?.players.find((p) => p.self)?.userId;
+  return !!me && state?.activePlayer === me;
 }
 
 /**
@@ -350,10 +454,41 @@ export function primaryPartMissing(d: Decision): boolean {
   return parts.some((p) => !done.get(p));
 }
 
+/**
+ * Primary parts a holder may repeat beyond the checklist: Technology's second research (6 resources). The engine
+ * lists the card's primary as ["research"] and allows a second press.
+ */
+const OPTIONAL_REPEAT: Record<string, number> = { research: 1 };
+
+/** Every checklist part is done and an optional repeat (Technology's second research) is still left. */
+export function optionalRepeatLeft(d: Decision): boolean {
+  const parts = checklist(d);
+  if (!parts.length || primaryOpen(d)) return false;
+  const done = doneCounts(d);
+  return Object.entries(OPTIONAL_REPEAT).some(([p, extra]) => parts.includes(p) && (done.get(p) ?? 0) < parts.filter((x) => x === p).length + extra);
+}
+
 /** A Politics "place this agenda" option (top / bottom / discard), as opposed to "draw 2 agendas". */
 function politicsPlacement(value: unknown): boolean {
   const a = (value as { action?: string } | null)?.action;
   return a === "top" || a === "bottom" || a === "discard";
+}
+
+function myFactionOf(state: GameState | null | undefined): string | undefined {
+  return state?.players.find((p) => p.self)?.faction ?? undefined;
+}
+
+/** Every player the window waits on has answered it. */
+function settledWindow(d: Decision): boolean {
+  const w = d.window;
+  return !!w && w.eligible.length > 0 && w.eligible.every((u) => w.responded.includes(u));
+}
+
+/** A pre-decline offer for a card that is already played (pre-declining is for cards not played yet). */
+function preDeclinePlayed(d: Decision, state: GameState | null | undefined): boolean {
+  if (!state) return false;
+  const sc = d.options.map((o) => (o.value as { strategyCard?: number } | null)?.strategyCard).find((n) => typeof n === "number");
+  return sc !== undefined && state.strategyCards.some((c) => c.number === sc && c.played);
 }
 
 /** A pre-decline offer for a strategy card I hold. */
@@ -387,6 +522,37 @@ export function secretScorable(d: Decision, state?: GameState | null): boolean {
     const v = o.value as SecretValue;
     if (!v || o.disabled || v.met === false) return false;
     return !inStatus || !v.phase || v.phase === "status";
+  });
+}
+
+type PillageValue = { id?: string; target?: string; action?: string } | null;
+
+/** The faction a Pillage offer (Mentak) is about, or undefined when the decision is not one. */
+export function pillageTarget(d: Decision): string | undefined {
+  if (d.kind !== "faction.ability") return undefined;
+  for (const o of d.options) {
+    const v = o.value as PillageValue;
+    if (v?.id === "pillage" && v.target) return v.target;
+  }
+  return undefined;
+}
+
+/**
+ * Stacked Pillage offers (one per trade good the neighbour gained: pt8 had 5–6 in a row): one per neighbour, the
+ * newest; answering it supersedes the older ones (see FactionStep).
+ */
+function dedupeOffers(list: Decision[]): Decision[] {
+  const newest = new Map<string, Decision>();
+  for (const d of list) {
+    const t = pillageTarget(d);
+    if (!t) continue;
+    const cur = newest.get(t);
+    if (!cur || d.createdAt > cur.createdAt || (d.createdAt === cur.createdAt && d.seq > cur.seq)) newest.set(t, d);
+  }
+  if (!newest.size) return list;
+  return list.filter((d) => {
+    const t = pillageTarget(d);
+    return !t || newest.get(t) === d;
   });
 }
 

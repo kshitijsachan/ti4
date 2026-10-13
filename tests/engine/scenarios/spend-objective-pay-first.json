@@ -1,0 +1,94 @@
+{
+  "name": "spend-objective-pay-first",
+  "description": "Playtest 6 pbd387 (bot 1da6c62): Alice scored Amass Wealth from Imperial's Score A Public list, the bot scored it at once and only then asked for the payment; the game ended (2 VP) on the unpaid score. Fix (bot fuzz-triage-2, ObjectiveSpendService): a spend objective (Erect a Monument, Sway the Council, Amass Wealth, Found a Golden Age, Manipulate Galactic Law, Hold Vast Reserves; Lead From the Front / Galvanize when the pools can share it) is paid first; the payment's Score option (payment.spend context poscore, value.objectiveCost) scores it and is refused until what was spent covers it (each planet counts resources or influence). Base: pinned pbd387 saves 294 (+295: the Score A Public list). Sol holds Jord 4/2, Lodor 3/1 and 10 trade goods. Needs bot fuzz-triage-2 (FAILS on 1da6c62: step 1 scores at once).",
+  "base": {
+    "save": "saves/pt6-pbd387-294.txt",
+    "next": "saves/pt6-pbd387-295.txt"
+  },
+  "steps": [
+    {
+      "press": "FFCC_sol_po_scoring_3",
+      "as": "sol",
+      "expect": {
+        "state": [
+          {
+            "path": "players[faction=sol].victoryPoints",
+            "eq": 1
+          }
+        ],
+        "decision": [
+          {
+            "kind": "payment.spend",
+            "as": "sol",
+            "open": true
+          },
+          {
+            "kind": "game.end",
+            "open": false
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "jord"
+          ],
+          "tg": 3
+        }
+      },
+      "as": "sol",
+      "refused": true,
+      "expect": {
+        "state": [
+          {
+            "path": "players[faction=sol].victoryPoints",
+            "eq": 1
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "jord",
+            "lodor"
+          ],
+          "tg": 4
+        }
+      },
+      "as": "sol"
+    },
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=sol].victoryPoints",
+        "eq": 2
+      },
+      {
+        "path": "players[faction=sol].tg",
+        "eq": 6
+      }
+    ],
+    "decision": [
+      {
+        "kind": "payment.spend",
+        "as": "sol",
+        "open": false
+      },
+      {
+        "kind": "game.end",
+        "open": true
+      }
+    ]
+  }
+}

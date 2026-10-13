@@ -3,6 +3,7 @@ import type { PrimaryPart, StrategyCardResolve } from "../../../../../shim/src/e
 import { Choice, live, Meta, playerName, Title, viewer, type RendererProps } from "./shared";
 import classes from "./strategy.module.css";
 import { useDecisionState } from "../../draftState";
+import { engineStore } from "../../store";
 
 type Value = NonNullable<StrategyCardResolve["options"][number]["value"]>;
 type Opt = Option<Value>;
@@ -56,7 +57,7 @@ export function PlayedCard({ decision, state, answer }: RendererProps<StrategyCa
       <Title sc={sc} sub={`Played by ${playerName(state, first.holder)}`}>
         {first.name}
       </Title>
-      {isHolder ? <Primary opts={opts} parts={first.primaryParts} pressed={pressed} done={serverDone(decision)} holdsMecatol={holdsMecatol(me.planets)} onPick={pick} /> : <Follow opts={opts} status={reaction?.status ?? "pending"} reason={reaction?.cantFollowReason ?? null} onPick={pick} />}
+      {isHolder ? <Primary opts={opts} parts={first.primaryParts} pressed={pressed} done={serverDone(decision)} holdsMecatol={holdsMecatol(me.planets)} onPick={pick} onDone={() => engineStore.getState().defer(decision.id)} /> : <Follow opts={opts} status={reaction?.status ?? "pending"} reason={reaction?.cantFollowReason ?? null} onPick={pick} />}
       {card && card.reactions.length > 0 && (
         <div className={classes.reactions}>
           {card.reactions.map((r) => (
@@ -100,6 +101,7 @@ function Primary({
   done,
   holdsMecatol: mecatol,
   onPick,
+  onDone,
 }: {
   opts: Opt[];
   parts: PrimaryPart[];
@@ -107,6 +109,8 @@ function Primary({
   done: string[];
   holdsMecatol: boolean;
   onPick: (id: string) => void;
+  /** Sets the card aside once only an optional repeat is left (it then waits behind "Available now"). */
+  onDone: () => void;
 }) {
   const mine = opts.filter((o) => o.value!.who !== "others");
   /* What the engine reports done (survives reload), else what I pressed on this page. */
@@ -120,15 +124,20 @@ function Primary({
   const checklist = parts.map((part) => {
     const n = (seen.get(part) ?? 0) + 1;
     seen.set(part, n);
-    return { part, n, done: doneCount(part) >= n };
+    return { part, n, done: doneCount(part) >= n, optional: false };
   });
+  /* Technology: once the free research is done, a second one for 6 resources (optional). */
+  const repeat = parts.includes("research") && doneCount("research") >= parts.filter((p) => p === "research").length;
+  if (repeat) checklist.push({ part: "research", n: checklist.length + 1, done: doneCount("research") > parts.filter((p) => p === "research").length, optional: true });
+  /* Every required part is done; what is left (a second structure, a second technology) is up to me. */
+  const onlyOptional = checklist.every((c) => c.done || c.optional || c.n > 1) && checklist.some((c) => !c.done);
   return (
     <>
       {checklist.length > 0 && (
         <ul className={classes.checklist}>
           {checklist.map((c) => (
             <li key={`${c.part}${c.n}`} className={classes.check} data-done={c.done || undefined}>
-              {c.done ? "✓" : "○"} {PART_LABEL[c.part] ?? c.part}
+              {c.done ? "✓" : "○"} {c.optional ? "Research a second technology (optional, 6 resources)" : (PART_LABEL[c.part] ?? c.part)}
             </li>
           ))}
         </ul>
@@ -138,12 +147,18 @@ function Primary({
           const blocked = imperialBlock(o, mecatol);
           return (
             <Choice key={o.id} option={blocked ? { ...o, disabled: true } : o} onPick={onPick} quiet={o.value!.action === "request_all"} title={blocked ?? undefined}>
-              {o.label}
+              {repeat && o.value!.action === "research" ? "Research another technology" : o.label}
+              {repeat && o.value!.action === "research" && <Meta>6 resources</Meta>}
               {blocked && <Meta>{blocked}</Meta>}
               {pressedCount(o.id) > 0 && <Meta>pressed ×{pressedCount(o.id)}</Meta>}
             </Choice>
           );
         })}
+        {onlyOptional && (
+          <button type="button" className={`${classes.choice} ${classes.quiet}`} onClick={onDone}>
+            Done — no more
+          </button>
+        )}
       </div>
     </>
   );
@@ -152,7 +167,8 @@ function Primary({
 /** Follow (spending a strategy token, with the card's secondary) or decline; once, never on your own card. */
 function Follow({ opts, status, reason, onPick }: { opts: Opt[]; status: string; reason: string | null; onPick: (id: string) => void }) {
   const others = opts.filter((o) => o.value!.who !== "holder");
-  if (status === "declined") return <p className={classes.sub}>You are not following this card.</p>;
+  /* Declined by the game (no strategy token…): the follow stays listed, greyed with why (never hidden). */
+  if (status === "declined" && !reason) return <p className={classes.sub}>You are not following this card.</p>;
   const decline = others.find((o) => o.value!.action === "decline");
   const secondary = others.filter((o) => o.value!.action !== "decline" && o.value!.action !== "follow");
   const follow = others.find((o) => o.value!.action === "follow");
@@ -165,27 +181,22 @@ function Follow({ opts, status, reason, onPick }: { opts: Opt[]; status: string;
       </div>
     );
   }
-  if (reason) {
-    return (
-      <>
-        <p className={classes.warn}>{REASON[reason] ?? reason}</p>
-        {decline && <Choice option={decline} onPick={onPick} />}
-      </>
-    );
-  }
   const main = secondary.length ? secondary : follow ? [follow] : [];
+  /* Can't follow (no strategy token, …): the follow stays visible, greyed with the reason. */
+  const why = reason ? (REASON[reason] ?? reason) : null;
   return (
     <>
       <span className={classes.sectionLabel}>Follow</span>
+      {why && <p className={classes.warn}>{status === "declined" ? `${why} You were marked as not following.` : why}</p>}
       <div className={classes.choices}>
         {main.map((o) => (
-          <Choice key={o.id} option={o} onPick={onPick}>
+          <Choice key={o.id} option={why ? { ...o, disabled: true } : o} onPick={onPick} title={why ?? undefined}>
             {o.label}
             {o.value!.spendsToken && <Meta>1 strategy token{o.value!.followCost ? ` + ${o.value!.followCost} resources` : ""}</Meta>}
             {!o.value!.spendsToken && o.value!.action.endsWith("_free") && <Meta>free — only if the holder agreed</Meta>}
           </Choice>
         ))}
-        {decline && <Choice option={decline} onPick={onPick} quiet />}
+        {decline && status !== "declined" && <Choice option={decline} onPick={onPick} quiet />}
       </div>
     </>
   );

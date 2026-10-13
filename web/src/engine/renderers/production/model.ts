@@ -5,6 +5,8 @@
  */
 import type { GameState, PlanetId } from "../../../../../shim/src/engine/types";
 import type {
+  ObjectiveCost,
+  ObjectivePlanet,
   PaymentDoneValue,
   PaymentPayload,
   PaymentSpend,
@@ -138,4 +140,56 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
   if (sarween) payload.sarween = true;
   const parts = [best.set.join("+") || null, best.tg ? `${best.tg} tg` : null, best.comm ? `${best.comm} commodities` : null, sarween ? "Sarween" : null].filter(Boolean);
   return { payload, why: `pay ${cost} ${currency === "inf" ? "influence" : "resources"} with ${parts.join(", ") || "nothing more"}` };
+}
+
+/**
+ * Mirrors planObjectivePayment in shim/src/engine/kinds/production.ts: the cheapest planets + trade goods paying a
+ * spend objective (each planet counts its resources or its influence; trade goods beyond the ones it asks for count
+ * toward either part). With fixedTg and exactly the chosen planets it checks whether a selection covers it.
+ */
+export function planObjectivePayment(
+  cost: ObjectiveCost,
+  planets: ObjectivePlanet[],
+  tgHeld: number,
+  tgValue: number,
+  opts: { fixedTg?: number; eitherValue?: boolean } = {},
+): { planets: PlanetId[]; tg: number } | null {
+  const R = cost.resources;
+  const I = cost.influence;
+  const tgv = Math.max(1, tgValue);
+  type Cell = { score: number; set: PlanetId[] } | null;
+  let dp: Cell[][] = Array.from({ length: R + 1 }, () => Array<Cell>(I + 1).fill(null));
+  dp[0][0] = { score: 0, set: [] };
+  for (const p of planets) {
+    const r = opts.eitherValue ? p.resources + p.influence : p.resources;
+    const i = opts.eitherValue ? p.resources + p.influence : p.influence;
+    const next = dp.map((row) => row.slice());
+    const put = (a: number, b: number, c: { score: number; set: PlanetId[] }) => {
+      const cur = next[a][b];
+      if (!cur || c.score < cur.score) next[a][b] = c;
+    };
+    for (let a = 0; a <= R; a++)
+      for (let b = 0; b <= I; b++) {
+        const c = dp[a][b];
+        if (!c) continue;
+        const w = (p.weight ?? 0) + 0.01;
+        if (r > 0) put(Math.min(R, a + r), b, { score: c.score + r + w, set: [...c.set, p.id] });
+        if (i > 0) put(a, Math.min(I, b + i), { score: c.score + i + w, set: [...c.set, p.id] });
+      }
+    dp = next;
+  }
+  const tgs = opts.fixedTg !== undefined ? [opts.fixedTg] : Array.from({ length: Math.max(0, tgHeld - cost.tg + 1) }, (_, k) => cost.tg + k);
+  let best: { planets: PlanetId[]; tg: number; score: number } | null = null;
+  for (const tg of tgs) {
+    if (tg < cost.tg || tg > Math.max(tgHeld, opts.fixedTg ?? 0)) continue;
+    const extra = (tg - cost.tg) * tgv;
+    for (let a = 0; a <= R; a++)
+      for (let b = 0; b <= I; b++) {
+        const c = dp[a][b];
+        if (!c || R - a + (I - b) > extra) continue;
+        const score = c.score + (tg - cost.tg) * 1.5;
+        if (!best || score < best.score) best = { planets: c.set, tg, score };
+      }
+  }
+  return best ? { planets: best.planets, tg: best.tg } : null;
 }

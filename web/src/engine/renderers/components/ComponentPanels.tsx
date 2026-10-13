@@ -10,7 +10,9 @@ import type {
 import type { GameState, Option } from "../../../../../shim/src/engine/types";
 import { strategyCardName } from "../tactical/names";
 import { unavailableReason } from "../explore/types";
+import { sourceName } from "../../sourceNames";
 import classes from "./components.module.css";
+import { engineStore } from "../../store";
 
 export type RendererProps<D> = {
   decision: D;
@@ -21,51 +23,7 @@ export type RendererProps<D> = {
 
 const live = <V,>(o: Option<V>) => !o.disabled && !o.needsInput;
 
-/** "stellarconverter" / "relic_draw_advantage" / "quantum_entangler" → readable words. */
-const SOURCE_NAMES: Record<string, string> = {
-  stellarconverter: "Stellar Converter",
-  nanoforge: "Nano-Forge",
-  starcharts: "Star Charts",
-  echo: "Frontier token",
-  horn_of_the_abyss: "Horn of the Abyss",
-  quantum_entangler: "Quantum Entangler",
-  commodities: "Commodities",
-  relic_draw_advantage: "Draw a relic",
-  relic_swap: "Swap relics",
-  steal_relic: "Steal a relic",
-  explore_look_top: "Look at the top exploration card",
-  explore_discard_top: "Discard the top exploration card",
-  codex: "The Codex",
-  mutagen: "Mutagen",
-  crownofemphidia: "Crown of Emphidia",
-  heartofixth: "Heart of Ixth",
-  thesilverflame: "The Silver Flame",
-  throne_of_the_false_emperor: "Throne of the False Emperor",
-  thesilverflame_bam: "Become a Martyr",
-  jrxs455o: "JR-XS455-O",
-  industrex: "Industrex",
-  research: "Research a technology",
-  entropicscar: "Entropic Scar",
-  ground_hit: "Hit an opposing ground force",
-  imperialarbiter: "Imperial Arbiter",
-  minister_peace: "Minister of Peace",
-  ixthian_artifact: "Ixthian Artifact",
-  pay_debt: "Pay a debt",
-  spend_objective_tokens: "Pay the objective: which pools give the command tokens",
-  checks_and_balances: "Checks and Balances: give the strategy card to",
-  colonial_redistribution: "Colonial Redistribution: give the planet to",
-  remove_cc: "Remove one of your command tokens",
-  return_play_area_pn: "Return a play-area promissory note",
-  mahactagent: "Mahact agent: follow without a strategy token",
-  scepter_of_emelpar: "Scepter of Emelpar: follow without a strategy token",
-  cognitive_parallax_engine: "Cognitive Parallax Engine: follow without a strategy token",
-  cavalry: "The Cavalry: the ship that becomes the Cavalry",
-  refit: "Refit Troops: replace an infantry with a mech",
-  warfare: "Warfare",
-};
-
-export const sourceName = (s: string | undefined | null) =>
-  !s ? "" : (SOURCE_NAMES[s] ?? s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+export { sourceName };
 
 function Choice({
   option,
@@ -226,8 +184,22 @@ export function ChoosePanel({ decision, state, answer, pendingOptionId }: Render
           ))}
       </div>
       <Rest options={opts} pendingOptionId={pendingOptionId} answer={answer} />
+      {redistributeOnly(opts) && (
+        <div className={classes.row}>
+          {/* Optional (Warfare: "you may redistribute"): set aside, it waits behind "Available now". */}
+          <UnstyledButton className={cx(classes.option, classes.quiet)} onClick={() => engineStore.getState().defer(decision.id)} disabled={!!pendingOptionId}>
+            <span>Skip — keep my tokens as they are</span>
+          </UnstyledButton>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Warfare's redistribute offer with nothing else on it (after its tactical action): optional. */
+function redistributeOnly(opts: Option<ChooseValue>[]): boolean {
+  const typed = opts.filter((o) => o.value);
+  return typed.length > 0 && typed.every((o) => (o.value as unknown as Record<string, unknown>).source === "warfare" && (o.value as unknown as Record<string, unknown>).choice === "redistribute");
 }
 
 const GROUPS: [string, (c: string) => boolean][] = [

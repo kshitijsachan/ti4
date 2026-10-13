@@ -117,7 +117,11 @@ export type CombatBombard = DecisionBase<"combat.bombard", CombatBombardValue>;
  * A stand-alone opener of the per-unit removal menu (fleet pool / capacity violation, rift: "remove"; hits taken
  * outside the combat controls: "bombardment", "afb", "pds", "spacecombat", "groundcombat"). "done" closes it.
  */
-export type UnitsRemoveValue = { action: "open"; tile: string; assignType: string } | { action: "done"; tile: null; assignType: null };
+export type UnitsRemoveValue =
+  /** reminder: the fleet-pool / capacity reminder (the turn cannot end while it is open and its system breaks the rules). */
+  | { action: "open"; tile: string; assignType: string; reminder?: boolean }
+  /** blocked: on a fleet-pool / capacity reminder, why Dismiss is refused now (the system is still over its limits). */
+  | { action: "done"; tile: null; assignType: null; blocked?: string | null };
 export type UnitsRemove = DecisionBase<"units.remove", UnitsRemoveValue>;
 
 /**
