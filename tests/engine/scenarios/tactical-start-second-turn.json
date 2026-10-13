@@ -1,0 +1,23 @@
+{
+  "name": "tactical-start-second-turn",
+  "description": "Playtest 8, pbd469 round 3 (HIGH): Mentak's 2nd turn could not start a tactical action — the turn panel said 'click a system on the map' but nothing lit. Bot side was right: the turn menu (Tactical Action (9) / Component / Play Warfare) and its turn.action decision with a live tactical option were posted, active system empty. The trigger: Naalu's Imperial primary ('Score A Public') posted its 'Please score objectives.' prompt (FFCC_naalu_po_scoring_*) in the actions channel AFTER Mentak's turn menu, and it stays up; the web's pending-prompt scan drops a faction prompt older than another player's newer prompt, so the map saw no turn step. pbd469@298 (Naalu just ended turn, Mentak active) with Naalu's Imperial card re-posted; Mentak's turn menu posted (/player turn_start); then Naalu presses Score A Public as the autopilot did. Expect Mentak's start-of-turn menu still open with a live tactical option (the web now takes that decision as the map's turn step), no active system, and Naalu's leftover scoring prompt open after it.",
+  "base": { "game": "pbd469", "index": 298 },
+  "setup": [
+    "/player turn_start faction_or_color:mentak",
+    { "wait": 2500 }
+  ],
+  "steps": [
+    { "wait": 500, "expect": { "decision": { "kind": "turn.action", "as": "mentak", "open": true } } },
+    { "press": "scoreAnObjective", "as": "naalu" },
+    { "wait": 2000, "expect": { "decision": [
+      { "kind": "turn.action", "as": "mentak", "open": true },
+      { "kind": "status.score", "as": "naalu", "open": true }
+    ] } }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "game.active_system", "eq": "" } ],
+    "state": [ { "path": "players[faction=mentak].commandTokens.tactic", "eq": 9 } ],
+    "decision": { "kind": "turn.action", "as": "mentak", "open": true }
+  }
+}

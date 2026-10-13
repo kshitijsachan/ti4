@@ -2,7 +2,7 @@
 /** Run: `node --test src/engine/__tests__/activateOffer.test.ts` from web/. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { engineActivation, offeredActivation } from "../../mapactions/activateOffer.ts";
+import { engineActivation, isStartMenu, offeredActivation } from "../../mapactions/activateOffer.ts";
 import { activateClick } from "../../mapactions/activateClick.ts";
 
 /* pbd436 (playtest 7): Yssaril, 0 tactic tokens, Thunder's Edge Warfare primary → the bot's system menu. */
@@ -46,4 +46,27 @@ void test("the inline confirm says Warfare places no token", () => {
     position: "302",
     label: "Activate Mehar Xull (no command token placed)",
   });
+});
+
+/* Playtest 8, pbd469 round 3: Mentak's 2nd turn (Leadership done on the 1st). The engine's start-of-turn menu is what
+   lets the map start a tactical action, even when a bot's leftover prompt hides the turn message from the scan. */
+const opt = (value: unknown, disabled = false) => ({ disabled, value });
+void test("pbd469: the start-of-turn menu with a live Tactical action is a start menu", () => {
+  const menu = {
+    kind: "turn.action",
+    options: [
+      opt({ action: "tactical", tacticTokens: 9 }),
+      opt({ action: "component" }),
+      opt({ action: "strategic", strategyCard: 6 }),
+      opt(null),
+      opt(null),
+    ],
+  };
+  assert.equal(isStartMenu(menu), true);
+});
+
+void test("the post-action menu (End turn / another action) and a disabled Tactical action are not start menus", () => {
+  assert.equal(isStartMenu({ kind: "turn.action", options: [opt({ action: "end_turn", abilities: false }), opt({ action: "another_action" })] }), false);
+  assert.equal(isStartMenu({ kind: "turn.action", options: [opt({ action: "tactical", tacticTokens: 0 }, true), opt({ action: "component" })] }), false);
+  assert.equal(isStartMenu({ kind: "tactical.activate", options: [opt({ action: "tactical", tacticTokens: 3 })] }), false);
 });
