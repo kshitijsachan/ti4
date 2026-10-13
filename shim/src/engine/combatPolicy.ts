@@ -79,7 +79,8 @@ function pickUnit(d: CombatAssignUnits, me: string): CombatChoice | null {
   if (d.target?.userId !== me) return null;
   const live = d.options.filter((o) => !o.disabled && !forDummy(o) && o.value);
   const left = Number((d.progress?.required as Record<string, unknown> | undefined)?.hits ?? 0);
-  const done = live.find((o) => o.value!.action === "done");
+  // A reminder's Dismiss the engine refuses while the system is still over its limits (value.blocked) is no option.
+  const done = live.find((o) => o.value!.action === "done" && !(o.value as { blocked?: string | null }).blocked);
   if (!d.progress || left <= 0) return done ? { option: done, why: "combat: nothing owed; close the menu" } : null;
   const units = live.filter((o) => o.value!.action === "sustain" || o.value!.action === "destroy") as Option<Extract<CombatAssignUnits["options"][number]["value"], { unit: string }>>[];
   const sustain = units.find((o) => o.value!.action === "sustain" && !o.value!.damaged);

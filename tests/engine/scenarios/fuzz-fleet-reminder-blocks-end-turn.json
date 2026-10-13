@@ -1,6 +1,6 @@
 {
   "name": "fuzz-fleet-reminder-blocks-end-turn",
-  "description": "Fuzz pbd385 / pbd386 (bot 1da6c62, invariant:fleet.supply): Xxcha placed a flagship in Warfare's home build (4 ships, fleet pool 3) and Crimson gave up a fleet token with 3 ships at home; the fleet-pool reminder (units.remove) was posted but nothing held the player to it, and the turn went on with the excess ships. Fix (bot fuzz-triage-2): units.remove options carry value.reminder; turn.action End Turn / Pass is refused while the player's reminder for a system still over its limits is open (its Dismiss sets it aside, as in the original); the web greys those buttons with the reason. Base: pinned pbd385 saves 141 (+142: Xxcha's End Turn prompt; 4 ships at 313, fleet pool 3, the reminder dismissed); one more destroyer added there posts the reminder again.",
+  "description": "Fuzz pbd385 / pbd386 and playtest 8 pbd469 (Mentak: 4 ships at fleet pool 3 after producing a destroyer; 'Dismiss These Buttons' closed the reminder with nothing removed and End Turn went through). Fix (bot fuzz-triage-2): while ButtonHelper.fleetReport says the system is over its limits, the reminder's Dismiss is refused (units.remove validate + the deleteButtons handler; value.blocked carries the reason for the web) and turn.action End Turn / Pass are refused, judged on the board whether or not a reminder is open (value.overLimits); removing the excess lets the turn end. Base: pinned pbd385 saves 141 (+142: Xxcha's End Turn prompt; cv, 2 ca, fs at 313 with fleet pool 3); one more destroyer added there posts the reminder.",
   "base": {
     "save": "saves/fuzz-pbd385-141.txt",
     "next": "saves/fuzz-pbd385-142.txt"
@@ -20,20 +20,13 @@
     },
     {
       "answer": {
-        "kind": "turn.action",
-        "option": "turnEnd$"
-      },
-      "as": "xxcha",
-      "refused": true
-    },
-    {
-      "answer": {
         "kind": "units.remove",
         "value": {
           "action": "done"
         }
       },
       "as": "xxcha",
+      "refused": true,
       "legacy": [
         {
           "press": "deleteButtons",
@@ -42,7 +35,18 @@
       ]
     },
     {
-      "wait": 1500,
+      "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "xxcha",
+      "refused": true
+    },
+    {
+      "command": "/remove_units tile_name:313 unit_names:\"dd, ca\" faction_or_color:xxcha"
+    },
+    {
+      "wait": 2500,
       "expect": {
         "decision": [
           {
