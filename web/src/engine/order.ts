@@ -194,6 +194,8 @@ const IN_ADVANCE_KINDS = new Set(["strategy_card.pre_decline", "strategy_card.qu
 const AGENDA_BLOCKING = new Set(["action_card.sabotage", "agenda.when", "agenda.after", "agenda.vote", "agenda.vote_step", "agenda.tiebreak", "agenda.resolve"]);
 /** Table-wide steps that move the phase on: after my own homework, so I'm not asked to start the next phase first. */
 const PHASE_STEP = new Set(["status.advance", "setup.deal_secrets", "setup.reveal_objectives", "status.reveal_objective", "agenda.next"]);
+/** Hand upkeep answers: what they reopen (the hand panel) is not something I asked to play from. */
+const CARD_UPKEEP = new Set(["action_card.discard", "action_card.draw"]);
 const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/;
 
 
@@ -235,8 +237,11 @@ export function orderDecisions(
         !(AGENDA_LIVE.has(d.kind) && !agendaPhase) &&
         !(d.kind === "agenda.when" && !!state?.agenda?.whensResolved) &&
         !(d.kind === "agenda.after" && !!state?.agenda?.aftersResolved) &&
-        /* Pre-declining a card I hold now (an offer left from before I took it): never mine to follow. */
-        !(d.kind === "strategy_card.pre_decline" && preDeclinesMine(d, state, selfId)) &&
+        /* Pre-declining a card I hold now (an offer left from before I took it): never mine to follow. Nor a card
+           already played: its follow window is what I answer now (pt7: "Pre-decline Warfare" stayed on offer). */
+        !(d.kind === "strategy_card.pre_decline" && (preDeclinesMine(d, state, selfId) || preDeclinePlayed(d, state))) &&
+        /* My played card once its primary is done and every other player answered it: nothing left on it (pt7). */
+        !(d.kind === "strategy_card.resolve" && !!myFactionOf(state) && d.window?.subject?.holder === myFactionOf(state) && !primaryOpen(d) && settledWindow(d)) &&
         /* A turn menu left open from my last turn: not mine while someone else is taking theirs. */
         !(d.kind === "turn.action" && !!state?.activePlayer && !!selfId && state.activePlayer !== selfId),
     ),
@@ -244,8 +249,14 @@ export function orderDecisions(
   const nextStep = (d: Decision) => answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2;
   /* Perpetual "play an action card" panels sit open all game: on offer, unless one is what my last answer opened. */
   /* …a new card drawn (status phase) reopens it too: only "play an action card" from my turn menu or a card prompt brings it up. */
-  const askedForCards = !!answeredKind && (answeredKind === "turn.action" || answeredKind.startsWith("action_card."));
-  const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && !(nextStep(d) && askedForCards);
+  /* (Not a discard or a draw: the hand panel reopening after one is not a request to play — pt7 status phase.) */
+  const askedForCards =
+    !!answeredKind && (answeredKind === "turn.action" || (answeredKind.startsWith("action_card.") && !CARD_UPKEEP.has(answeredKind)));
+  /* A hand with nothing playable now (every card greyed) is never what I must do: it stays on offer. */
+  const closedCards: Partial<Record<string, string>> = state?.players.find((p) => p.self)?.hand?.closedActionCards ?? {};
+  const nothingPlayable = (d: Decision) =>
+    d.options.filter((o) => o.value).every((o) => o.disabled || !!closedCards[(o.value as { actionCard?: string }).actionCard ?? ""]);
+  const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && (nothingPlayable(d) || !(nextStep(d) && askedForCards));
   const myFaction = state?.players.find((p) => p.self)?.faction;
   const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
   /* A step of a tactical action is only live while it is my turn (else a leftover of an earlier one). */
@@ -387,6 +398,23 @@ export function primaryPartMissing(d: Decision): boolean {
 function politicsPlacement(value: unknown): boolean {
   const a = (value as { action?: string } | null)?.action;
   return a === "top" || a === "bottom" || a === "discard";
+}
+
+function myFactionOf(state: GameState | null | undefined): string | undefined {
+  return state?.players.find((p) => p.self)?.faction ?? undefined;
+}
+
+/** Every player the window waits on has answered it. */
+function settledWindow(d: Decision): boolean {
+  const w = d.window;
+  return !!w && w.eligible.length > 0 && w.eligible.every((u) => w.responded.includes(u));
+}
+
+/** A pre-decline offer for a card that is already played (pre-declining is for cards not played yet). */
+function preDeclinePlayed(d: Decision, state: GameState | null | undefined): boolean {
+  if (!state) return false;
+  const sc = d.options.map((o) => (o.value as { strategyCard?: number } | null)?.strategyCard).find((n) => typeof n === "number");
+  return sc !== undefined && state.strategyCards.some((c) => c.number === sc && c.played);
 }
 
 /** A pre-decline offer for a strategy card I hold. */

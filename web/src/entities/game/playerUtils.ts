@@ -1,4 +1,5 @@
 import { PlayerData } from "@/entities/data/types";
+import { factionName } from "@/engine/names";
 
 const INVALID_FACTION_VALUES = new Set(["", "null", "neutral"]);
 
@@ -21,6 +22,8 @@ export function getPlayerFactionDisplayName(player: PlayerData) {
     cleanDisplayName(player.displayName) ??
     cleanDisplayName(player.flexibleDisplayName) ??
     player.faction;
+  /* A bare faction id reads as players say it ("ralnel" → "Ral Nel", as the seat rail has it; pt7). */
+  if (name && name === player.faction) return factionName(name);
   return factionKeyDisplayName(name);
 }
 

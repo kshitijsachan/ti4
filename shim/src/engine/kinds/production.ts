@@ -33,7 +33,7 @@ export type PaymentDoneValue = {
   tech: boolean;
   /** Known for production (engine's own build cost) or read from the first prompt; null = unknown. */
   cost: number | null;
-  costSource: "production" | "prompt" | null;
+  costSource: "production" | "prompt" | "objective" | "technology" | null;
   spentResources: number;
   spentInfluence: number;
   /** 2 with Mirror Computing. */

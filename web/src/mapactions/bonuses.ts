@@ -103,9 +103,12 @@ export function useMoveBonuses(args: {
       const name = c.label.replace(/^(Exhaust|Declare|Use|Purge)\s+/i, "");
       const bonus = known.bonus ? { name, ...known.bonus } : undefined;
       const what = bonus ? ` (+${bonus.amount} to ${bonus.ships === Infinity ? "all ships" : "one ship"})` : "";
+      /* Another faction's agent on my prompt is Ssruu (Yssaril agent) copying it: say so (pt7 read it as a bug). */
+      const agent = /^exhaustAgent_(\w+?)agent$/.exec(id)?.[1];
+      const via = agent && me?.faction && agent !== me.faction ? " via Ssruu (your Yssaril agent)" : "";
       out.push({
         id: customId,
-        label: `${c.label}${what}`,
+        label: `${c.label}${via}${what}`,
         note: bonus ? "uses it in the game before the ships move" : "uses it in the game before the ships move; the map does not count its effect",
         bonus,
         run: () => pressButton(conn, { ...prompt, customId }),

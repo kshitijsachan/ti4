@@ -165,21 +165,16 @@ function Follow({ opts, status, reason, onPick }: { opts: Opt[]; status: string;
       </div>
     );
   }
-  if (reason) {
-    return (
-      <>
-        <p className={classes.warn}>{REASON[reason] ?? reason}</p>
-        {decline && <Choice option={decline} onPick={onPick} />}
-      </>
-    );
-  }
   const main = secondary.length ? secondary : follow ? [follow] : [];
+  /* Can't follow (no strategy token, …): the follow stays visible, greyed with the reason. */
+  const why = reason ? (REASON[reason] ?? reason) : null;
   return (
     <>
       <span className={classes.sectionLabel}>Follow</span>
+      {why && <p className={classes.warn}>{why}</p>}
       <div className={classes.choices}>
         {main.map((o) => (
-          <Choice key={o.id} option={o} onPick={onPick}>
+          <Choice key={o.id} option={why ? { ...o, disabled: true } : o} onPick={onPick} title={why ?? undefined}>
             {o.label}
             {o.value!.spendsToken && <Meta>1 strategy token{o.value!.followCost ? ` + ${o.value!.followCost} resources` : ""}</Meta>}
             {!o.value!.spendsToken && o.value!.action.endsWith("_free") && <Meta>free — only if the holder agreed</Meta>}

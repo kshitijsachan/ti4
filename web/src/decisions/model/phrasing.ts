@@ -187,9 +187,37 @@ export function secretName(label: string) {
 }
 
 /** A label read as something done: "End Turn" → "Ended turn", "Don't score" → "Didn't score", "Xxcha" → "Chose Xxcha". */
+/** Engine answers logged by their kind ("tactical.move") instead of a button's words: what they did. */
+const KIND_PAST: Record<string, string> = {
+  "tactical.activate": "Activated a system",
+  "tactical.move": "Moved ships",
+  "tactical.land": "Landed ground forces",
+  "tactical.rift": "Rolled for the gravity rift",
+  "tactical.conclude": "Finished the tactical action",
+  "production.produce": "Produced units",
+  "production.place": "Placed units",
+  "payment.spend": "Paid",
+  "command_tokens.adjust": "Placed command tokens",
+  "status.homework": "Placed command tokens",
+  "planet.ready": "Readied planets",
+  "agenda.vote": "Voted",
+  "agenda.vote_step": "Voted",
+  "combat.assign_hits": "Assigned hits",
+  "combat.hits": "Assigned hits",
+  "combat.assign_units": "Chose units",
+  "explore.planet": "Explored",
+  "trade.offer": "Answered a trade offer",
+};
+
 export function pastTense(label: string): string {
   const text = cleanButtonLabel(label);
   if (!text) return "";
+  const kind = KIND_PAST[text.trim()];
+  if (kind) return kind;
+  /* An engine kind with no plain words yet ("strategy_card.construction_place"): say it as words, not as an id. */
+  if (/^[a-z_]+(\.[a-z_]+)+$/.test(text.trim())) return `Did ${text.trim().replace(/[._]/g, " ")}`;
+  /* A stepper's "-" / "+" (no words): nothing to say; the caller says a button was pressed. */
+  if (!/[\p{L}\p{N}]/u.test(text)) return "";
   const negated = text.match(/^(?:don['’]?t|do not)\s+(.*)$/i);
   if (negated) return `Didn't ${negated[1].charAt(0).toLowerCase()}${negated[1].slice(1)}`;
   /* "Done Exhausting Planets", "No Sabotage": a status, said in sentence case. */
