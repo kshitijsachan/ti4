@@ -173,7 +173,7 @@ export function asTheirs(label: string, point: UndoPoint): string {
  * from the button id the bot logged ("… (milty_slice_D)") instead, or just say a button was pressed.
  */
 export function readableLabel(label: string, point: UndoPoint): string {
-  if (!/“\s*”/.test(label)) return label;
+  if (!/“[^\p{L}\p{N}]*”/u.test(label)) return label;
   const id = pointButtonId(point);
   const draft = /^(?:milty|queueMilyPick)_(slice|order|faction)_(\w+)$/.exec(id);
   const what = draft
@@ -183,7 +183,7 @@ export function readableLabel(label: string, point: UndoPoint): string {
         ? `picked seat ${draft[2]}`
         : `picked ${draft[2]}`
     : "pressed a button";
-  return label.replace(/pressed “\s*”/, what);
+  return label.replace(/pressed “[^\p{L}\p{N}]*”/u, what);
 }
 
 /** "Bot Beta and Bot Alpha" / "Bot Beta, Bot Alpha and Tess" from the actors of `points`. */

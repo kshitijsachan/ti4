@@ -10,6 +10,7 @@ import type { PlayerDataResponse } from "@/entities/data/types";
 import { buildHand, type CardGroup, type HandResponse } from "./model";
 import { actionTakenThisTurn, assignNumbers, indexThread, sabotageWindow, type BotButton, type ThreadIndex } from "./botThread";
 import { useCardData } from "./cardData";
+import { useEngine } from "@/engine/store";
 
 const POLL_MS = 45_000;
 
@@ -106,6 +107,20 @@ export function useHand(gameName: string, token?: string): HandState {
     return () => window.clearTimeout(timer);
   }, [signature, newestId, gameName, queryClient]);
 
+  /* The engine pushes my state (hand verdicts included) on every game save: an activation, a played card or a new
+     turn re-judges the cards at once, instead of waiting for the hand poll (pt7: Flank Speed's Play lagged 6–10 s). */
+  const engineHand = useEngine((s) => (s.view.game === gameName ? (s.view.state?.players.find((p) => p.self)?.hand ?? null) : null));
+  const engineClosed = engineHand?.closedActionCards as Record<string, string> | undefined;
+  const engineStamp = useEngine((s) =>
+    s.view.game === gameName && s.view.state ? `${s.view.state.round}|${s.view.state.phase}|${s.view.state.activePlayer}` : "",
+  );
+  const stampSeen = useRef(engineStamp);
+  useEffect(() => {
+    if (!engineStamp || stampSeen.current === engineStamp) return;
+    stampSeen.current = engineStamp;
+    void queryClient.invalidateQueries({ queryKey: handQueryKey(gameName) });
+  }, [engineStamp, gameName, queryClient]);
+
   const cardDataReady = useCardData();
   const groups = useMemo(
     () => buildHand(hand.data, me, players),
@@ -150,6 +165,6 @@ export function useHand(gameName: string, token?: string): HandState {
     acLimit: index.acLimit ?? 7,
     actionTaken,
     sabotage,
-    closed: hand.data?.closedActionCards ?? {},
+    closed: engineClosed ?? hand.data?.closedActionCards ?? {},
   };
 }

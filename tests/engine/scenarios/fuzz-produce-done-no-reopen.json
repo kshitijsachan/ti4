@@ -1,0 +1,31 @@
+{
+  "name": "fuzz-produce-done-no-reopen",
+  "description": "Fuzz pbd385 (bot 1da6c62): Xxcha placed a flagship in Warfare's home build (production.produce answer), then pressed Done Producing Units within 3 s. The Done press closed the decision ('answered', message deleted) but the re-capture the place answer had scheduled 3 s later still read the message (its delete was in flight) and re-opened the decision under the same id (engine:answered-decision-reopened), a ghost prompt for a deleted message. Fix (bot fuzz-triage-2): recaptureLater skips a message whose decision was closed on purpose (answered / deleted) after the answer that scheduled it. Timing-dependent (Done within 3 s of the place answer, the delete in flight): the harness steps are usually slower, so this pins the flow; the race itself was checked by reading the code path (recaptureLater).",
+  "base": {
+    "save": "saves/fuzz-pbd385-99.txt",
+    "next": "saves/fuzz-pbd385-100.txt"
+  },
+  "steps": [
+    {
+      "press": "FFCC_xxcha_place_flagship_313",
+      "as": "xxcha"
+    },
+    {
+      "press": "FFCC_xxcha_deleteButtons_warfare_313~prod",
+      "as": "xxcha"
+    },
+    {
+      "wait": 6000,
+      "expect": {
+        "decision": {
+          "kind": "production.produce",
+          "as": "xxcha",
+          "open": false
+        }
+      }
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

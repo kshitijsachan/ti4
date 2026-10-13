@@ -423,6 +423,11 @@ async function checks() {
         (d) =>
           d.kind !== "legacy" &&
           !/preassign|pre_decline|queue|game_settings|info|draft\.milty/.test(d.kind) &&
+          // Background panels (plots, decide-in-advance, window-less table menus) never pop up; the movement / landing
+          // step is the map's step panel, not a popup (fuzz pbd348 legacy: "te.plot, tactical.move" with the
+          // "Move into …" step panel on screen).
+          !webReducer.openToAll(d) &&
+          !/^tactical\.(move|land)$/.test(d.kind) &&
           webReducer.awaits(d, ME) &&
           !(d.kind === "action_card.play" && !d.window) &&
           !(d.kind.startsWith("status.") && !phase.startsWith("status")),

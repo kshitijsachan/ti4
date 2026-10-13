@@ -1,0 +1,70 @@
+{
+  "name": "fuzz-fleet-reminder-blocks-end-turn",
+  "description": "Fuzz pbd385 / pbd386 (bot 1da6c62, invariant:fleet.supply): Xxcha placed a flagship in Warfare's home build (4 ships, fleet pool 3) and Crimson gave up a fleet token with 3 ships at home; the fleet-pool reminder (units.remove) was posted but nothing held the player to it, and the turn went on with the excess ships. Fix (bot fuzz-triage-2): units.remove options carry value.reminder; turn.action End Turn / Pass is refused while the player's reminder for a system still over its limits is open (its Dismiss sets it aside, as in the original); the web greys those buttons with the reason. Base: pinned pbd385 saves 141 (+142: Xxcha's End Turn prompt; 4 ships at 313, fleet pool 3, the reminder dismissed); one more destroyer added there posts the reminder again.",
+  "base": {
+    "save": "saves/fuzz-pbd385-141.txt",
+    "next": "saves/fuzz-pbd385-142.txt"
+  },
+  "steps": [
+    {
+      "wait": 1500,
+      "expect": {
+        "decision": [
+          {
+            "kind": "units.remove",
+            "as": "xxcha",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "xxcha",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "units.remove",
+        "value": {
+          "action": "done"
+        }
+      },
+      "as": "xxcha",
+      "legacy": [
+        {
+          "press": "deleteButtons",
+          "as": "xxcha"
+        }
+      ]
+    },
+    {
+      "wait": 1500,
+      "expect": {
+        "decision": [
+          {
+            "kind": "units.remove",
+            "as": "xxcha",
+            "open": false
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "xxcha"
+    }
+  ],
+  "expect": {
+    "invariants": false
+  },
+  "setup": [
+    "/add_units tile_name:313 unit_names:dd faction_or_color:xxcha"
+  ]
+}

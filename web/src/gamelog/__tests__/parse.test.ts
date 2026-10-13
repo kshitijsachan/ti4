@@ -101,6 +101,24 @@ void test("objectives: reveal embeds, scoring with VP", () => {
   assert.match(so.line, /scored Destroy Heretical Works \(secret objective\)/);
 });
 
+void test("game end: the summary is a major event naming the winner; heading and archive notices are noise", () => {
+  // playtest 6 pbd387: the log had no game end (all four messages were minor "other" rows, hidden by default).
+  assert.equal(classify(bot("**Game: `pbd387` has ended!**"), ctx()).cls.type, "noise");
+  assert.equal(classify(bot("This game's channels' permissions have been updated."), ctx()).cls.type, "noise");
+  assert.equal(classify(bot("Channel has been moved to Category **The in-limbo PBD Archive** and will be automatically cleaned up shortly."), ctx()).cls.type, "noise");
+  const end = one(
+    bot(
+      "**Game: __pbd387__** - Kinetic-Apparatus-Jargon\n**Duration:** 2026.10.12 - 2026.10.12\n\n**Players:**\n" +
+        "> `1.` <:Cabal:1558154649406668800><:poison:1558154739932332032>**Poison** <@1559324153117540352> - *1VP* \n" +
+        "> `3.` <:Sol:1558154703500607488><:ethereal:1558154695846002688>**Ethereal** <@1558155013916852224> - *2VP*  **👑WINNER👑**\n\n**Game Modes:** Normal",
+    ),
+  );
+  assert.equal(end.kind, "objective");
+  assert.equal(end.importance, 3);
+  assert.equal(end.actor?.faction, "sol");
+  assert.match(end.line, /won the game with 2 VP/);
+});
+
 void test("agenda: reveal fixture, votes, outcome uses the revealed agenda name", () => {
   const msgs = [
     { ...fixture("agenda-revealed"), id: "20" },

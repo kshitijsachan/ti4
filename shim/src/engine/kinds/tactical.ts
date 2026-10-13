@@ -49,10 +49,15 @@ export type TurnAction = DecisionBase<"turn.action", TurnActionValue>;
  * Choosing the system to activate. A menu step lists the systems it leads to (`positions`), so a client that wants
  * position X answers the menu option whose positions include X, then the system option for X.
  */
+/**
+ * `token`: whether activating places (spends) a tactic token — false while an effect activates without one (Thunder's
+ * Edge Warfare primary, Naalu agent, L1Z1X hero…), when a system already holding my token is offered too. Absent on
+ * older bots (read as true).
+ */
 export type TacticalActivateValue =
-  | { step: "system"; position: TilePosition; tileId: TileId | null }
-  | { step: "ring"; ring: string; positions: TilePosition[] }
-  | { step: "distance"; distance: number; positions: TilePosition[] };
+  | { step: "system"; position: TilePosition; tileId: TileId | null; token?: boolean }
+  | { step: "ring"; ring: string; positions: TilePosition[]; token?: boolean }
+  | { step: "distance"; distance: number; positions: TilePosition[]; token?: boolean };
 export type TacticalActivate = DecisionBase<"tactical.activate", TacticalActivateValue>;
 
 // ---------------------------------------------------------------- tactical.move

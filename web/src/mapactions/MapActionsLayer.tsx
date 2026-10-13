@@ -130,6 +130,9 @@ export function MapActionsLayer({
   );
   const ctx = useMapActionContext(gameName, names);
   const { step, me, web, conn, scope, pick } = ctx;
+  /* The engine's activation menu (choose step): its systems and whether activating spends a tactic token. */
+  const activateOffer = step.kind === "choose" ? ctx.activateOffer : null;
+  const activateToken = activateOffer?.token ?? true;
   /* The engine decision on screen picks a system / planet: the map answers it first (map-first). */
   const enginePick = useEngineMapPick((s) => s.pick);
   const engineTargets = enginePick?.byPosition ?? null;
@@ -175,10 +178,10 @@ export function MapActionsLayer({
     return Object.fromEntries(
       Object.values(tiles).map((t) => [
         t.position,
-        activationOf(t, me, web, step),
+        activationOf(t, me, web, step, activateOffer),
       ]),
     );
-  }, [activating, tiles, me, web, step]);
+  }, [activating, tiles, me, web, step, activateOffer]);
 
   const origins = useMemo(() => {
     if (step.kind !== "move" || !me) return [];
@@ -277,13 +280,13 @@ export function MapActionsLayer({
       setChip({
         position: requested,
         kind: "activate",
-        label: activateLabel(names[requested] || requested),
+        label: activateLabel(names[requested] || requested, activateToken),
       });
     else
       setError(
         a && !a.ok ? a.reason : "You can't activate a system right now.",
       );
-  }, [requested, activation, names]);
+  }, [requested, activation, names, activateToken]);
 
   /* Map clicks: answered here when they mean something for the current step, else left to the map (dossier). */
   const onTileClick = useRef<(position: string) => boolean>(() => false);
@@ -297,7 +300,7 @@ export function MapActionsLayer({
       return true;
     }
     if (activating) {
-      const click = activateClick(position, !!activation[position]?.ok, chip, names[position] ?? "");
+      const click = activateClick(position, !!activation[position]?.ok, chip, names[position] ?? "", activateToken);
       if (click.kind === "ignore") return false;
       if (click.kind === "confirm") confirmChip();
       else setChip({ position, kind: "activate", label: click.label });
@@ -387,13 +390,31 @@ export function MapActionsLayer({
     return () => window.removeEventListener("keydown", onKey);
   }, [chip, picker]);
 
+  /*
+   * Systems a click answers right now (a system/planet decision, or the "activate a system" step itself): lit at rest,
+   * not only under the cursor. On my plain turn menu activation stays a hover affordance (the whole map would light).
+   */
+  const pickTargets = useMemo(
+    () => [
+      ...new Set([
+        ...Object.keys(engineTargets ?? {}),
+        ...Object.keys(pick?.byPosition ?? {}),
+        ...(step.kind === "choose"
+          ? Object.entries(activation)
+              .filter(([, a]) => a.ok)
+              .map(([pos]) => pos)
+          : []),
+      ]),
+    ],
+    [engineTargets, pick, step.kind, activation],
+  );
   const placed = useMemo(() => {
-    const list = new Set<string>();
+    const list = new Set<string>(pickTargets);
     if (chip) list.add(chip.position);
     if (target && (moving || landing)) list.add(target);
     if (moving) Object.keys(groups).forEach((o) => list.add(o));
     return [...list].sort();
-  }, [chip, target, moving, landing, groups]);
+  }, [pickTargets, chip, target, moving, landing, groups]);
   const rects = useTileRects(frameRef, placed);
 
   const run = async (work: () => Promise<void>) => {
@@ -495,16 +516,6 @@ export function MapActionsLayer({
   })();
 
   const chipRect = chip ? rects[chip.position] : undefined;
-  /* Systems a click answers right now (a system/planet decision): lit at rest, not only under the cursor. */
-  const pickTargets = useMemo(
-    () => [
-      ...new Set([
-        ...Object.keys(engineTargets ?? {}),
-        ...Object.keys(pick?.byPosition ?? {}),
-      ]),
-    ],
-    [engineTargets, pick],
-  );
   /* While the player works a chip or the unit picker, the map's own hover cards stay out of the way. */
   const interacting = !!chip || (moving && !!picker);
   useEffect(() => {
