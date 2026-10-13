@@ -186,9 +186,8 @@ export function ChoosePanel({ decision, state, answer, pendingOptionId }: Render
       <Rest options={opts} pendingOptionId={pendingOptionId} answer={answer} />
       {redistributeOnly(opts) && (
         <div className={classes.row}>
-          {/* Optional (Warfare: "you may redistribute"): Skip closes it on this page (the engine closes it once the
-              turn is over; pt9: a deferred offer stayed under "Available now" for three rounds). */}
-          <UnstyledButton className={cx(classes.option, classes.quiet)} onClick={() => engineStore.getState().supersede([decision.id])} disabled={!!pendingOptionId}>
+          {/* Optional (Warfare: "you may redistribute"): set aside, it waits behind "Available now". */}
+          <UnstyledButton className={cx(classes.option, classes.quiet)} onClick={() => engineStore.getState().defer(decision.id)} disabled={!!pendingOptionId}>
             <span>Skip — keep my tokens as they are</span>
           </UnstyledButton>
         </div>

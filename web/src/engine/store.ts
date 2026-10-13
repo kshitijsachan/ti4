@@ -30,13 +30,12 @@ export type EngineStore = {
   hide(decisionId: string): void;
   unhideAll(): void;
   /**
-   * Prompts I set aside for now ("Done" on my card with only an optional repeat left): they wait behind "Available
-   * now" instead of leading (this page only).
+   * Prompts I set aside for now ("Done" on my card with only an optional repeat left, "Skip" on Warfare's redistribute
+   * offer): they wait behind "Available now" instead of leading (this page only).
    */
   deferred: ReadonlySet<string>;
   defer(decisionId: string): void;
-  /** Older copies of a prompt I answered a newer copy of (stacked Pillage offers), and offers I skipped (Warfare's
-   * redistribute): left out (this page only). */
+  /** Older copies of a prompt I answered a newer copy of (stacked Pillage offers): left out (this page only). */
   superseded: ReadonlySet<string>;
   supersede(decisionIds: readonly string[]): void;
 };
