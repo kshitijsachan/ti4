@@ -2221,7 +2221,7 @@ index 11f8248..0cb8c14 100644
                  MessageHelper.sendMessageToChannelWithButtons(
                          channel, "Use these buttons to spend 5 influence.", buttons);
 diff --git a/src/main/java/ti4/game/Game.java b/src/main/java/ti4/game/Game.java
-index 575a281..c10a0c1 100644
+index 575a281..01f03ff 100644
 --- a/src/main/java/ti4/game/Game.java
 +++ b/src/main/java/ti4/game/Game.java
 @@ -485,19 +485,27 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
@@ -2258,7 +2258,7 @@ index 575a281..c10a0c1 100644
      }
  
      @NotNull
-@@ -1295,6 +1303,15 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
+@@ -1295,6 +1303,25 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
          }
          value = StringHelper.escape(value);
          getStoredValueMap().put(key, value);
@@ -2271,10 +2271,20 @@ index 575a281..c10a0c1 100644
 +                getStoredValueMap().remove(ti4.helpers.CcGainCap.INF_KEY + faction);
 +            }
 +        }
++    }
++
++    /**
++     * Loading a save: puts a stored value back exactly as saved, without setStoredValue's panel hook. The hook ran in
++     * the save's (hash map) order, so "originalCCsFor&lt;faction&gt;" read before "ccGainCap_&lt;faction&gt;" dropped the
++     * banked Leadership influence (ccGainCapInf_) on every reload (live pbd436: a paid secondary then granted 0).
++     */
++    public void restoreStoredValue(String key, String value) {
++        if (key == null || value == null || value.isEmpty()) return;
++        getStoredValueMap().put(key, StringHelper.escape(value));
      }
  
      public int changeCommsOnPlanet(int change, String planet) {
-@@ -4079,10 +4096,25 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
+@@ -4079,10 +4106,25 @@ public class Game extends GameProperties implements StoredValueHelper, TwilightF
  
      @Override
      public void setOwnerID(String ownerID) {
@@ -2314,7 +2324,7 @@ index f900bf0..96974c1 100644
              }
              if (game.getStoredValue("fleetLogWhenSCFinished")
 diff --git a/src/main/java/ti4/game/persistence/GameLoadService.java b/src/main/java/ti4/game/persistence/GameLoadService.java
-index 05ddef3..0658a64 100644
+index 05ddef3..44bc29f 100644
 --- a/src/main/java/ti4/game/persistence/GameLoadService.java
 +++ b/src/main/java/ti4/game/persistence/GameLoadService.java
 @@ -163,6 +163,7 @@ class GameLoadService {
@@ -2325,6 +2335,15 @@ index 05ddef3..0658a64 100644
              TransientGameInfoUpdater.update(game);
              return game;
          } catch (Exception e) {
+@@ -489,7 +490,7 @@ class GameLoadService {
+                         }
+                         if (dataInfoTokens.hasMoreTokens()) {
+                             String dataInfo = dataInfoTokens.nextToken();
+-                            game.setStoredValue(outcome, dataInfo);
++                            game.restoreStoredValue(outcome, dataInfo); // as saved: no panel hook (CcGainCap)
+                         }
+                     }
+                 }
 diff --git a/src/main/java/ti4/game/persistence/GameSaveService.java b/src/main/java/ti4/game/persistence/GameSaveService.java
 index c8dcdf7..eec5076 100644
 --- a/src/main/java/ti4/game/persistence/GameSaveService.java
@@ -5004,14 +5023,12 @@ index 1c6dee8..89e7176 100644
                  ButtonHelperFactionSpecific.resolveVadenSCDebt(player, scModel.getInitiative(), game, event);
 diff --git a/src/main/java/ti4/helpers/CcGainCap.java b/src/main/java/ti4/helpers/CcGainCap.java
 new file mode 100644
-index 0000000..b5d4d3c
+index 0000000..176b82f
 --- /dev/null
 +++ b/src/main/java/ti4/helpers/CcGainCap.java
 @@ -0,0 +1,155 @@
 +package ti4.helpers;
 +
-+import java.util.regex.Matcher;
-+import java.util.regex.Pattern;
 +import javax.annotation.Nullable;
 +import lombok.experimental.UtilityClass;
 +import ti4.game.Game;
@@ -5035,7 +5052,6 @@ index 0000000..b5d4d3c
 +    public static final String INF_KEY = "ccGainCapInf_";
 +    /** Label marker of Predictive Intelligence's redistribute button (redistribute only: net 0). */
 +    public static final String PI_LABEL = "Predictive Intelligence";
-+    private static final Pattern TOTAL_INF = Pattern.compile("total spend of (\\d+) influence");
 +
 +    /**
 +     * @param base tokens granted outright
@@ -5123,12 +5139,15 @@ index 0000000..b5d4d3c
 +        }
 +    }
 +
-+    /** Influence spent in the open payment window (the same total the payment summary shows). */
++    /**
++     * Influence spent in the open payment window: the planets exhausted and trade goods spent on it, counted as the
++     * payment summary counts them (Helper.spentTotals), not read back from the summary's text. The same for the
++     * legacy presses and the engine's payment.spend (which presses the same buttons, then Done).
++     */
 +    static int currentInfluence(Game game, Player player) {
-+        if (player.getSpentThingsThisWindow().isEmpty() && player.getSpentTgsThisWindow() == 0) return 0;
++        if (player.getSpentThingsThisWindow().isEmpty()) return 0;
 +        try {
-+            Matcher m = TOTAL_INF.matcher(Helper.buildSpentThingsMessage(player, game, "inf"));
-+            return m.find() ? Integer.parseInt(m.group(1)) : 0;
++            return Math.max(0, Helper.spentTotals(player, game, "inf").influence());
 +        } catch (RuntimeException e) {
 +            return 0;
 +        }
@@ -5366,10 +5385,10 @@ index 0000000..7d83b30
 +    }
 +}
 diff --git a/src/main/java/ti4/helpers/Helper.java b/src/main/java/ti4/helpers/Helper.java
-index 661fb78..40f97c4 100644
+index 661fb78..e97a05a 100644
 --- a/src/main/java/ti4/helpers/Helper.java
 +++ b/src/main/java/ti4/helpers/Helper.java
-@@ -1535,6 +1535,50 @@ public final class Helper {
+@@ -1535,15 +1535,70 @@ public final class Helper {
          SharedResourcesLLButtonHandler.clear(game, player);
      }
  
@@ -5418,9 +5437,41 @@ index 661fb78..40f97c4 100644
 +    }
 +
      public static String buildSpentThingsMessage(Player player, Game game, String resOrInfOrBoth) {
-         String message = buildSpentThingsMessage(player, game, resOrInfOrBoth, false);
+-        String message = buildSpentThingsMessage(player, game, resOrInfOrBoth, false);
++        String message = spentThings(player, game, resOrInfOrBoth, false).message();
          if (message.length() <= Message.MAX_CONTENT_LENGTH) {
-@@ -2930,6 +2974,9 @@ public final class Helper {
+             return message;
+         }
+-        return buildSpentThingsMessage(player, game, resOrInfOrBoth, true);
++        return spentThings(player, game, resOrInfOrBoth, true).message();
+     }
+ 
+-    private static String buildSpentThingsMessage(
++    /** The open payment window's summary and the resources / influence it counts (the totals the summary shows). */
++    public record SpentThings(String message, int resources, int influence) {}
++
++    /**
++     * Resources and influence spent in the open payment window, counted exactly as the payment summary counts them
++     * (attachments, Mirror Computing, Xxcha hero, Wildlife Preservation, …) without reading the summary's text back.
++     */
++    public static SpentThings spentTotals(Player player, Game game, String resOrInfOrBoth) {
++        return spentThings(player, game, resOrInfOrBoth, true);
++    }
++
++    private static SpentThings spentThings(
+             Player player, Game game, String resOrInfOrBoth, boolean withoutPlanetEmojis) {
+         Function<String, String> planetWithResourcesAndInfluence = withoutPlanetEmojis
+                 ? planet -> getPlanetRepresentation(planet, game)
+@@ -1932,7 +1987,7 @@ public final class Helper {
+                     .append(inf)
+                     .append(" influence.");
+         }
+-        return msg.toString();
++        return new SpentThings(msg.toString(), res, inf);
+     }
+ 
+     public static String buildProducedUnitsMessage(Player player, Game game) {
+@@ -2930,6 +2985,9 @@ public final class Helper {
              Tile tile,
              String warfareNOtherstuff,
              String placePrefix) {
@@ -5430,7 +5481,7 @@ index 661fb78..40f97c4 100644
          List<Button> veiledNetworkingButtons = XinTechHandler.getVeiledNetworkingStarProductionButtons(
                  game, player, tile, warfareNOtherstuff, placePrefix);
          if (!veiledNetworkingButtons.isEmpty()) {
-@@ -2939,6 +2986,8 @@ public final class Helper {
+@@ -2939,6 +2997,8 @@ public final class Helper {
          player.resetProducedUnits();
          boolean asn = warfareNOtherstuff.contains("asn");
          warfareNOtherstuff = warfareNOtherstuff.replace("asn", "");
@@ -5439,7 +5490,7 @@ index 661fb78..40f97c4 100644
          ArcanumBreakthroughHandler.setPowerWordWishProductionContext(game, player, warfareNOtherstuff);
          int resourcelimit = 100;
          String planetInteg = "";
-@@ -3347,7 +3396,8 @@ public final class Helper {
+@@ -3347,7 +3407,8 @@ public final class Helper {
          }
          if ("place".equalsIgnoreCase(placePrefix)) {
              Button DoneProducingUnits = Buttons.red(
@@ -5449,7 +5500,7 @@ index 661fb78..40f97c4 100644
                      "Done Producing Units");
              unitButtons.add(DoneProducingUnits);
              unitButtons.add(Buttons.gray(player.factionButtonChecker() + "resetProducedThings", "Reset Build"));
-@@ -3382,7 +3432,7 @@ public final class Helper {
+@@ -3382,7 +3443,7 @@ public final class Helper {
              }
          }
  
@@ -6674,10 +6725,10 @@ index 0000000..b091bf4
 +}
 diff --git a/src/main/java/ti4/selfhost/SelfHosted.java b/src/main/java/ti4/selfhost/SelfHosted.java
 new file mode 100644
-index 0000000..ebde53c
+index 0000000..99c695d
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/SelfHosted.java
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,55 @@
 +package ti4.selfhost;
 +
 +import java.util.Map;
@@ -6721,6 +6772,16 @@ index 0000000..ebde53c
 +    public static boolean reopenedRecently(long threadId) {
 +        Long at = REOPENED.get(threadId);
 +        return at != null && System.currentTimeMillis() - at < 10_000;
++    }
++
++    /**
++     * A per-guild Discord limit (250 roles, 500 channels) as it applies here. The shim is not Discord and has no such
++     * limits (it never refuses a role or channel), so self-hosted the bot must not stop creating games when the guild
++     * passes Discord's numbers: live 2026-10-13, 241 game roles blocked every new "PBD #" category, so neither
++     * "Play solo" nor a fork could create a game.
++     */
++    public static int guildLimit(int discordLimit) {
++        return ENABLED ? 1_000_000 : discordLimit;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/ShimRetryInterceptor.java b/src/main/java/ti4/selfhost/ShimRetryInterceptor.java
@@ -6770,10 +6831,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..dc3c988
+index 0000000..88e3836
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,641 @@
+@@ -0,0 +1,642 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -7125,6 +7186,7 @@ index 0000000..dc3c988
 +        List<String> prompt = UndoGroup.promptOf(d, player.getFaction());
 +        ExecutionLockManager.lock(gameName, ExecutionLockType.WRITE);
 +        int undoBefore = UndoGroup.latest(gameName);
++        UndoGroup.nameAnswer(null);
 +        try {
 +            err = spec.answerPayload(answer, payload);
 +        } catch (MessageGone e) {
@@ -7140,7 +7202,7 @@ index 0000000..dc3c988
 +            return fail("error", String.valueOf(e.getMessage()), d.id());
 +        } finally {
 +            // One undo step for the whole answer (also a partial one: undo then takes back what it did press).
-+            UndoGroup.collapse(gameName, undoBefore, player.getUserName(), d.kind(), prompt);
++            UndoGroup.collapse(gameName, undoBefore, player.getUserName(), UndoGroup.takeAnswerLabel(d.kind()), prompt);
 +            ExecutionLockManager.unlock(gameName, ExecutionLockType.WRITE);
 +            inFlight.remove(flightKey);
 +        }
@@ -12635,10 +12697,10 @@ index 0000000..6344ad2
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/UndoGroup.java b/src/main/java/ti4/selfhost/engine/UndoGroup.java
 new file mode 100644
-index 0000000..a750d76
+index 0000000..7a5ff7b
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/UndoGroup.java
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,161 @@
 +package ti4.selfhost.engine;
 +
 +import java.nio.charset.StandardCharsets;
@@ -12663,8 +12725,27 @@ index 0000000..a750d76
 + * undo} and the web undo / rewind take the whole answer back in one step (the web's flow grouping is not needed for
 + * engine answers). Callers hold the game's WRITE lock, so no other save interleaves.
 + */
-+final class UndoGroup {
++public final class UndoGroup {
 +    private UndoGroup() {}
++
++    /** A payload answer's own words for its undo step ("Pay 3 influence"), set by the kind while it answers. */
++    private static final ThreadLocal<String> ANSWER_LABEL = new ThreadLocal<>();
++
++    /**
++     * Names the payload answer running on this thread for its undo step, in a button's imperative words ("Pay 3
++     * influence": the web reads "you paid 3 influence"). Without it the step is labelled with the decision's kind.
++     */
++    public static void nameAnswer(@Nullable String label) {
++        if (label == null || label.isBlank()) ANSWER_LABEL.remove();
++        else ANSWER_LABEL.set(label.replace("(", "").replace(")", "").replace("\n", " ").trim());
++    }
++
++    /** The label set by {@link #nameAnswer} on this thread (cleared), or {@code fallback}. */
++    static String takeAnswerLabel(String fallback) {
++        String l = ANSWER_LABEL.get();
++        ANSWER_LABEL.remove();
++        return l == null ? fallback : l;
++    }
 +
 +    /** The latest undo snapshot number now (-1 when none). */
 +    static int latest(String gameName) {
@@ -17700,10 +17781,10 @@ index 0000000..1516dd5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java b/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java
 new file mode 100644
-index 0000000..175d7f0
+index 0000000..cfcffea
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,104 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import static ti4.selfhost.engine.kinds.ChooseSupport.rule;
@@ -17752,6 +17833,18 @@ index 0000000..175d7f0
 +            // Ixthian Artifact (agenda, For): the speaker rolls (target = speaker); "roll anyway" for anyone else.
 +            rule("ixthian_artifact", "rollIxthian", Map.of("confirm", true)),
 +            rule("ixthian_artifact", "rollIxthianIgnoreSpeaker", Map.of("confirm", true, "choice", "ignore_speaker")),
++            // Lead From the Front / Galvanize the People (ObjectiveTokenSpendService): which pools pay the command
++            // tokens, one option per split; objective lead | galvanize, strategy + tactic = the cost.
++            rule(
++                    "spend_objective_tokens",
++                    "poTokenSpend_(?<objective>lead|galvanize)_(?<strategy>\\d+)_(?<tactic>\\d+)",
++                    Map.of("confirm", true, "choice", "split"),
++                    (v, ctx) -> {
++                        for (String k : new String[] {"strategy", "tactic"}) {
++                            Object raw = v.get(k);
++                            if (raw instanceof String str) v.put(k, Integer.parseInt(str));
++                        }
++                    }),
 +            // Debt reminder (AgendaHelper.pingAboutDebt, agenda phase): pay a creditor 1/3 commodities or trade goods,
 +            // or erase 1/3 debt paid elsewhere; "Delete These Buttons" declines. faction = the creditor.
 +            rule(
@@ -24515,10 +24608,10 @@ index 0000000..a3866b8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PaymentSpendKind.java b/src/main/java/ti4/selfhost/engine/kinds/PaymentSpendKind.java
 new file mode 100644
-index 0000000..d342381
+index 0000000..e9c7257
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/PaymentSpendKind.java
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,344 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -24820,8 +24913,21 @@ index 0000000..d342381
 +        Decision latest = a.decision();
 +        if (after != null && g != null && latest != null)
 +            PaymentSupport.syncContent(latest, Helper.buildSpentThingsMessage(after, g, whatFor));
++        // The undo step reads "you paid 3 influence", not the kind's name (web: 'you chose "payment.spend"').
++        if (after != null && g != null) ti4.selfhost.engine.UndoGroup.nameAnswer(undoLabel(g, after, whatFor));
 +        a.press(done.id());
 +        return null;
++    }
++
++    /** "Pay 3 influence" / "Pay 4 resources" / "Pay 2 resources or 3 influence" / "Finish paying" (nothing spent). */
++    static String undoLabel(Game game, Player player, String whatFor) {
++        int[] spent = PaymentSupport.spent(game, player, whatFor);
++        String currency = PaymentSupport.currency(whatFor);
++        String res = spent[0] + (spent[0] == 1 ? " resource" : " resources");
++        String inf = spent[1] + " influence";
++        if ("inf".equals(currency)) return spent[1] > 0 ? "Pay " + inf : "Finish paying";
++        if ("res".equals(currency) || "freelancers".equals(currency)) return spent[0] > 0 ? "Pay " + res : "Finish paying";
++        return spent[0] > 0 || spent[1] > 0 ? "Pay " + res + " or " + inf : "Finish paying";
 +    }
 +
 +    private static int countReadied(Set<String> offered, Set<String> readied) {
@@ -32439,6 +32545,21 @@ index 948970e..bf124e3 100644
                  if (!message.isEmpty()) {
                      MessageHelper.sendMessageToChannel(event.getMessageChannel(), message.toString());
                  }
+diff --git a/src/main/java/ti4/service/fow/CreateFoWGameService.java b/src/main/java/ti4/service/fow/CreateFoWGameService.java
+index 27d06a6..5913396 100644
+--- a/src/main/java/ti4/service/fow/CreateFoWGameService.java
++++ b/src/main/java/ti4/service/fow/CreateFoWGameService.java
+@@ -41,8 +41,8 @@ import ti4.service.game.CreateGameService;
+ @UtilityClass
+ public class CreateFoWGameService {
+ 
+-    private static final int MAX_CHANNELS_MINUS_5 = 495;
+-    private static final int MAX_ROLE_COUNT = 250;
++    private static final int MAX_CHANNELS_MINUS_5 = ti4.selfhost.SelfHosted.guildLimit(500) - 5;
++    private static final int MAX_ROLE_COUNT = ti4.selfhost.SelfHosted.guildLimit(250);
+     private static final Pattern FOW_GAME_NAME = Pattern.compile("fow[0-9]+");
+ 
+     private static final long PERMISSIONS =
 diff --git a/src/main/java/ti4/service/fow/FOWPlusService.java b/src/main/java/ti4/service/fow/FOWPlusService.java
 index ff687fc..d9da862 100644
 --- a/src/main/java/ti4/service/fow/FOWPlusService.java
@@ -32466,10 +32587,22 @@ index 64abce2..954a2fe 100644
          ReactionService.addReaction(event, game, player, "IS PERFORMING A **SACRIFICE**.");
  
 diff --git a/src/main/java/ti4/service/game/CreateGameService.java b/src/main/java/ti4/service/game/CreateGameService.java
-index 5b8e62a..15390f1 100644
+index 5b8e62a..a4f228a 100644
 --- a/src/main/java/ti4/service/game/CreateGameService.java
 +++ b/src/main/java/ti4/service/game/CreateGameService.java
-@@ -348,6 +348,7 @@ public class CreateGameService {
+@@ -59,8 +59,9 @@ import ti4.settings.users.UserSettingsManager;
+ @UtilityClass
+ public class CreateGameService {
+ 
+-    private static final int MAX_ROLE_COUNT = 250;
+-    private static final int MAX_CHANNEL_COUNT = 500;
++    // Discord's per-guild limits; lifted self-hosted (the shim has none, see SelfHosted.guildLimit).
++    private static final int MAX_ROLE_COUNT = ti4.selfhost.SelfHosted.guildLimit(250);
++    private static final int MAX_CHANNEL_COUNT = ti4.selfhost.SelfHosted.guildLimit(500);
+ 
+     public static Game createNewGame(String gameName, Member gameOwner) {
+         Game newGame = new Game();
+@@ -348,6 +349,7 @@ public class CreateGameService {
          //         tfOptions);
  
          setupButtons.add(Buttons.green("frankenSetup", "Start Franken Setup"));
@@ -32477,7 +32610,25 @@ index 5b8e62a..15390f1 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  actionsChannel, "These buttons can help you setup alternate game modes.", setupButtons);
  
-@@ -746,6 +747,8 @@ public class CreateGameService {
+@@ -592,7 +594,7 @@ public class CreateGameService {
+         int roleCount = guild.getRoles().size();
+         if (roleCount >= MAX_ROLE_COUNT) {
+             BotLogger.warning("`CreateGameService.serverHasRoomForNewRole` Cannot create a new role. Server **"
+-                    + guild.getName() + "** currently has **" + roleCount + "** / 250 roles.");
++                    + guild.getName() + "** currently has **" + roleCount + "** / " + MAX_ROLE_COUNT + " roles.");
+             return false;
+         }
+         return true;
+@@ -630,7 +632,7 @@ public class CreateGameService {
+             BotLogger.warning(
+                     "`CreateGameService.serverHasRoomForNewFullCategory` Cannot create a new category. Server **"
+                             + guild.getName() + "** currently has " + channelCount
+-                            + " / 500 channels and a new category requires space for "
++                            + " / " + MAX_CHANNEL_COUNT + " channels and a new category requires space for "
+                             + channelCountRequiredForNewCategory
+                             + " new channels (including 1 for the category itself)");
+             return false;
+@@ -746,6 +748,8 @@ public class CreateGameService {
      }
  
      public static boolean isLockedFromCreatingGames(GenericInteractionCreateEvent event) {
@@ -32957,8 +33108,108 @@ index f57515a..6ecd8d4 100644
              return FinishDraftService.finishDraft(event, this, game);
          }
          if (getCurrentDraftPlayer() == null || !userId.equals(getCurrentDraftPlayer())) {
+diff --git a/src/main/java/ti4/service/objectives/ObjectiveTokenSpendService.java b/src/main/java/ti4/service/objectives/ObjectiveTokenSpendService.java
+new file mode 100644
+index 0000000..b280537
+--- /dev/null
++++ b/src/main/java/ti4/service/objectives/ObjectiveTokenSpendService.java
+@@ -0,0 +1,94 @@
++package ti4.service.objectives;
++
++import java.util.ArrayList;
++import java.util.List;
++import lombok.experimental.UtilityClass;
++import net.dv8tion.jda.api.components.buttons.Button;
++import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
++import ti4.discord.interactions.buttons.Buttons;
++import ti4.discord.interactions.routing.ButtonHandler;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.helpers.ButtonHelper;
++import ti4.helpers.ButtonHelperCommanders;
++import ti4.message.MessageHelper;
++import ti4.service.emoji.CardEmojis;
++
++/**
++ * Public objectives paid in command tokens (Lead From the Front: 3, Galvanize the People: 6, one less with a readied
++ * Scepter of Emelpar). When the strategy and tactic pools can share the cost more than one way, the player chooses
++ * the split instead of the bot taking strategy tokens first: one button per split,
++ * {@code FFCC_<faction>_poTokenSpend_<lead|galvanize>_<strategy>_<tactic>}. With only one way to pay the bot still
++ * deducts it at once (ScorePublicObjectiveService).
++ */
++@UtilityClass
++public class ObjectiveTokenSpendService {
++
++    static final String PREFIX = "poTokenSpend_";
++
++    private static String objectiveName(String key) {
++        return "galvanize".equals(key) ? "Galvanize the People" : "Lead From the Front";
++    }
++
++    /** Posts the choice when there is one; false when the cost can be paid only one way (or not at all). */
++    public static boolean offerSplit(Game game, Player player, String key, int required, boolean emelpar) {
++        int strat = player.getStrategicCC();
++        int tact = player.getTacticalCC();
++        if (strat + tact < required) return false;
++        int minStrat = Math.max(0, required - tact);
++        int maxStrat = Math.min(strat, required);
++        if (minStrat >= maxStrat) return false;
++        List<Button> buttons = new ArrayList<>();
++        for (int s = maxStrat; s >= minStrat; s--) {
++            int t = required - s;
++            String label = s == 0
++                    ? t + " from tactic"
++                    : t == 0 ? s + " from strategy" : s + " from strategy, " + t + " from tactic";
++            buttons.add(Buttons.green(
++                    player.factionButtonChecker() + PREFIX + key + "_" + s + "_" + t, label));
++        }
++        String msg = player.getRepresentationUnfogged() + ", choose which pools pay the " + required
++                + " command tokens for _" + objectiveName(key) + "_ (strategy " + strat + ", tactic " + tact + ")."
++                + (emelpar ? " The Scepter of Emelpar saves 1." : "");
++        MessageHelper.sendMessageToChannelWithButtons(player.getCorrectChannel(), msg, buttons);
++        return true;
++    }
++
++    @ButtonHandler(PREFIX)
++    public static void spend(ButtonInteractionEvent event, Game game, Player player, String buttonID) {
++        String[] parts = buttonID.substring(PREFIX.length()).split("_");
++        if (parts.length != 3) return;
++        String key = parts[0];
++        int s;
++        int t;
++        try {
++            s = Integer.parseInt(parts[1]);
++            t = Integer.parseInt(parts[2]);
++        } catch (NumberFormatException e) {
++            return;
++        }
++        int strat = player.getStrategicCC();
++        int tact = player.getTacticalCC();
++        if (s > strat || t > tact) {
++            MessageHelper.sendMessageToChannel(
++                    player.getCorrectChannel(),
++                    player.getRepresentation() + ", your pools no longer hold " + s + " strategy and " + t
++                            + " tactic tokens (strategy " + strat + ", tactic " + tact + "). Choose again.");
++            return;
++        }
++        String card = ("galvanize".equals(key) ? CardEmojis.Public2 : CardEmojis.Public1) + " _"
++                + objectiveName(key) + "_.";
++        for (int x = 0; x < s; x++) {
++            ButtonHelperCommanders.resolveMuaatCommanderCheck(player, game, event, "scored " + card);
++        }
++        String before = player.getCCRepresentation();
++        player.setStrategicCC(strat - s);
++        player.setTacticalCC(tact - t);
++        MessageHelper.sendMessageToChannel(
++                player.getCorrectChannel(),
++                player.getRepresentation() + " spent " + s + " strategy and " + t + " tactic command token"
++                        + (s + t == 1 ? "" : "s") + " for _" + objectiveName(key) + "_ (" + before + " -> "
++                        + player.getCCRepresentation() + ").");
++        ButtonHelper.deleteMessage(event);
++    }
++}
 diff --git a/src/main/java/ti4/service/objectives/ScorePublicObjectiveService.java b/src/main/java/ti4/service/objectives/ScorePublicObjectiveService.java
-index b0d33b2..eb13b63 100644
+index b0d33b2..44a5ba2 100644
 --- a/src/main/java/ti4/service/objectives/ScorePublicObjectiveService.java
 +++ b/src/main/java/ti4/service/objectives/ScorePublicObjectiveService.java
 @@ -18,6 +18,7 @@ import ti4.helpers.ButtonHelper;
@@ -32978,6 +33229,27 @@ index b0d33b2..eb13b63 100644
              buttons.add(DoneExhausting);
              MessageHelper.sendMessageToChannelWithButtons(player.getCorrectChannel(), message2, buttons);
          }
+@@ -270,6 +271,11 @@ public class ScorePublicObjectiveService {
+             if (player.hasRelicReady("emelpar")) {
+                 requiredSpend--;
+             }
++            if (currentStrat + currentTact >= requiredSpend
++                    && ObjectiveTokenSpendService.offerSplit(
++                            game, player, "galvanize", requiredSpend, player.hasRelicReady("emelpar"))) {
++                return;
++            }
+             if (currentStrat + currentTact >= requiredSpend) {
+                 if (currentStrat >= requiredSpend) {
+                     for (int x = 0; x < requiredSpend; x++) {
+@@ -331,6 +337,8 @@ public class ScorePublicObjectiveService {
+             return;
+         }
+ 
++        if (ObjectiveTokenSpendService.offerSplit(game, player, "lead", requiredSpend, hasReadiedEmelpar)) return;
++
+         int spentFromStrat = Math.min(currentStrat, requiredSpend);
+         for (int x = 0; x < spentFromStrat; x++) {
+             ButtonHelperCommanders.resolveMuaatCommanderCheck(
 diff --git a/src/main/java/ti4/service/planet/AddPlanetService.java b/src/main/java/ti4/service/planet/AddPlanetService.java
 index 5fc1ce7..3921d0c 100644
 --- a/src/main/java/ti4/service/planet/AddPlanetService.java
