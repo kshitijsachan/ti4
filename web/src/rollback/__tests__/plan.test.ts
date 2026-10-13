@@ -89,3 +89,26 @@ void test("undo labels are plain words", () => {
   assert.equal(p("Trade", "FFCC_arborec_scPick_5"), "you picked Trade");
   assert.equal(p("Place 1 infantry", "mitosisInf"), "you started Mitosis (infantry)");
 });
+
+void test("a map activation (Tactical Action, ring, system) is undone as one action, back to the turn menu", () => {
+  const points = newestFirst(
+    press(40, 10_000, "End Turn", "turnEnd", "Bot Beta"),
+    press(41, 60_000, "Tactical Action", "tacticalAction"),
+    press(42, 61_000, "Ring #2", "ring_2"),
+    press(43, 62_000, "Lodor (209)", "FFCC_sol_ringTile_209"),
+  );
+  const plan = planUndo(points, me);
+  assert.equal(plan.kind, "flow");
+  if (plan.kind !== "flow") return;
+  assert.equal(plan.target.index, 40);
+  assert.equal(asMine(plan.first.label, plan.first, plan.summary), "you activated Lodor (209)");
+});
+
+void test("an activation whose Tactical Action was pressed long before still folds in the ring step only when close", () => {
+  const points = newestFirst(
+    press(40, 0, "x", "a", "Bot Beta"),
+    press(41, 1_000, "Tactical Action", "tacticalAction"),
+    press(42, 1_000_000, "Lodor (209)", "ringTile_209"),
+  );
+  assert.equal(planUndo(points, me).kind, "latest");
+});

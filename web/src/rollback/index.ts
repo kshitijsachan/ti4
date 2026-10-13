@@ -6,7 +6,7 @@ export { RewindProvider, useRewindRow, useRewindIndex } from "./RewindProvider";
 export type { RewindRow } from "./RewindProvider";
 export { RewindDialog } from "./RewindDialog";
 export type { RewindRequest } from "./RewindDialog";
-export { useUndoPoints, useUndoStore } from "./useUndoPoints";
+export { useUndoPoints, useUndoStore, undoMyActivation } from "./useUndoPoints";
 export { buildRewindIndex, liveIntervals, pointAfter } from "./lineage";
 export type { RewindIndex, RowRewind } from "./lineage";
 export { UndoApiError, fetchUndoPoints, postRewind, postUndo } from "./api";

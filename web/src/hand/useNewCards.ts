@@ -25,10 +25,10 @@ export type NewCards = {
 
 /**
  * Cards that arrived since the last hand snapshot (drawn, dealt, received in a trade), from the hand data
- * itself, so silent draws (Politics, status phase) show too. The first complete snapshot only sets the
+ * itself, so silent draws (Politics, status phase) show too. My own promissory notes never count. The first complete snapshot only sets the
  * baseline: a page load or reconnect never announces anything.
  */
-export function useNewCards(groups: CardGroup[], ready: boolean): NewCards {
+export function useNewCards(groups: CardGroup[], ready: boolean, myColor?: string): NewCards {
   const baseline = useRef<Map<string, number> | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const markTimer = useRef<number | undefined>(undefined);
@@ -43,7 +43,9 @@ export function useNewCards(groups: CardGroup[], ready: boolean): NewCards {
     if (!before) return;
     const arrived = groups
       .flatMap((g) => g.cards)
-      .filter((c) => !c.scored && !c.inPlayArea && (now.get(c.key) ?? 0) > (before.get(c.key) ?? 0));
+      .filter((c) => !c.scored && !c.inPlayArea && (now.get(c.key) ?? 0) > (before.get(c.key) ?? 0))
+      /* My own promissory notes (dealt at setup, or handed back) are not news: they fold into "Your own notes". */
+      .filter((c) => !(c.kind === "pn" && !!myColor && c.owner?.color === myColor));
     if (!arrived.length) return;
     setFresh((prev) => {
       const keys = new Set(arrived.map((c) => c.key));
@@ -55,7 +57,7 @@ export function useNewCards(groups: CardGroup[], ready: boolean): NewCards {
     timer.current = window.setTimeout(() => setFresh([]), SHOW_MS);
     window.clearTimeout(markTimer.current);
     markTimer.current = window.setTimeout(() => setMarked(new Set()), MARK_MS);
-  }, [groups, ready]);
+  }, [groups, ready, myColor]);
 
   useEffect(
     () => () => {

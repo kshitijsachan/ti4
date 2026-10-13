@@ -51,6 +51,7 @@ const SOURCE_NAMES: Record<string, string> = {
   minister_peace: "Minister of Peace",
   ixthian_artifact: "Ixthian Artifact",
   pay_debt: "Pay a debt",
+  spend_objective_tokens: "Pay the objective: which pools give the command tokens",
   checks_and_balances: "Checks and Balances: give the strategy card to",
   colonial_redistribution: "Colonial Redistribution: give the planet to",
   remove_cc: "Remove one of your command tokens",
@@ -157,6 +158,11 @@ function confirmText(a: Record<string, unknown>, state: GameState | null): strin
       return a.choice === "tactical" ? "Perform the tactical action" : "Redistribute command tokens";
     case "ixthian_artifact":
       return a.choice === "ignore_speaker" ? "Roll anyway" : "Roll";
+    case "spend_objective_tokens": {
+      const s = typeof a.strategy === "number" ? a.strategy : 0;
+      const t = typeof a.tactic === "number" ? a.tactic : 0;
+      return [s ? `${s} from strategy` : "", t ? `${t} from tactic` : ""].filter(Boolean).join(" + ");
+    }
     case "pay_debt": {
       const n = typeof a.amount === "number" ? a.amount : 1;
       const to = factionLabel(state, str(a.faction));

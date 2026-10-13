@@ -5,6 +5,7 @@ import type { Gateway } from "./gateway.js";
 import type { Interaction, Json, Store, StoredMessage } from "./store.js";
 import { log } from "./log.js";
 import { Retention } from "./retention.js";
+import { newRole } from "./store.js";
 
 /** Anything that wants to hear about state changes (the browser client server). */
 export type Listener = {
@@ -378,10 +379,12 @@ export class Hub {
         if (phase !== "finished") {
           if (chans.some((c) => c._archived || c.parent_id === cat.id)) {
             restored += this.unarchiveGameChannels(game, chans);
+            this.restoreGameRole(game, chans, playerIdsOf(data));
             await this.resumeRestoredGame(botApi, game, chans);
           }
           continue;
         }
+        this.parkGameRole(game, chans);
         for (const ch of chans) {
           if (ch._archived) continue;
           if (ch.parent_id !== cat.id) {
@@ -398,6 +401,70 @@ export class Hub {
       }
     }
     return { archived: n, restored, unreachable };
+  }
+
+  /**
+   * A finished game's role leaves the guild with its channels: the bot's End Game deletes it, but not every way a game
+   * ends does (a fork of an ended game, End Game with the role delete refused), and leftover roles kept the bot's
+   * Discord role budget full (live 2026-10-13: 241 roles, "a new category requires space for 10 roles", no new game).
+   * The role is parked on the game's channels (id, fields, holders) so a rewind that un-ends the game brings the same
+   * role back (restoreGameRole). Returns how many roles were parked.
+   */
+  parkGameRole(game: string, chans: Json[]): number {
+    const s = this.store.state;
+    const roles = Object.values(s.roles).filter((r) => String(r.name).toLowerCase() === game.toLowerCase());
+    const keeper = chans.find((c) => c.type === 0 && /-actions$/i.test(String(c.name ?? ""))) ?? chans[0];
+    if (!roles.length || !keeper) return 0;
+    const parked: Json[] = (keeper._parked_roles ??= []);
+    for (const r of roles) {
+      const holders = Object.values(s.members)
+        .filter((m) => m.roles.includes(r.id))
+        .map((m) => m.user_id);
+      parked.push({ role: { ...r }, holders });
+      delete s.roles[r.id];
+      for (const m of Object.values(s.members)) m.roles = m.roles.filter((x: string) => x !== r.id);
+      this.gateway.dispatch("GUILD_ROLE_DELETE", { guild_id: s.guild_id, role_id: r.id });
+    }
+    this.store.scheduleSave(keeper.id);
+    this.store.scheduleSave();
+    return roles.length;
+  }
+
+  /**
+   * The reverse of parkGameRole for a game a rewind un-ended: its parked role comes back with the same id (the
+   * channels' permission overwrites name it) and holders. A game whose role the bot's End Game deleted gets a new one
+   * for its players (playerIds, from the bot's web-data), so pings and the bot's role lookups work again. No-op when a
+   * role with the game's name exists. Returns whether a role was restored or created.
+   */
+  restoreGameRole(game: string, chans: Json[], playerIds: string[] = []): boolean {
+    const s = this.store.state;
+    const keepers = chans.filter((c) => Array.isArray(c._parked_roles) && c._parked_roles.length);
+    const parked: Json[] = keepers.flatMap((c) => c._parked_roles);
+    for (const c of keepers) {
+      delete c._parked_roles;
+      this.store.scheduleSave(c.id);
+    }
+    if (Object.values(s.roles).some((r) => String(r.name).toLowerCase() === game.toLowerCase())) return false;
+    let role: Json;
+    let holders: string[];
+    if (parked.length) {
+      role = parked[0].role;
+      holders = parked[0].holders ?? [];
+      if (s.roles[role.id]) return false;
+    } else {
+      role = newRole({ name: game, mentionable: true }, Object.keys(s.roles).length);
+      holders = playerIds;
+    }
+    s.roles[role.id] = role;
+    this.gateway.dispatch("GUILD_ROLE_CREATE", { guild_id: s.guild_id, role });
+    for (const id of holders) {
+      const m = s.members[id];
+      if (!m || m.roles.includes(role.id)) continue;
+      m.roles.push(role.id);
+      this.memberUpdate(id);
+    }
+    this.store.scheduleSave();
+    return true;
   }
 
   /** Whether a channel is parented to the archive category. */
@@ -644,4 +711,10 @@ export function localizeArt<T>(value: T, publicUrl: string): T {
     return out as T;
   }
   return value;
+}
+
+/** The players' user ids in the bot's web-data for a game (playerData[].discordId). */
+function playerIdsOf(data: Json): string[] {
+  const list = Array.isArray(data?.playerData) ? data.playerData : [];
+  return list.map((p: Json) => String(p?.discordId ?? "")).filter((id: string) => /^\d+$/.test(id));
 }
