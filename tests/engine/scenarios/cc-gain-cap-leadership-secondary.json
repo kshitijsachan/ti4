@@ -1,0 +1,236 @@
+{
+  "name": "cc-gain-cap-leadership-secondary",
+  "description": "CcGainCap on a paid Leadership secondary (live pbd436: Yssaril paid Retillion through the engine payment and was refused 'grants 0'). pbd28 r1, Mahact played Leadership. Yssaril follows and pays 3 influence (Retillion) in one payment.spend payload: 1 token accepted, the 2nd refused. Naaz follows and pays 6 (Naazir + Rokha + 3 trade goods): 2 accepted, the 3rd refused. Mahact (holder, primary) pays 5 (Ixth): 3 + 1 = 4 accepted, the 5th refused.",
+  "base": {
+    "recording": "pbd28",
+    "index": 47
+  },
+  "setup": [
+    "/player stats trade_goods:3 faction_or_color:naaz"
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "leadershipGenerateCCButtons$"
+      },
+      "as": "yssaril"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "retillion"
+          ]
+        }
+      },
+      "as": "yssaril",
+      "legacy": [
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_retillion_inf"
+          },
+          "as": "yssaril"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
+          "as": "yssaril"
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_tactic_cc$"
+      },
+      "as": "yssaril"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc$"
+      },
+      "as": "yssaril",
+      "refused": true,
+      "legacy": []
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "leadershipGenerateCCButtons$"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "naazir",
+            "rokha"
+          ],
+          "tg": 3
+        }
+      },
+      "as": "naaz",
+      "legacy": [
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_naazir_inf"
+          },
+          "as": "naaz"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_rokha_inf"
+          },
+          "as": "naaz"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "reduceTG_3_inf"
+          },
+          "as": "naaz"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
+          "as": "naaz"
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_tactic_cc$"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc$"
+      },
+      "as": "naaz"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_strategy_cc$"
+      },
+      "as": "naaz",
+      "refused": true,
+      "legacy": []
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "leadershipGenerateCCButtons$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "ixth"
+          ]
+        }
+      },
+      "as": "mahact",
+      "legacy": [
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "spend_ixth_inf"
+          },
+          "as": "mahact"
+        },
+        {
+          "answer": {
+            "kind": "payment.spend",
+            "option": "Done Exhausting"
+          },
+          "as": "mahact"
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_tactic_cc$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_strategy_cc$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_tactic_cc$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc$"
+      },
+      "as": "mahact",
+      "refused": true,
+      "legacy": []
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[yssaril].tactical_cc",
+        "eq": "4"
+      },
+      {
+        "key": "player[yssaril].fleet_cc",
+        "eq": "3"
+      },
+      {
+        "key": "player[naaz].tactical_cc",
+        "eq": "4"
+      },
+      {
+        "key": "player[naaz].fleet_cc",
+        "eq": "4"
+      },
+      {
+        "key": "player[mahact].tactical_cc",
+        "eq": "5"
+      },
+      {
+        "key": "player[mahact].fleet_cc",
+        "eq": "4"
+      }
+    ]
+  }
+}
