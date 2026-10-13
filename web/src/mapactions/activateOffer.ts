@@ -48,3 +48,13 @@ export function offeredActivation(
   if (offer.token && ctx.tacticTokens < 1) return { ok: false, reason: "No command tokens in your tactic pool" };
   return { ok: false, reason: "This system can't be activated right now" };
 }
+
+/** A start-of-turn menu: a live Tactical action and no End turn yet (the post-action menu is not one). */
+export function isStartMenu(d: { kind: string; options: { disabled?: boolean; value?: unknown }[] }): boolean {
+  const action = (o: { value?: unknown }) => (o.value as { action?: unknown } | null | undefined)?.action;
+  return (
+    d.kind === "turn.action" &&
+    d.options.some((o) => !o.disabled && action(o) === "tactical") &&
+    !d.options.some((o) => !o.disabled && action(o) === "end_turn")
+  );
+}

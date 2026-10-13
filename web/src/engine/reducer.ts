@@ -1,5 +1,6 @@
 import type { Decision, EngineEvent, GameState } from "./contract";
 import type { EngineFrame } from "./protocol";
+import { autoDeclinedFollow } from "./follows";
 
 export type EngineStatus = "off" | "connecting" | "live" | "unavailable";
 
@@ -151,8 +152,10 @@ export function myDecisions(view: EngineView, userId: string | null | undefined)
   const myFaction = view.state?.players.find((p) => p.userId === userId)?.faction;
   // The strategy card I played: its window lists followers only; I resolve the primary on it (answersOutsideWindow).
   const holding = (d: Decision) => d.kind === "strategy_card.resolve" && !!myFaction && d.window?.subject?.holder === myFaction;
+  // A card the game declined for me (no strategy token…): still shown, its follow greyed with why (on offer only).
+  const declinedForMe = (d: Decision) => autoDeclinedFollow(d, view.state);
   return Object.values(view.decisions)
-    .filter((d) => (awaits(d, userId) || holding(d)) && (d.scope === "player" || !!d.window || seated || holding(d)))
+    .filter((d) => (awaits(d, userId) || holding(d) || declinedForMe(d)) && (d.scope === "player" || !!d.window || seated || holding(d)))
     .sort((a, b) => Number(openToAll(a)) - Number(openToAll(b)) || a.createdAt - b.createdAt || a.seq - b.seq);
 }
 

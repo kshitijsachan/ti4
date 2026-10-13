@@ -4,6 +4,8 @@ import { AnswerButton, ExtraOptions, Head } from "../cards/parts";
 import { getTechData } from "@/entities/lookup/tech";
 import { planetName, playerLabel } from "../cards/labels";
 import classes from "../cards/Cards.module.css";
+import { engineStore } from "../../store";
+import { pillageTarget } from "../../order";
 
 type FactionKind = "leader.use" | "faction.ability";
 type Value = NonNullable<DecisionOf<FactionKind>["options"][number]["value"]>;
@@ -35,6 +37,12 @@ function componentName(v: Value): string {
 
 /** Button text from the typed fields: target player, planet, system, unit, amounts. */
 function optionLabel(state: GameState | null, v: Value): string {
+  /* Mentak's Pillage: "Pillage <player>" / "Don't pillage" (pt8: "Finish · <player>" read as a different action). */
+  if ("id" in v && v.id === "pillage") {
+    if (v.action === "skip") return "Don't pillage";
+    if (v.what) return v.what === "commodity" ? "Take 1 commodity" : "Take 1 trade good";
+    if (v.target) return `Pillage ${playerLabel(state, v.target)}`;
+  }
   const parts: string[] = [];
   if (v.action === "skip") parts.push("Finish");
   if (v.reset) return "Start over";
@@ -62,8 +70,17 @@ function optionLabel(state: GameState | null, v: Value): string {
 }
 
 /** leader.use / faction.ability: one list of typed choices for the leader or ability, then Decline / Done. */
-export function FactionStep({ decision, state, answer, pendingOptionId }: EngineRendererProps<DecisionOf<FactionKind>>) {
+export function FactionStep({ decision, state, answer: send, pendingOptionId }: EngineRendererProps<DecisionOf<FactionKind>>) {
   const typed = decision.options.filter((o) => o.value);
+  /* Pillage offers stack (one per trade good the neighbour gained): answering this one settles the older ones too. */
+  const answer = (id: string) => {
+    const target = pillageTarget(decision);
+    if (target) {
+      const open = Object.values(engineStore.getState().view.decisions);
+      engineStore.getState().supersede(open.filter((d) => d.id !== decision.id && pillageTarget(d) === target && d.createdAt <= decision.createdAt).map((d) => d.id));
+    }
+    return send(id);
+  };
   const first = typed[0]?.value as Value | undefined;
   const title = first ? componentName(first) : decision.kind === "leader.use" ? "Leader" : "Faction ability";
   const meta = first ? ("leaderType" in first ? first.leaderType : first.source) : undefined;

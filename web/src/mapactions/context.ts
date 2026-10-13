@@ -11,7 +11,7 @@ import type { PlayState } from "@/discord";
 import { idFaction } from "@/decisions/model/controls";
 import { useEngine } from "@/engine/store";
 import { stepKindOf } from "./stepIds";
-import { engineActivation, type EngineActivation } from "./activateOffer";
+import { engineActivation, isStartMenu, type EngineActivation } from "./activateOffer";
 
 /** Which step of a tactical action the bot is waiting on me for, read from its newest prompt to me. */
 export type TacticalStep =
@@ -100,6 +100,15 @@ function systemChoices(
   return Object.keys(out).length >= 2 ? out : null;
 }
 
+/**
+ * The engine decision's own message as a prompt (the button fallback presses it). When it is not on screen (history
+ * not loaded) a stub carries its ids: the engine path, which activates from the map, never reads the message.
+ */
+function sourcePrompt(state: PlayState, channelId: string, messageId: string): PendingPrompt {
+  const message = state.messages[channelId]?.byId[messageId] ?? ({ id: messageId, channel_id: channelId, content: "", components: [], author: { id: "", username: "", bot: true } } as unknown as PendingPrompt["message"]);
+  return { message, channelId, where: "actions", reason: "faction" };
+}
+
 /** Everything the map's actions need: the connection, my seat, the game document and the step the bot waits on. */
 export function useMapActionContext(
   gameName: string,
@@ -156,8 +165,27 @@ export function useMapActionContext(
       [...prompts].sort((a, b) => compareSnowflakes(b.message.id, a.message.id))[0];
     return prompt ? { kind: "choose", prompt } : null;
   }, [activateOpen, active, prompts]);
+  /*
+   * The engine's own word on the turn too: my open start-of-turn menu (turn.action with a live Tactical action, no
+   * "end turn" yet) means a click on the map starts a tactical action, whatever the message heuristics read. Playtest
+   * 8, pbd469 round 3: a bot's leftover prompt (Naalu's Imperial "Please score objectives", posted after my turn menu)
+   * made the pending-prompt scan drop my turn menu, so no system lit and the click opened the dossier; the turn panel
+   * (engine) still said "click a system on the map".
+   */
+  const startMenu = useEngine((s) =>
+    Object.values(s.view.decisions).find((d) => !!myId && d.target?.userId === myId && isStartMenu(d)),
+  );
+  const engineTurn = useMemo<TacticalStep | null>(() => {
+    if (!startMenu || (active && active !== "null")) return null;
+    const { channelId, messageId } = startMenu.source;
+    const prompt =
+      prompts.find((p) => p.message.id === messageId) ??
+      sourcePrompt(conn.store.getState(), channelId, messageId);
+    return { kind: "turn", prompt };
+    // `messages`: what sourcePrompt reads.
+  }, [startMenu, active, prompts, conn, messages]);
   const step = useMemo<TacticalStep>(() => {
-    if (!myTurn) return { kind: "none" };
+    if (!myTurn) return engineChoose ?? engineTurn ?? { kind: "none" };
     /*
      * Only the bot's newest prompt to my faction can be the current step: an older move or land prompt that
      * nothing pressed (the movement API answers with a fresh one) is a step the bot has moved past.
@@ -181,9 +209,9 @@ export function useMapActionContext(
       )
         return { kind: "none" };
     }
-    return engineChoose ?? { kind: "none" };
+    return engineChoose ?? engineTurn ?? { kind: "none" };
     // `messages` is what newestFactionPrompt reads.
-  }, [prompts, myTurn, me?.faction, active, conn, scope, messages, engineChoose]);
+  }, [prompts, myTurn, me?.faction, active, conn, scope, messages, engineChoose, engineTurn]);
 
   const pick = useMemo<SystemPick | null>(() => {
     /* Only the newest prompt: a map click must never answer a question the player has moved past. */

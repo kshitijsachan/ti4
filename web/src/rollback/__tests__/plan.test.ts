@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { asMine, planUndo } from "../plan.ts";
+import { humanActionLabel } from "../../decisions/model/phrasing.ts";
 import type { UndoPoint } from "../types.ts";
 
 const pt = (index: number, actor: string, label = `${actor} pressed “x${index}”`, command = `${actor} pressed button`): UndoPoint => ({
@@ -81,6 +82,15 @@ void test("undo labels are plain words", () => {
   assert.equal(p("Diplo A System", "FFCC_arborec_diploSystem"), "you started choosing a system to protect");
   assert.equal(p("[Primary] Use Production", "constructionPrimary_produce"), "you used Production");
   assert.equal(p("(2) Lead From the Front", "po_scoring_2"), "you scored Lead From the Front");
+  // A spend objective: picking it opens its payment; it is scored once paid (pt8).
+  assert.equal(p("(3) Sway the Council", "po_scoring_3"), "you started scoring Sway the Council");
+  assert.equal(p("Score Sway the Council, paying 8 influence", "deleteButtons_spend"), "you scored Sway the Council, paying 8 influence");
+  assert.equal(p("Done Landing Troops", "FFCC_arborec_doneLanding_312"), "you finished landing troops");
+  assert.equal(p("Dismiss These Buttons", "deleteButtons"), "you dismissed a prompt");
+  assert.equal(p("Build in This System (4 PRODUCTION value)", "FFCC_arborec_tacticalActionBuild_312"), "you started producing units");
+  assert.equal(p("command_tokens.adjust", "command_tokens.adjust"), "you placed command tokens");
+  assert.equal(p("Skip moving", "x"), "you skipped moving");
+  assert.equal(p("+", "FFCC_arborec_increase_tactic_cc"), "you added 1 tactic token");
   assert.equal(p("End Turn (+1 ability)", "FFCC_arborec_endOfTurnAbilities"), "you opened the end-of-turn abilities");
   assert.equal(p("Pass (+1 ability)", "FFCC_arborec_passingAbilities"), "you opened the abilities before passing");
   assert.equal(p("Done Exhausting Planets", "deleteButtons_spend"), "you finished paying");
@@ -111,4 +121,11 @@ void test("an activation whose Tactical Action was pressed long before still fol
     press(42, 1_000_000, "Lodor (209)", "ringTile_209"),
   );
   assert.equal(planUndo(points, me).kind, "latest");
+});
+
+void test("saved action labels read as words (game log, undo)", () => {
+  assert.equal(humanActionLabel("Alice pressed “command_tokens.adjust”"), "Alice placed command tokens");
+  assert.equal(humanActionLabel("Bot Theta 9 proposed a transaction (engine)"), "Bot Theta 9 proposed a transaction");
+  assert.equal(humanActionLabel("Alice pressed “strategy_card.construction_place”"), "Alice placed a structure");
+  assert.equal(humanActionLabel("Alice pressed “units.something_new”"), "Alice answered something new");
 });
