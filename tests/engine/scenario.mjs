@@ -21,6 +21,7 @@
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ],
 //                channels: { archived: true|false } } }
 //   A step may carry its own "expect" (same shape), checked right after it (e.g. a prompt closed mid-flow).
+//   A press step with "click": true clicks the button on every fork (a legacy press), never an engine answer.
 //   A step with "refused": true expects the engine to refuse it (the legacy fork must still end in the same state).
 //   "as": "seat1".."seat8" | a faction | a user id (default seat1). Strings may use ${seat1}…${seat8}, ${fork},
 //   ${faction:xxcha} (that faction's user id), ${color:red}.
@@ -304,7 +305,8 @@ class Runner {
   /** A recorded/known custom id: engine → answer the decision carrying it; press → click the message carrying it. */
   async press(customId, user, st) {
     let carrier = this.carrying(customId, user);
-    if (this.via === "engine") {
+    // "click": true clicks the button even on the engine fork (a legacy press: the original handler's own guards).
+    if (this.via === "engine" && !st.click) {
       const ds = await openDecisions(this.fork.game);
       let hit = ds.sort((a, b) => b.seq - a.seq).map((d) => ({ d, o: optionFor(d, customId) })).find((x) => x.o);
       if (!hit) {
