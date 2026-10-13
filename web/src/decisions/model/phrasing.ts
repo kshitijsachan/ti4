@@ -85,23 +85,6 @@ function systemName(label: string): string | undefined {
   return planets && !/^\d+$/.test(planets) ? `system ${m[1]} (${planets})` : `system ${m[1]}`;
 }
 
-/** Bot button labels that read as bot jargon, by handler (without the faction lock): plain words for the web UI. */
-const DISPLAY_LABELS: [RegExp, string][] = [
-  [/^constructionPrimary_produce$/, "Produce at a space dock instead"],
-  [/(^|_)generic_$/, "Other component action (resolve by hand)"],
-];
-
-/**
- * An engine option's label for display: plain words for known jargon ("[Primary] Use Production", "Generic Component
- * Action"), and no "[Primary]" tag otherwise (pt9 labels).
- */
-export function displayLabel(handler: string | null | undefined, label: string): string {
-  const id = (handler ?? "").replace(/^FFCC_[^_]+_/, "");
-  const known = DISPLAY_LABELS.find(([re]) => re.test(id));
-  if (known) return known[1];
-  return label.replace(/^\[[^\]]*\]\s*/, "");
-}
-
 /**
  * A bot button's label as words: no "[Primary]" tag, no "(2)" index, no "(3/2)" planet values, and a system button
  * ("307 (Nestphar - Arborec)") as "system 307 (Nestphar)".
@@ -155,7 +138,7 @@ function openingStep(id: string, label: string): Opening | undefined {
   if (/^get_so_discard_buttons$|^getDiscardButtons/.test(id)) return { now: "Choosing a card to discard…", undo: "Opened the discard choice" };
   if (/^diploSystem$/.test(id)) return { now: "Choosing a system to protect…", undo: "Started choosing a system to protect" };
   if (/^diploRefresh2$/.test(id)) return { now: "Choosing planets to ready…", undo: "Started readying planets" };
-  if (/^redistributeCCButtons(_|$)/.test(id)) return { now: "Choosing command tokens…", undo: "Opened the command tokens" };
+  if (/^redistributeCCButtons$/.test(id)) return { now: "Choosing command tokens…", undo: "Opened the command tokens" };
   if (/^mitosisInf$/.test(id)) return { now: "Mitosis: choosing a planet for the infantry…", undo: "Started Mitosis (infantry)" };
   if (/^mitosisMech$/.test(id)) return { now: "Mitosis: choosing an infantry to replace with a mech…", undo: "Started Mitosis (mech)" };
   return undefined;
@@ -193,8 +176,6 @@ function doneOutcome(id: string, label: string, content: string | undefined): st
   if (/^scPick_\d+$/.test(id)) return `Picked ${cleanButtonLabel(label)}`;
   if (/^po_scoring_\d+$/.test(id)) return `Scored ${cleanButtonLabel(label)}`;
   if (/^done exhausting planets$/i.test(label)) return "Finished paying";
-  /* "Discard (576) Drive the Debate": the card's name, not its number. */
-  if (/^discard\s*\(\s*\d+\s*\)/i.test(label)) return `Discarded ${secretName(label)}`;
   if (/^no secret objective scored$/i.test(label)) return "Didn't score a secret";
   if (/^no public objective scored$/i.test(label)) return "Didn't score a public objective";
   if (/^done (redistributing|gaining|losing) command tokens$/i.test(label)) return "Command tokens confirmed";

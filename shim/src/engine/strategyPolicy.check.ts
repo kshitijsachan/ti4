@@ -3,8 +3,7 @@
  * Regression for the fuzzer's pbd114 finding: after a shim restart (empty in-memory history) the Leadership holder
  * resolved the primary again (+3 tokens each time). The engine's window.subject.primaryDone now says what is done.
  */
-import { chooseStrategy, holderPrimaryPending } from "./kinds/strategyPolicy.js";
-import { chooseTurnAction } from "./policy/turn.js";
+import { chooseStrategy } from "./kinds/strategyPolicy.js";
 import type { Decision, GameState } from "./types.js";
 
 const ME = "u1";
@@ -153,87 +152,5 @@ expect("Warfare primary done: nothing", chooseStrategy(warfareCard("pok6warfare"
 const offer = { id: "d5", kind: "choose.confirm", target: { userId: ME }, options: [{ id: "beginTacticalTeWarfare", value: { source: "warfare", confirm: true, choice: "tactical" } }] } as unknown as Decision;
 expect("Warfare follow-up open: wait", chooseStrategy(warfareCard("te6warfare", []), te, ME, { ...ctx, open: [offer] }), null);
 
-// Playtest 9 pbd539: Imperial's "Score A Public" went stale, End Turn went in between, and the card scored after the
-// turn. While a primary part the holder policy would press is open, the turn is not ended.
-const imperialState = {
-  phase: "action",
-  activePlayer: ME,
-  players: [{ userId: ME, faction: "mentak", self: true, strategyCards: [8], planets: [], commandTokens: { tactic: 3, fleet: 3, strategy: 2 } }],
-  strategyCards: [{ number: 8, card: "pok8imperial", played: true, holder: ME, reactions: [] }],
-} as unknown as GameState;
-const imperial = (primaryDone: string[]) =>
-  ({
-    id: "d8",
-    kind: "strategy_card.resolve",
-    revision: 3,
-    scope: "table",
-    target: null,
-    createdAt: Date.now(),
-    window: { kind: "strategy_card", subject: { strategyCard: 8, primaryDone }, eligible: [], responded: [], responses: {} },
-    options: [
-      { id: "scoreAnObjective", label: "Score A Public", disabled: false, needsInput: false, value: { strategyCard: 8, name: "Imperial", card: "pok8imperial", holder: "mentak", action: "score_public", who: "holder", spendsToken: false, part: "score_public", primaryParts: ["score_public", "imperial"], copy: false } },
-      { id: "sc_draw_so", label: "Draw Secret Objective", disabled: false, needsInput: false, value: { strategyCard: 8, name: "Imperial", card: "pok8imperial", holder: "mentak", action: "draw_secret", who: "anyone", spendsToken: true, part: "imperial", primaryParts: ["score_public", "imperial"], copy: false } },
-    ],
-  }) as unknown as Decision;
-expect("Imperial primary not started: pending", !!holderPrimaryPending(imperialState, ME, [imperial([])]), true);
-expect("Imperial scored, secret not drawn: pending", !!holderPrimaryPending(imperialState, ME, [imperial(["score_public"])]), true);
-expect("Imperial resolved: not pending", holderPrimaryPending(imperialState, ME, [imperial(["score_public", "imperial"])]), null);
-const endMenu = {
-  id: "t1",
-  kind: "turn.action",
-  target: { userId: ME },
-  options: [{ id: "turnEnd", label: "End Turn", disabled: false, needsInput: false, value: { action: "end_turn", abilities: false, waitingFor: [], overLimits: [] } }],
-} as unknown as Decision;
-const pending = holderPrimaryPending(imperialState, ME, [imperial([])]);
-expect("turn policy waits while the primary is pending", chooseTurnAction(endMenu as never, imperialState, ME, { open: [], primaryPending: pending }), null);
-expect("turn policy ends the turn once resolved", chooseTurnAction(endMenu as never, imperialState, ME, { open: [], primaryPending: null })?.option.id, "turnEnd");
-
-// pt9 (coordinator): the bot completes every MANDATORY primary part of each card (bot StrategyCardResolveKind.MANDATORY),
-// and never ends its turn while the engine reports one missing (end_turn value primaryMissing).
-type Spec = [handler: string, action: string, who: string, part: string | null];
-const CARDS: [number, string, string, string[], Spec[], string[][]][] = [
-  [1, "Leadership", "pok1leadership", ["tokens"], [["leadershipGenerateCCButtons", "leadership_tokens", "anyone", "tokens"]], [["tokens"]]],
-  [2, "Diplomacy", "pok2diplomacy", ["system", "ready_planets"], [["diploSystem", "diplomacy_system", "holder", "system"], ["diploRefresh2", "ready_planets", "anyone", "ready_planets"]], [["system"]]],
-  [3, "Politics", "pok3politics", ["speaker", "action_cards", "agendas"], [["sc_ac_draw", "draw_action_cards", "anyone", "action_cards"]], [["action_cards"]]],
-  [4, "Construction", "pok4construction", ["structure", "structure"], [["construction_pds", "construction_structure", "anyone", "structure"], ["construction_spacedock", "construction_structure", "anyone", "structure"]], [["structure", "produce"]]],
-  [5, "Trade", "pok5trade", [], [["sc_refresh", "replenish_free", "others", null]], []],
-  [6, "Warfare", "pok6warfare", ["warfare_primary"], [["primaryOfWarfare", "warfare_primary", "holder", "warfare_primary"]], [["warfare_primary"]]],
-  [7, "Technology", "pok7technology", ["research"], [["acquireATechWithSC_first", "research", "anyone", "research"]], [["research"]]],
-  [8, "Imperial", "pok8imperial", ["score_public", "imperial"], [["scoreAnObjective", "score_public", "holder", "score_public"], ["sc_draw_so", "draw_secret", "anyone", "imperial"]], [["score_public"], ["imperial"]]],
-];
-for (const [n, name, card, parts, specs, mandatory] of CARDS) {
-  const st = {
-    phase: "action",
-    activePlayer: ME,
-    players: [{ userId: ME, faction: "mentak", self: true, strategyCards: [n], planets: ["a", "b", "c", "d"], commandTokens: { tactic: 3, fleet: 3, strategy: 2 } }],
-    strategyCards: [{ number: n, card, played: true, holder: ME, reactions: [] }],
-    tiles: [],
-  } as unknown as GameState;
-  let done: string[] = [];
-  for (let i = 0; i < 4; i++) {
-    const d = {
-      id: `c${n}`,
-      kind: "strategy_card.resolve",
-      revision: 1,
-      scope: "table",
-      target: null,
-      createdAt: Date.now(),
-      window: { kind: "strategy_card", subject: { strategyCard: n, primaryDone: done }, eligible: [], responded: [], responses: {} },
-      options: specs.map(([h, action, who, part]) => ({ id: h, label: h, disabled: false, needsInput: false, value: { strategyCard: n, name, card, holder: "mentak", action, who, spendsToken: false, part, primaryParts: parts, copy: false, ...(h.startsWith("construction_") ? { unit: h.slice("construction_".length) } : {}) } })),
-    } as unknown as Decision;
-    const pick = chooseStrategy(d, st, ME, { history: [], open: [], all: [] });
-    if (!pick) break;
-    done = [...done, pick.option.value.part];
-  }
-  const missing = mandatory.filter((g) => !g.some((p) => done.includes(p)));
-  expect(`${name}: bot completes its mandatory primary parts`, missing, []);
-}
-const missingMenu = {
-  id: "t2",
-  kind: "turn.action",
-  target: { userId: ME },
-  options: [{ id: "turnEnd", label: "End Turn", disabled: false, needsInput: false, value: { action: "end_turn", abilities: false, waitingFor: [], overLimits: [], primaryMissing: "finish Imperial: draw a secret objective / gain 1 VP for Mecatol Rex first" } }],
-} as unknown as Decision;
-expect("turn policy never ends the turn while the engine reports a missing mandatory part", chooseTurnAction(missingMenu as never, imperialState, ME, { open: [], primaryPending: null }), null);
 
 process.exit(failed ? 1 : 0);

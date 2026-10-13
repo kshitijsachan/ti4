@@ -81,8 +81,7 @@ export function CardFace({ card, size, number, timing, actionable }: Props) {
         {size === "large" && card.flavor && <div className={classes.flavor}>{card.flavor}</div>}
       </div>
       <div className={classes.foot}>
-        {/* The bot's card number is an id, not something to read on the card: only the enlarged card shows it. */}
-        {number !== undefined && size === "large" && <span className={classes.num}>#{number}</span>}
+        {number !== undefined && <span className={classes.num}>#{number}</span>}
         {card.inPlayArea && <span className={classes.tag}>In play</span>}
         {card.owner && size === "large" && <span className={classes.owner}>{card.owner.name}</span>}
       </div>
