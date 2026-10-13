@@ -176,7 +176,13 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
     case "payment.spend": {
       // Pay the whole bill in one answer when the engine knows the cost; otherwise the planner / rule table pays.
       const plan = planPayment(d, state, me);
-      return plan ? { payload: plan.payload as unknown as Record<string, unknown>, why: plan.why } : null;
+      if (plan) return { payload: plan.payload as unknown as Record<string, unknown>, why: plan.why };
+      // Paying for a spend objective it cannot cover (live pbd526: windows waited 60 s, then the fallback pressed a
+      // Score the engine refuses): give it up — "Don't Score It" refunds what was spent.
+      const done = d.options.map((o) => o.value).find((v) => !!v && "action" in v && v.action === "done") as { context?: string } | undefined;
+      const cancel = d.options.find((o) => !o.disabled && o.value && "action" in o.value && o.value.action === "cancel");
+      if (done?.context === "poscore" && cancel && d.target?.userId === me) return { option: cancel, why: "cannot pay for the objective: don't score it" };
+      return null;
     }
     case "production.place":
       return choosePlacement(d, state, me);
