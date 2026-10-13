@@ -33879,7 +33879,7 @@ index ca24054..10aedd7 100644
                      + player.getCCRepresentation() + ". Use buttons to gain command tokens.";
              Button resetCC = Buttons.gray(player.factionButtonChecker() + "resetCCs", "Reset Command Tokens");
 diff --git a/src/main/java/ti4/service/button/ReactionCheckService.java b/src/main/java/ti4/service/button/ReactionCheckService.java
-index b6fb6af..11f1dfa 100644
+index b6fb6af..8135930 100644
 --- a/src/main/java/ti4/service/button/ReactionCheckService.java
 +++ b/src/main/java/ti4/service/button/ReactionCheckService.java
 @@ -21,6 +21,7 @@ import ti4.helpers.Helper;
@@ -33890,9 +33890,52 @@ index b6fb6af..11f1dfa 100644
  import ti4.service.StatusCleanupService;
  import ti4.service.emoji.CardEmojis;
  import ti4.service.game.EndGameService;
-@@ -107,6 +108,13 @@ public class ReactionCheckService {
+@@ -48,18 +49,7 @@ public class ReactionCheckService {
+                         || buttonID.contains("po_no_scoring")
+                         || buttonID.contains("so_no_scoring")
+                         || buttonID.contains("so_score_hand"))) {
+-            boolean allReacted = true;
+-            for (Player player : game.getRealPlayers()) {
+-                String po = game.getStoredValue(player.getFaction() + "round" + game.getRound() + "PO");
+-                String so = game.getStoredValue(player.getFaction() + "round" + game.getRound() + "SO");
+-                if (po.isEmpty()
+-                        || so.isEmpty()
+-                        || game.getPhaseOfGame().contains("action")
+-                        || game.getPhaseOfGame().contains("agenda")) {
+-                    allReacted = false;
+-                }
+-            }
+-            if (allReacted) {
++            if (allDeclaredScoring(game)) {
+                 respondAllPlayersReacted(event, game);
+                 GameMessageManager.remove(game.getName(), messageId);
+             }
+@@ -106,7 +96,36 @@ public class ReactionCheckService {
+         }
      }
  
++    /** Every real player declared this round's public and secret objective (scored one or "None"), in status. */
++    public static boolean allDeclaredScoring(Game game) {
++        if (game.getPhaseOfGame().contains("action") || game.getPhaseOfGame().contains("agenda")) return false;
++        for (Player player : game.getRealPlayers()) {
++            String po = game.getStoredValue(player.getFaction() + "round" + game.getRound() + "PO");
++            String so = game.getStoredValue(player.getFaction() + "round" + game.getRound() + "SO");
++            if (po.isEmpty() || so.isEmpty()) return false;
++        }
++        return true;
++    }
++
++    /**
++     * A declaration that completes the status scoring without one of the scoring prompt's buttons (a spend
++     * objective's payment "Score", or its token split): the same all-declared check the prompt's buttons run, so the
++     * table is not left waiting for someone to press "No ... Scored" again (soak pbd894 / pbd581: the last player
++     * to declare paid for Sway the Council / Amass Wealth; the speaker's reveal came only after a re-press).
++     */
++    public static void checkAllDeclaredScoring(Game game) {
++        if (game == null || !allDeclaredScoring(game)) return;
++        respondAllHaveScored(game);
++    }
++
      public static void respondAllHaveScored(Game game) {
 +        // A late "No Public/Secret Objective Scored" press (a re-sent click, a second copy of the scoring message)
 +        // completes the scoring check again after this round's objective is out: do not offer the reveal again,
@@ -33904,7 +33947,7 @@ index b6fb6af..11f1dfa 100644
          String message2 =
                  "All players have indicated scoring. Flip the relevant public objective using the buttons. This will automatically run status clean-up if it has not been run already.";
          Button draw2Stage2 = Buttons.green("reveal_stage_2x2", "Reveal 2 Stage 2");
-@@ -181,7 +189,9 @@ public class ReactionCheckService {
+@@ -181,7 +200,9 @@ public class ReactionCheckService {
      }
  
      private static void respondAllPlayersReacted(ButtonInteractionEvent event, Game game) {
@@ -34873,10 +34916,10 @@ index f57515a..6ecd8d4 100644
          if (getCurrentDraftPlayer() == null || !userId.equals(getCurrentDraftPlayer())) {
 diff --git a/src/main/java/ti4/service/objectives/ObjectiveSpendService.java b/src/main/java/ti4/service/objectives/ObjectiveSpendService.java
 new file mode 100644
-index 0000000..6350adf
+index 0000000..ba9a854
 --- /dev/null
 +++ b/src/main/java/ti4/service/objectives/ObjectiveSpendService.java
-@@ -0,0 +1,310 @@
+@@ -0,0 +1,312 @@
 +package ti4.service.objectives;
 +
 +import java.util.ArrayList;
@@ -35138,6 +35181,7 @@ index 0000000..6350adf
 +        game.removeStoredValue(fromKey(player));
 +        ButtonHelper.deleteMessage(event);
 +        ScorePublicObjectiveService.scorePO(event, game, player, poID, true);
++        ti4.service.button.ReactionCheckService.checkAllDeclaredScoring(game);
 +    }
 +
 +    @ButtonHandler(CANCEL)
@@ -35185,6 +35229,7 @@ index 0000000..6350adf
 +        if (pending(game, player) != poID) return;
 +        game.removeStoredValue(pendingKey(player));
 +        ScorePublicObjectiveService.scorePO(event, game, player, poID, true);
++        ti4.service.button.ReactionCheckService.checkAllDeclaredScoring(game);
 +    }
 +}
 diff --git a/src/main/java/ti4/service/objectives/ObjectiveTokenSpendService.java b/src/main/java/ti4/service/objectives/ObjectiveTokenSpendService.java
