@@ -53,7 +53,7 @@ async function pickTarget() {
   const deadline = Date.now() + 10 * 60000;
   while (Date.now() < deadline) {
     const pts = await points();
-    const i = pts.findIndex((p) => p.index > seen && byBot(p) && /tactical\.move|tactical move/i.test(label(p)));
+    const i = pts.findIndex((p) => p.index > seen && byBot(p) && /tactical\.move|tactical move|“Move ships”|“Skip moving”/i.test(label(p)));
     if (i >= 0 && i + 1 < pts.length) return { to: pts[i + 1], undone: pts[i], latest: pts[0] };
     await sleep(1000);
   }
