@@ -1,22 +1,53 @@
 {
   "name": "setup-argent-starting-tech-double-press",
-  "description": "Soak games pbd353 / pbd491 stuck in setup: Argent chooses 2 of its 3 starting technologies from two identical prompts (\"choose one of\" / \"choose another of\" the 3 starting Argent technologies). A second press on a tech already taken (here Neural Motivator again, on the remaining prompt) ran PlayerTechService.getTech, which gained nothing and deleted that remaining prompt: the second pick was never offered and setup waited on Argent forever. Fix (bot): getTech refuses a technology the player already has with a private message and leaves the prompt up; tech.gain validate refuses it the same way (and a starting prompt once all starting techs are chosen). Here (pbd89, before Argent's picks): Neural Motivator, Neural Motivator again (engine refuses; legacy is a no-op), then Sarween Tools: Argent has both, owes none, and no starting-tech prompt of Argent's stays open.",
-  "base": { "recording": "pbd89", "index": 19 },
+  "description": "Soak games pbd353 / pbd491 stuck in setup: Argent chooses 2 of its 3 starting technologies from two identical prompts (\"choose one of\" / \"choose another of\" the 3 starting Argent technologies). A second press on a tech already taken (here Neural Motivator again, on the remaining prompt) ran PlayerTechService.getTech, which gained nothing and deleted that remaining prompt: the second pick was never offered and setup waited on Argent forever. Fix (bot): getTech refuses a technology the player already has with a private message and leaves the prompt up; tech.gain validate refuses it the same way (and a starting prompt once all starting techs are chosen). Here (pbd89, before Argent's picks): Neural Motivator, Neural Motivator again (engine refuses; legacy is a no-op), then Sarween Tools: Argent has both, owes none, and no starting-tech prompt of Argent's stays open. Setup proceeding is checked as setup.waitingOn no longer naming Argent. No 'decision closed' check: the harness re-posts a missing button as its own one-button '[replay]' message (the base re-posts only the first of Argent's two prompts), so the refused repeat press leaves that Neural Motivator-only copy open on both forks, which is correct for a refused press. In a real game the repeat lands on Argent's second prompt, and the Sarween press then removes it.",
+  "base": {
+    "recording": "pbd89",
+    "index": 19
+  },
   "steps": [
-    { "press": "FFCC_argent_getTech_nm__noPay__comp", "as": "argent" },
-    { "wait": 1500 },
-    { "press": "FFCC_argent_getTech_nm__noPay__comp", "as": "argent", "refused": true },
-    { "wait": 1500 },
-    { "press": "FFCC_argent_getTech_st__noPay__comp", "as": "argent" },
-    { "wait": 2000 }
+    {
+      "press": "FFCC_argent_getTech_nm__noPay__comp",
+      "as": "argent"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "press": "FFCC_argent_getTech_nm__noPay__comp",
+      "as": "argent",
+      "refused": true
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "press": "FFCC_argent_getTech_st__noPay__comp",
+      "as": "argent"
+    },
+    {
+      "wait": 2000
+    }
   ],
   "expect": {
     "invariants": true,
     "state": [
-      { "path": "players[faction=argent].techs", "includes": "nm" },
-      { "path": "players[faction=argent].techs", "includes": "st" },
-      { "path": "setup.players[faction=argent].startingTechsNeeded", "eq": 0 }
-    ],
-    "decision": { "kind": "tech.gain", "as": "argent", "open": false }
+      {
+        "path": "players[faction=argent].techs",
+        "includes": "nm"
+      },
+      {
+        "path": "players[faction=argent].techs",
+        "includes": "st"
+      },
+      {
+        "path": "setup.players[faction=argent].startingTechsNeeded",
+        "eq": 0
+      },
+      {
+        "path": "setup.waitingOn",
+        "excludes": "${faction:argent}"
+      }
+    ]
   }
 }
