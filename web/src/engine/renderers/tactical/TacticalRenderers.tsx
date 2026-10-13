@@ -161,7 +161,21 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   const waits = followWaits(opts, state);
   const defer = opts.find((o) => o.value!.action === "end_turn_when_followed");
   const ends = (o: TurnOpt) => o.value!.action === "end_turn" || o.value!.action === "pass";
-  const disabled = (o: TurnOpt) => owed.length > 0 || (waits.length > 0 && ends(o));
+  /* Rules (fleet pool, capacity): units over the limit go before the turn ends; the engine refuses End Turn / Pass
+     while my reminder for that system is open (its Dismiss sets it aside). */
+  const overLimit = [
+    ...new Set(
+      mine.flatMap((d) =>
+        d.kind === "units.remove"
+          ? d.options.flatMap((o) => {
+              const v = o.value as { reminder?: boolean; tile?: string } | null;
+              return v?.reminder && v.tile ? [v.tile] : [];
+            })
+          : [],
+      ),
+    ),
+  ];
+  const disabled = (o: TurnOpt) => owed.length > 0 || ((waits.length > 0 || overLimit.length > 0) && ends(o));
   const pending = waits.flatMap((w) => w.userIds.map((id, i) => state?.players.find((p) => p.userId === id)?.userName ?? factionName(w.factions[i] ?? id)));
   const reminders = waits
     .map((w) => {
@@ -171,6 +185,7 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     })
     .filter((x) => x !== null);
   const label = (o: TurnOpt) => {
+    if (overLimit.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · remove the units over your limits in ${overLimit.join(", ")} first`;
     if (waits.length && ends(o))
       return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow ${waits.map((w) => w.name).join(" and ")}`;
     return turnLabel(o, me?.commandTokens.tactic);
