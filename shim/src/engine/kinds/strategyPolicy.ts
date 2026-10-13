@@ -164,6 +164,33 @@ function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["op
   return null;
 }
 
+/** Own primary prompts older than this are leftovers (an earlier turn's card), never what holds the turn. */
+const PRIMARY_MAX_AGE_MS = 10 * 60_000;
+
+/**
+ * Why `me` must not end the turn yet because the primary of the card it played is not resolved, or null: a part the
+ * holder policy would still press (Imperial's score / secret: playtest 9 pbd539, End Turn went in between a stale
+ * "Score A Public" and its retry, so the card scored after the turn).
+ * Rules: the primary is part of the strategic action, which is over before the turn ends.
+ */
+export function holderPrimaryPending(state: GameState | null, me: string, open: Decision[], now = Date.now()): string | null {
+  const self = state?.players.find((p) => p.userId === me) ?? null;
+  if (!self) return null;
+  // (An open picker of the primary never holds the turn by itself: the engine reports a mandatory part still missing
+  // in the end_turn value's primaryMissing, which the turn policy waits on; soak pbd1029.)
+  for (const x of open) {
+    if (x.kind !== "strategy_card.resolve" || now - x.createdAt >= PRIMARY_MAX_AGE_MS) continue;
+    const d = x as StrategyCardResolve;
+    const opts = live(d).filter((o) => o.value);
+    const v = opts[0]?.value;
+    if (!v || !(v.holder === self.faction || self.strategyCards.includes(v.strategyCard))) continue;
+    if (!state?.strategyCards.find((c) => c.number === v.strategyCard)?.played) continue;
+    const part = holderPart(d, opts, self, { history: [], open, all: open }, state);
+    if (part) return `${v.name} primary not resolved (${part.why})`;
+  }
+  return null;
+}
+
 function strategicAction(d: StrategicAction, state: GameState | null, self: PlayerState | null): StrategyChoice | null {
   if (!self || (state?.activePlayer && state.activePlayer !== self.userId && state.activePlayer !== self.color && state.activePlayer !== self.faction)) return null;
   const o = live(d).find((x) => x.value && self.strategyCards.includes(x.value.strategyCard) && !state?.strategyCards.find((c) => c.number === x.value!.strategyCard)?.played);

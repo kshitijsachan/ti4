@@ -1,0 +1,44 @@
+{
+  "name": "pt9-tech-follow-unaffordable",
+  "description": "Playtest 9 pbd539 (014): a Technology follower 1 resource short got the technology and 'Pay all you have (1 resources short)' finished the bill. The technology is granted before its payment, so (bot pt9-followups, StrategyCardResolveKind.researchUnaffordable): the research press is refused when ready planets + trade goods + commodities cannot cover it (4 for the secondary, 6 for the holder's second); the web pays a Technology research in full. Base: tech-secondary-pay (pbd101 r1, Naalu played Technology); Mentak's planets are exhausted and its trade goods / commodities set to 0.",
+  "base": {
+    "recording": "pbd101",
+    "index": 47
+  },
+  "setup": [
+    {
+      "command": "planet exhaust_all",
+      "options": {
+        "faction_or_color": "mentak"
+      }
+    },
+    {
+      "command": "player stats",
+      "options": {
+        "faction_or_color": "mentak",
+        "trade_goods": "0",
+        "commodities": "0"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "acquireATechWithSC_first"
+      },
+      "as": "mentak",
+      "refused": true
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": [
+      {
+        "kind": "tech.gain",
+        "as": "mentak",
+        "open": false
+      }
+    ]
+  }
+}
