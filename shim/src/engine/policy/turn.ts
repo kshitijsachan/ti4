@@ -130,6 +130,8 @@ export function chooseTurnAction(
     now?: number;
     /** Options of this decision we already answered (autopilot ctx.history). */
     history?: string[];
+    /** Our played card's primary is not resolved yet (kinds/strategyPolicy holderPrimaryPending): no end turn. */
+    primaryPending?: string | null;
   } = {},
 ): Choice | null {
   if (turnStale(d, state, me)) return null;
@@ -142,6 +144,9 @@ export function chooseTurnAction(
   // Follows outstanding on our card: wait for them (turnStale already says so; guard anyway).
   if (waits.length) return null;
   if (end.length) {
+    // The primary is part of the strategic action: resolve it before the turn ends (playtest 9 pbd539: End Turn went
+    // in between a stale "Score A Public" and its retry, and Imperial scored after the turn).
+    if (timing.primaryPending) return null;
     const pick =
       end.find((o) => o.value!.action === "end_turn" && !o.value!.abilities) ??
       end[0];
