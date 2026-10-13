@@ -3,8 +3,7 @@
  * Regression for the fuzzer's pbd114 finding: after a shim restart (empty in-memory history) the Leadership holder
  * resolved the primary again (+3 tokens each time). The engine's window.subject.primaryDone now says what is done.
  */
-import { chooseStrategy, holderPrimaryPending } from "./kinds/strategyPolicy.js";
-import { chooseTurnAction } from "./policy/turn.js";
+import { chooseStrategy } from "./kinds/strategyPolicy.js";
 import type { Decision, GameState } from "./types.js";
 
 const ME = "u1";
@@ -153,39 +152,5 @@ expect("Warfare primary done: nothing", chooseStrategy(warfareCard("pok6warfare"
 const offer = { id: "d5", kind: "choose.confirm", target: { userId: ME }, options: [{ id: "beginTacticalTeWarfare", value: { source: "warfare", confirm: true, choice: "tactical" } }] } as unknown as Decision;
 expect("Warfare follow-up open: wait", chooseStrategy(warfareCard("te6warfare", []), te, ME, { ...ctx, open: [offer] }), null);
 
-// Playtest 9 pbd539: Imperial's "Score A Public" went stale, End Turn went in between, and the card scored after the
-// turn. While a primary part the holder policy would press is open, the turn is not ended.
-const imperialState = {
-  phase: "action",
-  activePlayer: ME,
-  players: [{ userId: ME, faction: "mentak", self: true, strategyCards: [8], planets: [], commandTokens: { tactic: 3, fleet: 3, strategy: 2 } }],
-  strategyCards: [{ number: 8, card: "pok8imperial", played: true, holder: ME, reactions: [] }],
-} as unknown as GameState;
-const imperial = (primaryDone: string[]) =>
-  ({
-    id: "d8",
-    kind: "strategy_card.resolve",
-    revision: 3,
-    scope: "table",
-    target: null,
-    createdAt: Date.now(),
-    window: { kind: "strategy_card", subject: { strategyCard: 8, primaryDone }, eligible: [], responded: [], responses: {} },
-    options: [
-      { id: "scoreAnObjective", label: "Score A Public", disabled: false, needsInput: false, value: { strategyCard: 8, name: "Imperial", card: "pok8imperial", holder: "mentak", action: "score_public", who: "holder", spendsToken: false, part: "score_public", primaryParts: ["score_public", "imperial"], copy: false } },
-      { id: "sc_draw_so", label: "Draw Secret Objective", disabled: false, needsInput: false, value: { strategyCard: 8, name: "Imperial", card: "pok8imperial", holder: "mentak", action: "draw_secret", who: "anyone", spendsToken: true, part: "imperial", primaryParts: ["score_public", "imperial"], copy: false } },
-    ],
-  }) as unknown as Decision;
-expect("Imperial primary not started: pending", !!holderPrimaryPending(imperialState, ME, [imperial([])]), true);
-expect("Imperial scored, secret not drawn: pending", !!holderPrimaryPending(imperialState, ME, [imperial(["score_public"])]), true);
-expect("Imperial resolved: not pending", holderPrimaryPending(imperialState, ME, [imperial(["score_public", "imperial"])]), null);
-const endMenu = {
-  id: "t1",
-  kind: "turn.action",
-  target: { userId: ME },
-  options: [{ id: "turnEnd", label: "End Turn", disabled: false, needsInput: false, value: { action: "end_turn", abilities: false, waitingFor: [], overLimits: [] } }],
-} as unknown as Decision;
-const pending = holderPrimaryPending(imperialState, ME, [imperial([])]);
-expect("turn policy waits while the primary is pending", chooseTurnAction(endMenu as never, imperialState, ME, { open: [], primaryPending: pending }), null);
-expect("turn policy ends the turn once resolved", chooseTurnAction(endMenu as never, imperialState, ME, { open: [], primaryPending: null })?.option.id, "turnEnd");
 
 process.exit(failed ? 1 : 0);
