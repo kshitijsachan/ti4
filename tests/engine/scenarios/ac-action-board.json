@@ -1,6 +1,6 @@
 {
   "name": "ac-action-board",
-  "description": "pbd72 r4 action phase, Winnu active: War Effort (cruiser at home), Frontline Deployment (3 infantry), Signal Jamming (Arborec token next to Winnu's home), Reactor Meltdown (a space dock added on Arborec's Atlas; home docks are not offered), Ghost Ship (first offered system). Five starting cards are discarded first (playAC refuses while over the hand limit).",
+  "description": "pbd72 r4 action phase, Winnu active: War Effort (cruiser at home), Frontline Deployment (3 infantry), Signal Jamming (Arborec token next to Winnu's home), Reactor Meltdown (a space dock added on Arborec's Atlas; home docks are not offered), Ghost Ship (first offered system). Five starting cards are discarded first (playAC refuses while over the hand limit). Each Action: card is a component action, so one is played per turn (rules: one action per turn; the engine refuses a second since 01:50): the other seats are marked passed in setup, so Winnu's End Turn (turn.action turnEnd) starts Winnu's next turn and the next card is played there. --diff ignores stored.engineActionCardTurn: the engine's one-action-per-turn marker, which the original code does not keep.",
   "base": {
     "recording": "pbd72",
     "index": 815,
@@ -17,7 +17,10 @@
     "/ac draw_specific_ac ac_id:jamming faction_or_color:winnu",
     "/ac draw_specific_ac ac_id:meltdown faction_or_color:winnu",
     "/ac draw_specific_ac ac_id:ghost_ship faction_or_color:winnu",
-    "/add_units tile_name:211 unit_names:\"sd atlas\" faction_or_color:arborec"
+    "/add_units tile_name:211 unit_names:\"sd atlas\" faction_or_color:arborec",
+    "/player stats passed:y faction_or_color:muaat",
+    "/player stats passed:y faction_or_color:empyrean",
+    "/player stats passed:y faction_or_color:arborec"
   ],
   "steps": [
     {
@@ -45,6 +48,22 @@
     },
     {
       "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "winnu",
+      "expect": {
+        "decision": [
+          {
+            "kind": "action_card.play",
+            "as": "winnu",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
         "kind": "action_card.play",
         "value": {
           "actionCard": "f_deployment"
@@ -65,6 +84,22 @@
         "option": "placeOneNDone_skipbuild_3gf_winnu$"
       },
       "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "winnu",
+      "expect": {
+        "decision": [
+          {
+            "kind": "action_card.play",
+            "as": "winnu",
+            "open": true
+          }
+        ]
+      }
     },
     {
       "answer": {
@@ -105,6 +140,22 @@
     },
     {
       "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "winnu",
+      "expect": {
+        "decision": [
+          {
+            "kind": "action_card.play",
+            "as": "winnu",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
         "kind": "action_card.play",
         "value": {
           "actionCard": "meltdown"
@@ -135,6 +186,22 @@
     },
     {
       "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "winnu",
+      "expect": {
+        "decision": [
+          {
+            "kind": "action_card.play",
+            "as": "winnu",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
         "kind": "action_card.play",
         "value": {
           "actionCard": "ghost_ship"
@@ -159,5 +226,8 @@
   ],
   "expect": {
     "invariants": true
-  }
+  },
+  "diffIgnore": [
+    "stored.engineActionCardTurn"
+  ]
 }

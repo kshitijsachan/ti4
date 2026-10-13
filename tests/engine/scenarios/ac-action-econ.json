@@ -1,6 +1,6 @@
 {
   "name": "ac-action-econ",
-  "description": "pbd72 r4 action phase, Winnu active (5 cards discarded first: hand limit 7) Uprising (Arborec's Atlas), Mining Initiative, Industrial Initiative and Insubordination (Arborec) through action_card.play / .resolve / .target. (Rise of a Messiah is in Muaat's hand at this save, so not drawable.)",
+  "description": "pbd72 r4 action phase, Winnu active (5 cards discarded first: hand limit 7) Uprising (Arborec's Atlas), Mining Initiative, Industrial Initiative and Insubordination (Arborec) through action_card.play / .resolve / .target. (Rise of a Messiah is in Muaat's hand at this save, so not drawable.) Each Action: card is a component action, so one is played per turn (rules: one action per turn; the engine refuses a second since 01:50): the other seats are marked passed in setup, so Winnu's End Turn (turn.action turnEnd) starts Winnu's next turn and the next card is played there. --diff ignores stored.engineActionCardTurn: the engine's one-action-per-turn marker, which the original code does not keep.",
   "base": {
     "recording": "pbd72",
     "index": 815,
@@ -15,7 +15,10 @@
     "/ac draw_specific_ac ac_id:uprising faction_or_color:winnu",
     "/ac draw_specific_ac ac_id:mining_initiative faction_or_color:winnu",
     "/ac draw_specific_ac ac_id:industrial_initiative faction_or_color:winnu",
-    "/ac draw_specific_ac ac_id:insub faction_or_color:winnu"
+    "/ac draw_specific_ac ac_id:insub faction_or_color:winnu",
+    "/player stats passed:y faction_or_color:muaat",
+    "/player stats passed:y faction_or_color:empyrean",
+    "/player stats passed:y faction_or_color:arborec"
   ],
   "steps": [
     {
@@ -50,6 +53,22 @@
     },
     {
       "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "winnu",
+      "expect": {
+        "decision": [
+          {
+            "kind": "action_card.play",
+            "as": "winnu",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
         "kind": "action_card.play",
         "value": {
           "actionCard": "mining_initiative"
@@ -66,6 +85,22 @@
     },
     {
       "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "winnu",
+      "expect": {
+        "decision": [
+          {
+            "kind": "action_card.play",
+            "as": "winnu",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
         "kind": "action_card.play",
         "value": {
           "actionCard": "industrial_initiative"
@@ -79,6 +114,22 @@
         "option": "industrialInitiative"
       },
       "as": "winnu"
+    },
+    {
+      "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "winnu",
+      "expect": {
+        "decision": [
+          {
+            "kind": "action_card.play",
+            "as": "winnu",
+            "open": true
+          }
+        ]
+      }
     },
     {
       "answer": {
@@ -112,5 +163,8 @@
         "eq": "0"
       }
     ]
-  }
+  },
+  "diffIgnore": [
+    "stored.engineActionCardTurn"
+  ]
 }
