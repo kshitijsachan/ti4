@@ -18,6 +18,7 @@
 //                { engine: "rebuild" | "recover" } (the engine's restart-time rebuild / prompt recovery),
 //                { answerOn: "<custom id>", pick?: "oldest" } (answer the on-screen message carrying it, no re-post) ],
 //     diffIgnore: [ "stored.violatedSystems" ]   (save keys --diff skips: game.<k> | stored.<k> | player.<k>)
+//     invariantsIgnore: [ "content.no-homebrew" ]  (invariant ids the base game violates anyway)
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ],
 //                channels: { archived: true|false } } }
 //   A step may carry its own "expect" (same shape), checked right after it (e.g. a prompt closed mid-flow).
@@ -450,7 +451,9 @@ class Runner {
   }
 
   invariants(id, label) {
-    const vs = checkSnapshot({ id, label, save: this.save(), web: null }).filter((v) => v.severity === "error");
+    // invariantsIgnore: invariant ids a scenario's base game violates anyway (e.g. content.no-homebrew on an old recording).
+    const ignore = new Set(sc.invariantsIgnore ?? []);
+    const vs = checkSnapshot({ id, label, save: this.save(), web: null }).filter((v) => v.severity === "error" && !ignore.has(v.id));
     this.violations.push(...vs);
     return vs;
   }
