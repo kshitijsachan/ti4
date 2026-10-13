@@ -16,7 +16,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readShimState } from "../../../shim/tools/read-state.mjs";
-import { BOT_STORAGE, BOT_URL, SHIM_STATE, SHIM_URL, botToken, ensureRunDir, gameFile, readGameFile, getJson, sleep, undoDir, undoFile, type Json } from "./env.ts";
+import { BOT_STORAGE, BOT_URL, SHIM_STATE, SHIM_URL, botToken, ensureRunDir, gameFile, readGameFile, getJson, sleep, undoDir, undoFile, waitForStack, type Json } from "./env.ts";
 import { GAME_CHANNEL_KEYS, PLAYER_CHANNEL_KEYS, isRealPlayer, parseSave, rewriteForFork, type ForkMap } from "./savefile.ts";
 import { ShimClient, controlsOf, type Msg } from "./shim.ts";
 import { openDecisions } from "./engine.ts";
@@ -403,7 +403,7 @@ export async function acquireForkLease(log: (s: string) => void = () => {}, cap 
 }
 
 /** Ends a fork game (the bot's /game end: no results posted, channels archived) as its first seat. */
-export async function endFork(fork: Fork, log: (s: string) => void = () => {}): Promise<boolean> {
+export async function endFork(fork: Fork, log: (s: string) => void = () => {}, retry = true): Promise<boolean> {
   try {
     const c = await clientFor(fork, fork.seats[0].user_id);
     const r = await c.command(fork.actionsId, "game", [
@@ -414,7 +414,12 @@ export async function endFork(fork: Fork, log: (s: string) => void = () => {}): 
     return !r.error;
   } catch (e: any) {
     log(`end ${fork.game}: ${e.message}`);
-    return false;
+    if (!retry) return false;
+    // The shim/bot restarting (a deploy) is the usual cause: wait for it (bounded) and try once more, so a fork this
+    // run created is not left running.
+    fork.clients.clear();
+    await waitForStack(240000, log).catch(() => {});
+    return endFork(fork, log, false);
   }
 }
 
