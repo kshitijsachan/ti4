@@ -11546,10 +11546,10 @@ index 0000000..e6aabf7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ScFollowGate.java b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
 new file mode 100644
-index 0000000..5a7b722
+index 0000000..cdc5320
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
-@@ -0,0 +1,392 @@
+@@ -0,0 +1,320 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -11640,25 +11640,6 @@ index 0000000..5a7b722
 +            }
 +        }
 +        return out;
-+    }
-+
-+    /**
-+     * The turn on which {@code player} played {@code sc} this round is over (rules: the primary is part of that
-+     * strategic action). False when the play was not recorded (games from before the gate), outside the action phase
-+     * (Crisis / hero primaries) or with the gate off.
-+     */
-+    public static boolean playTurnOver(@Nullable Game game, @Nullable Player player, int sc) {
-+        if (!enabled(game) || player == null || !"action".equalsIgnoreCase(game.getPhaseOfGame()) || game.isNaaluAgent())
-+            return false;
-+        String mine = game.getRound() + ":" + player.getFaction() + ":";
-+        String current = turnKey(game, player) + sc;
-+        boolean recorded = false;
-+        for (String e : game.getStoredValue(KEY).split(";")) {
-+            if (!e.startsWith(mine) || !e.endsWith(":" + sc)) continue;
-+            recorded = true;
-+            if (e.equals(current) && player == game.getActivePlayer()) return false;
-+        }
-+        return recorded;
 +    }
 +
 +    /** Stored per-turn markers: an "Action:" card played (that was the action), and "do another action" granted. */
@@ -11814,56 +11795,6 @@ index 0000000..5a7b722
 +    }
 +
 +    /**
-+     * The player's own steps that mean the action is not over for End Turn. Narrower than {@link #IN_FLIGHT}: prompts
-+     * that can be left open past an action (a relic, fragments, a payment or production nobody closed, a rift prompt)
-+     * never hold the turn; the tactical action itself is judged on the board ({@link #tacticalUnderway}).
-+     */
-+    private static final Pattern END_TURN_HOLD = Pattern.compile(
-+            "^(tactical\\.(move|land)$|strategy_card\\.(diplomacy_system|construction_place|construction_build)$)");
-+
-+    /**
-+     * Why {@code player} may not end the turn yet because their action is not over, or null (playtest 9 pbd539: End
-+     * Turn mid Thunder's Edge Warfare tactical action; Imperial scored after the holder's turn ended): a tactical action
-+     * under way, the card played this turn with its primary not started, or one of their own action steps open.
-+     */
-+    @Nullable
-+    public static String endTurnRefusal(@Nullable Game game, @Nullable Player player) {
-+        if (!enabled(game) || player == null || !"action".equalsIgnoreCase(game.getPhaseOfGame())) return null;
-+        if (player != game.getActivePlayer()) return null;
-+        String why = null;
-+        if (tacticalUnderway(game)) why = "your tactical action is still under way: conclude it first";
-+        if (why == null) why = primaryMissingMessage(game, player);
-+        if (why == null) {
-+            long now = System.currentTimeMillis();
-+            for (EngineModels.Decision d : DecisionRegistry.openDecisions(game.getName())) {
-+                if (d.target() == null || !player.getUserID().equals(d.target().userId())) continue;
-+                if (now - d.createdAt() > IN_FLIGHT_MAX_AGE_MS) continue;
-+                if (END_TURN_HOLD.matcher(d.kind()).find()) {
-+                    why = "your action is still under way (" + d.kind() + ")";
-+                    break;
-+                }
-+            }
-+        }
-+        return why == null ? null : "You can't end your turn yet: " + why + ".";
-+    }
-+
-+    /**
-+     * "finish Imperial: draw a secret objective / gain 1 VP for Mecatol Rex first", or null: a mandatory part of the
-+     * primary of a card {@code player} played this turn is not done (StrategyCardResolveKind.MANDATORY).
-+     */
-+    @Nullable
-+    public static String primaryMissingMessage(@Nullable Game game, @Nullable Player player) {
-+        if (game == null || player == null) return null;
-+        for (int sc : playedThisTurn(game, player)) {
-+            if (player.getSCs() == null || !player.getSCs().contains(sc)) continue;
-+            List<String> missing = ti4.selfhost.engine.kinds.StrategyCardResolveKind.mandatoryMissing(game, sc);
-+            if (!missing.isEmpty())
-+                return "finish " + cardName(game, sc) + ": " + String.join(", ", missing) + " first";
-+        }
-+        return null;
-+    }
-+
-+    /**
 +     * A tactical action is under way: a system is active and the action was not concluded yet (concluding logs it;
 +     * EndTurnService clears the active system). A save written with no active system loads it as the text "null".
 +     */
@@ -11926,9 +11857,6 @@ index 0000000..5a7b722
 +            Player player = context.getPlayer();
 +            if (game == null || player == null || !"action".equalsIgnoreCase(game.getPhaseOfGame())) return false;
 +            String msg = defer ? deferRefusal(game, player) : conclude ? null : waitingMessage(game, player);
-+            // End Turn mid-action (not Pass: passing starts no action; not the deferred end, judged above).
-+            if (msg == null && handler != null && handler.matches("turnEnd|endOfTurnAbilities"))
-+                msg = endTurnRefusal(game, player);
 +            // Units over the fleet pool / capacity hold the turn too, judged on the board (playtest 8 pbd469: End
 +            // Turn after dismissing the reminder). Same refusal as the engine's turn.action validate.
 +            if (msg == null && !defer) msg = ti4.selfhost.engine.kinds.TurnActionKind.overLimitMessage(game, player);
@@ -12458,10 +12386,10 @@ index 0000000..be3157a
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/TacticalController.java b/src/main/java/ti4/selfhost/engine/TacticalController.java
 new file mode 100644
-index 0000000..1490a8f
+index 0000000..14c41e0
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/TacticalController.java
-@@ -0,0 +1,496 @@
+@@ -0,0 +1,484 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -12642,11 +12570,8 @@ index 0000000..1490a8f
 +                if (err != null) return fail("refused", err, decisionId);
 +            }
 +            TacticalActionDisplacementService.stageFullDisplacementAndRemoveFromOrigins(game, player, internal);
-+            if (!conclude) TacticalActionOutputService.refreshButtonsAndMessageForChoosingTile(null, game, player);
-+            // After the refresh: its move summary marks a possible rift for any shorter path through one; the whole
-+            // move is re-read here, so the engine's own verdict replaces it.
-+            game.setStoredValue("possiblyUsedRift", "");
 +            markRifts(game, player, active, internal);
++            if (!conclude) TacticalActionOutputService.refreshButtonsAndMessageForChoosingTile(null, game, player);
 +            GameManager.save(game, player.getUserName() + " moved units");
 +        } catch (Exception e) {
 +            BotLogger.error("engine: move " + decisionId + " by " + userId + " failed", e);
@@ -12752,30 +12677,21 @@ index 0000000..1490a8f
 +            if (from == null) continue;
 +            // validateMoveValue: Alluring Throne lets only the Illustrion flagship ignore the rift
 +            boolean ships = false;
-+            int slowest = Integer.MAX_VALUE;
 +            for (UnitKey k : e.getValue().keySet()) {
 +                UnitModel m = player.getUnitFromUnitKey(k);
 +                if (m == null || m.getMoveValue() <= 0) continue;
 +                if (k.unitType() == Units.UnitType.Flagship
 +                        && AlluringThroneService.illustrionFlagshipIgnoresAnomalies(game, player, from)) continue;
 +                ships = true;
-+                slowest = Math.min(slowest, m.getMoveValue());
 +            }
 +            if (!ships) continue;
-+            // Ships leaving a gravity rift roll (rules 41: moving out of a rift).
-+            if (from.isGravityRift(game, player)) {
-+                game.setStoredValue("possiblyUsedRift", "yes");
-+                continue;
-+            }
 +            try {
 +                int distance = CheckDistanceHelper.getDistanceBetweenTwoTiles(game, player, pos, active, true);
 +                int rift = CheckDistanceHelper.getDistanceBetweenTwoTiles(game, player, pos, active, false);
 +                // "scc": ships in both systems makes both distances 1 (buildMessageForSingleSystem)
 +                if (player.hasTech("scc") && from.containsPlayersUnits(player) && activeTile != null
 +                        && activeTile.containsPlayersUnits(player)) distance = rift = 1;
-+                // Through a rift only when the move needed it: a ship whose own move covers the plain path did not
-+                // have to pass the rift (playtest 9 pbd539: 309 -> 207 was offered the rift rolls).
-+                if (rift < distance && distance > slowest) game.setStoredValue("possiblyUsedRift", "yes");
++                if (rift < distance) game.setStoredValue("possiblyUsedRift", "yes");
 +            } catch (Exception ignored) {
 +                // distance unknown: no rift prompt
 +            }
@@ -18574,10 +18490,10 @@ index 0000000..1516dd5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java b/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java
 new file mode 100644
-index 0000000..8653b29
+index 0000000..0d671dd
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ChooseConfirmKind.java
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,105 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import static ti4.selfhost.engine.kinds.ChooseSupport.rule;
@@ -18676,36 +18592,6 @@ index 0000000..8653b29
 +        Map<String, Object> v = StrategyCards.optionValue(decision, optionId);
 +        if (v == null || !"mahactagent".equals(v.get("source"))) return null;
 +        return ti4.service.leader.LeaderRuleChecks.agentNotReady(answering, "mahactagent");
-+    }
-+
-+    /**
-+     * Warfare's "redistribute command tokens" offer belongs to the turn it was posted in (its strategic / tactical
-+     * action): posted before the current turn began, it is over (playtest 9 pbd539: round 1's offer stayed under
-+     * "Available now" through rounds 2-4). Action phase only; the turn start is Game.lastActivePlayerChange.
-+     */
-+    @Override
-+    public boolean obsolete(CaptureContext ctx) {
-+        ti4.game.Game game = ctx.game();
-+        if (game == null || !"action".equalsIgnoreCase(game.getPhaseOfGame())) return false;
-+        if (!redistributeOffer(ctx)) return false;
-+        long posted = ti4.selfhost.engine.RoundClock.postTime(ctx.messageId());
-+        java.util.Date turn = game.getLastActivePlayerChange();
-+        if (posted <= 0 || turn == null || turn.getTime() < 1_000_000L) return false;
-+        return posted < turn.getTime();
-+    }
-+
-+    private static boolean redistributeOffer(CaptureContext ctx) {
-+        List<String> handlers = ctx.handlerIds();
-+        if (handlers == null) {
-+            String id = ti4.selfhost.engine.DecisionRegistry.decisionIdForMessage(ctx.messageId());
-+            ti4.selfhost.engine.EngineModels.Decision d =
-+                    id == null ? null : ti4.selfhost.engine.DecisionRegistry.get(id);
-+            if (d == null) return false;
-+            handlers = new java.util.ArrayList<>();
-+            for (ti4.selfhost.engine.EngineModels.Option o : d.options()) if (o.handler() != null) handlers.add(o.handler());
-+        }
-+        for (String h : handlers) if (h != null && h.contains("redistributeCCButtons_")) return true;
-+        return false;
 +    }
 +
 +    @Override
@@ -28783,10 +28669,10 @@ index 0000000..b93c542
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StatusScoreKind.java b/src/main/java/ti4/selfhost/engine/kinds/StatusScoreKind.java
 new file mode 100644
-index 0000000..aa50f5c
+index 0000000..832f156
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StatusScoreKind.java
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,192 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -28883,27 +28769,7 @@ index 0000000..aa50f5c
 +        if (ctx.game() == null || ctx.player() == null) return false;
 +        if (ctx.target() == null || !"owner_prefix".equals(ctx.target().resolvedBy())) return false;
 +        int n = ti4.service.objectives.ObjectiveSpendService.pending(ctx.game(), ctx.player());
-+        if (ti4.service.objectives.ObjectiveSpendService.paying(ctx.game(), ctx.player(), n)) return true;
-+        return imperialSpent(ctx.game(), ctx.player());
-+    }
-+
-+    /**
-+     * Imperial's list in the action phase once nothing on it can be scored (the holder scored, or meets none of the
-+     * revealed publics they have not scored), or once the holder's turn is over: the primary is part of that strategic
-+     * action (playtest 9 pbd539: the list lingered as "Score objectives — You meet none…" after scoring).
-+     */
-+    static boolean imperialSpent(Game game, Player player) {
-+        if (!"action".equalsIgnoreCase(game.getPhaseOfGame())) return false;
-+        Player active = game.getActivePlayer();
-+        if (active != null && active != player && !game.isNaaluAgent()) return true;
-+        for (Map.Entry<String, Integer> e : game.getRevealedPublicObjectives().entrySet()) {
-+            String id = e.getKey();
-+            if (!ti4.image.Mapper.getPublicObjectives().containsKey(id)) continue;
-+            if (game.didPlayerScoreThisAlready(player.getUserID(), id)) continue;
-+            int[] pr = StatusPhase.progress(game, player, id);
-+            if (pr[1] <= 0 || pr[0] >= pr[1]) return false;
-+        }
-+        return true;
++        return ti4.service.objectives.ObjectiveSpendService.paying(ctx.game(), ctx.player(), n);
 +    }
 +
 +    @Override
@@ -29512,10 +29378,10 @@ index 0000000..3d95df7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
 new file mode 100644
-index 0000000..d225788
+index 0000000..3569eb9
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
-@@ -0,0 +1,533 @@
+@@ -0,0 +1,419 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -29614,88 +29480,6 @@ index 0000000..d225788
 +            case "pok8imperial" -> List.of("score_public", "imperial");
 +            default -> List.of();
 +        };
-+    }
-+
-+    /**
-+     * The MANDATORY parts of each card's primary (rules wording "may" / "up to" / a repeat = optional), one group per
-+     * required step; a group is done when any of its parts is in primaryDone. Only parts recorded from this kind's own
-+     * options are listed (Politics' speaker / agendas are answered on other prompts and never recorded). Optional, never
-+     * listed: Diplomacy's ready planets, Construction's second structure, Technology's second research, Trade.
-+     * End Turn waits on these (ScFollowGate.endTurnRefusal; playtest 9: Imperial's second part was lost).
-+     */
-+    private static final Map<String, List<List<String>>> MANDATORY = Map.ofEntries(
-+            Map.entry("pok1leadership", List.of(List.of("tokens"))),
-+            Map.entry("pok2diplomacy", List.of(List.of("system"))),
-+            Map.entry("pok3politics", List.of(List.of("action_cards"))),
-+            Map.entry("pok4construction", List.of(List.of("structure", "produce"))),
-+            Map.entry("te4construction", List.of(List.of("structure", "produce"))),
-+            Map.entry("monuments4construction", List.of(List.of("structure", "produce"))),
-+            Map.entry("monumentstf4", List.of(List.of("structure", "produce"))),
-+            Map.entry("pok6warfare", List.of(List.of("warfare_primary"))),
-+            Map.entry("te6warfare", List.of(List.of("warfare_primary"))),
-+            Map.entry("pok7technology", List.of(List.of("research"))),
-+            Map.entry("pok8imperial", List.of(List.of("score_public"), List.of("imperial"))));
-+
-+    private static final Map<String, String> PART_WORDS = Map.of(
-+            "tokens", "gain command tokens",
-+            "system", "choose a system",
-+            "action_cards", "draw 2 action cards",
-+            "structure", "place a structure",
-+            "warfare_primary", "resolve the primary",
-+            "research", "research a technology",
-+            "score_public", "score a public objective",
-+            "imperial", "draw a secret objective / gain 1 VP for Mecatol Rex");
-+
-+    /**
-+     * The mandatory primary steps of {@code sc} not done yet, in words (empty: the primary may end). A step worded "if
-+     * able" binds only while the holder can do it now (soak pbd672 / pbd746: Imperial's holder met no public objective
-+     * and could never end the turn): see {@link #able}.
-+     */
-+    public static List<String> mandatoryMissing(Game game, int sc) {
-+        List<List<String>> groups = MANDATORY.get(StrategyCards.automation(game, sc));
-+        List<String> out = new ArrayList<>();
-+        if (groups == null) return out;
-+        Player holder = StrategyCards.holder(game, sc);
-+        List<String> done = ButtonHelperSCs.primaryDone(game, sc);
-+        for (List<String> g : groups) {
-+            if (g.stream().anyMatch(done::contains)) continue;
-+            if (!able(game, holder, g.get(0))) continue;
-+            out.add(PART_WORDS.getOrDefault(g.get(0), g.get(0)));
-+        }
-+        return out;
-+    }
-+
-+    /**
-+     * Whether the holder can do a conditional mandatory step right now (unknown: false, so it never blocks):
-+     * score_public = a revealed public objective they have not scored and meet ("score 1 public objective IF you
-+     * fulfil its requirements"); structure = a PDS or a space dock left in their reinforcements (Construction places
-+     * from the supply). The other steps (gain tokens, choose a system, draw action cards, the Warfare press, research,
-+     * Mecatol point / secret) are always possible.
-+     */
-+    static boolean able(Game game, Player holder, String part) {
-+        try {
-+            if ("score_public".equals(part)) {
-+                if (holder == null) return false;
-+                for (String id : game.getRevealedPublicObjectives().keySet()) {
-+                    if (ti4.image.Mapper.getPublicObjective(id) == null) continue;
-+                    if (game.didPlayerScoreThisAlready(holder.getUserID(), id)) continue;
-+                    if (StatusPhase.meetsPublic(game, holder, id)) return true;
-+                }
-+                return false;
-+            }
-+            if ("structure".equals(part)) {
-+                if (holder == null) return false;
-+                for (String unit : new String[] {"pds", "spacedock"}) {
-+                    int cap = holder.getUnitCap(unit);
-+                    if (cap <= 0 || ti4.helpers.ButtonHelper.getNumberOfUnitsOnTheBoard(game, holder, unit) < cap)
-+                        return true;
-+                }
-+                return false;
-+            }
-+            return true;
-+        } catch (RuntimeException e) {
-+            return false;
-+        }
 +    }
 +
 +    @Override
@@ -29934,27 +29718,6 @@ index 0000000..d225788
 +                game.getName(), g -> ButtonHelperSCs.recordPrimaryDone(g, sc, part));
 +    }
 +
-+    /**
-+     * Why {@code player} cannot pay {@code cost} resources for a Technology research, or null. Generous on purpose (every
-+     * ready planet's resources, trade goods at Mirror Computing's worth, and commodities): only a bill nothing could
-+     * cover is refused.
-+     */
-+    static String researchUnaffordable(Game game, Player player, int cost, String name) {
-+        if (cost <= 0 || player == null) return null;
-+        int planets;
-+        try {
-+            Integer r = ti4.helpers.Helper.getPlayerResourcesAvailable(player, game);
-+            planets = r == null ? 0 : r;
-+        } catch (RuntimeException e) {
-+            return null;
-+        }
-+        int worth = player.hasTech("mc") ? 2 : 1;
-+        int have = planets + player.getTg() * worth + player.getCommodities();
-+        if (have >= cost) return null;
-+        return "Researching with " + name + " costs " + cost + " resources and you have " + have
-+                + " (ready planets and trade goods): you cannot pay for it.";
-+    }
-+
 +    /** Stored "&lt;round&gt;:&lt;holder|follower&gt;:&lt;techs owned&gt;" of the player's last Technology research press. */
 +    static final String RESEARCH_KEY = "engineTechResearch";
 +
@@ -30015,21 +29778,10 @@ index 0000000..d225788
 +        if (HOLDER.equals(who) && !isHolder) return "Only the player who played " + name + " may do that.";
 +        if (OTHERS.equals(who) && isHolder)
 +            return "You played " + name + ": resolve its primary; you do not follow your own card.";
-+        if ("research".equals(action)) {
-+            // Technology: the research is paid after the technology is granted, so a bill that cannot be covered must
-+            // not start (playtest 9 pbd539: "Pay all you have (1 resources short)" kept the technology).
-+            int cost = isHolder ? (partsLeft(game, sc, "research") == 1 ? 6 : 0) : 4;
-+            String poor = researchUnaffordable(game, answering, cost, name);
-+            if (poor != null) return poor;
-+        }
 +        if (isHolder) {
 +            String part = v.get("part") == null ? null : String.valueOf(v.get("part"));
 +            if (part != null && partsLeft(game, sc, part) <= 0)
 +                return "You already resolved that part of the primary ability of " + name + ".";
-+            // The primary is part of the strategic action: once the turn it was played on is over, it is too
-+            // (playtest 9 pbd539: Imperial scored and paid 3 s after the holder's End Turn).
-+            if (part != null && ti4.selfhost.engine.ScFollowGate.playTurnOver(game, answering, sc))
-+                return "Your turn is over: the primary ability of " + name + " is resolved during the strategic action.";
 +            if ("score_imperial".equals(action) && !answering.controlsMecatol(true))
 +                return "You do not control Mecatol Rex: draw a secret objective instead.";
 +            if ("draw_secret".equals(action) && answering.controlsMecatol(true))
@@ -30726,10 +30478,10 @@ index 0000000..12fc1d8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TacticalRiftKind.java b/src/main/java/ti4/selfhost/engine/kinds/TacticalRiftKind.java
 new file mode 100644
-index 0000000..941c004
+index 0000000..7ca233e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TacticalRiftKind.java
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,54 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -30760,17 +30512,6 @@ index 0000000..941c004
 +    @Override
 +    public boolean matches(String handlerId) {
 +        return handlerId.startsWith("riftUnit_") || handlerId.startsWith("riftAllUnits_") || handlerId.equals("doneRifting");
-+    }
-+
-+    /**
-+     * The rolls belong to the tactical action: once it is concluded (TACTICAL_ACTION_LOGGED, cleared when the next one
-+     * starts) the prompt is over (playtest 9 pbd539: it came back after Conclude with a second "Done with rifts").
-+     */
-+    @Override
-+    public boolean obsolete(CaptureContext ctx) {
-+        ti4.game.Game game = ctx.game();
-+        if (game == null || !"action".equalsIgnoreCase(game.getPhaseOfGame())) return false;
-+        return !game.getStoredValue(ti4.helpers.ButtonHelperTacticalAction.TACTICAL_ACTION_LOGGED).isEmpty();
 +    }
 +
 +    @Override
@@ -32717,10 +32458,10 @@ index 0000000..300def7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
 new file mode 100644
-index 0000000..eb0a51c
+index 0000000..ace0d5e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
-@@ -0,0 +1,209 @@
+@@ -0,0 +1,198 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -32826,11 +32567,6 @@ index 0000000..eb0a51c
 +            UnitsRemoveKind.overLimits(ctx.game(), p).forEach((pos, r) -> over.add(UnitsRemoveKind.describe(pos, r)));
 +            v.put("overLimits", over);
 +        }
-+        if ("end_turn".equals(action) && ctx.game() != null && p != null) {
-+            // The played card's mandatory primary steps not done yet (ScFollowGate.endTurnRefusal refuses the end).
-+            String missing = ti4.selfhost.engine.ScFollowGate.primaryMissingMessage(ctx.game(), p);
-+            v.put("primaryMissing", missing);
-+        }
 +        return v;
 +    }
 +
@@ -32902,12 +32638,6 @@ index 0000000..eb0a51c
 +                // dismissed reminder changes nothing: fuzz pbd385 / pbd386, playtest 8 pbd469).
 +                String over = overLimitMessage(game, answering);
 +                if (over != null) return over;
-+                // The action is not over (a tactical action under way, the played card's primary not started, the
-+                // holder's own action steps open): the turn cannot end yet (playtest 9 pbd539).
-+                if ("end_turn".equals(action)) {
-+                    String mid = ti4.selfhost.engine.ScFollowGate.endTurnRefusal(game, answering);
-+                    if (mid != null) return mid;
-+                }
 +            }
 +            if ("end_turn_when_followed".equals(action)) {
 +                // Only a turn whose action is over may be ended for the player (live pbd273: pressed before the
