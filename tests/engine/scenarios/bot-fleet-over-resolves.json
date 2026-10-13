@@ -1,0 +1,48 @@
+{
+  "name": "bot-fleet-over-resolves",
+  "description": "Coordinator follow-up to the fleet-limit enforcement (bot fuzz-triage-2 7845ccc): a BOT seat (autopilot) over the fleet pool must resolve it alone \u2014 the removal answered, End Turn accepted, play goes on. Base: pinned pbd385 saves 141 (+142: the active seat's End Turn prompt; cv, 2 ca, fs at 313 with fleet pool 3); the seat is handed to Bot Kappa (autopilot) and one more destroyer posts the reminder (5 ships, fleet 3). The autopilot's unit-limit desk opens 'Remove Units in 313' and removes the cheapest ships; End Turn then goes through. Pass = the reminder closed on its own (it closes only once 313 is within the fleet pool; Dismiss is refused while it is not) with no command run after the setup.",
+  "base": {
+    "save": "saves/fuzz-pbd385-141.txt",
+    "next": "saves/fuzz-pbd385-142.txt"
+  },
+  "setup": [
+    "/game replace player_or_faction:${faction:xxcha} player:1558257076705296384",
+    "/player turn_start faction_or_color:xxcha",
+    "/add_units tile_name:313 unit_names:dd faction_or_color:xxcha"
+  ],
+  "steps": [
+    {
+      "wait": 3000,
+      "expect": {
+        "state": [
+          {
+            "path": "activePlayer",
+            "eq": "1558257076705296384"
+          }
+        ],
+        "decision": [
+          {
+            "kind": "units.remove",
+            "as": "xxcha",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "wait": 120000,
+      "expect": {
+        "decision": [
+          {
+            "kind": "units.remove",
+            "as": "xxcha",
+            "open": false
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "invariants": false
+  }
+}
