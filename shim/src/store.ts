@@ -97,6 +97,8 @@ const VIEW_TTL_MS = 120_000;
 
 /** Channel-scoped view changes kept for catching up (see Store.invalidateChannels); older caches start over. */
 const VIEW_LOG_MAX = 1000;
+/** Channel changes kept for changedSince (a few minutes of live traffic). */
+const CHANGE_LOG_MAX = 20_000;
 
 /** One user's cached visibility answers (see Store.canView). seq: the last channel-scoped change applied. */
 type ViewCache = {
@@ -248,6 +250,7 @@ export class Store {
    * members, roles, commands, emojis, seats, webhooks, gateway session). See ShardStore for what each mark rewrites.
    */
   scheduleSave(channelId?: string | null, messageId?: string) {
+    this.noteChange(channelId);
     if (channelId && messageId) this.disk.markMessage(channelId, messageId);
     else {
       this.disk.markChannel(channelId);
@@ -441,6 +444,10 @@ export class Store {
   private viewSeq = 0;
   /** Changes whenever any channel was added, removed or changed in a way that may matter to visibility or grouping. */
   private chanGen = 0;
+  private globalGen = 0;
+  /** Marked changes (noteChange): their count, and the recent channel changes, oldest first. */
+  private changeSeq = 0;
+  private changeLog: { seq: number; id: string }[] = [];
 
   private viewsOf(userId: string): ViewCache {
     const now = Date.now();
@@ -509,6 +516,51 @@ export class Store {
       v.listSeq = v.seq;
     }
     return v.list;
+  }
+
+  /**
+   * Records a marked change for the change log (scheduleSave calls it): a channel's messages / channel object, or
+   * global state (no channel). Every change to stored state is marked (unmarked ones are reported by the verifier).
+   */
+  noteChange(channelId?: string | null) {
+    this.changeSeq++;
+    if (!channelId) {
+      this.globalGen++;
+      return;
+    }
+    const last = this.changeLog.at(-1);
+    if (last && last.seq === this.changeSeq - 1 && last.id === channelId) last.seq = this.changeSeq;
+    else this.changeLog.push({ seq: this.changeSeq, id: channelId });
+    if (this.changeLog.length > CHANGE_LOG_MAX) this.changeLog.splice(0, this.changeLog.length - CHANGE_LOG_MAX);
+  }
+
+  /** The last marked change's number (see changedSince). */
+  get changeSequence() {
+    return this.changeSeq;
+  }
+
+  /**
+   * The channels changed (messages added / edited / deleted, channel object, thread members) after change number
+   * `seq`, or null when the log no longer reaches back that far or global state changed meanwhile (assume anything
+   * changed). For caches of derived per-channel / per-game state (SeatPilot.decide).
+   */
+  changedSince(seq: number, globalGen: number): Set<string> | null {
+    if (globalGen !== this.globalGen) return null;
+    if (seq === this.changeSeq) return new Set();
+    const first = this.changeLog[0];
+    // Entries are coalesced (one entry per run of changes to the same channel, numbered by the run's last change).
+    if (!first || this.changeLog.length >= CHANGE_LOG_MAX && first.seq > seq + 1) return null;
+    const out = new Set<string>();
+    for (let i = this.changeLog.length - 1; i >= 0 && this.changeLog[i].seq > seq; i--) out.add(this.changeLog[i].id);
+    return out;
+  }
+
+  /**
+   * Changes whenever global state was marked changed (scheduleSave without a channel: users, members, seats, roles...):
+   * for caches derived from the seats and their names (Autopilot.textFacts).
+   */
+  get globalGeneration() {
+    return this.globalGen;
   }
 
   /** Changes whenever all cached views are dropped (permissions changed guild-wide, members, roles). */

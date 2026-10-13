@@ -135,3 +135,27 @@ test("Slicer: many loops slicing at once still let the event loop turn every sli
   // 30 loops x 10 ms slices back to back would hold timers for ~300 ms per turn.
   assert.ok(worst < 120, `a timer waited ${Math.round(worst)}ms`);
 });
+
+test("changedSince: the channels whose messages / channel changed after a change number; null when unsure", () => {
+  const { s, done } = store();
+  try {
+    const a = s.createChannel({ type: 0, name: "pbd1-actions" });
+    const b = s.createChannel({ type: 0, name: "pbd2-actions" });
+    const seq = s.changeSequence;
+    const gen = s.globalGeneration;
+    assert.deepEqual(s.changedSince(seq, gen), new Set());
+    s.insertMessage({ id: "11", channel_id: a.id, content: "x", timestamp: new Date().toISOString() } as never);
+    s.insertMessage({ id: "12", channel_id: a.id, content: "y", timestamp: new Date().toISOString() } as never);
+    assert.deepEqual(s.changedSince(seq, gen), new Set([a.id]));
+    const mid = s.changeSequence;
+    s.scheduleSave(b.id, "13"); // an edit
+    assert.deepEqual(s.changedSince(seq, gen), new Set([a.id, b.id]));
+    assert.deepEqual(s.changedSince(mid, gen), new Set([b.id]));
+    // Global state (users, seats, roles): anything may have changed.
+    s.addUser("someone");
+    assert.equal(s.changedSince(s.changeSequence, gen), null);
+    assert.deepEqual(s.changedSince(s.changeSequence, s.globalGeneration), new Set());
+  } finally {
+    done();
+  }
+});
