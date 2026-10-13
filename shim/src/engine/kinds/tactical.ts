@@ -34,7 +34,8 @@ export type TurnActionValue =
   /** overLimits: systems over the fleet pool / capacity ("1 over the fleet limit in 209 (3) — remove ships first"); the engine refuses end_turn / pass while any. */
   | { action: "pass"; abilities: boolean; waitingFor?: FollowWait[]; overLimits?: string[] }
   /** abilities: opens the end-of-turn abilities menu (it carries a final end_turn with abilities=false). */
-  | { action: "end_turn"; abilities: boolean; waitingFor?: FollowWait[]; overLimits?: string[] }
+  /** primaryMissing: "finish Imperial: draw a secret objective / gain 1 VP for Mecatol Rex first" while a mandatory part of the card played this turn is not done; the engine refuses end_turn then. */
+  | { action: "end_turn"; abilities: boolean; waitingFor?: FollowWait[]; overLimits?: string[]; primaryMissing?: string | null }
   /** "End Turn When All Have Reacted": the turn ends by itself once every player answered the card's follow window. */
   | { action: "end_turn_when_followed"; strategyCard: StrategyCardNumber; waitingFor?: FollowWait[] }
   /**

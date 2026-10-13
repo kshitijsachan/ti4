@@ -178,8 +178,13 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
      until it is concluded (pt9 058). */
   const midAction = mine.some((d) => MID_ACTION.test(d.kind) && d.target?.userId === me?.userId);
   const endsTurn = (o: TurnOpt) => o.value!.action === "end_turn";
+  /* The card I played this turn has a mandatory primary part left (Imperial's secret / Mecatol point): the engine
+     refuses End turn until it is done (pt9). */
+  const primaryMissing = opts.map((o) => (o.value!.action === "end_turn" ? o.value!.primaryMissing : null)).find((x): x is string => !!x) ?? null;
   const disabled = (o: TurnOpt) =>
-    owed.length > 0 || ((waits.length > 0 || overLimit.length > 0) && ends(o)) || (midAction && endsTurn(o));
+    owed.length > 0 ||
+    ((waits.length > 0 || overLimit.length > 0) && ends(o)) ||
+    ((midAction || !!primaryMissing) && endsTurn(o));
   const pending = waits.flatMap((w) => w.userIds.map((id, i) => state?.players.find((p) => p.userId === id)?.userName ?? factionName(w.factions[i] ?? id)));
   const reminders = waits
     .map((w) => {
@@ -190,6 +195,7 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     .filter((x) => x !== null);
   const label = (o: TurnOpt) => {
     if (midAction && endsTurn(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · finish your tactical action first`;
+    if (primaryMissing && endsTurn(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${primaryMissing}`;
     if (overLimit.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${overLimit.join("; ")}`;
     if (waits.length && ends(o))
       return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow ${waits.map((w) => w.name).join(" and ")}`;
