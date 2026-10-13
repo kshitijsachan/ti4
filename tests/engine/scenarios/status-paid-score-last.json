@@ -1,0 +1,47 @@
+{
+  "name": "status-paid-score-last",
+  "description": "Soak pbd894 round 4 (bot 520dcf2) and pbd581 round 3 (05d0bc5): the soak human pressed No Public / No Secret Objective Scored right when the scoring prompt appeared; both presses were recorded (l1z1xround4PO/SO = None, saves 1065/1068), but the last player to declare (Mentak) scored a SPEND objective (Sway the Council): its payment's Score (poPayScore_3, ObjectiveSpendService.score) records the declaration without the scoring prompt's all-declared check (ReactionCheckService.checkForAllReactions only runs for po_scoring / po_no_scoring / so_no_scoring / so_score_hand presses), so nobody got the speaker's Reveal prompt and the table stalled until someone re-pressed No ... Scored (2 min). Fix (bot status-score-press): the payment's Score and the Lead/Galvanize token split run the same check (ReactionCheckService.checkAllDeclaredScoring). Base: pinned pbd894 saves 1066 (+1067: the scoring prompt). FAILS on bots without the fix (status.reveal_objective stays closed).",
+  "base": {
+    "save": "saves/soak-pbd894-1066.txt",
+    "next": "saves/soak-pbd894-1067.txt"
+  },
+  "steps": [
+    {
+      "answer": { "kind": "status.score", "option": "so_no_scoring" },
+      "as": "l1z1x",
+      "expect": {
+        "save": [ { "key": "game.phase_of_game", "eq": "statusScoring" } ],
+        "decision": [ { "kind": "status.reveal_objective", "open": false } ]
+      }
+    },
+    {
+      "press": "po_scoring_3",
+      "as": "mentak",
+      "expect": {
+        "decision": [ { "kind": "payment.spend", "as": "mentak", "open": true } ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": { "planets": ["virapicsiii", "semlore", "mollprimus", "sakulag"], "tg": 1 }
+      },
+      "as": "mentak",
+      "legacy": [
+        { "press": "spend_virapicsiii_inf" },
+        { "press": "spend_semlore_inf" },
+        { "press": "spend_mollprimus_inf" },
+        { "press": "spend_sakulag_inf" },
+        { "press": "reduceTG_1_inf" },
+        { "press": "poPayScore_3" }
+      ]
+    },
+    { "wait": 2000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [ { "path": "players[faction=mentak].victoryPoints", "eq": 1 } ],
+    "save": [ { "key": "game.phase_of_game", "eq": "statusScoring" } ],
+    "decision": [ { "kind": "status.reveal_objective", "open": true } ]
+  }
+}
