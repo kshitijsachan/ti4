@@ -136,7 +136,8 @@ export class EngineFanout {
       : await engine.answer(game, d.id, { optionId: op.optionId, payload: isObject(op.payload) ? op.payload : undefined, values, inputs, ...common });
     if (!result) return reply({ ok: false, status: "error", error: "The game server did not answer." });
     const t2 = performance.now();
-    const timing = t2 - t0 >= 1000 ? ` (${Math.round(t2 - t0)}ms: shim ${Math.round(t1 - t0)}ms, bot ${Math.round(t2 - t1)}ms)` : "";
+    // Every human answer (not only slow ones), so tests/engine/latency.mjs can give p50/p90 of human clicks.
+    const timing = ` (${Math.round(t2 - t0)}ms: shim ${Math.round(t1 - t0)}ms, bot ${Math.round(t2 - t1)}ms)`;
     log.info(`engine answer ${seat.userId} ${game} ${d.kind} ${what} -> ${result.status}${result.error ? `: ${result.error}` : ""}${timing}`);
     reply(result);
   }

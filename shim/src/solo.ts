@@ -518,13 +518,40 @@ export class SoloGames {
     }
   }
 
+  /** Channels by game token (see gameChannels), rebuilt in one pass when the store's channels change. */
+  private gameIndex: { gen: number; byGame: Map<string, Json[]> } | null = null;
+
+  /**
+   * A game's channels: those named "<game>-…" or "…-<game>-…". From an index (one pass over every channel per channel
+   * change) instead of a pass over all 9000 channels per steward call: the stewards' scans were a quarter of the
+   * shim's CPU in the pbd539 soak (event loop blocked 1-3 s at a time).
+   */
+  private gameChannels(game: string): Json[] {
+    const s = this.store.state;
+    if (game.includes("-")) {
+      return Object.values(s.channels).filter((ch) => {
+        const name = String(ch.name ?? "");
+        return name.startsWith(`${game}-`) || name.includes(`-${game}-`);
+      });
+    }
+    const gen = this.store.channelGeneration;
+    if (this.gameIndex?.gen !== gen) {
+      const byGame = new Map<string, Json[]>();
+      for (const ch of Object.values(s.channels)) {
+        // Every part followed by a "-" ("pbd1-actions" -> pbd1; "x-pbd1-y" -> x, pbd1): the names the two tests match.
+        const parts = String(ch.name ?? "").split("-");
+        for (const p of new Set(parts.slice(0, -1))) (byGame.get(p) ?? byGame.set(p, []).get(p)!).push(ch);
+      }
+      this.gameIndex = { gen, byGame };
+    }
+    return this.gameIndex.byGame.get(game) ?? [];
+  }
+
   /** Every bot message of a game the user can see: its actions channel, table talk and threads. */
   private gameMessages(game: string, userId: string | null): StoredMessage[] {
     const s = this.store.state;
     const out: StoredMessage[] = [];
-    for (const ch of Object.values(s.channels)) {
-      const name = String(ch.name ?? "");
-      if (!name.startsWith(`${game}-`) && !name.includes(`-${game}-`)) continue;
+    for (const ch of this.gameChannels(game)) {
       if (userId && !this.store.canView(userId, ch.id)) continue;
       for (const m of this.store.messages(ch.id)) if ((!userId || visible(m, userId)) && s.users[m.author?.id]?.bot) out.push(m);
     }
@@ -534,9 +561,7 @@ export class SoloGames {
   /** When the newest message in any of the game's channels was posted (or edited). */
   private lastActivity(game: string): number {
     let last = 0;
-    for (const ch of Object.values(this.store.state.channels)) {
-      const name = String(ch.name ?? "");
-      if (!name.startsWith(`${game}-`) && !name.includes(`-${game}-`)) continue;
+    for (const ch of this.gameChannels(game)) {
       const list = this.store.messages(ch.id);
       const m = list[list.length - 1];
       if (!m) continue;
