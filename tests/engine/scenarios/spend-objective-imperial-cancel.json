@@ -1,0 +1,108 @@
+{
+  "name": "spend-objective-imperial-cancel",
+  "description": "Coordinator follow-up to the pay-first spend objectives (bot fuzz-triage-2): a payment started from Imperial's 'Score A Public' list and given up with Don't Score It refunds what was spent and posts Imperial's list again, so the player keeps Imperial's score and picks another objective. While paying, the list is obsolete and a repeat press of the same objective is refused (live pbd526 loop). Base: pinned pbd387 saves 294 (+295: the list). Needs bot fuzz-triage-2 >= this commit.",
+  "base": {
+    "save": "saves/pt6-pbd387-294.txt",
+    "next": "saves/pt6-pbd387-295.txt"
+  },
+  "steps": [
+    {
+      "press": "FFCC_sol_po_scoring_4",
+      "as": "sol",
+      "expect": {
+        "state": [
+          {
+            "path": "players[faction=sol].victoryPoints",
+            "eq": 1
+          }
+        ],
+        "decision": [
+          {
+            "kind": "payment.spend",
+            "as": "sol",
+            "open": true
+          },
+          {
+            "kind": "status.score",
+            "as": "sol",
+            "open": false
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "value": {
+          "action": "cancel"
+        }
+      },
+      "as": "sol"
+    },
+    {
+      "wait": 2500,
+      "expect": {
+        "state": [
+          {
+            "path": "players[faction=sol].victoryPoints",
+            "eq": 1
+          },
+          {
+            "path": "players[faction=sol].tg",
+            "eq": 10
+          }
+        ],
+        "decision": [
+          {
+            "kind": "payment.spend",
+            "as": "sol",
+            "open": false
+          },
+          {
+            "kind": "status.score",
+            "as": "sol",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "press": "FFCC_sol_po_scoring_3",
+      "as": "sol",
+      "expect": {
+        "decision": [
+          {
+            "kind": "payment.spend",
+            "as": "sol",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answer": {
+        "kind": "payment.spend",
+        "payload": {
+          "planets": [
+            "jord",
+            "lodor"
+          ],
+          "tg": 4
+        }
+      },
+      "as": "sol"
+    },
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=sol].victoryPoints",
+        "eq": 2
+      }
+    ]
+  }
+}
