@@ -7051,10 +7051,10 @@ index 0000000..35c108f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ActionInvoker.java b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
 new file mode 100644
-index 0000000..022cb48
+index 0000000..3ff9cb6
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ActionInvoker.java
-@@ -0,0 +1,643 @@
+@@ -0,0 +1,664 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -7247,6 +7247,14 @@ index 0000000..022cb48
 +            Player lockedPlayer = lockedGame == null ? null : lockedGame.getPlayer(userId);
 +            if (lockedPlayer == null) return fail("forbidden", "You are not a player of this game.", decisionId);
 +            if (lockedSpec != null) {
++                // Obsolete on the game as it is now (its round / phase passed, a newer copy replaced it, what it
++                // offers is gone): the sweep closes it on the next state change; refuse with the reason meanwhile.
++                String gone = obsoleteNow(lockedSpec, d, lockedGame);
++                if (gone != null) {
++                    DecisionRegistry.close(decisionId, "obsolete");
++                    EngineMetrics.count("answer.obsolete");
++                    return fail("stale", gone, decisionId);
++                }
 +                String err = lockedSpec.validate(lockedGame, lockedPlayer, d, req.optionId());
 +                if (err != null) return fail("refused", err, decisionId);
 +                lockedSpec.beforeAnswer(lockedGame, lockedPlayer, d, req.optionId());
@@ -7654,6 +7662,19 @@ index 0000000..022cb48
 +        msg.put("components", rows);
 +    }
 +
++    /** Why the open decision is obsolete on this game (DecisionCapture.obsoleteReason), null when it is not. */
++    @Nullable
++    static String obsoleteNow(KindSpec spec, Decision d, Game game) {
++        if (d.source() == null) return null;
++        List<String> handlers = new ArrayList<>();
++        for (Option o : d.options()) if (o.handler() != null) handlers.add(o.handler());
++        Player p = d.target() == null || d.target().userId() == null ? null : game.getPlayer(d.target().userId());
++        KindSpec.CaptureContext ctx = new KindSpec.CaptureContext(
++                game, d.source().channelId(), d.source().messageId(), d.prompt(), d.source().ephemeral(), d.target(),
++                p, handlers);
++        return DecisionCapture.obsoleteReason(spec, ctx);
++    }
++
 +    private static AnswerResult fail(String status, String error, String decisionId) {
 +        return new AnswerResult(false, status, error, decisionId, DecisionRegistry.currentSeq(), 0, List.of(), null);
 +    }
@@ -7700,10 +7721,10 @@ index 0000000..022cb48
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..a29d058
+index 0000000..e2aaf91
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,820 @@
+@@ -0,0 +1,851 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -8201,10 +8222,21 @@ index 0000000..a29d058
 +    }
 +
 +    static boolean obsolete(KindSpec spec, KindSpec.CaptureContext ctx) {
++        return obsoleteReason(spec, ctx) != null;
++    }
++
++    /** Why the prompt is obsolete (its phase / round passed, or the kind's own rule), null when it is not. */
++    @javax.annotation.Nullable
++    static String obsoleteReason(KindSpec spec, KindSpec.CaptureContext ctx) {
 +        try {
-+            return phasePassed(spec.kind(), ctx) || spec.obsolete(ctx);
++            if (phasePassed(spec.kind(), ctx)) {
++                return roundScoped(spec.kind()) && RoundClock.beforeThisRound(ctx.game(), ctx.messageId())
++                        ? "This prompt is from an earlier round."
++                        : "That step of the game is over.";
++            }
++            return spec.obsoleteReason(ctx);
 +        } catch (Exception e) {
-+            return false;
++            return null;
 +        }
 +    }
 +
@@ -8267,7 +8299,7 @@ index 0000000..a29d058
 +    /** Agenda windows (not the in-advance preassign): only during the agenda phase. */
 +    private static final java.util.Set<String> AGENDA_PHASE_KINDS = java.util.Set.of(
 +            "agenda.when", "agenda.after", "agenda.shenanigans", "agenda.rider", "agenda.tiebreak", "agenda.vote",
-+            "agenda.vote_step", "agenda.resolve", "agenda.next");
++            "agenda.vote_step", "agenda.resolve", "agenda.next", "action_card.when_after");
 +    /** Status-phase steps (status.score_secret is not here: secrets are scored in the action phase too). */
 +    private static final java.util.Set<String> STATUS_PHASE_KINDS =
 +            java.util.Set.of("status.score", "status.homework", "status.reveal_objective", "status.advance");
@@ -8290,16 +8322,36 @@ index 0000000..a29d058
 +    /**
 +     * Kinds whose prompts belong to one game round: agenda windows and votes (not the in-advance preassign), status
 +     * steps (not secret scoring, also an action-phase prompt), every strategy-card prompt but the next-round pick
-+     * queue, combat, tactical actions and their production, the turn menu.
++     * queue, combat, tactical actions and their production, the turn menu; and the follow-up steps of an effect being
++     * resolved now ({@link #EFFECT_STEP_KINDS}).
 +     */
 +    static boolean roundScoped(String kind) {
 +        if (kind == null) return false;
 +        if (kind.startsWith("agenda.")) return !"agenda.preassign".equals(kind);
 +        if (kind.startsWith("status.")) return !"status.score_secret".equals(kind);
 +        if (kind.startsWith("strategy_card")) return !"strategy_card.queue_pick".equals(kind);
++        if (EFFECT_STEP_KINDS.contains(kind)) return true;
++        if (kind.startsWith("choose.")) return !"choose.select".equals(kind); // select menus: setup / draft / lore
 +        return kind.startsWith("combat.") || kind.startsWith("tactical.") || kind.startsWith("production.")
-+                || "turn.action".equals(kind);
++                || kind.startsWith("explore.") || "turn.action".equals(kind);
 +    }
++
++    /**
++     * The steps of an ability, card or reward being resolved when it is posted (a card's resolve / target / follow-up
++     * steps, an agenda when/after window, a payment, an exploration, a research, a readying, a command token gain…).
++     * The rules resolve an effect when it triggers, so such a prompt is over once its round is: never usable in a
++     * later round (live pbd436: round 1–2 prompts still open in round 3). Not here, because they stay legal across
++     * rounds or are owed board set-up: the hand trays (action_card.play / promissory_note.play: own rules), the
++     * hand-limit discard (owed until done), preassignments, the Modify Units / galvanize / plot bookkeeping menus,
++     * relic.use, expeditions, placing Thunder's Edge / ingress tokens, the Fracture roll, setup and draft kinds,
++     * preferences and the ui.* affordances (own rules).
++     */
++    static final java.util.Set<String> EFFECT_STEP_KINDS = java.util.Set.of(
++            "action_card.resolve", "action_card.step", "action_card.target", "action_card.draw",
++            "action_card.when_after", "promissory_note.resolve", "component.action", "payment.spend",
++            "planet.ready", "commodities.gain", "command_tokens.adjust", "tech.gain", "tech.choose_type",
++            "tech.step", "relic.draw", "relic.fragments", "trade.force_replenish", "faction.ability", "te.breach",
++            "te.breakthrough", "te.visionaria.respond");
 +
 +    static boolean phasePassed(String kind, KindSpec.CaptureContext ctx) {
 +        ti4.game.Game game = ctx.game();
@@ -10895,10 +10947,10 @@ index 0000000..a7d1d6f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/KindSpec.java b/src/main/java/ti4/selfhost/engine/KindSpec.java
 new file mode 100644
-index 0000000..f43527b
+index 0000000..b069fe6
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/KindSpec.java
-@@ -0,0 +1,261 @@
+@@ -0,0 +1,271 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -11039,6 +11091,16 @@ index 0000000..f43527b
 +     */
 +    default boolean obsolete(CaptureContext ctx) {
 +        return false;
++    }
++
++    /**
++     * Why this prompt is obsolete (see {@link #obsolete}), for refusing an answer that reaches it before the sweep
++     * closed it (ActionInvoker); null when it is not. Kinds with a lifetime rule override this and derive obsolete()
++     * from it.
++     */
++    @Nullable
++    default String obsoleteReason(CaptureContext ctx) {
++        return obsolete(ctx) ? "This prompt no longer applies." : null;
 +    }
 +
 +    /**
@@ -15495,10 +15557,10 @@ index 0000000..7d525d1
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardDiscardKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardDiscardKind.java
 new file mode 100644
-index 0000000..e258253
+index 0000000..efa6c0c
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardDiscardKind.java
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,123 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -15589,6 +15651,29 @@ index 0000000..e258253
 +                over == 0);
 +    }
 +
++    /**
++     * Lifetime: a discard request is owed until done, whatever the round (hand limit, Scheming), so the only rule is
++     * that none of the cards it offers is in the hand any more.
++     */
++    @Override
++    public String obsoleteReason(CaptureContext ctx) {
++        Player p = ctx.player();
++        if (p == null || !Lifetime.settled(ctx)) return null;
++        boolean anyCard = false;
++        for (String h : Lifetime.handlers(ctx)) {
++            int handle = Lifetime.intAfter(h, PREFIX);
++            if (handle < 0) continue;
++            anyCard = true;
++            if (p.getActionCards().containsValue(handle)) return null;
++        }
++        return anyCard ? "None of these action cards is in your hand any more." : null;
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
++    }
++
 +    @Override
 +    public String validate(Game game, Player answering, Decision decision, String optionId) {
 +        for (Option o : decision.options()) {
@@ -15653,13 +15738,14 @@ index 0000000..0995425
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardPlayKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardPlayKind.java
 new file mode 100644
-index 0000000..60abb53
+index 0000000..3519423
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardPlayKind.java
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,127 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
++import java.util.List;
 +import java.util.Map;
 +import ti4.game.Game;
 +import ti4.game.Player;
@@ -15730,6 +15816,47 @@ index 0000000..60abb53
 +        return null;
 +    }
 +
++    /**
++     * Lifetime. The hand tray (cards-info thread, "Click a button below to play an action card.") is the player's
++     * standing way to play cards: it lives until a newer tray of theirs replaces it (the bot posts one on every hand
++     * change) or none of its cards is held any more. Any other play prompt (a reply offering the cards for one window:
++     * a combat round, a component action) belongs to the event that opened it, which is over once its round is.
++     */
++    @Override
++    public String obsoleteReason(CaptureContext ctx) {
++        if (ctx.game() == null) return null;
++        List<String> handlers = Lifetime.handlers(ctx);
++        Player p = ctx.player();
++        if (p != null && Lifetime.settled(ctx)) {
++            boolean anyCard = false, anyHeld = false;
++            for (String h : handlers) {
++                int handle = Lifetime.intAfter(h, PREFIX);
++                if (handle < 0) continue;
++                anyCard = true;
++                if (p.getActionCards().containsValue(handle)
++                        || ctx.game().getDiscardActionCards().containsValue(handle)) anyHeld = true;
++            }
++            if (anyCard && !anyHeld) return "None of these action cards is in your hand any more.";
++        }
++        if (tray(ctx.content(), ctx)) {
++            if (Lifetime.superseded(ctx, kind(), d -> Lifetime.promptStarts(d.prompt(), Lifetime.AC_TRAY)))
++                return "A newer copy of your action card hand was posted; use that one.";
++            return null;
++        }
++        if (Lifetime.settled(ctx) && Lifetime.earlierRound(ctx))
++            return "This action card window was in an earlier round.";
++        return null;
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
++    }
++
++    private static boolean tray(String prompt, CaptureContext ctx) {
++        return Lifetime.promptStarts(prompt, Lifetime.AC_TRAY) && Lifetime.inCardsThread(ctx);
++    }
++
 +    /** An "Action:" card played on the player's own turn is that turn's action (ActionCardTiming refuses another). */
 +    @Override
 +    public void beforeAnswer(Game game, Player answering, Decision decision, String optionId) {
@@ -15744,14 +15871,20 @@ index 0000000..60abb53
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardPreassignKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardPreassignKind.java
 new file mode 100644
-index 0000000..e7aeffe
+index 0000000..1f883bc
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardPreassignKind.java
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,141 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
++import java.util.List;
 +import java.util.Map;
++import javax.annotation.Nullable;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Option;
 +import ti4.selfhost.engine.KindSpec;
 +
 +/**
@@ -15761,8 +15894,34 @@ index 0000000..e7aeffe
 + * agenda.preassign (higher priority).
 + *
 + * <p>value: {preassignment: the card / effect name, target: the part after the first "_" or null}.
++ *
++ * <p>Lifetime. A card preassignment is for a later window (the next strategy / agenda / status phase), so it stays
++ * open across phases and rounds for as long as the player holds the card. "Pass on Next Turn" (Pre Pass) is for this
++ * round's action phase: usable in any phase until the player passed this round (a stand-alone offer then closes).
++ * The perpetual cards-info menu ("You may use these buttons to do various things", which carries Pre
++ * Pass) lives until a newer copy of it replaces it.
 + */
 +public class ActionCardPreassignKind implements KindSpec {
++
++    /** Preassignment name -> the action card it pre-plays (the ids the offers check, ButtonHelperActionCards). */
++    private static final Map<String, String> CARD = Map.ofEntries(
++            Map.entry("Puppets On A String", "puppetsonastring"),
++            Map.entry("Relitigate", "relitigate"),
++            Map.entry("Coup", "coup"),
++            Map.entry("ExtremeDuress", "extremeduress"),
++            Map.entry("Crisis Target", "crisis"),
++            Map.entry("Stasis Target", "tf-stasis"),
++            Map.entry("Summit", "summit"),
++            Map.entry("BountyContracts", "bounty_contracts"),
++            Map.entry("Reverse Splice", "tf-reverse"),
++            Map.entry("Manipulate Splice", "tf-manipulate"),
++            Map.entry("Investments", "investments"),
++            Map.entry("PreRevolution", "revolution"),
++            Map.entry("Deflection", "deflection"),
++            Map.entry("Tartarus", "tf-tartarus"),
++            Map.entry("Compose", "tk-compose"),
++            Map.entry("Public Disgrace", "disgrace"),
++            Map.entry("Public Disgrace Only", "disgrace"));
 +
 +    @Override
 +    public String kind() {
@@ -15790,6 +15949,71 @@ index 0000000..e7aeffe
 +        v.put("preassignment", us < 0 ? rest : rest.substring(0, us));
 +        v.put("target", us < 0 ? null : rest.substring(us + 1));
 +        return v;
++    }
++
++    @Override
++    public String obsoleteReason(CaptureContext ctx) {
++        if (ctx.game() == null) return null;
++        if (Lifetime.promptStarts(ctx.content(), Lifetime.INFO_MENU)) {
++            return Lifetime.superseded(ctx, null, d -> Lifetime.promptStarts(d.prompt(), Lifetime.INFO_MENU))
++                    ? "A newer copy of this menu was posted; use that one."
++                    : null;
++        }
++        // An offer of its own: obsolete when every preassignment it offers is.
++        String reason = null;
++        for (String h : Lifetime.handlers(ctx)) {
++            if (!matches(h)) continue;
++            String why = reason(ctx.player(), name(h), ctx, true, Lifetime.settled(ctx));
++            if (why == null) return null;
++            reason = why;
++        }
++        return reason;
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
++    }
++
++    /**
++     * Refuses only what the original cannot sensibly do: pre-passing after passing this round. Everything else
++     * (a card no longer held) is left to obsolete() closing the prompt.
++     */
++    @Override
++    public String validate(Game game, Player answering, Decision decision, String optionId) {
++        for (Option o : decision.options()) {
++            if (!o.id().equals(optionId) || o.handler() == null || !matches(o.handler())) continue;
++            if (name(o.handler()).startsWith("Pre Pass") && answering.isPassed())
++                return "You have already passed this round.";
++        }
++        return null;
++    }
++
++    /** The preassignment's name (before the first '_'). */
++    private static String name(String h) {
++        String rest = h.substring("resolvePreassignment_".length());
++        int us = rest.indexOf('_');
++        return us < 0 ? rest : rest.substring(0, us);
++    }
++
++    /**
++     * Why this preassignment can no longer be made. offer: a stand-alone offer (not the info menu's button); settled:
++     * the game read is current for this prompt (an answer, or a prompt past DecisionCapture.FRESH_MS).
++     */
++    @Nullable
++    private static String reason(@Nullable Player p, String name, CaptureContext ctx, boolean offer, boolean settled) {
++        if (p == null) return null;
++        if (name.startsWith("Pre Pass")) {
++            if (p.isPassed()) return "You have already passed this round.";
++            // Otherwise allowed in any phase and round (setup, strategy, action before passing: the original sets it
++            // and the pass happens on the player's next action-phase turn; live backtest pbd106@38, a pre-pass in
++            // round 1 playerSetup). A stand-alone offer closes once its player passed (above).
++            return null;
++        }
++        String card = CARD.get(name);
++        if (card != null && settled && !p.getPlayableActionCards().contains(card))
++            return "You no longer hold that action card.";
++        return null;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardResolveKind.java
@@ -24422,10 +24646,10 @@ index 0000000..e2835f7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/InfoMenuSplit.java b/src/main/java/ti4/selfhost/engine/kinds/InfoMenuSplit.java
 new file mode 100644
-index 0000000..d931638
+index 0000000..cefb30e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/InfoMenuSplit.java
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,122 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -24503,6 +24727,24 @@ index 0000000..d931638
 +        }
 +        String a = UiOptionalKind.action(h);
 +        return a == null ? null : UiAffordanceKind.v(a, null, UiAffordanceKind.ref(h));
++    }
++
++    /**
++     * Lifetime: the menu is re-posted at every turn start and cards refresh; a newer copy for the same player (in the
++     * same thread) replaces it. The newest copy never lapses.
++     */
++    @Override
++    @Nullable
++    public String obsoleteReason(CaptureContext ctx) {
++        if (!Lifetime.promptStarts(ctx.content(), Lifetime.INFO_MENU)) return null;
++        return Lifetime.superseded(ctx, null, d -> Lifetime.promptStarts(d.prompt(), Lifetime.INFO_MENU))
++                ? "A newer copy of this menu was posted; use that one."
++                : null;
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
 +    }
 +
 +    /** The action shortcuts that ride on the info menu, null for anything else. */
@@ -24904,6 +25146,125 @@ index 0000000..dd73896
 +    @Nullable
 +    public Target target(CaptureContext ctx, @Nullable Target resolved) {
 +        return FactionSteps.Registry.target(ctx, resolved);
++    }
++}
+diff --git a/src/main/java/ti4/selfhost/engine/kinds/Lifetime.java b/src/main/java/ti4/selfhost/engine/kinds/Lifetime.java
+new file mode 100644
+index 0000000..fa26a4f
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/kinds/Lifetime.java
+@@ -0,0 +1,113 @@
++package ti4.selfhost.engine.kinds;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.Predicate;
++import javax.annotation.Nullable;
++import ti4.game.Player;
++import ti4.selfhost.engine.DecisionCapture;
++import ti4.selfhost.engine.DecisionRegistry;
++import ti4.selfhost.engine.EngineModels.Decision;
++import ti4.selfhost.engine.EngineModels.Option;
++import ti4.selfhost.engine.KindSpec.CaptureContext;
++import ti4.selfhost.engine.RoundClock;
++
++/**
++ * Shared lifetime rules for prompts that the bot leaves on screen (hand trays, info menus, offers, undo
++ * affordances): when a newer copy replaced one, and when its round is over. Not a KindSpec: the kind scan ignores it.
++ */
++public final class Lifetime {
++    private Lifetime() {}
++
++    /** The prompt's first line of the hand tray (ActionCardHelper.sendActionCardInfo). */
++    static final String AC_TRAY = "Click a button below to play an action card.";
++    /** The perpetual cards-info menu (CardsInfoService.sendVariousAdditionalButtons). */
++    static final String INFO_MENU = "You may use these buttons to do various things";
++
++    /**
++     * Older than DecisionCapture.FRESH_MS: a phase verdict is safe (capture may read the save before the interaction
++     * that posted the prompt).
++     */
++    static boolean settled(CaptureContext ctx) {
++        return DecisionCapture.olderThan(ctx.messageId(), DecisionCapture.FRESH_MS);
++    }
++
++    /** Posted before the current round started (RoundClock; false when that is not known). */
++    static boolean earlierRound(CaptureContext ctx) {
++        return ctx.game() != null && RoundClock.beforeThisRound(ctx.game(), ctx.messageId());
++    }
++
++    static String phase(CaptureContext ctx) {
++        String p = ctx.game() == null ? null : ctx.game().getPhaseOfGame();
++        return p == null ? "" : p;
++    }
++
++    /** Handler ids of the prompt: from the capture, else from its open decision; empty when unknown. */
++    static List<String> handlers(CaptureContext ctx) {
++        if (ctx.handlerIds() != null) return ctx.handlerIds();
++        Decision d = self(ctx);
++        List<String> out = new ArrayList<>();
++        if (d != null) for (Option o : d.options()) if (o.handler() != null) out.add(o.handler());
++        return out;
++    }
++
++    @Nullable
++    static Decision self(CaptureContext ctx) {
++        if (ctx.messageId() == null) return null;
++        String id = DecisionRegistry.decisionIdForMessage(ctx.messageId());
++        return id == null ? null : DecisionRegistry.get(id);
++    }
++
++    /** The prompt sits in the target player's cards-info thread, not ephemeral. */
++    static boolean inCardsThread(CaptureContext ctx) {
++        Player p = ctx.player();
++        return !ctx.ephemeral() && p != null && ctx.channelId() != null
++                && ctx.channelId().equals(p.getCardsInfoThreadID());
++    }
++
++    static boolean promptStarts(@Nullable String prompt, String head) {
++        return prompt != null && prompt.startsWith(head);
++    }
++
++    /**
++     * A newer open decision of {@code kind} (null: any kind) for the same target player, in the same channel and
++     * accepted by {@code same}, replaced this prompt. When this prompt is the newest, the older matching ones close
++     * ("superseded") at once; the state-change sweep catches any found later (after a rebuild).
++     */
++    static boolean superseded(CaptureContext ctx, @Nullable String kind, Predicate<Decision> same) {
++        if (ctx.game() == null || ctx.messageId() == null) return false;
++        String user = ctx.target() == null ? null : ctx.target().userId();
++        if (user == null) return false;
++        List<Decision> older = new ArrayList<>();
++        for (Decision d : DecisionRegistry.openDecisions(ctx.game().getName())) {
++            if (kind != null && !kind.equals(d.kind())) continue;
++            if (d.source() == null || ctx.messageId().equals(d.source().messageId())) continue;
++            if (d.target() == null || !user.equals(d.target().userId())) continue;
++            if (ctx.channelId() == null || !ctx.channelId().equals(d.source().channelId())) continue;
++            if (d.source().ephemeral() || !same.test(d)) continue;
++            if (RoundClock.olderThan(ctx.messageId(), d.source().messageId())) return true;
++            older.add(d);
++        }
++        for (Decision d : older) DecisionRegistry.close(d.id(), "superseded");
++        return false;
++    }
++
++    static List<String> handlersOf(Decision d) {
++        List<String> out = new ArrayList<>();
++        for (Option o : d.options()) if (o.handler() != null) out.add(o.handler());
++        return out;
++    }
++
++    /** The integer after {@code prefix} at the start of the handler id, -1 when none. */
++    static int intAfter(String handler, String prefix) {
++        if (handler == null || !handler.startsWith(prefix)) return -1;
++        int i = prefix.length(), j = i;
++        while (j < handler.length() && Character.isDigit(handler.charAt(j))) j++;
++        if (j == i) return -1;
++        try {
++            return Integer.parseInt(handler.substring(i, j));
++        } catch (NumberFormatException e) {
++            return -1;
++        }
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftInfoKind.java b/src/main/java/ti4/selfhost/engine/kinds/MiltyDraftInfoKind.java
@@ -25800,10 +26161,10 @@ index 0000000..bd759aa
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PlayerPreferenceKind.java b/src/main/java/ti4/selfhost/engine/kinds/PlayerPreferenceKind.java
 new file mode 100644
-index 0000000..8f0220c
+index 0000000..cbcb25e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/PlayerPreferenceKind.java
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,115 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -25875,6 +26236,36 @@ index 0000000..8f0220c
 +
 +    private static Map<String, Object> v(String pref, String question, String choice) {
 +        return SetupKindSupport.map("preference", pref, "question", question, "choice", choice);
++    }
++
++    /**
++     * Lifetime: preferences are asked any time and never lapse, except the secret-scoring offer (sandbagPref_), which
++     * is about this round's scoring ("auto pass on scoring this round"): over after its round or once a newer one was
++     * posted to the player. The setting itself stays reachable from Player Settings.
++     */
++    @Override
++    public String obsoleteReason(CaptureContext ctx) {
++        if (ctx.game() == null || !sandbagOnly(Lifetime.handlers(ctx))) return null;
++        if (Lifetime.superseded(ctx, KIND, d -> sandbagOnly(Lifetime.handlersOf(d))))
++            return "A newer copy of this question was posted.";
++        return Lifetime.settled(ctx) && Lifetime.earlierRound(ctx)
++                ? "This question was about an earlier round's scoring; change the setting in Player Settings."
++                : null;
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
++    }
++
++    private static boolean sandbagOnly(java.util.List<String> handlers) {
++        boolean any = false;
++        for (String h : handlers) {
++            if (h == null) return false;
++            if (h.startsWith("sandbagPref_")) any = true;
++            else if (!UiAffordanceKind.isDismiss(h)) return false;
++        }
++        return any;
 +    }
 +
 +    /** Asked around setup too: faction / colour are picked after capture; re-resolve the target on state changes. */
@@ -26700,13 +27091,14 @@ index 0000000..42efba5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PromissoryNotePlayKind.java b/src/main/java/ti4/selfhost/engine/kinds/PromissoryNotePlayKind.java
 new file mode 100644
-index 0000000..a63fb40
+index 0000000..530b67a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/PromissoryNotePlayKind.java
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,125 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
++import java.util.List;
 +import java.util.Map;
 +import ti4.game.Game;
 +import ti4.game.Player;
@@ -26784,6 +27176,48 @@ index 0000000..a63fb40
 +                return "That promissory note is not in your hand.";
 +        }
 +        return null;
++    }
++
++    /**
++     * Lifetime. The hand tray (cards-info thread, only "Play X" buttons, PromissoryNoteHelper.sendPromissoryNoteInfo)
++     * lives until a newer tray of the player replaces it or none of its notes is held. Any other play offer (the
++     * "this is the window to play X" reminders with a Decline, Trade Agreement after a replenish) belongs to the
++     * event that opened it, which is over once its round is.
++     */
++    @Override
++    public String obsoleteReason(CaptureContext ctx) {
++        if (ctx.game() == null || !Lifetime.settled(ctx)) return null;
++        List<String> handlers = Lifetime.handlers(ctx);
++        Player p = ctx.player();
++        if (p != null) {
++            boolean anyFromHand = false, anyHeld = false;
++            for (String h : handlers) {
++                if (!h.startsWith(PREFIX) || h.equals(PREFIX + "bmfNotHand")) continue;
++                Map<String, Object> v = value(h, ctx);
++                if (v == null || !(v.get("promissoryNote") instanceof String pn)) continue;
++                anyFromHand = true;
++                if (p.getPromissoryNotes().containsKey(pn)) anyHeld = true;
++            }
++            if (anyFromHand && !anyHeld) return "None of these promissory notes is in your hand any more.";
++        }
++        if (tray(handlers) && Lifetime.inCardsThread(ctx)) {
++            return Lifetime.superseded(ctx, kind(), d -> tray(Lifetime.handlersOf(d)))
++                    ? "A newer copy of your promissory notes was posted; use that one."
++                    : null;
++        }
++        return Lifetime.earlierRound(ctx) ? "This promissory note window was in an earlier round." : null;
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
++    }
++
++    /** Only hand-tray buttons (no Decline / dismiss, no Trade Agreement offer). */
++    private static boolean tray(List<String> handlers) {
++        if (handlers.isEmpty()) return false;
++        for (String h : handlers) if (h == null || !h.startsWith(PREFIX)) return false;
++        return true;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PromissoryNoteResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/PromissoryNoteResolveKind.java
@@ -31727,10 +32161,10 @@ index 0000000..1303c99
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TradeOfferKind.java b/src/main/java/ti4/selfhost/engine/kinds/TradeOfferKind.java
 new file mode 100644
-index 0000000..7a9f73f
+index 0000000..ce6f04a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TradeOfferKind.java
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,187 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -31823,6 +32257,85 @@ index 0000000..7a9f73f
 +        return null;
 +    }
 +
++    /**
++     * Lifetime: an offer is open while it is the newest one between the two players and not yet accepted or withdrawn
++     * (TradeEngine.isCurrent), within the round it was made in (a deal is struck for the moment it is made: the
++     * engine lets it lapse at the end of the round), and while both sides still hold the specific cards it trades.
++     * Being short of trade goods / commodities is not checked: the original accepts it outside fog of war.
++     */
++    @Override
++    public String obsoleteReason(CaptureContext ctx) {
++        Game game = ctx.game();
++        if (game == null) return null;
++        Player to = ctx.player() != null ? ctx.player() : cardsThreadOwner(game, ctx.channelId());
++        for (String h : Lifetime.handlers(ctx)) {
++            if (!h.startsWith("acceptOffer_")) continue;
++            String[] parts = h.split("_");
++            if (parts.length < 2) return null;
++            Player from = game.getPlayerFromColorOrFaction(parts[1]);
++            if (from == null) return "The player who made this offer is gone.";
++            if (to == null) return null;
++            Integer n = parts.length > 2 ? parseInt(parts[2]) : null;
++            if (!Lifetime.settled(ctx)) return null;
++            if (!TradeEngine.isCurrent(game, from, to, n))
++                return "This offer was accepted, withdrawn or replaced by a newer one.";
++            if (Lifetime.earlierRound(ctx)) return "Transaction offers lapse at the end of the round they were made in.";
++            return lostCard(from, to);
++        }
++        return null;
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
++    }
++
++    /** Items of from's offer to to: "sending<f>_receiving<f>_<thing>_<detail>" (TransactionHelper). */
++    private static List<String[]> parsed(Player from, Player to) {
++        List<String[]> out = new ArrayList<>();
++        for (String item : from.getTransactionItemsWithPlayer(to)) {
++            String[] p = item.split("_", 4);
++            if (p.length == 4 && p[0].startsWith("sending")) out.add(p);
++        }
++        return out;
++    }
++
++    @javax.annotation.Nullable
++    private static Player sender(String[] item, Player a, Player b) {
++        String f = item[0].substring("sending".length());
++        return f.equals(a.getFaction()) ? a : f.equals(b.getFaction()) ? b : null;
++    }
++
++    /** A specific action card / secret objective / promissory note of the offer its giver no longer holds. */
++    @javax.annotation.Nullable
++    static String lostCard(Player from, Player to) {
++        for (String[] item : parsed(from, to)) {
++            Player s = sender(item, from, to);
++            if (s == null || item[3].startsWith("generic")) continue;
++            String who = s == to ? "You no longer hold" : s.getFaction() + " no longer holds";
++            switch (item[2]) {
++                case "ACs" -> {
++                    Integer h = parseInt(item[3]);
++                    if (h != null && !s.getActionCards().containsValue(h))
++                        return who + " an action card of this offer.";
++                }
++                case "SOs" -> {
++                    if (!s.getSecretsUnscored().containsKey(item[3]))
++                        return who + " a secret objective of this offer.";
++                }
++                case "PNs" -> {
++                    Integer h = parseInt(item[3]);
++                    boolean held = h != null
++                            ? s.getPromissoryNotes().containsValue(h)
++                            : s.getPromissoryNotes().containsKey(item[3].replace("fin9", "_"));
++                    if (!held) return who + " a promissory note of this offer.";
++                }
++                default -> {}
++            }
++        }
++        return null;
++    }
++
 +    static Player cardsThreadOwner(Game game, String channelId) {
 +        if (channelId == null) return null;
 +        for (Player p : game.getRealPlayers()) {
@@ -31841,10 +32354,10 @@ index 0000000..7a9f73f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TradeOfferSentKind.java b/src/main/java/ti4/selfhost/engine/kinds/TradeOfferSentKind.java
 new file mode 100644
-index 0000000..3cfacb3
+index 0000000..300def7
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TradeOfferSentKind.java
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,98 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -31909,6 +32422,38 @@ index 0000000..3cfacb3
 +    @Override
 +    public String scope(CaptureContext ctx) {
 +        return "player";
++    }
++
++    /**
++     * Lifetime: rescinding is possible while the offer is outstanding: not once it was accepted or rescinded (the
++     * sender's items with the receiver are empty), not on an older copy once a newer offer to the same player was sent,
++     * and not after the round it was made in (the offer itself lapsed then, see TradeOfferKind).
++     */
++    @Override
++    public String obsoleteReason(CaptureContext ctx) {
++        Game game = ctx.game();
++        if (game == null || !Lifetime.settled(ctx)) return null;
++        Player from = ctx.player() != null ? ctx.player() : TradeOfferKind.cardsThreadOwner(game, ctx.channelId());
++        for (String h : Lifetime.handlers(ctx)) {
++            if (!matches(h)) continue;
++            String[] parts = h.split("_");
++            Player to = parts.length < 2 ? null : game.getPlayerFromColorOrFaction(parts[1]);
++            if (to == null) return "The player this offer was for is gone.";
++            if (from == null) return null;
++            if (from.getTransactionItemsWithPlayer(to).isEmpty()) return "This offer was accepted or withdrawn.";
++            String toColor = parts[1];
++            if (Lifetime.superseded(ctx, kind(), d -> Lifetime.handlersOf(d).stream()
++                    .anyMatch(x -> x.equals("rescindOffer_" + toColor) || x.startsWith("rescindOffer_" + toColor + "_"))))
++                return "A newer offer to that player replaced this one.";
++            if (Lifetime.earlierRound(ctx)) return "Transaction offers lapse at the end of the round they were made in.";
++            return null;
++        }
++        return null;
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
@@ -32117,10 +32662,10 @@ index 0000000..ace0d5e
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/UiAffordanceKind.java b/src/main/java/ti4/selfhost/engine/kinds/UiAffordanceKind.java
 new file mode 100644
-index 0000000..f93469a
+index 0000000..08a4974
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/UiAffordanceKind.java
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,214 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -32195,6 +32740,101 @@ index 0000000..f93469a
 +        return u == null ? null : v("undo", u, ref(h));
 +    }
 +
++    /**
++     * Lifetime: an undo affordance is for the step it was posted with. It is obsolete when every undo it offers is:
++     * <ul>
++     *   <li>so_discard: the secret objective is no longer in the deck (someone drew it), or the discard was in an
++     *       earlier round;</li>
++     *   <li>preset: nothing is preset under that name any more (used or removed);</li>
++     *   <li>agenda_put: the agenda is no longer in the deck (revealed), or it was put there in an earlier round;</li>
++     *   <li>vote / rider: the agenda phase is over;</li>
++     *   <li>pre_score: nothing is queued any more, the action phase is over, or it was queued in an earlier round;</li>
++     *   <li>last_action (UNDO): a later step was saved since, so it would undo that step instead (the original
++     *       deletes the button only when it is the latest).</li>
++     * </ul>
++     */
++    @Override
++    @Nullable
++    public String obsoleteReason(CaptureContext ctx) {
++        return allStale(ctx, Lifetime.settled(ctx));
++    }
++
++    @Override
++    public boolean obsolete(CaptureContext ctx) {
++        return obsoleteReason(ctx) != null;
++    }
++
++    /** The reason when every undo option of the prompt is stale (dismiss / other options ignored); else null. */
++    @Nullable
++    static String allStale(CaptureContext ctx, boolean settled) {
++        if (ctx.game() == null) return null;
++        String reason = null;
++        for (String h : Lifetime.handlers(ctx)) {
++            if (undoes(h) == null) continue;
++            String why = undoReason(h, ctx, settled);
++            if (why == null) return null;
++            reason = why;
++        }
++        return reason;
++    }
++
++    /** Why this undo affordance (handler id) can no longer be used; null when it can (or no verdict). */
++    @Nullable
++    static String undoReason(String h, CaptureContext ctx, boolean settled) {
++        ti4.game.Game game = ctx.game();
++        String u = undoes(h);
++        String ref = ref(h);
++        if (game == null || u == null) return null;
++        String phase = Lifetime.phase(ctx);
++        boolean earlier = settled && Lifetime.earlierRound(ctx);
++        ti4.game.Player p = ctx.player();
++        switch (u) {
++            case "so_discard" -> {
++                if (ref != null && settled && !game.getSecretObjectives().contains(ref))
++                    return "That secret objective is no longer in the deck.";
++                return earlier ? "That discard was in an earlier round." : null;
++            }
++            case "preset" -> {
++                if (ref == null || !settled) return null;
++                String stored = game.getStoredValue(ref);
++                if (stored == null || stored.isEmpty()) return "Nothing is preset under that name any more.";
++                if (ref.toLowerCase().contains("abstain") && p != null && !stored.contains(p.getFaction()))
++                    return "Nothing is preset under that name any more.";
++                return null;
++            }
++            case "agenda_put" -> {
++                if (ref != null && settled && !game.getAgendas().contains(ref))
++                    return "That agenda is no longer in the deck.";
++                return earlier ? "That agenda was put back in an earlier round." : null;
++            }
++            case "vote", "rider" -> {
++                if (earlier) return "That vote was in an earlier round.";
++                return settled && !phase.startsWith("agenda") ? "The agenda phase is over." : null;
++            }
++            case "pre_score" -> {
++                if (earlier) return "That objective was queued in an earlier round.";
++                if (settled && !"action".equals(phase)) return "Objectives are only queued in the action phase.";
++                String[] parts = ref == null ? new String[0] : ref.split("_");
++                if (settled && p != null && parts.length > 0) {
++                    String key = p.getFaction() + "Round" + game.getRound() + "PreScored" + parts[0];
++                    if (game.getStoredValue(key).isEmpty()) return "Nothing is queued any more.";
++                }
++                return null;
++            }
++            case "last_action" -> {
++                int n = Lifetime.intAfter(h, "ultimateUndo_");
++                if (n < 0 || !settled) return null;
++                int latest = ti4.service.game.GameUndoNameService.getLatestUndoNumber(game.getName());
++                return latest >= 0 && n < latest - 1
++                        ? "Later steps were taken since; this UNDO would no longer undo the step it was posted with."
++                        : null;
++            }
++            default -> {
++                return null;
++            }
++        }
++    }
++
 +    // ------------------------------------------------------------------ shared with UiOptionalKind / InfoMenuSplit
 +
 +    /** What an undo affordance takes back, null when the handler is not one. */
@@ -32242,10 +32882,10 @@ index 0000000..f93469a
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/UiOptionalKind.java b/src/main/java/ti4/selfhost/engine/kinds/UiOptionalKind.java
 new file mode 100644
-index 0000000..ce9ab4f
+index 0000000..56aa805
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/UiOptionalKind.java
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,218 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -32336,23 +32976,88 @@ index 0000000..ce9ab4f
 +     * One "Create round N summary" offer per player per round: the engine re-sends it (live pbd105: 19 copies of round
 +     * 1's for one player, 103 in the game), so a newer copy obsoletes the older ones. At capture of the newest copy the
 +     * older ones close at once ("superseded"); the state-change sweep closes any it finds later (e.g. after a rebuild).
++     * An offer for a round is also over once the player has the next round's offer, or two rounds later (the cards-info
++     * menu's "Edit Round Summaries" still edits any round).
++     *
++     * <p>Other optional prompts: a pre-score offer is for this round's action phase; the agenda help menu for the
++     * agenda phase; an undo companion as in {@link UiAffordanceKind}; a message with only a dismiss is over after its
++     * round. The message is obsolete when every option it offers is (dismiss and read-only options aside); the
++     * ping toggle never is.
 +     */
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
-+        if (ctx.game() == null || ctx.messageId() == null) return false;
-+        String round = summaryRound(handlersOf(ctx));
++        return obsoleteReason(ctx) != null;
++    }
++
++    @Override
++    @Nullable
++    public String obsoleteReason(CaptureContext ctx) {
++        if (ctx.game() == null || ctx.messageId() == null) return null;
++        List<String> handlers = handlersOf(ctx);
++        String round = summaryRound(handlers);
 +        String user = ctx.target() == null ? null : ctx.target().userId();
-+        if (round == null || user == null) return false;
-+        List<Decision> older = new ArrayList<>();
-+        for (Decision d : DecisionRegistry.openDecisions(ctx.game().getName())) {
-+            if (!KIND.equals(d.kind()) || d.source() == null || ctx.messageId().equals(d.source().messageId())) continue;
-+            if (d.target() == null || !user.equals(d.target().userId())) continue;
-+            if (!round.equals(summaryRound(d.options().stream().map(Option::handler).toList()))) continue;
-+            if (newer(d.source().messageId(), ctx.messageId())) return true; // a newer copy is open: this one goes
-+            older.add(d);
++        boolean settled = Lifetime.settled(ctx);
++        if (round != null && user != null) {
++            List<Decision> older = new ArrayList<>();
++            for (Decision d : DecisionRegistry.openDecisions(ctx.game().getName())) {
++                if (!KIND.equals(d.kind()) || d.source() == null || ctx.messageId().equals(d.source().messageId())) continue;
++                if (d.target() == null || !user.equals(d.target().userId())) continue;
++                String other = summaryRound(d.options().stream().map(Option::handler).toList());
++                if (other == null) continue;
++                if (laterRound(other, round)) return "Your summary offer for a later round is open.";
++                if (!round.equals(other)) continue;
++                if (newer(d.source().messageId(), ctx.messageId())) return "A newer copy of this offer was posted.";
++                older.add(d);
++            }
++            for (Decision d : older) DecisionRegistry.close(d.id(), "superseded");
++            int r = parse(round);
++            if (settled && r > 0 && r < ctx.game().getRound() - 1) return "That round's summary offer has lapsed.";
++            return null;
 +        }
-+        for (Decision d : older) DecisionRegistry.close(d.id(), "superseded");
-+        return false;
++        if (handlers == null || handlers.isEmpty()) return null;
++        String reason = null;
++        boolean onlyDismiss = true;
++        for (String h : handlers) {
++            if (h == null || UiAffordanceKind.isDismiss(h)) continue;
++            onlyDismiss = false;
++            String why;
++            String a = action(h);
++            if (a != null) why = optionalReason(a, ctx, settled);
++            else if (UiAffordanceKind.undoes(h) != null) why = UiAffordanceKind.undoReason(h, ctx, settled);
++            else continue; // read-only info
++            if (why == null) return null;
++            reason = why;
++        }
++        if (onlyDismiss) return settled && Lifetime.earlierRound(ctx) ? "Nothing to answer here." : null;
++        return reason;
++    }
++
++    @Nullable
++    private static String optionalReason(String action, CaptureContext ctx, boolean settled) {
++        boolean earlier = settled && Lifetime.earlierRound(ctx);
++        String phase = Lifetime.phase(ctx);
++        return switch (action) {
++            case "pre_score" -> earlier
++                    ? "That scoring queue offer was for an earlier round."
++                    : settled && !"action".equals(phase) ? "Objectives are only queued in the action phase." : null;
++            case "skip_waiting", "refresh_agenda", "ping_nonresponders" -> earlier || (settled && !phase.startsWith("agenda"))
++                    ? "The agenda phase is over."
++                    : null;
++            default -> null; // round_summary (above), disable_pings: no lifetime
++        };
++    }
++
++    private static boolean laterRound(String a, String b) {
++        int x = parse(a), y = parse(b);
++        return x > 0 && y > 0 && x > y;
++    }
++
++    private static int parse(String round) {
++        try {
++            return Integer.parseInt(round.trim());
++        } catch (Exception e) {
++            return -1;
++        }
 +    }
 +
 +    @Nullable
