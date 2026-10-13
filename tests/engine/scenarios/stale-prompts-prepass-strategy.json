@@ -1,0 +1,15 @@
+{
+  "name": "stale-prompts-prepass-strategy",
+  "description": "Regression (rollback of stale-prompts at 07:50): a pre-pass during the strategy phase (the common case: decide before the action phase) must be accepted like the original does. Pinned pbd436 save 220: round 2 ends, round 3's strategy phase starts, Saar opens the cards-info menu and presses 'Pass on Next Turn'. Legacy press vs engine answer must match.",
+  "base": { "save": "saves/pbd436-220-round2-action.txt", "repost": false },
+  "setup": [
+    "/status cleanup confirm:YES",
+    "/game start_phase specific_phase:strategy",
+    { "command": "/cards_info", "options": { "player": "${faction:saar}" }, "as": "saar" },
+    { "wait": 2500 }
+  ],
+  "steps": [
+    { "press": "resolvePreassignment_Pre Pass saar", "as": "saar" }
+  ],
+  "expect": { "invariants": true, "save": [ { "key": "game.phase_of_game", "eq": "strategy" } ] }
+}
