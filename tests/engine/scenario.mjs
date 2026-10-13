@@ -582,7 +582,7 @@ for (const { phase, st } of all) {
   const res = [];
   for (const r of runs) {
     // setup commands are the same on every fork (always commands / presses, never "the thing under test")
-    const out = await r.step(st).catch((e) => ({ ok: false, error: e.message }));
+    const out = await r.step(st).catch((e) => ({ ok: false, error: `${e.message}${e.cause ? ` (${e.cause.code ?? e.cause.message ?? e.cause})` : ""}${process.env.SCEN_STACK ? `\n${e.stack}` : ""}` }));
     if (flag("--buttons")) out.prompts = await r.newPrompts().catch((e) => [`(prompts: ${e.message})`]);
     const vs = r.invariants(`${phase}${n}`, JSON.stringify(st));
     res.push({ fork: r.fork.game, via: r.label, ...out, invariants: vs.map((v) => `${v.id}: ${v.message}`) });

@@ -113,12 +113,28 @@ export function botToken(): string {
 
 /** GET/POST on the bot's trusted engine API (/api/public/selfhost/engine…). Returns {status, body}; never throws on HTTP errors. */
 export async function engineApi(path: string, body?: Json, timeoutMs = 60000): Promise<{ status: number; body: any }> {
-  const r = await fetch(`${BOT_URL}/api/public/selfhost/engine${path}`, {
-    method: body ? "POST" : "GET",
-    headers: { authorization: `Bot ${botToken()}`, accept: "application/json", ...(body ? { "content-type": "application/json" } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  const call = () =>
+    fetch(`${BOT_URL}/api/public/selfhost/engine${path}`, {
+      method: body ? "POST" : "GET",
+      headers: { authorization: `Bot ${botToken()}`, accept: "application/json", ...(body ? { "content-type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  let r: Response;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      r = await call();
+      break;
+    } catch (e: any) {
+      // A pooled keep-alive socket the bot already closed (UND_ERR_SOCKET "other side closed", ECONNRESET): after a
+      // long synchronous stretch (shimState reads of the whole store while polling) the close is only seen once the
+      // next request went out on it (scenario game-end-rewind-unarchive step 6: "fetch failed"). GETs are safe to repeat.
+      const code = e?.cause?.code;
+      if (body || attempt >= 2 || !["UND_ERR_SOCKET", "ECONNRESET", "UND_ERR_CLOSED"].includes(code)) throw e;
+      console.error(`engineApi ${path}: ${code} on a reused connection, retrying`);
+      await sleep(500);
+    }
+  }
   const text = await r.text();
   let parsed: any = text;
   try {
