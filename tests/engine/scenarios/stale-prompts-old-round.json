@@ -1,0 +1,62 @@
+{
+  "name": "stale-prompts-old-round",
+  "description": "Live pbd436: ~30 prompts of rounds 1-2 still open in round 3 (old action card hand trays, cards-info menus, spent / old trade offers, secret-objective retrieve buttons...): action-card, ui.* and trade prompts had no round / lifetime rule. Fix (bot stale-prompts): the hand tray and the cards-info menu live until a newer copy for the player; trade offers lapse at the end of their round (and when no longer current or a traded card is gone); an undo affordance ends with what it undoes (SO back out of the deck, earlier round...); card preassignments live while the card is held. Here: pinned pbd436 save 220 (round 2, action): Saar gets Coup (pre-assign offer at the action phase start), posts its hand tray twice, Yssaril its cards-info menu, Ral Nel offers Saar a trade, Saar discards a secret objective; the round ends and round 3 starts; Saar posts a fresh tray, offers Ral Nel a trade, discards another secret; rebuild as after a restart. Expected: only the newest tray / menu per player, the round-3 offer and undo and both Coup offers (card still held) are open; the round-2 offer, its sender copy and the round-2 retrieve button are closed and the old tray refuses an answer. Engine only (no legacy equivalent: the original leaves every old button live).",
+  "base": {
+    "save": "saves/pbd436-220-round2-action.txt",
+    "repost": false
+  },
+  "setup": [
+    "/ac draw_specific_ac ac_id:coup faction_or_color:saar",
+    "/game start_phase specific_phase:action",
+    { "wait": 2500 },
+    { "command": "/ac info", "as": "saar" },
+    { "wait": 1500 },
+    { "command": "/ac info", "as": "saar" },
+    { "command": "/cards_info", "options": { "player": "${faction:yssaril}" }, "as": "yssaril" },
+    { "wait": 2500 },
+    { "gameAction": "trade.propose", "as": "ralnel", "body": { "to": "saar", "give": { "tg": 1 }, "receive": {} } },
+    { "command": "/so discard", "options": { "secret_objective_id": 337, "faction_or_color": "saar" }, "as": "saar" },
+    { "wait": 3000 },
+    "/status cleanup confirm:YES",
+    "/game start_phase specific_phase:strategy",
+    "/player sc_pick strategy_card:1 faction_or_color:saar",
+    "/player sc_pick strategy_card:7 faction_or_color:yssaril",
+    "/player sc_pick strategy_card:5 faction_or_color:ralnel",
+    "/player sc_pick strategy_card:8 faction_or_color:saar",
+    "/player sc_pick strategy_card:3 faction_or_color:yssaril",
+    "/player sc_pick strategy_card:6 faction_or_color:ralnel",
+    "/game start_phase specific_phase:action",
+    { "wait": 2500 },
+    { "command": "/ac info", "as": "saar" },
+    { "gameAction": "trade.propose", "as": "saar", "body": { "to": "ralnel", "give": { "tg": 1 }, "receive": {} } },
+    { "command": "/so discard", "options": { "secret_objective_id": 311, "faction_or_color": "saar" }, "as": "saar" },
+    { "wait": 3000 }
+  ],
+  "steps": [
+    {
+      "engine": "rebuild",
+      "expect": {
+        "decision": [
+          { "kind": "action_card.play", "as": "saar", "count": 1 },
+          { "kind": "action_card.play", "as": "yssaril", "count": 1 },
+          { "kind": "action_card.preassign", "as": "saar", "value": { "preassignment": "Coup" }, "count": 3 },
+          { "kind": "trade.offer", "as": "saar", "value": { "from": "ralnel" }, "open": false },
+          { "kind": "trade.offer", "as": "ralnel", "value": { "from": "saar" }, "open": true },
+          { "kind": "trade.offer_sent", "as": "ralnel", "open": false },
+          { "kind": "trade.offer_sent", "as": "saar", "open": true },
+          { "kind": "ui.undo_affordance", "as": "saar", "value": { "undoes": "so_discard", "ref": "mew" }, "open": false },
+          { "kind": "ui.undo_affordance", "as": "saar", "value": { "undoes": "so_discard", "ref": "ans" }, "open": true }
+        ]
+      }
+    },
+    { "answerOn": "getDiscardButtonsACs", "pick": "oldest", "as": "saar", "refused": true },
+    { "answerOn": "rescindOffer_tan", "pick": "oldest", "as": "ralnel", "refused": true }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": [
+      { "kind": "trade.offer", "as": "ralnel", "value": { "from": "saar" }, "open": true },
+      { "kind": "action_card.preassign", "as": "saar", "value": { "preassignment": "Coup" }, "open": true }
+    ]
+  }
+}

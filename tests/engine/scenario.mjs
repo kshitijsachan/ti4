@@ -18,6 +18,7 @@
 //                { engine: "rebuild" | "recover" } (the engine's restart-time rebuild / prompt recovery),
 //                { answerOn: "<custom id>", pick?: "oldest" } (answer the on-screen message carrying it, no re-post) ],
 //     diffIgnore: [ "stored.violatedSystems" ]   (save keys --diff skips: game.<k> | stored.<k> | player.<k>)
+//     invariantsIgnore: [ "content.no-homebrew" ]  (invariant ids the base game violates anyway)
 //     expect:  { invariants: true, state: [ { path: "players[faction=xxcha].tg", eq: 3 } ], save: [ { key: "game.phase_of_game", eq: "action" } ],
 //                channels: { archived: true|false } } }
 //   A step may carry its own "expect" (same shape), checked right after it (e.g. a prompt closed mid-flow).
@@ -456,7 +457,9 @@ class Runner {
   }
 
   invariants(id, label) {
-    const vs = checkSnapshot({ id, label, save: this.save(), web: null }).filter((v) => v.severity === "error");
+    // invariantsIgnore: invariant ids a scenario's base game violates anyway (e.g. content.no-homebrew on an old recording).
+    const ignore = new Set(sc.invariantsIgnore ?? []);
+    const vs = checkSnapshot({ id, label, save: this.save(), web: null }).filter((v) => v.severity === "error" && !ignore.has(v.id));
     this.violations.push(...vs);
     return vs;
   }
@@ -529,7 +532,7 @@ async function checkExpect(run, expect) {
       fails.push(`channels: expected ${want ? "archived" : "restored"}, got ${got.map((ch) => (ch ? `${ch.name} archived=${!!ch._archived} parent=${shimState().channels?.[ch.parent_id]?.name}` : "missing")).join("; ")}`);
   }
   if (expect.decision) {
-    // { kind, as?, scope?: "player"|"table", value?: {partial option value or window subject}, open: true|false }
+    // { kind, as?, scope?: "player"|"table", value?: {partial option value or window subject}, open: true|false, count?: n }
     const like = (o, v) => !!o && Object.entries(v).every(([k, x]) => JSON.stringify(o[k]) === JSON.stringify(x));
     for (const e of [].concat(expect.decision)) {
       const ds = (await openDecisions(run.fork.game)).filter(
@@ -537,7 +540,11 @@ async function checkExpect(run, expect) {
         (d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx) || (d.scope === "table" && !d.target?.userId && !!d.window?.eligible?.includes(userOf(e.as, run.ctx)))) && (!e.scope || d.scope === e.scope)
           && (!e.value || like(d.window?.subject, e.value) || d.options.some((o) => like(o.value, e.value))),
       );
-      if ((e.open ?? true) !== ds.length > 0)
+      if (e.count != null) {
+        // count: exactly this many such decisions open (e.g. only the newest copy of a re-posted tray / menu).
+        if (ds.length !== e.count)
+          fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}${e.value ? ` ${JSON.stringify(e.value)}` : ""}: expected ${e.count} open, got ${ds.length} (${ds.map((d) => d.id).join(", ")})`);
+      } else if ((e.open ?? true) !== ds.length > 0)
         fails.push(`decision ${e.kind}${e.as ? ` for ${e.as}` : ""}${e.scope ? ` (scope ${e.scope})` : ""}: expected ${(e.open ?? true) ? "open" : "closed"}`);
     }
   }
