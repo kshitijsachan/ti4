@@ -117,6 +117,34 @@ index edc648f..70ccd9a 100644
                  .append("\n> ⚠ **Slow Button Warning:**")
                  .append("\n> 🕒 Event start: ")
                  .append(eventTime);
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/ActionCardHandButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/ActionCardHandButtonHandler.java
+index 6938f8b..dee20c8 100644
+--- a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/ActionCardHandButtonHandler.java
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/ActionCardHandButtonHandler.java
+@@ -15,6 +15,7 @@ import ti4.discord.interactions.routing.ButtonHandler;
+ import ti4.game.Game;
+ import ti4.game.Player;
+ import ti4.helpers.ActionCardHelper;
++import ti4.helpers.ActionCardTiming;
+ import ti4.helpers.ButtonHelper;
+ import ti4.helpers.ButtonHelperFactionSpecific;
+ import ti4.helpers.Constants;
+@@ -219,6 +220,15 @@ class ActionCardHandButtonHandler {
+                     player.getRepresentation() + ", to cancel an action card, use the button in the actions channel.");
+             return;
+         }
++        // Selfhost (deliberate improvement): refuse a card whose timing window is closed (ActionCardTiming). The
++        // bot's own window offers (Counterstroke, Reverse Engineer, Twinning... "<n>_<card>_<arg>") are already timed.
++        if (acID.matches("\\d+")) {
++            String closed = ActionCardTiming.closedReasonForHandle(game, player, Integer.parseInt(acID));
++            if (closed != null) {
++                MessageHelper.sendMessageToChannel(event.getChannel(), player.getRepresentation() + ", " + closed);
++                return;
++            }
++        }
+ 
+         if (acID.contains("reverse_")) {
+             String actionCardTitle = acID.split("_")[2];
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/ArmisticeAcd2ButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/ArmisticeAcd2ButtonHandler.java
 index f292eb0..1ad3108 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/ArmisticeAcd2ButtonHandler.java
@@ -2569,6 +2597,264 @@ index 88c72d8..7eb851f 100644
  
              if (!actionCardIsCancelable) {
                  MessageHelper.sendMessageToChannelWithEmbedsAndButtons(
+diff --git a/src/main/java/ti4/helpers/ActionCardTiming.java b/src/main/java/ti4/helpers/ActionCardTiming.java
+new file mode 100644
+index 0000000..1456cfb
+--- /dev/null
++++ b/src/main/java/ti4/helpers/ActionCardTiming.java
+@@ -0,0 +1,252 @@
++package ti4.helpers;
++
++import java.util.HashMap;
++import java.util.Map;
++import java.util.Set;
++import ti4.game.Game;
++import ti4.game.Planet;
++import ti4.game.Player;
++import ti4.game.Tile;
++import ti4.helpers.Units.UnitType;
++import ti4.image.Mapper;
++import ti4.model.ActionCardModel;
++import ti4.model.Source.ComponentSource;
++
++/**
++ * Selfhost (deliberate improvement over the original bot): whether an official action card's timing window (and its
++ * hard preconditions, such as a cost the player cannot pay) is open right now. The original bot only refused an
++ * "Action:" card from a player who is not the active player, so every other card could be played at any moment (a
++ * rider during the action phase, Crash Landing with no active system, Summit in the agenda phase...).
++ *
++ * <p>Conservative: only the four official decks (base, Prophecy of Kings, Codex, Thunder's Edge) are judged, and a
++ * window is "closed" only when the public game state proves it: the phase, the active player, the active system and
++ * who has units in it. Anything the state cannot see (did the player win the combat, was a ship just destroyed) stays
++ * open and is left to the players, as before. Twilight's Fall games, and Wild, Wild Galaxy's altered four-of-a-kind
++ * cards, keep the original behaviour. Played through the hand tray (ac_play_from_hand_) and the engine; the
++ * {@code /ac play} command and the bot's own automatic plays (pre-assigned Summit, Coup, Crisis...) are not gated.
++ */
++public final class ActionCardTiming {
++
++    private ActionCardTiming() {}
++
++    /** Per-game off switch: stored value {@code acTimingGate=off}. */
++    public static final String GAME_SWITCH = "acTimingGate";
++
++    /**
++     * On by default on the self-hosted (web) server; off with env {@code TI4_AC_TIMING=off} (whole server, instant
++     * rollback) or per game with the stored value {@code acTimingGate=off}. Off = the original behaviour.
++     */
++    public static boolean enabled(Game game) {
++        if (game == null) return false;
++        String env = System.getenv("TI4_AC_TIMING");
++        if ("off".equalsIgnoreCase(env) || "false".equalsIgnoreCase(env)) return false;
++        if ("off".equalsIgnoreCase(game.getStoredValue(GAME_SWITCH))) return false;
++        return ti4.selfhost.SelfHosted.isEnabled() || "on".equalsIgnoreCase(env);
++    }
++
++    private enum Window {
++        /** "Action": a component action on your own turn. */
++        ACTION,
++        /** "After you activate a system" family: your tactical action, a system activated. */
++        OWN_ACTIVATION,
++        /** Master Plan: "After you perform an action". */
++        OWN_TURN,
++        /** "After another player activates / moves into / commits to land ...": someone else's tactical action. */
++        OTHER_ACTIVATION,
++        /** Combat / invasion / space cannon windows the player takes part in (has units in the active system). */
++        IN_ACTIVE_SYSTEM,
++        /** Combat-ish windows where the player may have no units left there (Direct Hit, Courageous, Scramble). */
++        TACTICAL,
++        /** Anything during the action phase (planet control changes, production, end of a turn). */
++        ACTION_PHASE,
++        AGENDA,
++        STRATEGY,
++        STATUS,
++        /** Puppets on a String: at the end of a turn, if you have passed. */
++        PASSED,
++        /** Coup d'Etat, Extreme Duress: during another player's turn. */
++        OTHER_TURN
++    }
++
++    private static final Set<ComponentSource> OFFICIAL =
++            Set.of(ComponentSource.base, ComponentSource.pok, ComponentSource.codex1, ComponentSource.thunders_edge);
++
++    private static final Map<String, Window> WINDOWS = new HashMap<>();
++
++    private static void put(Window w, String... aliases) {
++        for (String a : aliases) WINDOWS.put(a, w);
++    }
++
++    static {
++        put(Window.OWN_ACTIVATION, "fs1", "fs2", "fs3", "fs4", "lost_star", "silence_space", "nav_suite", "solar_flare");
++        put(Window.OWN_ACTIVATION, "upgrade", "harness", "rally");
++        put(Window.OWN_TURN, "master_plan");
++        put(Window.OTHER_ACTIVATION, "counterstroke", "fsb", "decoy", "rescue", "experimental", "parley", "ghost_squad");
++        put(Window.IN_ACTIVE_SYSTEM, "mb1", "mb2", "mb3", "mb4", "sh1", "sh2", "sh3", "sh4", "emergency", "f_prototype");
++        put(Window.IN_ACTIVE_SYSTEM, "s_retreat1", "s_retreat2", "s_retreat3", "s_retreat4", "intercept", "fire_team");
++        put(Window.IN_ACTIVE_SYSTEM, "mjets1", "mjets2", "mjets3", "mjets4", "waylay", "reveal_prototype", "rout");
++        put(Window.IN_ACTIVE_SYSTEM, "salvage", "reflective", "blitz", "disable", "bunker", "crashlanding");
++        put(Window.TACTICAL, "dh1", "dh2", "dh3", "dh4", "courageous", "scramble");
++        put(Window.ACTION_PHASE, "infiltrate", "reparations", "crisis");
++        put(Window.ACTION_PHASE, "war_machine1", "war_machine2", "war_machine3", "war_machine4", "war_machinell");
++        put(Window.AGENDA, "abs", "assassin", "bribery", "confusing", "confounding", "distinguished", "deadly_plot");
++        put(Window.AGENDA, "const_rider", "diplo_rider", "imp_rider", "lead_rider", "politic_rider", "tech_rider");
++        put(Window.AGENDA, "trade_rider", "war_rider", "sanction", "veto", "veto3", "veto4", "hack", "insider");
++        put(Window.AGENDA, "dp1", "dp2", "dp3", "dp4");
++        put(Window.STRATEGY, "summit", "investments", "disgrace");
++        put(Window.STATUS, "stability");
++        put(Window.PASSED, "puppetsonastring");
++        put(Window.OTHER_TURN, "coup", "extremeduress");
++        // Sabotage, Reverse Engineer, Lie in Wait and Black Market Dealings answer events the state does not track.
++    }
++
++    /**
++     * Why {@code player} cannot play {@code acId} right now, or null when they may (or the card is not judged). The
++     * reason is a full sentence for the player.
++     */
++    public static String closedReason(Game game, Player player, String acId) {
++        if (game == null || player == null || acId == null || !enabled(game)) return null;
++        ActionCardModel card = Mapper.getActionCard(acId);
++        if (card == null || !OFFICIAL.contains(card.getSource())) return null;
++        if (game.isTwilightsFallMode()) return null;
++        if (game.isWildWildGalaxyMode() && card.isAffectedByWildWildGalaxy()) return null;
++        Window w = "action".equalsIgnoreCase(card.getWindow()) ? Window.ACTION : WINDOWS.get(card.getAlias());
++        if (w == null) return null;
++
++        String name = "_" + card.getName() + "_";
++        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame().toLowerCase();
++        boolean actionPhase = "action".equals(phase);
++        Player active = game.getActivePlayer();
++        boolean isActive = active != null && active == player;
++        // The system activated in THIS tactical action: getActiveSystem() falls back to the stored lastActiveSystem, so
++        // the previous turn's system kept every "after you activate" / combat window open at turn start (playtest 6,
++        // pbd387: Nav Suite played with no activation). A save written with no active system loads it as "null".
++        String pos = game.getCurrentActiveSystem();
++        Tile tile = pos == null || pos.isBlank() || "null".equalsIgnoreCase(pos) ? null : game.getTileByPosition(pos);
++
++        switch (w) {
++            case ACTION -> {
++                if (!actionPhase || !isActive)
++                    return name + " is a component action: it can only be played on your own turn in the action phase.";
++                return costReason(game, player, card);
++            }
++            case OWN_ACTIVATION -> {
++                if (!actionPhase || !isActive || tile == null)
++                    return name + " can only be played during your own tactical action, after you activate a system.";
++                if ("upgrade".equals(card.getAlias())
++                        && tile.getSpaceUnitHolder().getUnitCount(UnitType.Cruiser, player.getColor()) < 1)
++                    return name + " needs 1 of your cruisers in the active system.";
++                if ("harness".equals(card.getAlias()) && !tile.isAnomaly(game, player))
++                    return name + " can only be played after you activate an anomaly.";
++                return null;
++            }
++            case OWN_TURN -> {
++                if (!actionPhase || !isActive) return name + " can only be played on your own turn, after your action.";
++                return null;
++            }
++            case OTHER_ACTIVATION -> {
++                if (!actionPhase || tile == null || isActive)
++                    return name + " can only be played during another player's tactical action.";
++                return otherActivationReason(game, player, card, tile, name);
++            }
++            case IN_ACTIVE_SYSTEM -> {
++                if (!actionPhase || tile == null || !(isActive || FoWHelper.playerHasUnitsInSystem(player, tile)))
++                    return name + " can only be played during a combat or invasion you take part in"
++                            + " (you need units in the active system).";
++                return null;
++            }
++            case TACTICAL -> {
++                if (!actionPhase || tile == null)
++                    return name + " can only be played during a tactical action (there is no active system).";
++                return null;
++            }
++            case ACTION_PHASE -> {
++                return actionPhase ? null : name + " can only be played during the action phase.";
++            }
++            case AGENDA -> {
++                return phase.contains("agenda") ? null : name + " can only be played during the agenda phase.";
++            }
++            case STRATEGY -> {
++                return "strategy".equals(phase) ? null : name + " can only be played during the strategy phase.";
++            }
++            case STATUS -> {
++                return phase.contains("status") ? null : name + " can only be played during the status phase.";
++            }
++            case PASSED -> {
++                if (!actionPhase || !player.isPassed())
++                    return name + " can only be played in the action phase once you have passed.";
++                return null;
++            }
++            case OTHER_TURN -> {
++                if (!actionPhase || active == null || isActive)
++                    return name + " can only be played during another player's turn.";
++                if ("extremeduress".equals(card.getAlias()) && !active.hasUnplayedSCs())
++                    return name + " needs the active player to have a readied strategy card.";
++                return null;
++            }
++        }
++        return null;
++    }
++
++    /** {@link #closedReason} for the card behind a hand handle (or a Garbozia discard handle); null when unknown. */
++    public static String closedReasonForHandle(Game game, Player player, int handle) {
++        if (game == null || player == null) return null;
++        for (Map.Entry<String, Integer> e : player.getActionCards().entrySet())
++            if (e.getValue() == handle) return closedReason(game, player, e.getKey());
++        if (player.hasPlanet("garbozia"))
++            for (Map.Entry<String, Integer> e : game.getDiscardActionCards().entrySet())
++                if (e.getValue() == handle) return closedReason(game, player, e.getKey());
++        return null;
++    }
++
++    /** Every card in {@code player}'s hand whose window is closed right now: card id to the reason. */
++    public static Map<String, String> closedInHand(Game game, Player player) {
++        Map<String, String> out = new java.util.LinkedHashMap<>();
++        if (game == null || player == null) return out;
++        for (String ac : player.getActionCards().keySet()) {
++            String r = closedReason(game, player, ac);
++            if (r != null) out.put(ac, r);
++        }
++        return out;
++    }
++
++    /** A component card's cost the player plainly cannot pay (the card would be discarded for nothing). */
++    private static String costReason(Game game, Player player, ActionCardModel card) {
++        String name = "_" + card.getName() + "_";
++        switch (card.getAlias()) {
++            case "f_researched" -> {
++                if (player.getTg() < 4 && !player.hasUnexhaustedLeader("keleresagent"))
++                    return name + " costs 4 trade goods; you have " + player.getTg() + ".";
++            }
++            case "mercenarycontract" -> {
++                if (player.getTg() < 2) return name + " costs 2 trade goods; you have " + player.getTg() + ".";
++            }
++            default -> {}
++        }
++        return null;
++    }
++
++    private static String otherActivationReason(Game game, Player player, ActionCardModel card, Tile tile, String name) {
++        switch (card.getAlias()) {
++            case "counterstroke" -> {
++                if (!CommandCounterHelper.hasCC(player, tile))
++                    return name + " needs 1 of your command tokens in the active system.";
++            }
++            case "fsb", "decoy" -> {
++                if (!FoWHelper.playerHasUnitsInSystem(player, tile))
++                    return name + " needs your units in the active system.";
++            }
++            case "rescue" -> {
++                if (!FoWHelper.playerHasShipsInSystem(player, tile))
++                    return name + " needs your ships in the active system.";
++            }
++            case "parley", "ghost_squad" -> {
++                boolean controls = false;
++                for (Planet p : tile.getPlanetUnitHolders()) controls |= player.getPlanets().contains(p.getName());
++                if (!controls) return name + " needs a planet you control in the active system.";
++            }
++            default -> {}
++        }
++        return null;
++    }
++}
 diff --git a/src/main/java/ti4/helpers/AgendaHelper.java b/src/main/java/ti4/helpers/AgendaHelper.java
 index 9b27bd5..cb00433 100644
 --- a/src/main/java/ti4/helpers/AgendaHelper.java
@@ -3274,7 +3560,7 @@ index d6e4d1f..3f13dfa 100644
          MessageHelper.sendMessageToChannelWithButtons(event.getChannel(), message, buttons);
          ButtonHelper.deleteMessage(event);
 diff --git a/src/main/java/ti4/helpers/ButtonHelperActionCards.java b/src/main/java/ti4/helpers/ButtonHelperActionCards.java
-index 1b73177..1c9dba1 100644
+index 1b73177..aa2661d 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperActionCards.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperActionCards.java
 @@ -402,7 +402,7 @@ public final class ButtonHelperActionCards {
@@ -3286,6 +3572,15 @@ index 1b73177..1c9dba1 100644
          String message2 = player.getRepresentation() + "! Your current command tokens are "
                  + player.getCCRepresentation() + ". Use buttons to gain command tokens.";
          MessageHelper.sendMessageToChannelWithButtons(event.getChannel(), message2, buttons);
+@@ -1175,7 +1175,7 @@ public final class ButtonHelperActionCards {
+     @ButtonHandler("ghostShipStep2_")
+     public static void resolveGhostShipStep2(Player player, Game game, ButtonInteractionEvent event, String buttonID) {
+         Tile tile = game.getTileByPosition(buttonID.split("_")[1]);
+-        if (tile == null || !FoWHelper.doesTileHaveWHs(game, tile.getPosition())) {
++        if (tile == null || !FoWHelper.doesTileHaveWHs(game, tile.getPosition()) || tile.isHomeSystem(game)) {
+             PlanetTargetService.fizzle(event, player);
+             return;
+         }
 @@ -1388,7 +1388,7 @@ public final class ButtonHelperActionCards {
          }
          SecretObjectiveInfoService.sendSecretObjectiveInfo(game, player, event);
@@ -3295,7 +3590,64 @@ index 1b73177..1c9dba1 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  event.getChannel(),
                  player.getRepresentation() + ", please pay the 3 influence for _Impersonation_.",
-@@ -2845,7 +2845,7 @@ public final class ButtonHelperActionCards {
+@@ -1857,10 +1857,9 @@ public final class ButtonHelperActionCards {
+     private static UnitHolderTargetSpec meltdownSpec(Game game) {
+         return UnitHolderTargetSpec.of("reactorMeltdownStep3_" + BlindSelectionService.TBD_FACTION, UnitType.Spacedock)
+                 .excludingSelf()
+-                .where((tile, uh) -> Constants.SPACE.equals(uh.getName())
+-                        || (!uh.getName().contains("custodia")
+-                                && !uh.getName().contains("ghoti")
+-                                && !tile.isHomeSystem(game)));
++                .where((tile, uh) -> !tile.isHomeSystem(game)
++                        && (Constants.SPACE.equals(uh.getName())
++                                || (!uh.getName().contains("custodia") && !uh.getName().contains("ghoti"))));
+     }
+ 
+     // Non-fog only: the fog path skips the player-picking step, because anonymising who you point at and
+@@ -1889,7 +1888,10 @@ public final class ButtonHelperActionCards {
+             }
+         }
+         for (Tile tile : game.getTileMap().values()) {
+-            if (tile.getUnitHolders().get("space").getUnitCount(UnitType.Spacedock, p2.getColor()) > 0) {
++            // Selfhost (deliberate improvement): "in a non-home system" holds for docks in space too (the original
++            // offered a floating dock in a home system).
++            if (!tile.isHomeSystem(game)
++                    && tile.getUnitHolders().get("space").getUnitCount(UnitType.Spacedock, p2.getColor()) > 0) {
+                 buttons.add(Buttons.gray(
+                         "reactorMeltdownStep3_" + p2.getFaction() + "_" + tile.getPosition() + "_space",
+                         tile.getRepresentationForButtons(game, player)));
+@@ -1914,6 +1916,15 @@ public final class ButtonHelperActionCards {
+         Tile tile = target.tile();
+         UnitHolder holder = target.holder();
+         Player p2 = target.owner();
++        // Selfhost (deliberate improvement): resolveUnitHolder applies meltdownSpec's legality in fog only, so a
++        // pressed id for a home system (or Custodia/Ghoti) reached here; "in a non-home system" is re-checked.
++        if (tile.isHomeSystem(game)
++                || tile.isHomeSystem()
++                || holder.getName().contains("custodia")
++                || holder.getName().contains("ghoti")) {
++            PlanetTargetService.fizzle(event, player);
++            return;
++        }
+         String unitHolderName = Constants.SPACE.equals(holder.getName()) ? "" : holder.getName();
+         RemoveUnitService.removeUnits(event, tile, game, p2.getColor(), "sd " + unitHolderName);
+         FoWHelper.notifyActorAndAffectedElsePublic(
+@@ -2031,6 +2042,14 @@ public final class ButtonHelperActionCards {
+     @ButtonHandler("resolveUpgrade_")
+     public static void resolveUpgrade(Player player, Game game, ButtonInteractionEvent event, String buttonID) {
+         Tile tile = game.getTileByPosition(buttonID.split("_")[1]);
++        // Selfhost (deliberate improvement): the original replaced a cruiser that was not there (removeUnits
++        // removes nothing), so Upgrade conjured a dreadnought from no cruiser at all.
++        if (tile == null || tile.getSpaceUnitHolder().getUnitCount(UnitType.Cruiser, player.getColor()) < 1) {
++            MessageHelper.sendMessageToChannel(
++                    event.getMessageChannel(),
++                    player.getRepresentation() + ", you have no cruiser in the active system for _Upgrade_ to replace.");
++            return;
++        }
+         RemoveUnitService.removeUnits(event, tile, game, player.getColor(), "cruiser");
+         AddUnitService.addUnits(event, tile, game, player.getColor(), "dread");
+         ButtonHelper.deleteMessage(event);
+@@ -2845,7 +2864,7 @@ public final class ButtonHelperActionCards {
                      player.getRepresentationUnfogged() + ", you may use the button to research your technology.",
                      List.of(Buttons.GET_A_TECH));
          } else {
@@ -3304,7 +3656,7 @@ index 1b73177..1c9dba1 100644
              String message2 = player.getRepresentation()
                      + ", you would research a technology, but because of **Propagation**, you instead gain 3 command tokens."
                      + " Your current command tokens are " + player.getCCRepresentation()
-@@ -2876,7 +2876,7 @@ public final class ButtonHelperActionCards {
+@@ -2876,7 +2895,7 @@ public final class ButtonHelperActionCards {
                      player.getRepresentationUnfogged() + ", you may use the button to get your technology.",
                      List.of(Buttons.GET_A_TECH));
          } else {
@@ -3313,7 +3665,7 @@ index 1b73177..1c9dba1 100644
              String message2 = player.getRepresentation()
                      + ", you would research a technology, but because of **Propagation**, you instead gain 3 command tokens."
                      + " Your current command tokens are " + player.getCCRepresentation()
-@@ -2915,7 +2915,7 @@ public final class ButtonHelperActionCards {
+@@ -2915,7 +2934,7 @@ public final class ButtonHelperActionCards {
                  "Please choose the technology you wish to acquire by violating intellectual property law.",
                  getPlagiarizeButtons(game, player));
          List<Button> buttons = ButtonHelper.getExhaustButtonsWithTG(game, player, "inf");
@@ -3322,6 +3674,16 @@ index 1b73177..1c9dba1 100644
          buttons.add(doneExhausting);
          MessageHelper.sendMessageToChannelWithButtons(
                  event.getChannel(), "Please choose the planets you wish to exhaust to pay the 5 influence.", buttons);
+@@ -3015,7 +3034,8 @@ public final class ButtonHelperActionCards {
+     private static List<Button> getGhostShipButtons(Game game, Player player) {
+         List<Button> buttons = new ArrayList<>();
+         for (Tile tile : game.getTileMap().values()) {
+-            if (FoWHelper.doesTileHaveWHs(game, tile.getPosition())) {
++            // Selfhost (deliberate improvement): "a non-home system" (the original offered e.g. the Creuss home).
++            if (FoWHelper.doesTileHaveWHs(game, tile.getPosition()) && !tile.isHomeSystem(game)) {
+                 boolean hasOtherShip = false;
+                 for (Player p2 : game.getRealPlayersNNeutral()) {
+                     if (p2 == player) {
 diff --git a/src/main/java/ti4/helpers/ButtonHelperAgents.java b/src/main/java/ti4/helpers/ButtonHelperAgents.java
 index f6fd934..1aba933 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperAgents.java
@@ -5902,7 +6264,7 @@ index 6d9bcab..9dc0abb 100644
      }
  
 diff --git a/src/main/java/ti4/helpers/thundersedge/TeHelperActionCards.java b/src/main/java/ti4/helpers/thundersedge/TeHelperActionCards.java
-index d4d3cdb..9014217 100644
+index d4d3cdb..b2ac42c 100644
 --- a/src/main/java/ti4/helpers/thundersedge/TeHelperActionCards.java
 +++ b/src/main/java/ti4/helpers/thundersedge/TeHelperActionCards.java
 @@ -23,10 +23,12 @@ import ti4.helpers.ButtonHelperAbilities;
@@ -5972,7 +6334,22 @@ index d4d3cdb..9014217 100644
          MessageHelper.sendMessageToChannel(player.getCorrectChannel(), msg2);
          ButtonHelper.deleteMessage(event);
      }
-@@ -622,7 +644,7 @@ public class TeHelperActionCards {
+@@ -557,6 +579,14 @@ public class TeHelperActionCards {
+         RegexService.runMatcher(regex, buttonID, matcher -> {
+             String planet = matcher.group("planet");
+             Tile tile = game.getTileFromPlanet(planet);
++            // Selfhost (deliberate improvement): the original spent the 2 trade goods it could not take (TG < 0).
++            if (player.getTg() < 2) {
++                MessageHelper.sendMessageToChannel(
++                        player.getCorrectChannel(),
++                        player.getRepresentation() + ", _Mercenary Contract_ costs 2 trade goods; you have "
++                                + player.getTg() + ".");
++                return;
++            }
+             resolvePiratesGeneric(event, game, player, tile, "2 inf " + planet);
+             player.setTg(player.getTg() - 2);
+             String message = player.getRepresentation() + " paid some mercenaries 2 trade goods to post up at "
+@@ -622,7 +652,7 @@ public class TeHelperActionCards {
          String message = player.getRepresentation() + " choose a system to place the pirates! 🦜☠";
          if (allowRes) {
              List<Button> buttons = ButtonHelper.getExhaustButtonsWithTG(game, player, "res");
@@ -9149,10 +9526,10 @@ index 0000000..853beb8
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineModels.java b/src/main/java/ti4/selfhost/engine/EngineModels.java
 new file mode 100644
-index 0000000..c8239e1
+index 0000000..81380cd
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineModels.java
-@@ -0,0 +1,477 @@
+@@ -0,0 +1,482 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.List;
@@ -9273,7 +9650,12 @@ index 0000000..c8239e1
 +    public record Hand(
 +            Map<String, Integer> actionCards,
 +            Map<String, Integer> secretObjectives,
-+            Map<String, Integer> promissoryNotes) {}
++            Map<String, Integer> promissoryNotes,
++            /**
++             * Selfhost: action cards in this hand whose timing window is closed right now, card id to the reason
++             * (ti4.helpers.ActionCardTiming). Absent cards may be played (or are not judged).
++             */
++            Map<String, String> closedActionCards) {}
 +
 +    /**
 +     * One strategy card. name/card: display name and the card's automation id (e.g. "pok4construction", what the
@@ -11157,10 +11539,10 @@ index 0000000..6216ba1
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java b/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java
 new file mode 100644
-index 0000000..99f0353
+index 0000000..be3157a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/StateSnapshotBuilder.java
-@@ -0,0 +1,255 @@
+@@ -0,0 +1,256 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -11347,7 +11729,8 @@ index 0000000..99f0353
 +                ? new Hand(
 +                        new LinkedHashMap<>(p.getActionCards()),
 +                        new LinkedHashMap<>(p.getSecrets()),
-+                        new LinkedHashMap<>(p.getPromissoryNotes()))
++                        new LinkedHashMap<>(p.getPromissoryNotes()),
++                        ti4.helpers.ActionCardTiming.closedInHand(game, p))
 +                : null;
 +        return new PlayerState(
 +                p.getUserID(),
@@ -14716,16 +15099,17 @@ index 0000000..0995425
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardPlayKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardPlayKind.java
 new file mode 100644
-index 0000000..a6147a3
+index 0000000..e9de668
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardPlayKind.java
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,73 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
 +import java.util.Map;
 +import ti4.game.Game;
 +import ti4.game.Player;
++import ti4.helpers.ActionCardTiming;
 +import ti4.selfhost.engine.EngineModels.Decision;
 +import ti4.selfhost.engine.EngineModels.Option;
 +import ti4.selfhost.engine.KindSpec;
@@ -14782,6 +15166,12 @@ index 0000000..a6147a3
 +                    && !answering.getActionCards().containsValue(handle)
 +                    && !game.getDiscardActionCards().containsValue(handle))
 +                return "That action card is not in your hand.";
++            // Selfhost (deliberate improvement over the original, which only checked "Action:" cards' active
++            // player): a card whose timing window is closed is refused (ti4.helpers.ActionCardTiming).
++            if (h instanceof Integer handle) {
++                String closed = ActionCardTiming.closedReasonForHandle(game, answering, handle);
++                if (closed != null) return closed;
++            }
 +        }
 +        return null;
 +    }
@@ -33003,6 +33393,44 @@ index 8501858..8990781 100644
      private static final String DISCORD_CLIENT_ID = System.getenv("DISCORD_CLIENT_ID");
      private static final String DISCORD_CLIENT_SECRET = System.getenv("DISCORD_CLIENT_SECRET");
  
+diff --git a/src/main/java/ti4/spring/api/hand/GetHandResponse.java b/src/main/java/ti4/spring/api/hand/GetHandResponse.java
+index e58bf24..64961a2 100644
+--- a/src/main/java/ti4/spring/api/hand/GetHandResponse.java
++++ b/src/main/java/ti4/spring/api/hand/GetHandResponse.java
+@@ -1,5 +1,8 @@
+ package ti4.spring.api.hand;
+ 
++import java.util.Map;
+ import java.util.Set;
+ 
+-public record GetHandResponse(Set<String> actionCards, Set<String> secretObjectives, Set<String> promissoryNotes) {}
++public record GetHandResponse(Set<String> actionCards, Set<String> secretObjectives, Set<String> promissoryNotes,
++        /** Selfhost: action cards whose timing window is closed right now, card id to the reason. */
++        Map<String, String> closedActionCards) {}
+diff --git a/src/main/java/ti4/spring/api/hand/HandController.java b/src/main/java/ti4/spring/api/hand/HandController.java
+index e763f1b..a255cc5 100644
+--- a/src/main/java/ti4/spring/api/hand/HandController.java
++++ b/src/main/java/ti4/spring/api/hand/HandController.java
+@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
+ import org.springframework.web.bind.annotation.PathVariable;
+ import org.springframework.web.bind.annotation.RequestMapping;
+ import org.springframework.web.bind.annotation.RestController;
++import ti4.helpers.ActionCardTiming;
+ import ti4.spring.context.RequestContext;
+ 
+ @RequiredArgsConstructor
+@@ -25,6 +26,10 @@ public class HandController {
+         Set<String> secretObjectives = HandService.getSecretObjectives(player);
+         Set<String> promissoryNotes = HandService.getPromissoryNotes(player);
+ 
+-        return new GetHandResponse(actionCards, secretObjectives, promissoryNotes);
++        return new GetHandResponse(
++                actionCards,
++                secretObjectives,
++                promissoryNotes,
++                ActionCardTiming.closedInHand(RequestContext.getGame(), player));
+     }
+ }
 diff --git a/src/main/java/ti4/spring/api/selfhost/ArtController.java b/src/main/java/ti4/spring/api/selfhost/ArtController.java
 new file mode 100644
 index 0000000..abfae77
