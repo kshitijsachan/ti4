@@ -31,13 +31,16 @@
 // --diff: TWO forks run the same scenario, one with legacy button presses (the original code's behaviour = ground
 //   truth) and one with engine answers; after every step the normalized saves are diffed (first divergence reported).
 // Invariants (lib/invariants.ts) are checked on the fork's save after every step. Exit 1 on any failure.
-// Forks: --forks reuses existing forks (comma-separated, 1 or 2); otherwise forks are created and their names
-// printed (pass them back with --forks next time: forks are reusable; the bot is shared).
+// Forks: by default every run creates fresh forks (one, two with --diff) and ends them when it finishes (or dies;
+//   --keep leaves them running for inspection). Concurrent harness-created forks are capped machine-wide
+//   (SCEN_MAX_FORKS, default 4; a run waits for a free lease). --forks pbdA[,pbdB] reuses existing forks instead:
+//   every message with buttons in them is deleted first (no prompt of an earlier run stays answerable; --no-reset
+//   skips this), then the scenario's base save is loaded as usual. Reused forks are never ended.
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BOT_URL, SHIM_URL, botToken, ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, readGameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
-import { createFork, openFork, closeFork, clientFor, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
+import { acquireForkLease, createFork, endFork, openFork, closeFork, clientFor, resetFork, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
 import { loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
 import { controlsOf } from "./lib/shim.ts";
@@ -400,7 +403,10 @@ class Runner {
       const ds = (await openDecisions(this.fork.game))
         .filter((d) => !kind || (typeof kind === "string" ? d.kind === kind : kind.test(d.kind)))
         .filter((d) => (d.scope === "table" ? !d.window || d.window.eligible?.includes(user) || this.answersOutsideWindow(d, user) : !d.target?.userId || d.target.userId === user))
-        .sort((a, b) => b.seq - a.seq);
+        // A reaction window this seat already answered (an earlier card's Sabotage window whose message keeps its
+        // buttons, re-captured with a newer seq) sorts after the open ones: ac-combat-shields-direct-hit answered
+        // Shields Holding's finished window for Direct Hit's ("You already responded to this window").
+        .sort((a, b) => Number(!!a.window?.responded?.includes(user)) - Number(!!b.window?.responded?.includes(user)) || b.seq - a.seq);
       if (ds.length) return ds;
       if (Date.now() > end) return [];
       await sleep(400);
@@ -563,7 +569,47 @@ const base = baseSave(sc.base ?? "fresh6p");
 const forkNames = (opt("--forks", "") || "").split(",").filter(Boolean);
 const need = diffMode ? 2 : 1;
 const forks = [];
-for (let i = 0; i < need; i++) forks.push(forkNames[i] ? await openFork(forkNames[i]) : await createFork(8, log));
+// Forks this run created (fresh by default): ended when the run finishes or dies, unless --keep.
+const created = [];
+let cleaned = false;
+async function cleanup() {
+  if (cleaned) return;
+  cleaned = true;
+  for (const c of created) {
+    if (!flag("--keep")) await endFork(c.fork, log);
+    c.lease.release();
+  }
+  for (const f of forks) closeFork(f);
+}
+const die = (code) => (e) => {
+  if (e) console.error(e?.stack ?? e);
+  cleanup().finally(() => process.exit(code));
+};
+process.on("SIGINT", die(130));
+process.on("SIGTERM", die(143));
+process.on("uncaughtException", die(1));
+process.on("unhandledRejection", die(1));
+for (let i = 0; i < need; i++) {
+  if (forkNames[i]) {
+    // A reused fork: drop every prompt an earlier run left on screen (open windows, payments, turn menus) before the
+    // base save is loaded over it (--no-reset skips this).
+    const f = await openFork(forkNames[i]);
+    forks.push(f);
+    if (!flag("--no-reset")) await resetFork(f, log);
+    continue;
+  }
+  const lease = await acquireForkLease(log);
+  let f;
+  try {
+    f = await createFork(8, log);
+  } catch (e) {
+    lease.release();
+    throw e;
+  }
+  lease.note(f.game);
+  created.push({ fork: f, lease });
+  forks.push(f);
+}
 log(`scenario ${sc.name ?? basename(file)} from ${base.from} on ${forks.map((f) => f.game).join(" + ")}${diffMode ? " (diff: legacy vs engine)" : ""}`);
 const runs = diffMode ? [new Runner(forks[0], "press", "legacy"), new Runner(forks[1], "engine", "engine")] : [new Runner(forks[0], opt("--via", "engine"), opt("--via", "engine"))];
 
@@ -627,7 +673,8 @@ if (timings) {
 const out = opt("--out", join(ensureRunDir(), "reports", `scenario-${(sc.name ?? basename(file)).replace(/[^\w.-]+/g, "_")}${diffMode ? "-diff" : ""}.json`));
 mkdirSync(join(ensureRunDir(), "reports"), { recursive: true });
 writeFileSync(out, JSON.stringify(report, null, 1));
-for (const f of forks) closeFork(f);
-console.log(`\n${report.scenario}: ${report.failures.length ? `FAILED (${report.failures.length})` : "PASSED"} in ${((Date.now() - t0) / 1000).toFixed(0)}s; forks ${forks.map((f) => f.game).join(",")} (reuse with --forks); report ${out}`);
+await cleanup();
+const forkNote = created.length && !flag("--keep") ? `fresh fork${forks.length > 1 ? "s" : ""} ${forks.map((f) => f.game).join(",")} (ended)` : `forks ${forks.map((f) => f.game).join(",")} (reuse with --forks)`;
+console.log(`\n${report.scenario}: ${report.failures.length ? `FAILED (${report.failures.length})` : "PASSED"} in ${((Date.now() - t0) / 1000).toFixed(0)}s; ${forkNote}; report ${out}`);
 if (flag("--json")) console.log(JSON.stringify(report));
 process.exit(report.failures.length ? 1 : 0);

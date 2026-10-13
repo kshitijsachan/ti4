@@ -1,11 +1,16 @@
 {
   "name": "ac-combat-lucky-scuttle",
-  "description": "pbd60 save 122: mentak plays Lucky Shot (startToLuckyShotAUnit_0 -> luckyShotIn_308 -> luckyShotOn_308_*) and Scuttle (startToScuttleAUnit_0 -> scuttleIn_ -> scuttleOn_ -> endScuttle_). Follow-ups are untyped; answered as whatever decision carries them. Lucky Shot offers no system here (mentak controls no planet at 308; same in legacy), so only its play and start step are checked.",
+  "description": "pbd60 save 122: mentak plays Lucky Shot (startToLuckyShotAUnit_0 -> luckyShotIn_308 -> luckyShotOn_308_*) and Scuttle (startToScuttleAUnit_0 -> scuttleIn_ -> scuttleOn_ -> endScuttle_). Both are Action: cards (component actions; one action per turn, enforced since 01:50), so the base's tactical action at 308 is put aside (/player turn_start mentak: a new turn, no active system), Lucky Shot is played on that turn, and Scuttle on mentak's next turn (the other seats are marked passed in setup, so mentak's End Turn starts mentak's next turn; mentak's fleet pool is raised to 5 first, since the base's 5 ships at 308 are over fleet pool 3 and End Turn is refused while over the limit). Follow-ups are untyped; answered as whatever decision carries them. Lucky Shot offers no system here (mentak controls no planet at 308; same in legacy), so only its play and start step are checked. --diff ignores stored.engineActionCardTurn: the engine's one-action-per-turn marker, which the original code does not keep.",
   "base": {
     "recording": "pbd60",
     "index": 122
   },
   "setup": [
+    "/player stats passed:y faction_or_color:muaat",
+    "/player stats passed:y faction_or_color:ghost",
+    "/player stats passed:y faction_or_color:crimson",
+    "/player stats fleet_cc:5 faction_or_color:mentak",
+    "/player turn_start faction_or_color:mentak",
     {
       "command": "ac draw_specific_ac",
       "options": {
@@ -37,6 +42,22 @@
         "option": "startToLuckyShotAUnit_0"
       },
       "as": "mentak"
+    },
+    {
+      "answer": {
+        "kind": "turn.action",
+        "option": "turnEnd$"
+      },
+      "as": "mentak",
+      "expect": {
+        "decision": [
+          {
+            "kind": "action_card.play",
+            "as": "mentak",
+            "open": true
+          }
+        ]
+      }
     },
     {
       "answer": {
@@ -78,5 +99,8 @@
   ],
   "expect": {
     "invariants": true
-  }
+  },
+  "diffIgnore": [
+    "stored.engineActionCardTurn"
+  ]
 }

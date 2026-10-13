@@ -1,6 +1,9 @@
 {
   "name": "ac-combat-suite",
-  "description": "All ac-combat scenarios chained on one base (pbd60 save 122, space combat at 308 mentak vs muaat) so one live run covers them: ac-combat-sabotage-cancel, ac-combat-repairs-upgrade, ac-combat-parley-salvage, ac-combat-lucky-scuttle, ac-combat-crash-landing, ac-combat-bunker, ac-combat-dice-cards, ac-combat-skilled-retreat. Cards are drawn right before each card is played (ActionCardHelper.resolveActionCard refuses a play while the hand is over the limit). Dice cards (EBS, Courageous, Blitz) may show dice diffs. Lucky Shot has no target here; the Blitz bombardment roll (dice) lives only in ac-combat-dice-cards.",
+  "description": "All ac-combat scenarios chained on one base (pbd60 save 122, space combat at 308 mentak vs muaat) so one live run covers them: ac-combat-sabotage-cancel, ac-combat-repairs-upgrade, ac-combat-parley-salvage, ac-combat-crash-landing, ac-combat-bunker, ac-combat-dice-cards, ac-combat-skilled-retreat. Cards are drawn right before each card is played (ActionCardHelper.resolveActionCard refuses a play while the hand is over the limit). Dice cards (EBS, Courageous, Blitz) may show dice diffs. Lucky Shot and Scuttle are Action: cards (component actions), which cannot be played during this tactical action (one action per turn, enforced since 01:50): they live in ac-combat-lucky-scuttle, on turns of their own; the Blitz bombardment roll (dice) lives only in ac-combat-dice-cards.",
+  "diffIgnore": [
+    "stored.muaatlatestAssignHits"
+  ],
   "base": {
     "recording": "pbd60",
     "index": 122
@@ -150,73 +153,6 @@
         "option": "salvageStep2_mentak"
       },
       "as": "muaat"
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "lucky",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "scuttle",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "lucky"
-        }
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.resolve",
-        "option": "startToLuckyShotAUnit_0"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "scuttle"
-        }
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.resolve",
-        "option": "startToScuttleAUnit_0"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "scuttleIn_"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "scuttleOn_"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "endScuttle_"
-      },
-      "as": "mentak"
     },
     {
       "command": "ac draw_specific_ac",

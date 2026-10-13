@@ -1,6 +1,9 @@
 {
   "name": "ac-combat-dice-cards",
   "description": "pbd60 save 122 (combat at 308): Fire Team (resolveFireTeam, no stored rolls -> message only), Experimental Battlestation (resolveEBSStep1_308 -> space cannon roll), Courageous to the End (courageousStarter -> courageousFire_destroyer_*), Blitz (resolveBlitz_308). EBS/Courageous/Blitz roll dice: a dice diff there is expected; the point is that each step is typed/accepted and the non-dice state matches.",
+  "diffIgnore": [
+    "stored.muaatlatestAssignHits"
+  ],
   "base": { "recording": "pbd60", "index": 122 },
   "setup": [
     { "command": "ac draw_specific_ac", "options": { "ac_id": "fire_team", "faction_or_color": "muaat" } },

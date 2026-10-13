@@ -120,8 +120,14 @@ the engine's result differs from the legacy result (legacy is right unless prove
 * **≤ 2 concurrent replays/scenarios per agent.** Each step reloads a save and waits for the bot (~3–10 s/step).
 * **Keep runs short**: replay ranges of ≤ 30 steps (`--from/--to`), use `find.mjs` to target steps; no full-game
   replays unless asked.
-* **Reuse forks**: create once, then always pass `--fork pbdN` / `--forks pbdA,pbdB`. Never run two runs on the same
+* **Reuse forks** (replay.mjs): create once, then always pass `--fork pbdN`. Never run two runs on the same
   fork at the same time (they overwrite each other's state).
+* **scenario.mjs creates a fresh fork per run** (two with `--diff`; ~10 s each) and ends it when the run finishes or
+  dies (`--keep` leaves it running). Harness-created forks are capped machine-wide (`SCEN_MAX_FORKS`, default 4: a
+  run waits for a free lease in `$ENGINE_RUN_DIR/fork-leases`) and created one at a time (`fork-create.lock`; the
+  game's fun name is a nonce the creator checks, so two runs never share a fork). `--forks pbdA,pbdB` still reuses
+  forks: every message with buttons in them is deleted first (no window, payment or turn menu of an earlier run stays
+  answerable; `--no-reset` skips it) and the base save is loaded as usual. Reused forks are never ended by the run.
 * **Clean up**: when done, end your forks — `/game end` from the fork's actions channel is what a person would do;
   simplest: tell your caller the fork names so they can be reused, and do not leave runs in the background.
 * Never restart the bot/shim; if it restarts under you the harness waits and retries once.
