@@ -229,7 +229,7 @@ export const VOLATILE_GAME_KEYS = new Set([
  */
 export const ENGINE_ONLY_STORED_KEYS = [/^scPrimaryDone\d+$/];
 
-export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^engineCombatLedger$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/, /NothingMessage$/];
+export const VOLATILE_STORED_KEYS = [/^engineExploreLog$/, /^roundStartedAt\d+$/, /^engineCombatLedger$/, /^savedChannelType$/, /[Pp]ing/, /^lastActive/, /MsgID|MessageID|messageId|ThreadId/, /\d{15,20}/, /NothingMessage$/];
 
 /** The game's stored values: `check_reacts_info k1,v1:k2,v2:...` (see Game.getStoredValue). */
 export function storedValues(v: string): Map<string, string> {

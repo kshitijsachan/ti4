@@ -1,0 +1,93 @@
+{
+  "name": "sc-follow-old-round",
+  "description": "Live pbd436 (HIGH): after a bot restart the engine's rebuild re-opened round 2's strategy-card plays (Imperial / Politics / Technology / Warfare) in round 3, where only Leadership was played, and ACCEPTED answers on them (a research on the old Technology play, a secret objective draw on the old Imperial play). The play messages keep their buttons when the round ends; StrategyCardResolveKind.obsolete had no verdict for a play of an earlier round (and none at all at capture after a restart: its card map is filled while typing, after the obsolete check). Fix (bot sc-follow-obsolete): a play prompt is obsolete / refused when its card is not played this round, it is older than this round's play of the card, or it is (in the thread of) an earlier round's recorded play; generically, round-scoped kinds (agenda, status, strategy cards, combat, tactical, production, turn menu) posted before the round started (stored roundStartedAt<round>) are obsolete. Here: round 2 (pinned pbd436 save 220): Leadership re-played and Technology played, the round ends, round 3 starts with Leadership played again; rebuild as after a restart. Single fork, engine answers only (the answerOn steps have no legacy equivalent: the original code still runs an old button).",
+  "base": {
+    "save": "saves/pbd436-220-round2-action.txt",
+    "repost": false
+  },
+  "setup": [
+    "/player sc_unplay strategy_card:1 faction_or_color:saar",
+    "/player sc_play strategy_card:1 faction_or_color:saar",
+    {
+      "wait": 2500
+    },
+    "/player sc_play strategy_card:7 faction_or_color:ralnel",
+    {
+      "wait": 2500
+    },
+    "/status cleanup confirm:YES",
+    "/game start_phase specific_phase:strategy",
+    "/player sc_pick strategy_card:1 faction_or_color:saar",
+    "/player sc_pick strategy_card:7 faction_or_color:yssaril",
+    "/player sc_pick strategy_card:5 faction_or_color:ralnel",
+    "/player sc_pick strategy_card:8 faction_or_color:saar",
+    "/player sc_pick strategy_card:3 faction_or_color:yssaril",
+    "/player sc_pick strategy_card:6 faction_or_color:ralnel",
+    "/game start_phase specific_phase:action",
+    "/player sc_play strategy_card:1 faction_or_color:saar",
+    {
+      "wait": 3000
+    }
+  ],
+  "steps": [
+    {
+      "engine": "rebuild",
+      "expect": {
+        "decision": [
+          {
+            "kind": "strategy_card.resolve",
+            "value": {
+              "strategyCard": 7
+            },
+            "open": false
+          },
+          {
+            "kind": "strategy_card.resolve",
+            "value": {
+              "strategyCard": 1
+            },
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "answerOn": "acquireATechWithSC_first",
+      "as": "saar",
+      "refused": true
+    },
+    {
+      "answerOn": "sc_follow_7",
+      "as": "saar",
+      "refused": true
+    },
+    {
+      "answerOn": "sc_no_follow_1",
+      "pick": "oldest",
+      "as": "yssaril",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "value": {
+          "strategyCard": 1,
+          "action": "decline"
+        }
+      },
+      "as": "yssaril"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": [
+      {
+        "kind": "strategy_card.resolve",
+        "value": {
+          "strategyCard": 7
+        },
+        "open": false
+      }
+    ]
+  }
+}
