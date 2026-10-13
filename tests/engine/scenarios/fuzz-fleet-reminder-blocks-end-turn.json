@@ -1,6 +1,6 @@
 {
   "name": "fuzz-fleet-reminder-blocks-end-turn",
-  "description": "Fuzz pbd385 / pbd386 and playtest 8 pbd469 (Mentak: 4 ships at fleet pool 3 after producing a destroyer; 'Dismiss These Buttons' closed the reminder with nothing removed and End Turn went through). Fix (bot fuzz-triage-2): while ButtonHelper.fleetReport says the system is over its limits, the reminder's Dismiss is refused (units.remove validate + the deleteButtons handler; value.blocked carries the reason for the web) and turn.action End Turn / Pass are refused, judged on the board whether or not a reminder is open (value.overLimits); removing the excess lets the turn end. Base: pinned pbd385 saves 141 (+142: Xxcha's End Turn prompt; cv, 2 ca, fs at 313 with fleet pool 3); one more destroyer added there posts the reminder. A legacy End Turn click (the button itself, not an engine answer) is refused the same way (ScFollowGate.refuse hook: turnEnd, endOfTurnAbilities, passForRound, passingAbilities, concludeAndEndTurn).",
+  "description": "Fuzz pbd385 / pbd386 and playtest 8 pbd469 (Mentak: 4 ships at fleet pool 3 after producing a destroyer; 'Dismiss These Buttons' closed the reminder with nothing removed and End Turn went through). Fix (bot fuzz-triage-2): while ButtonHelper.fleetReport says the system is over its limits, the reminder's Dismiss is refused (units.remove validate + the deleteButtons handler; value.blocked carries the reason for the web) and turn.action End Turn / Pass are refused, judged on the board whether or not a reminder is open (value.overLimits); removing the excess lets the turn end. Base: pinned pbd385 saves 141 (+142: Xxcha's End Turn prompt; cv, 2 ca, fs at 313 with fleet pool 3); one more destroyer added there posts the reminder. A legacy End Turn click (the button itself, not an engine answer) is refused the same way (ScFollowGate.refuse hook: turnEnd, endOfTurnAbilities, passForRound, passingAbilities, concludeAndEndTurn). Since pt9 End Turn also waits on the played card's mandatory primary parts: the pinned save has Politics played with no open primary prompt, so the scenario marks its mandatory part (draw 2 action cards) done in the stored scPrimaryDone3 first; the End Turn refusals that follow come from the fleet limit alone.",
   "base": {
     "save": "saves/fuzz-pbd385-141.txt",
     "next": "saves/fuzz-pbd385-142.txt"
@@ -17,6 +17,9 @@
           }
         ]
       }
+    },
+    {
+      "command": "/bothelper edit_stored_value stored_key:scPrimaryDone3 stored_value:action_cards game_name:${fork}"
     },
     {
       "answer": {
