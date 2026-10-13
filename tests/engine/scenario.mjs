@@ -41,7 +41,7 @@ import { loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
 import { controlsOf } from "./lib/shim.ts";
 import { checkSnapshot } from "./lib/invariants.ts";
-import { answer, act, openDecisions, optionFor, engineState } from "./lib/engine.ts";
+import { answer, act, openDecisions, optionFor, engineState, timingSummary } from "./lib/engine.ts";
 import { newNonce } from "./lib/materialize.ts";
 
 const SCEN_DIR = join(ENGINE_DIR, "scenarios");
@@ -610,6 +610,12 @@ for (const { phase, st } of all) {
 if (firstDiff) fail(`legacy and engine saves differ from step ${firstDiff.n ?? firstDiff.step} (${firstDiff.phase}) on: ${firstDiff.diffs.slice(0, 5).map((d) => d.key).join(", ")}`);
 for (const r of runs) for (const f of await checkExpect(r, sc.expect)) fail(`expect (${r.label}): ${f}`);
 report.firstDiff = firstDiff;
+// Engine answer latency (bot HTTP + its REST round trips to the shim, game lock): the click-latency benchmark.
+const timings = timingSummary();
+if (timings) {
+  report.answerTimings = { answer: timingSummary("answer"), act: timingSummary("act") };
+  console.log(`engine answers: ${timings}${timingSummary("act") ? ` (direct actions ${timingSummary("act")})` : ""}`);
+}
 
 const out = opt("--out", join(ensureRunDir(), "reports", `scenario-${(sc.name ?? basename(file)).replace(/[^\w.-]+/g, "_")}${diffMode ? "-diff" : ""}.json`));
 mkdirSync(join(ensureRunDir(), "reports"), { recursive: true });

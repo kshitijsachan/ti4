@@ -41,7 +41,11 @@ export class Rest {
       // Anything but a message / interaction / reaction write may change who sees what: drop cached canView answers.
       // Before and after: the handler may await, and a canView answered meanwhile must not outlive the change.
       const permsMayChange = method !== "GET" && !/\/(messages|interactions|reactions|webhooks|typing)(\/|$)/.test(path);
-      if (permsMayChange) this.store.invalidateViews();
+      // A write to one channel (/channels/:c/..., thread members, overwrites, archive flags) can only change who sees
+      // that channel and its threads: drop just those answers. Anything else (roles, members, guild-wide) drops all.
+      const scope = /^\/channels\/(\d+)(\/|$)/.exec(path)?.[1];
+      const invalidate = () => (scope ? this.store.invalidateChannels([scope]) : this.store.invalidateViews());
+      if (permsMayChange) invalidate();
       const done = activity(`rest ${method} ${path}`);
       try {
         await r.handler({ req, res, params, query, body });
@@ -50,7 +54,7 @@ export class Rest {
         if (!res.headersSent) discordError(res, 500, 0, "shim error");
       } finally {
         done();
-        if (permsMayChange) this.store.invalidateViews();
+        if (permsMayChange) invalidate();
       }
       if (!res.headersSent) noContent(res);
       log.debug(`${method} ${path} -> ${res.statusCode}`);

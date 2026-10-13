@@ -64,8 +64,28 @@ function outcome(r: { status: number; body: any }): AnswerOutcome {
   };
 }
 
+/** Wall time of every answer / direct action this process made (ms), for the latency summary (scenario.mjs). */
+export const answerTimings: { kind: "answer" | "act"; ms: number }[] = [];
+
+/** "n 12, p50 340ms, p90 900ms, max 1.2s" over answerTimings (all, or one kind). */
+export function timingSummary(kind?: "answer" | "act"): string | null {
+  const ms = answerTimings.filter((t) => !kind || t.kind === kind).map((t) => t.ms).sort((a, b) => a - b);
+  if (!ms.length) return null;
+  const q = (p: number) => Math.round(ms[Math.min(ms.length - 1, Math.floor(p * ms.length))]);
+  return `n ${ms.length}, p50 ${q(0.5)}ms, p90 ${q(0.9)}ms, max ${Math.round(ms[ms.length - 1])}ms, sum ${Math.round(ms.reduce((a, b) => a + b, 0))}ms`;
+}
+
 /** POST …/decisions/{id}/answer as `userId` (Bot token). `body`: {optionId} | {optionId, values} | {payload} | {optionId:"submit", inputs}. */
 export async function answer(game: string, decisionId: string, userId: string, body: Json): Promise<AnswerOutcome> {
+  const t0 = performance.now();
+  try {
+    return await answerOnce(game, decisionId, userId, body);
+  } finally {
+    answerTimings.push({ kind: "answer", ms: performance.now() - t0 });
+  }
+}
+
+async function answerOnce(game: string, decisionId: string, userId: string, body: Json): Promise<AnswerOutcome> {
   const r = await engineApi(`/${encodeURIComponent(game)}/decisions/${encodeURIComponent(decisionId)}/answer`, {
     userId,
     requestId: `bt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -76,6 +96,15 @@ export async function answer(game: string, decisionId: string, userId: string, b
 
 /** Direct action on a decision (tactical.move → "move", tactical.land → "land", combat.hits → "combat-plan"). */
 export async function act(game: string, decisionId: string, action: string, userId: string, body: Json): Promise<AnswerOutcome> {
+  const t0 = performance.now();
+  try {
+    return await actOnce(game, decisionId, action, userId, body);
+  } finally {
+    answerTimings.push({ kind: "act", ms: performance.now() - t0 });
+  }
+}
+
+async function actOnce(game: string, decisionId: string, action: string, userId: string, body: Json): Promise<AnswerOutcome> {
   const r = await engineApi(`/${encodeURIComponent(game)}/decisions/${encodeURIComponent(decisionId)}/${action}`, {
     userId,
     requestId: `bt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

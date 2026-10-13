@@ -355,12 +355,12 @@ export class Autopilot {
 
   /**
    * Every channel of a game (its channels and their threads, any type, in state order), from an index rebuilt when
-   * channels or permissions change (Store.viewGeneration) and at least every 10 s: the loops that need one game's
+   * channels change (Store.channelGeneration) and at least every 10 s: the loops that need one game's
    * channels walked all 3600+ channels of every game for it.
    */
   gameChannels(game: string): Json[] {
     const store = this.hub.store;
-    if (this.byGameGen !== store.viewGeneration || Date.now() - this.byGameAt > 10_000) {
+    if (this.byGameGen !== store.channelGeneration || Date.now() - this.byGameAt > 10_000) {
       const s = store.state;
       this.byGame = new Map();
       for (const ch of Object.values(s.channels)) {
@@ -368,7 +368,7 @@ export class Autopilot {
         if (g) (this.byGame.get(g) ?? this.byGame.set(g, []).get(g)!).push(ch);
       }
       this.byGameAt = Date.now();
-      this.byGameGen = store.viewGeneration;
+      this.byGameGen = store.channelGeneration;
     }
     return this.byGame.get(game) ?? [];
   }
