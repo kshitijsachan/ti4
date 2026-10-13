@@ -18,6 +18,7 @@ import {
   who,
 } from "./markup.ts";
 import { exploreEffect } from "./explore.ts";
+import { humanActionLabel } from "../../decisions/model/phrasing.ts";
 
 /** The parts of a Discord message the log reads, flattened. */
 export type LogMessage = {
@@ -287,13 +288,14 @@ const rules: Rule[] = [
     const hit = actorAt(m.content.slice(1));
     const rest = hit?.rest ?? m.content.slice(1);
     const rw = rest.match(/rewound the game to just after: \*\*(.+?)\*\*/);
-    if (rw) return ev({ kind: "edit", importance: 3, actor: hit?.actor, summary: [txt("rewound the game to just after "), b(rw[1])] });
+    if (rw) return ev({ kind: "edit", importance: 3, actor: hit?.actor, summary: [txt("rewound the game to just after "), b(humanActionLabel(rw[1]))] });
     const un = rest.match(/undid: \*\*(.+?)\*\*/);
     if (un) {
       // Undoing a rewind: the undone step is the rewind notice itself ("⏪ Solo rewound the game to: …").
       const rewind = un[1].match(/rewound the game to(?: just after)?:?\s*(.+)$/);
       if (rewind) return ev({ kind: "edit", importance: 2, actor: hit?.actor, summary: [txt("undid the rewind to "), b(rewind[1])] });
-      return ev({ kind: "edit", importance: 2, actor: hit?.actor, summary: [txt("undid "), b(un[1])] });
+      // "Alice pressed “command_tokens.adjust”" → "Alice placed command tokens" (pt8: the raw label showed).
+      return ev({ kind: "edit", importance: 2, actor: hit?.actor, summary: [txt("undid "), b(humanActionLabel(un[1]))] });
     }
     return null;
   },

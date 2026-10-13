@@ -69,3 +69,17 @@ export function followHeader(state: GameState | null | undefined, myId?: string 
     : null;
   return { mine, others };
 }
+
+/**
+ * A played card I did not follow because the game declined it for me (no strategy token, no home space dock, every
+ * secret scored): its panel stays on offer with the follow greyed and why (pt8: only Trade, never auto-declined,
+ * showed it).
+ */
+export function autoDeclinedFollow(d: Decision, state: GameState | null | undefined): boolean {
+  if (d.kind !== "strategy_card.resolve" || !state) return false;
+  const me = state.players.find((p) => p.self);
+  const sc = d.window?.subject?.strategyCard;
+  if (!me || typeof sc !== "number" || d.window?.subject?.holder === me.faction) return false;
+  const r = state.strategyCards.find((c) => c.number === sc)?.reactions?.find((x) => x.faction === me.faction);
+  return !!r && r.status === "declined" && !!r.cantFollowReason;
+}
