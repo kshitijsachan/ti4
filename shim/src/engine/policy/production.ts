@@ -10,6 +10,7 @@ import {
   isPaymentDone,
   isPlacement,
   isProductionDone,
+  planObjectivePayment,
   type ProductionCap,
   type PaymentDoneValue,
   type PaymentPayload,
@@ -46,6 +47,7 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
   const opts = d.options.filter((o) => !o.disabled && o.value) as Option<PaymentValue>[];
   const done = opts.map((o) => o.value).find(isPaymentDone);
   if (!done) return null;
+  if (done.context === "poscore" && done.objectiveCost) return planScorePayment(d, done, state, me);
   const req = (d.progress?.required ?? {}) as { cost?: number | null; remaining?: number | null };
   const cost = req.cost ?? done.cost ?? contextCost(done, state, me);
   const currency = done.currency;
@@ -132,6 +134,25 @@ export function planPayment(d: PaymentSpend, state: GameState | null, me: string
  *   for the card's holder; a follower's research costs 4 resources.
  * null otherwise (left to the planner / fallback).
  */
+/**
+ * Paying a spend objective before it is scored (context "poscore": Amass Wealth, Erect a Monument, ...): the cheapest
+ * planets + trade goods that cover objectiveCost on their own (each planet counts resources or influence). The engine
+ * adds them to anything already spent on the prompt, so a partial manual payment can only make it overpay.
+ */
+function planScorePayment(d: PaymentSpend, done: PaymentDoneValue, state: GameState | null, me: string): PaymentPlan | null {
+  const cost = done.objectiveCost!;
+  const self = state?.players.find((p) => p.userId === me);
+  const exhausted = new Set(self?.exhaustedPlanets ?? []);
+  const planets = d.options
+    .map((o) => (o.disabled ? null : o.value))
+    .flatMap((v) => (v && "source" in v && v.source === "planet" && !exhausted.has(v.planet) ? [{ id: v.planet, resources: v.resources, influence: v.influence, weight: (v.techSpecialties?.length ? SKIP_WEIGHT : 0) + (v.legendary ? LEGENDARY_WEIGHT : 0) }] : []))
+    .slice(0, 16);
+  const hasTg = d.options.some((o) => o.value && "source" in o.value && o.value.source === "tg");
+  const plan = planObjectivePayment(cost, planets, hasTg ? (self?.tg ?? 0) : 0, done.tgValue);
+  if (!plan) return null; // cannot cover it: leave the prompt (the planner / a person decides; Score is refused)
+  return { payload: { planets: plan.planets, tg: plan.tg }, why: `score ${done.objective ?? "the objective"}: ${plan.planets.length} planets + ${plan.tg} trade goods` };
+}
+
 export function contextCost(done: PaymentDoneValue, state: GameState | null, me: string): number | null {
   if (done.context === "leadership" && done.currency === "inf") return 0;
   if (done.context === "technology" && done.currency === "res" && done.tech) {

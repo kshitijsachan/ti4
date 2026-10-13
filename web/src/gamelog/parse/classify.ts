@@ -693,6 +693,28 @@ const rules: Rule[] = [
       summary: [txt("scored "), ...(emoji ? emo(emojiRef(emoji)) : []), b(name), ...(label ? [txt(` (${label})`)] : [])],
     });
   },
+  /* Game over (EndGameService): "**Game: `pbd387` has ended!**", then the summary whose player list marks the
+     winner ("> `3.` <faction emoji><color emoji>**Ethereal** someone - 2VP 👑WINNER👑"). The summary is the event (a
+     major one: playtest 6 pbd387, the log had no game end to rewind to); the heading and the archive notices are noise. */
+  (m) => (/^\*\*Game: `[^`]+` has ended!\*\*/.test(m.content.trim()) ? noise("game end heading") : null),
+  (m) => {
+    if (!/^\*\*Game: __[^_]+__\*\*/.test(m.content.trim())) return null;
+    const lines = m.content.split("\n").filter((l) => /WINNER/.test(l));
+    const w = lines[0]?.match(/(<a?:\w+:\d+>)(<a?:\w+:\d+>)\*\*([^*]+)\*\*\s*(<@\d+>)?.*?-\s*\*?(\d+)\s*VP/);
+    /* Same shape as a turn line ("<faction><@user> <color>**Color**"), so the winner reads like any other actor. */
+    const winner = w ? actorAt(`${w[1]}${w[4] ?? ""} ${w[2]}**${w[3]}** won`)?.actor : undefined;
+    return ev({
+      kind: "objective",
+      importance: 3,
+      actor: winner,
+      dedupe: `game-end:${m.content.match(/__([^_]+)__/)?.[1] ?? ""}`,
+      summary: w ? [txt(`won the game with ${w[5]} VP${lines.length > 1 ? " (shared victory)" : ""}`)] : [txt("Game over")],
+    });
+  },
+  (m) =>
+    /^(?:This game's channels' permissions have been updated\.|Role deleted: |Channel has been moved to Category )/.test(m.content.trim())
+      ? noise("game end housekeeping")
+      : null,
   (m) => {
     const hit = actorAt(m.content);
     if (!hit) return null;
