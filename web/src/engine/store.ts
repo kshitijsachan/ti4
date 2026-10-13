@@ -29,6 +29,15 @@ export type EngineStore = {
   hidden: ReadonlySet<string>;
   hide(decisionId: string): void;
   unhideAll(): void;
+  /**
+   * Prompts I set aside for now ("Done" on my card with only an optional repeat left, "Skip" on Warfare's redistribute
+   * offer): they wait behind "Available now" instead of leading (this page only).
+   */
+  deferred: ReadonlySet<string>;
+  defer(decisionId: string): void;
+  /** Older copies of a prompt I answered a newer copy of (stacked Pillage offers): left out (this page only). */
+  superseded: ReadonlySet<string>;
+  supersede(decisionIds: readonly string[]): void;
 };
 
 const HIDDEN_KEY = "ti4online.engine.hidden";
@@ -105,6 +114,16 @@ export const engineStore = createStore<EngineStore>((set) => ({
     writeHidden(new Set());
     set({ hidden: new Set() });
   },
+  deferred: new Set(),
+  defer: (id) => set((s) => ({ deferred: new Set(s.deferred).add(id) })),
+  superseded: new Set(),
+  supersede: (ids) =>
+    set((s) => {
+      if (!ids.length) return {};
+      const next = new Set(s.superseded);
+      for (const id of ids) next.add(id);
+      return { superseded: next };
+    }),
 }));
 
 if (import.meta.env.DEV && typeof window !== "undefined") (window as unknown as { __engine?: unknown }).__engine = engineStore;

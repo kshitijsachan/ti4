@@ -12,6 +12,7 @@ import { strategyCardName } from "../tactical/names";
 import { unavailableReason } from "../explore/types";
 import { sourceName } from "../../sourceNames";
 import classes from "./components.module.css";
+import { engineStore } from "../../store";
 
 export type RendererProps<D> = {
   decision: D;
@@ -183,8 +184,22 @@ export function ChoosePanel({ decision, state, answer, pendingOptionId }: Render
           ))}
       </div>
       <Rest options={opts} pendingOptionId={pendingOptionId} answer={answer} />
+      {redistributeOnly(opts) && (
+        <div className={classes.row}>
+          {/* Optional (Warfare: "you may redistribute"): set aside, it waits behind "Available now". */}
+          <UnstyledButton className={cx(classes.option, classes.quiet)} onClick={() => engineStore.getState().defer(decision.id)} disabled={!!pendingOptionId}>
+            <span>Skip — keep my tokens as they are</span>
+          </UnstyledButton>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Warfare's redistribute offer with nothing else on it (after its tactical action): optional. */
+function redistributeOnly(opts: Option<ChooseValue>[]): boolean {
+  const typed = opts.filter((o) => o.value);
+  return typed.length > 0 && typed.every((o) => (o.value as unknown as Record<string, unknown>).source === "warfare" && (o.value as unknown as Record<string, unknown>).choice === "redistribute");
 }
 
 const GROUPS: [string, (c: string) => boolean][] = [

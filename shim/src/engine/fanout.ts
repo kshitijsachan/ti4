@@ -120,6 +120,8 @@ export class EngineFanout {
     const values = Array.isArray(op.values) ? op.values.map(String) : undefined;
     const inputs = isObject(op.inputs) ? Object.fromEntries(Object.entries(op.inputs).map(([k, v]) => [k, String(v)])) : undefined;
     if (!game || !op.decisionId || !what) return reply({ ok: false, status: "bad_option", error: "game, decisionId and an option, payload or action are required" });
+    /* Where a click's time goes (pt8: 5+ s per click): our checks, then the bot (its game lock + the handler). */
+    const t0 = performance.now();
     const snap = await engine.decisionsSnapshot(game);
     const d = snap?.decisions.find((x) => x.id === op.decisionId);
     if (!d) return reply({ ok: false, status: "not_found", error: "That prompt is no longer open." });
@@ -128,11 +130,14 @@ export class EngineFanout {
     if (refusal === "answered") return reply({ ok: false, status: "refused", error: "You already answered this." });
     if (refusal) return reply({ ok: false, status: "forbidden", error: "That prompt is for another player." });
     const common = { expectedSeq: op.expectedSeq, requestId: op.requestId, userId: seat.userId };
+    const t1 = performance.now();
     const result = op.action
       ? await engine.act(game, d.id, op.action, { ...(op.body ?? {}), ...common })
       : await engine.answer(game, d.id, { optionId: op.optionId, payload: isObject(op.payload) ? op.payload : undefined, values, inputs, ...common });
     if (!result) return reply({ ok: false, status: "error", error: "The game server did not answer." });
-    log.info(`engine answer ${seat.userId} ${game} ${d.kind} ${what} -> ${result.status}${result.error ? `: ${result.error}` : ""}`);
+    const t2 = performance.now();
+    const timing = t2 - t0 >= 1000 ? ` (${Math.round(t2 - t0)}ms: shim ${Math.round(t1 - t0)}ms, bot ${Math.round(t2 - t1)}ms)` : "";
+    log.info(`engine answer ${seat.userId} ${game} ${d.kind} ${what} -> ${result.status}${result.error ? `: ${result.error}` : ""}${timing}`);
     reply(result);
   }
 

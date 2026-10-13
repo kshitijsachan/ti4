@@ -1,4 +1,4 @@
-import { buttonUndoPhrase, lowerFirst, plainId } from "../decisions/model/phrasing.ts";
+import { buttonUndoPhrase, humanActionLabel, lowerFirst, plainId } from "../decisions/model/phrasing.ts";
 import type { Flow } from "./flows.ts";
 import type { UndoPoint } from "./types";
 
@@ -173,8 +173,8 @@ export function asTheirs(label: string, point: UndoPoint): string {
  * from the button id the bot logged ("… (milty_slice_D)") instead, or just say a button was pressed.
  */
 export function readableLabel(label: string, point: UndoPoint): string {
-  if (!/“[^\p{L}\p{N}]*”/u.test(label)) return label;
   const id = pointButtonId(point);
+  if (!/“[^\p{L}\p{N}]*”/u.test(label)) return humanActionLabel(label, id);
   const draft = /^(?:milty|queueMilyPick)_(slice|order|faction)_(\w+)$/.exec(id);
   const what = draft
     ? draft[1] === "slice"
@@ -182,7 +182,8 @@ export function readableLabel(label: string, point: UndoPoint): string {
       : draft[1] === "order"
         ? `picked seat ${draft[2]}`
         : `picked ${draft[2]}`
-    : "pressed a button";
+    : undefined;
+  if (!what) return humanActionLabel(label, id);
   return label.replace(/pressed “[^\p{L}\p{N}]*”/u, what);
 }
 

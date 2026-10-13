@@ -539,3 +539,37 @@
     max-height: 40vh;
   }
 }
+
+/* The button I just clicked, while the engine works on it (EngineDecisionHost markPressed). */
+.body :global(button[data-engine-pressing]) {
+  position: relative;
+  cursor: progress;
+  opacity: 0.8;
+  padding-right: 26px;
+}
+
+.body :global(button[data-engine-pressing])::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: engine-press-spin 0.7s linear infinite;
+}
+
+@keyframes engine-press-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body :global(button[data-engine-pressing])::after {
+    animation-duration: 2s;
+  }
+}
