@@ -1,6 +1,6 @@
 {
   "name": "agendas-crisis-sc",
-  "description": "Galactic Crisis Pact elects strategy card 2 (Diplomacy): secondary prompts for everyone.",
+  "description": "Galactic Crisis Pact elects strategy card 2 (Diplomacy): secondary prompts for everyone. The Diplomacy secondary offer must stay open for every player (live fork pbd468: StrategyCardResolveKind.obsolete closed it because no one holds a card in the agenda phase; fix bot sc-follow-obsolete).",
   "base": {
     "recording": "pbd33",
     "index": 158,
@@ -15,7 +15,56 @@
       "as": "nekro"
     },
     {
-      "wait": 1500
+      "wait": 1500,
+      "expect": {
+        "decision": [
+          {
+            "kind": "strategy_card.resolve",
+            "scope": "table",
+            "value": {
+              "strategyCard": 2
+            },
+            "as": "winnu",
+            "open": true
+          },
+          {
+            "kind": "strategy_card.resolve",
+            "scope": "table",
+            "value": {
+              "strategyCard": 2
+            },
+            "as": "nekro",
+            "open": true
+          },
+          {
+            "kind": "strategy_card.resolve",
+            "scope": "table",
+            "value": {
+              "strategyCard": 2
+            },
+            "as": "mahact",
+            "open": true
+          },
+          {
+            "kind": "strategy_card.resolve",
+            "scope": "table",
+            "value": {
+              "strategyCard": 2
+            },
+            "as": "naaz",
+            "open": true
+          },
+          {
+            "kind": "strategy_card.resolve",
+            "scope": "table",
+            "value": {
+              "strategyCard": 2
+            },
+            "as": "keleresa",
+            "open": true
+          }
+        ]
+      }
     }
   ],
   "expect": {

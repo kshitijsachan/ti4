@@ -525,7 +525,8 @@ async function checkExpect(run, expect) {
     const like = (o, v) => !!o && Object.entries(v).every(([k, x]) => JSON.stringify(o[k]) === JSON.stringify(x));
     for (const e of [].concat(expect.decision)) {
       const ds = (await openDecisions(run.fork.game)).filter(
-        (d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx)) && (!e.scope || d.scope === e.scope)
+        // as: the player's own decision, or a table decision whose window lists them as eligible.
+        (d) => d.kind === e.kind && (!e.as || d.target?.userId === userOf(e.as, run.ctx) || (d.scope === "table" && !d.target?.userId && !!d.window?.eligible?.includes(userOf(e.as, run.ctx)))) && (!e.scope || d.scope === e.scope)
           && (!e.value || like(d.window?.subject, e.value) || d.options.some((o) => like(o.value, e.value))),
       );
       if ((e.open ?? true) !== ds.length > 0)
