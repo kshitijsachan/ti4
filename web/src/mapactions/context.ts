@@ -11,6 +11,7 @@ import type { PlayState } from "@/discord";
 import { idFaction } from "@/decisions/model/controls";
 import { useEngine } from "@/engine/store";
 import { stepKindOf } from "./stepIds";
+import { engineActivation, type EngineActivation } from "./activateOffer";
 
 /** Which step of a tactical action the bot is waiting on me for, read from its newest prompt to me. */
 export type TacticalStep =
@@ -31,6 +32,8 @@ export type MapActionContext = {
   step: TacticalStep;
   /** The newest other prompt whose choices are systems on the map (map clicks can answer it). */
   pick: SystemPick | null;
+  /** My open tactical.activate decision's systems (and whether activating spends a token), when the engine has one. */
+  activateOffer: EngineActivation | null;
 };
 
 export type SystemPick = {
@@ -192,5 +195,7 @@ export function useMapActionContext(
     return byPosition ? { prompt: newest, byPosition } : null;
   }, [prompts, me?.faction, systemNames]);
 
-  return { gameName, conn, scope, web, me, myTurn, step, pick };
+  const activateOffer = useMemo(() => (activateOpen ? engineActivation(activateOpen.options) : null), [activateOpen]);
+
+  return { gameName, conn, scope, web, me, myTurn, step, pick, activateOffer };
 }

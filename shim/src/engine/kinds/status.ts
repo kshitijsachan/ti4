@@ -139,7 +139,7 @@ export function commandTokensReinforcements(d: { progress?: { required?: unknown
 }
 export type CommandTokensAdjust = DecisionBaseOf<
   "command_tokens.adjust",
-  { action: "adjust"; pool: "tactic" | "fleet" | "strategy"; delta: 1 | -1; payload: boolean } | { action: "reset" }
+  { action: "adjust"; pool: "tactic" | "fleet" | "strategy"; delta: 1 | -1; payload: boolean; editor?: boolean } | { action: "reset" }
 >;
 
 export type StatusDecision =

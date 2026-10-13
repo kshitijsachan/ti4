@@ -147,3 +147,34 @@ test("technology bill (cost null) with no Technology card played: left to the ca
   const d = payment([planet("a", 4)], null, null, { context: "technology", for: "restech", tech: true } as Partial<PaymentValue>);
   assert.equal(planPayment(d, withCards([]), "u"), null);
 });
+
+test("spend objective (pay first, poscore): Amass Wealth covered with planets split between resources and influence + 3 trade goods", () => {
+  const d = payment([planet("a", 3, 0), planet("b", 0, 3), planet("c", 2, 2), planet("d", 1, 1), { source: "tg", amount: 1 }], null, null, {
+    context: "poscore",
+    currency: "both",
+    objective: "amass_wealth",
+    objectiveCost: { resources: 3, influence: 3, tg: 3 },
+  } as Partial<PaymentValue>);
+  const p = planPayment(d, state(4), "u");
+  assert.deepEqual(p?.payload.planets.sort(), ["a", "b"]);
+  assert.equal(p?.payload.tg, 3);
+});
+
+test("spend objective: extra trade goods stand in for a missing part; not enough trade goods = no plan", () => {
+  const extra = { context: "poscore", currency: "both", objective: "amass_wealth", objectiveCost: { resources: 3, influence: 3, tg: 3 } } as Partial<PaymentValue>;
+  const d = payment([planet("a", 3, 0), planet("b", 0, 1), { source: "tg", amount: 1 }], null, null, extra);
+  const p = planPayment(d, state(5), "u");
+  assert.deepEqual(p?.payload, { planets: ["a", "b"], tg: 5 });
+  assert.equal(planPayment(d, state(2), "u"), null);
+});
+
+test("spend objective in one currency (Erect a Monument: 8 resources)", () => {
+  const d = payment([planet("a", 4, 1), planet("b", 3, 0), planet("c", 2, 5), planet("d", 1, 1)], 8, 8, {
+    context: "poscore",
+    objective: "monument",
+    objectiveCost: { resources: 8, influence: 0, tg: 0 },
+  } as Partial<PaymentValue>);
+  const p = planPayment(d, state(0), "u");
+  const res = { a: 4, b: 3, c: 2, d: 1 } as Record<string, number>;
+  assert.ok((p?.payload.planets ?? []).reduce((n, x) => n + res[x], 0) >= 8);
+});

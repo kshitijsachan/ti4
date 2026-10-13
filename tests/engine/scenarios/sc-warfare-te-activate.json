@@ -1,0 +1,64 @@
+{
+  "name": "sc-warfare-te-activate",
+  "description": "Thunder's Edge Warfare primary by Mahact (pbd28 r1) with 0 tactic tokens (as Yssaril in playtest 7, pbd436), straight to the tactical action without redistributing first: 'Perform Tactical Action' closes the before-the-action Redistribute offer (it is offered again once the Warfare action ends), so the open decision is tactical.activate \u2014 answerable without a tactic token (its values carry token:false) \u2014 and no choose.confirm is left in front of it. Activating Mecatol Rex then opens movement and spends no token.",
+  "base": {
+    "recording": "pbd28",
+    "index": 78
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^primaryOfTeWarfare$"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "choose.confirm",
+        "option": "beginTacticalTeWarfare"
+      },
+      "as": "mahact"
+    },
+    {
+      "answer": {
+        "kind": "tactical.activate",
+        "value": {
+          "step": "system",
+          "position": "000"
+        }
+      },
+      "as": "mahact"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": [
+      {
+        "kind": "tactical.move",
+        "as": "mahact",
+        "open": true
+      },
+      {
+        "kind": "choose.confirm",
+        "as": "mahact",
+        "open": false
+      }
+    ],
+    "save": [
+      {
+        "key": "player[mahact].tactical_cc",
+        "eq": "0"
+      }
+    ]
+  },
+  "setup": [
+    {
+      "command": "player stats",
+      "options": {
+        "tactical_cc": "0",
+        "faction_or_color": "mahact"
+      }
+    }
+  ]
+}

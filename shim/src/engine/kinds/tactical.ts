@@ -31,9 +31,10 @@ export type TurnActionValue =
   | { action: "component" }
   | { action: "strategic"; strategyCard: StrategyCardNumber }
   /** abilities: opens the "pass with abilities" menu instead of passing now. waitingFor: see FollowWait. */
-  | { action: "pass"; abilities: boolean; waitingFor?: FollowWait[] }
+  /** overLimits: systems over the fleet pool / capacity ("1 over the fleet limit in 209 (3) — remove ships first"); the engine refuses end_turn / pass while any. */
+  | { action: "pass"; abilities: boolean; waitingFor?: FollowWait[]; overLimits?: string[] }
   /** abilities: opens the end-of-turn abilities menu (it carries a final end_turn with abilities=false). */
-  | { action: "end_turn"; abilities: boolean; waitingFor?: FollowWait[] }
+  | { action: "end_turn"; abilities: boolean; waitingFor?: FollowWait[]; overLimits?: string[] }
   /** "End Turn When All Have Reacted": the turn ends by itself once every player answered the card's follow window. */
   | { action: "end_turn_when_followed"; strategyCard: StrategyCardNumber; waitingFor?: FollowWait[] }
   /**
@@ -49,10 +50,15 @@ export type TurnAction = DecisionBase<"turn.action", TurnActionValue>;
  * Choosing the system to activate. A menu step lists the systems it leads to (`positions`), so a client that wants
  * position X answers the menu option whose positions include X, then the system option for X.
  */
+/**
+ * `token`: whether activating places (spends) a tactic token — false while an effect activates without one (Thunder's
+ * Edge Warfare primary, Naalu agent, L1Z1X hero…), when a system already holding my token is offered too. Absent on
+ * older bots (read as true).
+ */
 export type TacticalActivateValue =
-  | { step: "system"; position: TilePosition; tileId: TileId | null }
-  | { step: "ring"; ring: string; positions: TilePosition[] }
-  | { step: "distance"; distance: number; positions: TilePosition[] };
+  | { step: "system"; position: TilePosition; tileId: TileId | null; token?: boolean }
+  | { step: "ring"; ring: string; positions: TilePosition[]; token?: boolean }
+  | { step: "distance"; distance: number; positions: TilePosition[]; token?: boolean };
 export type TacticalActivate = DecisionBase<"tactical.activate", TacticalActivateValue>;
 
 // ---------------------------------------------------------------- tactical.move

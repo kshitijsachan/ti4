@@ -316,20 +316,34 @@ async function compareWithFresh(why) {
   const fresh = new ShimClient(seat.token, { game, label: "fresh", engine: true });
   await fresh.connect();
   for (let i = 0; i < 30 && fresh.view.status !== "live"; i++) await sleep(300);
-  await sleep(500);
-  fresh.close();
-  if (fresh.view.status !== "live") return;
-  if (Math.abs(fresh.view.seq - client.view.seq) > 0) {
-    await sleep(1500); // let the resumed stream catch up
-    if (fresh.view.seq > client.view.seq) return; // the game moved meanwhile: not comparable
-  }
+  if (fresh.view.status !== "live") return fresh.close();
+  // Both views follow the same live events once the fresh one has its snapshot, so correct views converge. Compare
+  // only once neither has moved for a while: a one-shot comparison right after a press read the resumed view a few
+  // events ahead of a snapshot taken a moment earlier (fuzz pbd412 / pbd430: "lacks 1" = a decision closed in between).
   const sig = (v) => Object.values(v.decisions).map((d) => `${d.id}@${d.revision}`).sort();
-  const a = sig(client.view);
-  const b = sig(fresh.view);
-  const missing = b.filter((x) => !a.includes(x));
-  const extra = a.filter((x) => !b.includes(x));
-  if (missing.length || extra.length)
-    rec.record({ kind: `engine:${why}-diverges`, detail: `after ${why} at seq ${client.view.seq}: resumed view lacks ${missing.length} (${missing.slice(0, 3).join(",")}), has ${extra.length} extra (${extra.slice(0, 3).join(",")}) vs a fresh snapshot (seq ${fresh.view.seq})`, step, trace: tr() });
+  let last = "";
+  let quietSince = Date.now();
+  let diff = null;
+  for (const end = Date.now() + 20000; Date.now() < end; ) {
+    await sleep(300);
+    if (client.view.status !== "live" || fresh.view.status !== "live") break;
+    const a = sig(client.view);
+    const b = sig(fresh.view);
+    const missing = b.filter((x) => !a.includes(x));
+    const extra = a.filter((x) => !b.includes(x));
+    if (!missing.length && !extra.length) break;
+    const key = `${client.view.seq}|${fresh.view.seq}`;
+    if (key !== last) {
+      last = key;
+      quietSince = Date.now();
+    } else if (Date.now() - quietSince >= 3000) {
+      diff = { missing, extra, seq: client.view.seq, freshSeq: fresh.view.seq };
+      break;
+    }
+  }
+  fresh.close();
+  if (diff)
+    rec.record({ kind: `engine:${why}-diverges`, detail: `after ${why} at seq ${diff.seq}: resumed view lacks ${diff.missing.length} (${diff.missing.slice(0, 3).join(",")}), has ${diff.extra.length} extra (${diff.extra.slice(0, 3).join(",")}) vs a fresh snapshot (seq ${diff.freshSeq}), both quiet for 3 s`, step, trace: tr() });
 }
 
 // ---- checks ----

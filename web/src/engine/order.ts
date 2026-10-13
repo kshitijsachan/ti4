@@ -4,6 +4,7 @@ import { factionName } from "./names";
 import { nothingToDecide, setupOnly } from "./optionKinds";
 import { readDecisionState } from "./draftState";
 import { owesFollow } from "./follows";
+import { sourceName } from "./sourceNames";
 
 /** Plain-words titles per kind; `legacy` (untyped) prompts take a title from their own text. */
 const TITLES: Record<string, string> = {
@@ -131,6 +132,10 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
     const card = sc !== undefined ? state?.strategyCards.find((c) => c.number === sc) : undefined;
     if (card) return `Pre-decline ${card.name}`;
   }
+  if (d.kind.startsWith("choose.")) {
+    const title = chooseTitle(d);
+    if (title) return title;
+  }
   const typed = TITLES[d.kind];
   if (typed) return typed;
   if (d.kind !== "legacy") {
@@ -138,6 +143,30 @@ export function decisionTitle(d: Decision, state?: GameState | null): string {
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
   return promptTitle(d.prompt) || (d.scope === "table" ? "Open to everyone" : "Your move");
+}
+
+type ChooseTitleValue = { source?: unknown; choice?: unknown } | null;
+
+/**
+ * A choose.* step's title from what asks it (its options' `source`), not the raw kind ("Choose confirm"): Warfare's
+ * offers say what they are, others name their card / ability.
+ */
+function chooseTitle(d: Decision): string {
+  const values = d.options.map((o) => o.value as ChooseTitleValue).filter((v): v is NonNullable<ChooseTitleValue> => !!v);
+  const source = values.map((v) => v.source).find((x): x is string => typeof x === "string" && !!x);
+  if (!source) return "";
+  if (source === "warfare") {
+    const tactical = values.some((v) => v.source === "warfare" && v.choice === "tactical");
+    return tactical ? "Warfare: your primary" : "Warfare: redistribute command tokens?";
+  }
+  return sourceName(source);
+}
+
+/** The redistribute offer of Warfare (before / after its tactical action), no other choice on it. */
+function warfareRedistribute(d: Decision): boolean {
+  if (d.kind !== "choose.confirm") return false;
+  const values = d.options.map((o) => o.value as ChooseTitleValue).filter((v): v is NonNullable<ChooseTitleValue> => !!v);
+  return values.length > 0 && values.every((v) => v.source === "warfare" && v.choice === "redistribute");
 }
 
 /** The small line above the title: who it is for when it is not just me. */
@@ -165,6 +194,8 @@ const IN_ADVANCE_KINDS = new Set(["strategy_card.pre_decline", "strategy_card.qu
 const AGENDA_BLOCKING = new Set(["action_card.sabotage", "agenda.when", "agenda.after", "agenda.vote", "agenda.vote_step", "agenda.tiebreak", "agenda.resolve"]);
 /** Table-wide steps that move the phase on: after my own homework, so I'm not asked to start the next phase first. */
 const PHASE_STEP = new Set(["status.advance", "setup.deal_secrets", "setup.reveal_objectives", "status.reveal_objective", "agenda.next"]);
+/** Hand upkeep answers: what they reopen (the hand panel) is not something I asked to play from. */
+const CARD_UPKEEP = new Set(["action_card.discard", "action_card.draw"]);
 const HOMEWORK = /^(status\.|command_tokens\.|planet\.ready|secret_objective\.)/;
 
 
@@ -206,8 +237,11 @@ export function orderDecisions(
         !(AGENDA_LIVE.has(d.kind) && !agendaPhase) &&
         !(d.kind === "agenda.when" && !!state?.agenda?.whensResolved) &&
         !(d.kind === "agenda.after" && !!state?.agenda?.aftersResolved) &&
-        /* Pre-declining a card I hold now (an offer left from before I took it): never mine to follow. */
-        !(d.kind === "strategy_card.pre_decline" && preDeclinesMine(d, state, selfId)) &&
+        /* Pre-declining a card I hold now (an offer left from before I took it): never mine to follow. Nor a card
+           already played: its follow window is what I answer now (pt7: "Pre-decline Warfare" stayed on offer). */
+        !(d.kind === "strategy_card.pre_decline" && (preDeclinesMine(d, state, selfId) || preDeclinePlayed(d, state))) &&
+        /* My played card once its primary is done and every other player answered it: nothing left on it (pt7). */
+        !(d.kind === "strategy_card.resolve" && !!myFactionOf(state) && d.window?.subject?.holder === myFactionOf(state) && !primaryOpen(d) && settledWindow(d)) &&
         /* A turn menu left open from my last turn: not mine while someone else is taking theirs. */
         !(d.kind === "turn.action" && !!state?.activePlayer && !!selfId && state.activePlayer !== selfId),
     ),
@@ -215,8 +249,14 @@ export function orderDecisions(
   const nextStep = (d: Decision) => answeredAtSeq !== null && d.scope === "player" && d.seq > answeredAtSeq && (d.revision ?? 1) <= 2;
   /* Perpetual "play an action card" panels sit open all game: on offer, unless one is what my last answer opened. */
   /* …a new card drawn (status phase) reopens it too: only "play an action card" from my turn menu or a card prompt brings it up. */
-  const askedForCards = !!answeredKind && (answeredKind === "turn.action" || answeredKind.startsWith("action_card."));
-  const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && !(nextStep(d) && askedForCards);
+  /* (Not a discard or a draw: the hand panel reopening after one is not a request to play — pt7 status phase.) */
+  const askedForCards =
+    !!answeredKind && (answeredKind === "turn.action" || (answeredKind.startsWith("action_card.") && !CARD_UPKEEP.has(answeredKind)));
+  /* A hand with nothing playable now (every card greyed) is never what I must do: it stays on offer. */
+  const closedCards: Partial<Record<string, string>> = state?.players.find((p) => p.self)?.hand?.closedActionCards ?? {};
+  const nothingPlayable = (d: Decision) =>
+    d.options.filter((o) => o.value).every((o) => o.disabled || !!closedCards[(o.value as { actionCard?: string }).actionCard ?? ""]);
+  const perpetual = (d: Decision) => d.kind === "action_card.play" && !d.window && (nothingPlayable(d) || !(nextStep(d) && askedForCards));
   const myFaction = state?.players.find((p) => p.self)?.faction;
   const myTurn = !!state?.activePlayer && state.players.find((p) => p.self)?.userId === state.activePlayer;
   /* A step of a tactical action is only live while it is my turn (else a leftover of an earlier one). */
@@ -233,9 +273,13 @@ export function orderDecisions(
   /* Imperial's "score a public" list once nothing on it scores (I scored one, or meet none): finished, so it never
      takes the panel back from what I'm doing (it stays under "Available now"). */
   const finishedImperial = (d: Decision) => d.kind === "status.score" && d.scope === "player" && !publicScorable(d, state, selfId);
+  /* A Warfare redistribute offer while a step of my tactical action is open: optional, it waits behind "Available now"
+     so the step leads (playtest 7, pbd436: it sat in front of "Activate a system"). */
+  const tacticalOpen = shown.some((d) => TACTICAL_STEP.test(d.kind) && d.scope === "player" && !staleStep(d));
   const background = (d: Decision) =>
     !requiredSetup(d) &&
-    (openToAll(d) ||
+    ((tacticalOpen && warfareRedistribute(d)) ||
+    openToAll(d) ||
     lateSecretList(d) ||
     finishedImperial(d) ||
     finishedCard(d) || IN_ADVANCE_EXTRA.has(d.kind) || perpetual(d) || staleStep(d) || (d.kind === "legacy" && nothingToDecide(d.options)));
@@ -354,6 +398,23 @@ export function primaryPartMissing(d: Decision): boolean {
 function politicsPlacement(value: unknown): boolean {
   const a = (value as { action?: string } | null)?.action;
   return a === "top" || a === "bottom" || a === "discard";
+}
+
+function myFactionOf(state: GameState | null | undefined): string | undefined {
+  return state?.players.find((p) => p.self)?.faction ?? undefined;
+}
+
+/** Every player the window waits on has answered it. */
+function settledWindow(d: Decision): boolean {
+  const w = d.window;
+  return !!w && w.eligible.length > 0 && w.eligible.every((u) => w.responded.includes(u));
+}
+
+/** A pre-decline offer for a card that is already played (pre-declining is for cards not played yet). */
+function preDeclinePlayed(d: Decision, state: GameState | null | undefined): boolean {
+  if (!state) return false;
+  const sc = d.options.map((o) => (o.value as { strategyCard?: number } | null)?.strategyCard).find((n) => typeof n === "number");
+  return sc !== undefined && state.strategyCards.some((c) => c.number === sc && c.played);
 }
 
 /** A pre-decline offer for a strategy card I hold. */

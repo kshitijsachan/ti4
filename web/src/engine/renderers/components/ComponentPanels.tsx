@@ -10,6 +10,7 @@ import type {
 import type { GameState, Option } from "../../../../../shim/src/engine/types";
 import { strategyCardName } from "../tactical/names";
 import { unavailableReason } from "../explore/types";
+import { sourceName } from "../../sourceNames";
 import classes from "./components.module.css";
 
 export type RendererProps<D> = {
@@ -21,51 +22,7 @@ export type RendererProps<D> = {
 
 const live = <V,>(o: Option<V>) => !o.disabled && !o.needsInput;
 
-/** "stellarconverter" / "relic_draw_advantage" / "quantum_entangler" → readable words. */
-const SOURCE_NAMES: Record<string, string> = {
-  stellarconverter: "Stellar Converter",
-  nanoforge: "Nano-Forge",
-  starcharts: "Star Charts",
-  echo: "Frontier token",
-  horn_of_the_abyss: "Horn of the Abyss",
-  quantum_entangler: "Quantum Entangler",
-  commodities: "Commodities",
-  relic_draw_advantage: "Draw a relic",
-  relic_swap: "Swap relics",
-  steal_relic: "Steal a relic",
-  explore_look_top: "Look at the top exploration card",
-  explore_discard_top: "Discard the top exploration card",
-  codex: "The Codex",
-  mutagen: "Mutagen",
-  crownofemphidia: "Crown of Emphidia",
-  heartofixth: "Heart of Ixth",
-  thesilverflame: "The Silver Flame",
-  throne_of_the_false_emperor: "Throne of the False Emperor",
-  thesilverflame_bam: "Become a Martyr",
-  jrxs455o: "JR-XS455-O",
-  industrex: "Industrex",
-  research: "Research a technology",
-  entropicscar: "Entropic Scar",
-  ground_hit: "Hit an opposing ground force",
-  imperialarbiter: "Imperial Arbiter",
-  minister_peace: "Minister of Peace",
-  ixthian_artifact: "Ixthian Artifact",
-  pay_debt: "Pay a debt",
-  spend_objective_tokens: "Pay the objective: which pools give the command tokens",
-  checks_and_balances: "Checks and Balances: give the strategy card to",
-  colonial_redistribution: "Colonial Redistribution: give the planet to",
-  remove_cc: "Remove one of your command tokens",
-  return_play_area_pn: "Return a play-area promissory note",
-  mahactagent: "Mahact agent: follow without a strategy token",
-  scepter_of_emelpar: "Scepter of Emelpar: follow without a strategy token",
-  cognitive_parallax_engine: "Cognitive Parallax Engine: follow without a strategy token",
-  cavalry: "The Cavalry: the ship that becomes the Cavalry",
-  refit: "Refit Troops: replace an infantry with a mech",
-  warfare: "Warfare",
-};
-
-export const sourceName = (s: string | undefined | null) =>
-  !s ? "" : (SOURCE_NAMES[s] ?? s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+export { sourceName };
 
 function Choice({
   option,

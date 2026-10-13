@@ -292,12 +292,18 @@ function checkWeb(web: Json, add: Add, ctx: { scCount?: number } = {}) {
         else if (m?.isShip) ships += u.count;
         capacity += num(m?.capacityValue) * u.count;
       }
-      const excessFighters = Math.max(0, fighters - capacity);
+      // Space docks on the system's planets hold fighters too (3 each, unit capacityValue; Cabal's dimensional
+      // tear docks hold none): fighters at a home dock are not unsupported (fuzz pbd377 / pbd418 / pbd420 / pbd430:
+      // "1 ships + 3 unsupported fighters > fleet pool 3" at a home system with its dock).
+      const dockFighters = mine
+        .filter((u) => u.tile === tile && u.where !== "space" && u.id === "sd")
+        .reduce((n, u) => n + num(owned.get(u.id)?.capacityValue) * u.count, 0);
+      const excessFighters = Math.max(0, fighters - dockFighters - capacity);
       const nonFighterSupply = ships + excessFighters;
       // Fleet supply may be exceeded mid-move; the rules only enforce it at specific timings.
       if (num(p.fleetCC) >= 0 && nonFighterSupply > num(p.fleetCC) && !/nomad|letnev/.test(p.faction))
         add("fleet.supply", "warn", `system ${tile}: ${ships} ships${excessFighters ? ` + ${excessFighters} unsupported fighters` : ""} > fleet pool ${p.fleetCC}`, p.faction);
-      if (fighters + ground > capacity && ground > 0 && !/naalu|titans|nekro/.test(p.faction))
+      if (Math.max(0, fighters - dockFighters) + ground > capacity && ground > 0 && !/naalu|titans|nekro/.test(p.faction))
         add("capacity.space", "warn", `system ${tile}: ${fighters} fighters + ${ground} ground forces in space, capacity ${capacity}`, p.faction);
     }
   }

@@ -49,6 +49,9 @@
 .objective:disabled {
   cursor: default;
   color: var(--play-ink-muted);
+  /* Plainly greyed (pt7: an unmet 0/4 objective read like a pressable one next to a met one). */
+  opacity: 0.5;
+  filter: saturate(0.2);
 }
 
 .objective:not(:disabled):hover {
