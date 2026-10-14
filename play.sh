@@ -12,6 +12,10 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY="$ROOT/deploy"
 cd "$DEPLOY"
 [ -f .env ] || cp .env.example .env
+case "$(grep -E '^BOT_MEMORY=' .env | cut -d= -f2)" in
+  1g|2g|3g|[0-9][0-9][0-9]m|[0-3][0-9][0-9][0-9]m)
+    echo "Note: BOT_MEMORY in deploy/.env is below 4g, which makes the game lag. Set BOT_MEMORY=5g there (needs ~8 GB for Docker)." >&2 ;;
+esac
 
 PROFILE=()
 TUNNEL=0
