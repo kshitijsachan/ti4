@@ -6,7 +6,7 @@
  * to roll, from the round trackers), never ahead of its opponent and never while it still owes hits; barrage and
  * space cannon once per prompt; it never bombards, retreats or cancels hits.
  */
-import type { CombatEngage, CombatUnitPickValue, CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
+import type { CombatState, CombatEngage, CombatUnitPickValue, CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
 import type { Decision, GameState, Option } from "./types.js";
 import { chooseCombatAutomate, chooseCombatModifier } from "./policy/units.js";
 
@@ -122,8 +122,7 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
 
 /** Combat-round hits in a fight where we have not rolled the round yet: roll first (both roll, then both assign). */
 function rollFirst(state: GameState | null, me: string, tile: string, holder: string): boolean {
-  if (state?.combat?.tile !== tile) return false;
-  const front = state.combat.fronts.find((f) => f.holder === holder);
+  const front = combatAt(state, tile)?.fronts.find((f) => f.holder === holder);
   const mine = front?.sides.find((s) => s.userId === me);
   const theirs = front?.sides.find((s) => s.userId !== me);
   return !!mine && !!theirs && mine.units.length > 0 && mine.roundsRolled < theirs.roundsRolled;
@@ -274,11 +273,23 @@ export function unitLimits(tile: string, state: GameState | null, me: string): {
   };
 }
 
+/** Every combat in state: the active system's (or the first) and the others under way (elsewhere). */
+export function combatsOf(state: GameState | null): CombatState[] {
+  const c = state?.combat;
+  return c ? [c, ...(c.elsewhere ?? [])] : [];
+}
+
+/** The combat in this system, if state has it. */
+export function combatAt(state: GameState | null, tile: string | null | undefined): CombatState | null {
+  return combatsOf(state).find((c) => c.tile === tile) ?? null;
+}
+
 function roll(d: CombatRound, state: GameState | null, me: string, open: Decision[], all: Decision[] = open): CombatChoice | null {
   const w = d.window;
   if (!w) return useRoundAgent(d, state, me, open);
   if (!w || w.kind !== "combat_roll" || !w.eligible.includes(me) || w.responded.includes(me)) return null;
-  const combat = state?.combat;
+  /* The combat this prompt is about: the active system's, or one outside the activation (elsewhere). */
+  const combat = w.subject.tile ? combatAt(state, String(w.subject.tile)) : (state?.combat ?? null);
   const self = state?.players.find((p) => p.userId === me);
   if (!self?.faction) return null;
   const rollType = String(w.subject.rollType ?? "");
@@ -287,13 +298,13 @@ function roll(d: CombatRound, state: GameState | null, me: string, open: Decisio
   if (w.subject.waitingFor) return null;
   // state.combat describes the active system only: another system's combat (two at once, pbd203) is judged from the
   // window alone (eligible / responded per round).
-  const sameTile = !!combat && (!w.subject.tile || combat.tile === String(w.subject.tile));
+  const sameTile = !!combat;
   const rolls = (o: Option<any>): o is Option<CombatControlValue & { action: "roll" }> =>
     !o.disabled && !forDummy(o) && o.value?.action === "roll";
   const options = d.options.filter(rolls);
   const pick = (type: string, h?: string) => options.find((o) => o.value!.rollType === type && (!h || o.value!.holder === h));
   const rolledSincePrompt = (type: string) =>
-    !!combat?.rolls.some((r) => r.faction === self.faction && r.rollType === type && r.at >= d.createdAt);
+    !!(combat ?? state?.combat)?.rolls.some((r) => r.faction === self.faction && r.rollType === type && r.at >= d.createdAt);
 
   if (rollType === "afb" || rollType === "spacecannonoffence") {
     if (rolledSincePrompt(rollType)) return null;
@@ -336,9 +347,8 @@ function roll(d: CombatRound, state: GameState | null, me: string, open: Decisio
 /** The combat controls (no roll window) carrying our ready round agent for a fight we are in: use it. */
 function useRoundAgent(d: CombatRound, state: GameState | null, me: string, open: Decision[]): CombatChoice | null {
   const self = state?.players.find((p) => p.userId === me);
-  const combat = state?.combat;
-  if (!self?.faction || !combat) return null;
-  for (const front of combat.fronts) {
+  if (!self?.faction) return null;
+  for (const front of combatsOf(state).flatMap((c) => c.fronts)) {
     const mine = front.sides.find((s) => s.userId === me);
     const theirs = front.sides.find((s) => s.userId !== me);
     if (!mine?.units.length || !theirs?.units.length || mine.roundsRolled > theirs.roundsRolled) continue;

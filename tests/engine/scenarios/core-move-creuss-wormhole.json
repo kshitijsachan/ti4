@@ -1,0 +1,65 @@
+{
+  "name": "core-move-creuss-wormhole",
+  "description": "Rules audit (core, TI4_MOVE_CHECK): wormhole adjacency counts in the move check, including Creuss' Quantum Entanglement (alpha and beta wormholes adjacent to each other). Base pbd60@165: Creuss (ghost) gets a cruiser at 306 (beta wormhole) and activates 105 (alpha wormhole, far across the map): the move is 1 system through the wormholes and is accepted.",
+  "base": {
+    "recording": "pbd60",
+    "index": 165,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "306",
+        "unit_names": "cruiser",
+        "faction_or_color": "ghost"
+      }
+    },
+    {
+      "command": "player turn_start",
+      "options": {
+        "faction_or_color": "ghost"
+      }
+    }
+  ],
+  "trigger": {
+    "press": "FFCC_ghost_ringTile_105",
+    "as": "ghost"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "306",
+              "holder": "space",
+              "unit": "ca",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "as": "ghost",
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": false,
+    "save": [
+      {
+        "key": "tile 105: eth\u2014ca",
+        "exists": true
+      }
+    ]
+  }
+}

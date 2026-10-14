@@ -20,7 +20,7 @@ import { gameOverHeadline, gameOverView } from "./gameOver";
 import { WinnerPanel } from "./renderers/game/WinnerPanel";
 import { planetName } from "./renderers/tactical/names";
 import { CombatPanel } from "./renderers/combat/CombatPanel";
-import { combatView, type CombatView } from "./renderers/combat/combatView";
+import { combatView, decisionTile, type CombatView } from "./renderers/combat/combatView";
 import { playerLabel } from "./names";
 
 export { decisionTitle };
@@ -180,9 +180,11 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   const shown = openOffer ?? queue.find((d) => d.id === jumpId) ?? queue[0];
   /* One combat, one panel: every combat prompt of the active system is a step of the same panel (not "N more"). */
   const myUserId = state?.players.find((p) => p.self)?.userId ?? null;
+  /* The combat the shown prompt is about (its system: combats outside the activation too), else the one I am in. */
+  const combatTile = shown?.kind.startsWith("combat.") ? decisionTile(shown) : null;
   const combat = useMemo(
-    () => combatView(state, Object.values(openIds), myUserId, (who) => playerLabel(state, who)),
-    [state, openIds, myUserId],
+    () => combatView(state, Object.values(openIds), myUserId, (who) => playerLabel(state, who), combatTile),
+    [state, openIds, myUserId, combatTile],
   );
   const combatShown = !!combat && !!shown && partOfCombat(shown, combat);
   const more = queue.filter((d) => d.id !== shown?.id && !(combatShown && combat && partOfCombat(d, combat))).length;
@@ -597,10 +599,8 @@ export { DecisionFooter };
 /** A combat decision about the combat on screen (its system; unrelated combat prompts keep their own renderer). */
 function inCombat(d: Decision, view: CombatView): boolean {
   if (d.kind === "combat.engage" || d.kind === "combat.automate") return false;
-  const subject = d.window?.subject?.tile;
-  if (subject != null) return (typeof subject === "string" || typeof subject === "number" ? String(subject) : "") === view.tile;
-  const tiles = d.options.map((o) => (o.value as { tile?: string | null } | null)?.tile).filter((t): t is string => !!t);
-  return !tiles.length || tiles.includes(view.tile);
+  const t = decisionTile(d);
+  return !t || t === view.tile;
 }
 
 /**

@@ -146,11 +146,10 @@ const CONTROL_LABEL: Record<string, string> = {
 };
 
 /** Why an ability / control is greyed now, or null when it can be pressed. */
-function abilityReason(a: AbilityChoice, view: CombatView): string | null {
+function abilityReason(a: AbilityChoice): string | null {
   const v: CombatAbilityValue = a.option.value!;
-  if (v.blocked) return v.blocked;
-  if (!view.current?.on && v.source === "agent") return "no combat under way";
-  return null;
+  /* The engine decides (it also sees combats opened outside the activation, which state.combat does not). */
+  return v.blocked || null;
 }
 
 function controlReason(c: RollChoice, view: CombatView): string | null {
@@ -239,7 +238,7 @@ export function CombatPanel({ view, state, extras, answer, pendingOptionId }: Pr
           <div className={classes.actions}>
             {view.abilities.map((a) => {
               const v = a.option.value!;
-              const reason = abilityReason(a, view);
+              const reason = abilityReason(a);
               const label = v.source === "agent" ? `Use ${v.name ?? a.option.label}` : a.option.label;
               return (
                 <Tooltip key={a.option.id} label={reason ? `Not now: ${reason}` : (v.window ?? label)} multiline maw={280} withArrow>
@@ -265,13 +264,13 @@ export function CombatPanel({ view, state, extras, answer, pendingOptionId }: Pr
               );
             })}
           </div>
-          {view.abilities.some((a) => abilityReason(a, view)) && (
+          {view.abilities.some((a) => abilityReason(a)) && (
             <ul className={classes.reasons}>
               {view.abilities
-                .filter((a) => abilityReason(a, view))
+                .filter((a) => abilityReason(a))
                 .map((a) => (
                   <li key={a.option.id}>
-                    {a.option.value!.name ?? a.option.label}: {abilityReason(a, view)}
+                    {a.option.value!.name ?? a.option.label}: {abilityReason(a)}
                   </li>
                 ))}
             </ul>

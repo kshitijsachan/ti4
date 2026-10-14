@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Decision, GameState } from "../contract";
 import type { HittableUnit } from "../../../../shim/src/engine/kinds/combat";
-import { combatView, hitRefusal, ineligibleUnits, lossesBetween } from "../renderers/combat/combatView";
+import { combatView, decisionTile, hitRefusal, ineligibleUnits, lossesBetween } from "../renderers/combat/combatView";
 
 const ME = "u1";
 const BOT = "u2";
@@ -147,6 +147,18 @@ void test("hit rules mirror: transported infantry and planet units never take sp
   const off = ineligibleUnits(state(), "305", "space", "space", ME);
   assert.deepEqual(off.map((u) => `${u.holder}/${u.unit}`), ["space/gf", "lodor/pd", "lodor/gf"]);
   assert.deepEqual(ineligibleUnits(state(), "305", "lodor", "ground", ME).map((u) => u.unit), ["pd"]);
+});
+
+void test("a combat outside the active system: picked by the prompt's system, or as the one I fight in", () => {
+  const st = state();
+  const other = { ...st.combat!, tile: "201", tileId: "25", rolls: [], owed: [], attacker: null };
+  st.combat = { ...st.combat!, tile: "101", fronts: [], rolls: [], elsewhere: [other] } as typeof st.combat;
+  assert.equal(combatView(st, [], ME, names, "201")?.tile, "201");
+  assert.equal(combatView(st, [], ME, names)?.tile, "201", "the combat I am in");
+  assert.equal(combatView(st, [], ME, names, "999"), null);
+  const prompt = { ...rollPrompt([]), window: { ...rollPrompt([]).window!, subject: { tile: "201", holder: "space", rollType: "combat" } } } as unknown as Decision;
+  assert.equal(decisionTile(prompt), "201");
+  assert.equal(decisionTile(controls(null)), null, "ability / announce tiles come from the active system: no tile");
 });
 
 void test("lossesBetween counts destroyed and newly damaged", () => {

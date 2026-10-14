@@ -211,6 +211,10 @@ const owed2 = bombHits(2, jord);
 expect("bombardment menu while the hits prompt is open: its plan assigns (hold)", menuPick([owed2], []), null);
 expect("bombardment menu, 2 owed, one removed: one more", menuPick([owed2], ["FFCC_letnev_assignHits_201_1_gf_jord_red"]), "FFCC_letnev_assignHits_201_1_gf_jord_red");
 
+// A combat outside the active system (state.combat.elsewhere): the prompt's own combat decides.
+const elsewhere = state({ tile: "101", fronts: [], elsewhere: [{ tile: "201", tileId: "25", factions: ["letnev", "sol"], fronts: [{ holder: "space", sides: [side(ME, "letnev", 0), side(OPP, "sol", 1)] }], spaceCannonOffence: [], rolls: [], owed: [], attacker: null, elsewhere: [] }] } as never);
+expect("elsewhere: rolls its own combat's round", pick(round([OPP]), elsewhere), "combatRoll_201_space");
+expect("elsewhere: behind, does not assign before rolling", pick(hits(ME, 1), elsewhere), null);
 // Letnev agent (Viscount Unlenn): on the combat controls (no roll window); used before our roll, then the roll waits for its picker.
 const agentOpt = (blocked: string | null, owner = "letnev") =>
   opt("FFCC_letnev_getAgentSelection_letnevagent", { action: "ability", tile: "201", ability: "letnevagent", source: "agent", owner, name: "Viscount Unlenn", window: "At the start of a space combat round", blocked });
