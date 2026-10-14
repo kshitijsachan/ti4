@@ -1,0 +1,16 @@
+{
+  "name": "turn-recovery-lost-turn-prompt",
+  "description": "Soak pbd1204 (23:28-23:30): the shim froze 115 s under load, the next player's turn-start post timed out and never landed, so no turn prompt existed and the game idled 30 min. Here: pbd60 save 122; crimson's turn starts (/player turn_start, as after the previous player's pass/end turn), then its turn menu message is deleted straight through the shim (as if the post had never landed; the bot's MESSAGE_DELETE listener closes the decision). The engine's PromptRecovery must re-post crimson's turn menu (a typed turn.action decision for crimson) within ~90 s. Engine-only (no --diff: the original code never re-posts).",
+  "base": { "recording": "pbd60", "index": 122, "repost": false },
+  "trigger": { "command": "/player turn_start faction_or_color:crimson", "as": "crimson" },
+  "steps": [
+    { "waitDecision": { "kind": "turn.action", "timeoutMs": 30000 }, "as": "crimson" },
+    { "deleteDecision": { "kind": "turn.action" }, "as": "crimson" },
+    { "wait": 3000 },
+    { "waitDecision": { "kind": "turn.action", "timeoutMs": 100000 }, "as": "crimson" }
+  ],
+  "expect": {
+    "invariants": true,
+    "decision": [ { "kind": "turn.action", "as": "crimson", "open": true } ]
+  }
+}
