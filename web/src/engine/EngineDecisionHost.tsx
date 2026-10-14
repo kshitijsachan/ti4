@@ -19,6 +19,9 @@ import { EngineOutcomeToast } from "./ui/OutcomeToast";
 import { gameOverHeadline, gameOverView } from "./gameOver";
 import { WinnerPanel } from "./renderers/game/WinnerPanel";
 import { planetName } from "./renderers/tactical/names";
+import { CombatPanel } from "./renderers/combat/CombatPanel";
+import { combatView, type CombatView } from "./renderers/combat/combatView";
+import { playerLabel } from "./names";
 
 export { decisionTitle };
 
@@ -175,7 +178,16 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   }, [queueKey]);
   const openOffer = offers.find((d) => d.id === offerId);
   const shown = openOffer ?? queue.find((d) => d.id === jumpId) ?? queue[0];
-  const more = queue.filter((d) => d.id !== shown?.id).length;
+  /* One combat, one panel: every combat prompt of the active system is a step of the same panel (not "N more"). */
+  const myUserId = state?.players.find((p) => p.self)?.userId ?? null;
+  const combat = useMemo(
+    () => combatView(state, Object.values(openIds), myUserId, (who) => playerLabel(state, who)),
+    [state, openIds, myUserId],
+  );
+  const combatShown = !!combat && !!shown && partOfCombat(shown, combat);
+  const more = queue.filter((d) => d.id !== shown?.id && !(combatShown && combat && partOfCombat(d, combat))).length;
+  /* Nothing asked of me, but a combat I fight in is under way: the panel shows it (what the other side rolled, who it waits on). */
+  const combatWatch = !shown && !!combat && combatInvolves(combat, myUserId);
   const collapsed = !!shown && collapsedId === shown.id && !errors[shown.id];
   const over = useMemo(() => gameOverView(state, Object.values(openIds)), [state, openIds]);
   /* Empty means nothing at all is open for me: not a step the map is answering (move / land), not one in flight. */
@@ -211,8 +223,8 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
   }, [status, openIds]);
 
   const setFocus = useDecisionFocus((s) => s.set);
-  const position = decisionPosition(shown, state);
-  const focusLabel = shown?.kind.startsWith("combat.") ? "Combat" : null;
+  const position = combatWatch ? (combat?.tile ?? null) : decisionPosition(shown, state);
+  const focusLabel = shown?.kind.startsWith("combat.") || combatWatch ? "Combat" : null;
   useEffect(() => setFocus(position, "prompt", focusLabel), [position, focusLabel, setFocus]);
   useEffect(() => () => setFocus(null, null), [setFocus]);
 
@@ -365,6 +377,30 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
     );
   }
 
+  if (!shown && combatWatch && combat) {
+    return (
+      <>
+        <PopupLayer contained={placement === "contained"} rightInset={rightInset} peeking={peek.peeking}>
+          <section ref={cardRef} className={classes.card} role="dialog" aria-modal="false" aria-label={combatTitle(combat)} data-engine-decision="combat.watch">
+            <header className={classes.head}>
+              <div className={classes.headTop}>
+                <div className={classes.titles}>
+                  <span className={classes.eyebrow}>Combat</span>
+                  <h2 className={classes.title}>{combatTitle(combat)}</h2>
+                </div>
+              </div>
+            </header>
+            <div className={classes.body}>
+              <CombatPanel view={combat} state={state} extras={[]} answer={(d, choice) => answer(d, choice)} pendingOptionId={null} />
+            </div>
+          </section>
+          {offerPill}
+        </PopupLayer>
+        <EngineOutcomeToast gameName={gameName} rightInset={rightInset} />
+      </>
+    );
+  }
+
   if (!shown) {
     return (
       <>
@@ -386,7 +422,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
 
   const Renderer = rendererFor(shown.kind);
   const error = errors[shown.id];
-  const title = decisionTitle(shown, state);
+  const title = combatShown && combat ? combatTitle(combat) : decisionTitle(shown, state);
   const eyebrow = openOffer ? "Available now · optional" : decisionEyebrow(shown, state);
 
   return (
@@ -519,12 +555,22 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
             data-more-below={edges.below || undefined}
           >
             <FooterSlot.Provider value={footerEl}>
-              <Renderer
-                decision={shown}
-                state={state}
-                answer={(choice) => answer(shown, choice)}
-                pendingOptionId={pending[shown.id]?.optionId ?? null}
-              />
+              {combatShown && combat ? (
+                <CombatPanel
+                  view={combat}
+                  state={state}
+                  extras={queue.filter((d) => partOfCombat(d, combat))}
+                  answer={(d, choice) => answer(d, choice)}
+                  pendingOptionId={Object.values(pending)[0]?.optionId ?? null}
+                />
+              ) : (
+                <Renderer
+                  decision={shown}
+                  state={state}
+                  answer={(choice) => answer(shown, choice)}
+                  pendingOptionId={pending[shown.id]?.optionId ?? null}
+                />
+              )}
             </FooterSlot.Provider>
           </div>
           <div ref={setFooterEl} className={classes.footer} hidden={collapsed} />
@@ -547,6 +593,40 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
 }
 
 export { DecisionFooter };
+
+/** A combat decision about the combat on screen (its system; unrelated combat prompts keep their own renderer). */
+function inCombat(d: Decision, view: CombatView): boolean {
+  if (d.kind === "combat.engage" || d.kind === "combat.automate") return false;
+  const subject = d.window?.subject?.tile;
+  if (subject != null) return (typeof subject === "string" || typeof subject === "number" ? String(subject) : "") === view.tile;
+  const tiles = d.options.map((o) => (o.value as { tile?: string | null } | null)?.tile).filter((t): t is string => !!t);
+  return !tiles.length || tiles.includes(view.tile);
+}
+
+/**
+ * A prompt that is a step of the combat on screen: its combat decisions, and faction abilities / leaders offered for
+ * that system while the fight is on (Mentak Ambush, agents posted on their own message): one panel, not a queue.
+ */
+function partOfCombat(d: Decision, view: CombatView): boolean {
+  if (d.kind.startsWith("combat.")) return inCombat(d, view);
+  if (d.kind !== "faction.ability" && d.kind !== "leader.use") return false;
+  if (!view.fronts.some((f) => f.on)) return false;
+  return d.options.some((o) => (o.value as { tile?: unknown } | null)?.tile === view.tile);
+}
+
+/** I fight in a combat under way there, or hits are owed in it to or by me. */
+function combatInvolves(view: CombatView, me: string | null): boolean {
+  if (!me) return false;
+  if (view.owed.some((o) => o.userId === me)) return true;
+  return view.fronts.some((f) => f.on && f.sides.some((s) => s.userId === me));
+}
+
+function combatTitle(view: CombatView): string {
+  const f = view.current;
+  if (!f) return "Combat";
+  const kind = f.holder === "space" ? "Space combat" : `Ground combat · ${planetName(f.holder)}`;
+  return f.round > 0 ? `${kind} · round ${f.round}` : kind;
+}
 
 /** A payment with nothing to pay for the Technology holder's free first research. */
 function freeResearchPayment(d: Decision): boolean {

@@ -12,6 +12,7 @@ import { TradeDesk } from "./botplay/trade.js";
 import { LegacyTradeDesk } from "./botplay/tradeLegacy.js";
 import type { EngineClient } from "./engine/client.js";
 import { chooseTyped, ENGINE_GRACE_MS, engineOwnership, type TypedChoice } from "./engine/autopilot.js";
+import { offersRoundAgent } from "./engine/combatPolicy.js";
 import { forgetGameKeys, isRollbackNotice, newRewind, REWIND_SETTLE_MS, type GameScope } from "./engine/rewind.js";
 import { answersOutsideWindow, awaits, type AnswerResult } from "./engine/types.js";
 import { isTableSetupStep } from "./engine/policy/setup.js";
@@ -1962,7 +1963,11 @@ class SeatPilot {
       if (pub?.ended) continue; // the game is over: nothing to answer (live pbd114 kept its phase "action")
       // And the strategy cards we played: their windows list only followers; we resolve the primary on them.
       const holding = open.filter((d) => answersOutsideWindow(d, this.userId, pub) && !own?.some((x) => x.id === d.id));
-      const mine = [...(own ?? []), ...table, ...holding];
+      // And the combat controls carrying our own ready "+1 die" agent (Sol / Letnev): window-less table prompts, first,
+      // so the agent is used before our roll (combatPolicy.roundAgent).
+      const myFaction = pub?.players.find((p) => p.userId === this.userId)?.faction ?? null;
+      const agents = open.filter((d) => !own?.some((x) => x.id === d.id) && offersRoundAgent(d, myFaction));
+      const mine = [...agents, ...(own ?? []), ...table, ...holding];
       this.watchdogSweep(game, mine);
       if (pub?.draft?.status === "drafting") await this.draftResnapshot(game, open, pub, now);
       if (!mine.length) continue;
