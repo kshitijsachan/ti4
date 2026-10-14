@@ -34,7 +34,29 @@ export type CombatControlValue =
   | { action: "repair"; tile: TilePosition }
   | { action: "retreat"; tile: TilePosition; variant: "skilled" | "foresight" | "gheminabt" | string | null }
   /** A temporary modifier for the presser's next roll offered on the controls (Supercharge: source "tech", card "sc"). */
-  | { action: "temp_mod"; tile: TilePosition | null; source: "action_cards" | "tech" | string; card: string };
+  | { action: "temp_mod"; tile: TilePosition | null; source: "action_cards" | "tech" | string; card: string }
+  | CombatAbilityValue
+  | { action: "refresh"; tile: TilePosition }
+  /** "Done" on a controls message. */
+  | { action: "done"; tile: null };
+
+/**
+ * Any other button the bot posts with a combat ("Buttons for combat."): agents (Sol, Letnev, Yin...), relics (Heart of
+ * Ixth), promissory notes (War Funding), faction abilities. owner = the faction that may use it (null when not known);
+ * window = the card's timing text; blocked = why it cannot be used now (agent exhausted, no combat under way...),
+ * refused by the engine when pressed.
+ */
+export type CombatAbilityValue = {
+  action: "ability";
+  tile: TilePosition | null;
+  /** Leader / relic / note id, or the handler prefix for other abilities. */
+  ability: string;
+  source: "agent" | "relic" | "pn" | "other";
+  owner: FactionId | null;
+  name: string | null;
+  window: string | null;
+  blocked: string | null;
+};
 
 export type CombatHitsValue =
   | {
@@ -171,6 +193,8 @@ export type CombatSide = {
   units: HittableUnit[];
   /** Optional rolls this side has units for here. */
   abilities: ("afb" | "bombardment" | "spacecannondefence")[];
+  /** Space: the combat round this side announced a retreat for (this activation), 0 when none. Older engines: absent. */
+  retreatAnnounced?: number;
 };
 
 export type CombatFront = { holder: HolderName; sides: CombatSide[] };
@@ -185,6 +209,23 @@ export type CombatRoll = {
   round: number | null;
   hits: number;
   dice: { unit: UnitId; threshold: number; results: number[] }[];
+  /** Combat rounds: the roller's units able to fight in that holder when it rolled (losses = difference to its next roll / now). Older engines: absent. */
+  units?: HittableUnit[];
+};
+
+/** Hits a player still has to assign in the active system (an open hits prompt / manual menu). */
+export type HitsOwed = {
+  faction: FactionId;
+  userId: UserId;
+  tile: TilePosition;
+  holder: HolderName;
+  source: HitSource;
+  /** Hits still to assign. */
+  hits: number;
+  /** Assigned so far through the manual menu. */
+  assigned: number;
+  /** The combat.hits decision to answer (option, or a combat plan). */
+  decisionId: string;
 };
 
 export type CombatState = {
@@ -196,8 +237,12 @@ export type CombatState = {
   fronts: CombatFront[];
   /** Factions other than the active player that may fire SPACE CANNON at the active system. */
   spaceCannonOffence: FactionId[];
-  /** Recent rolls in this game, oldest first (bot memory: empty after a bot restart). */
+  /** Rolls of this game, oldest first (persisted ledger, last 60; older entries may have no dice). */
   rolls: CombatRoll[];
+  /** Hits owed in this system right now. Older engines: absent. */
+  owed?: HitsOwed[];
+  /** The active player's faction (the attacker), or null. Older engines: absent. */
+  attacker?: FactionId | null;
 };
 
 // ---------------------------------------------------------------- plan answer (POST …/decisions/{id}/combat-plan)

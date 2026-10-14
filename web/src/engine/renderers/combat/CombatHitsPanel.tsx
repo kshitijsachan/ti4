@@ -6,6 +6,7 @@ import type { CombatHits, CombatHitsValue } from "../../../../../shim/src/engine
 import type { Option } from "../../../../../shim/src/engine/types";
 import { assigned, planProblem, rowKey, suggestPlan, toEntries, type PlanRow } from "./plan";
 import { holderName, live, me, unitName, type RendererProps } from "./types";
+import { ineligibleUnits } from "./combatView";
 import classes from "./combat.module.css";
 import { DecisionFooter } from "../../ui/Popup";
 import { useDecisionState } from "../../draftState";
@@ -64,8 +65,19 @@ function Row({ row, onChange }: { row: PlanRow; onChange: (r: PlanRow) => void }
 export function CombatHitsPanel({ decision: d, state, answer }: RendererProps<CombatHits>) {
   const self = me(state);
   const options = d.options.filter(live).filter((o) => !o.id.includes("dummyPlayerSpoof"));
-  const autoOpt = options.find((o) => o.value?.action === "auto") as Option<Auto> | undefined;
+  /* BOMBARDMENT hits have no auto option: their manual option carries hits / planet / units, answered by a plan. */
+  const bombard = options.find(
+    (o) => o.value?.action === "assign_manual" && typeof o.value.hits === "number" && !!o.value.units && !!o.value.holder,
+  ) as Option<Extract<CombatHitsValue, { action: "assign_manual" }>> | undefined;
+  const autoOpt = (options.find((o) => o.value?.action === "auto") ??
+    (bombard
+      ? {
+          ...bombard,
+          value: { action: "auto", tile: bombard.value!.tile, holder: bombard.value!.holder!, source: "ground", hits: bombard.value!.hits!, units: bombard.value!.units!, sustainCancels: bombard.value!.sustainCancels ?? 1 },
+        }
+      : undefined)) as Option<Auto> | undefined;
   const auto = autoOpt?.value ?? null;
+  const isBombard = !!bombard && autoOpt?.id === bombard.id;
   const cancels = options.filter((o) => o.value?.action === "cancel");
   const initial = useMemo(() => (auto ? suggestPlan(auto.units, auto.hits, auto.sustainCancels) : []), [auto]);
   const [rows, setRows] = useDecisionState<PlanRow[]>(d.id, "rows", initial);
@@ -93,6 +105,17 @@ export function CombatHitsPanel({ decision: d, state, answer }: RendererProps<Co
             {rows.map((r) => (
               <Row key={rowKey(r.unit)} row={r} onChange={update} />
             ))}
+            {/* My other units there, greyed with why they cannot take these hits (never hidden). */}
+            {ineligibleUnits(state, auto.tile, auto.holder, auto.source, self?.userId ?? null).map((u) => (
+              <div key={`off-${u.holder}/${u.unit}`} className={cx(classes.row, classes.rowOff)} data-hit-ineligible={u.unit}>
+                <span>
+                  {u.count} {unitName(u.unit)}
+                  {u.holder !== "space" && <span className={classes.sub}> on {holderName(u.holder)}</span>}
+                </span>
+                <span />
+                <span className={classes.reason}>{u.reason}</span>
+              </div>
+            ))}
           </div>
           <p className={cx(classes.status, problem ? classes.warn : classes.good)}>
             <span className={classes.mono}>
@@ -106,9 +129,11 @@ export function CombatHitsPanel({ decision: d, state, answer }: RendererProps<Co
                 Assign
               </Button>
               {/* Auto-assign would assign every hit on the buttons, cancelled ones included: the engine refuses it then. */}
-              <Button size="xs" variant="default" disabled={!!auto.cancelled} onClick={() => answer(autoOpt.id)}>
-                Auto-assign
-              </Button>
+              {!isBombard && (
+                <Button size="xs" variant="default" disabled={!!auto.cancelled} onClick={() => answer(autoOpt.id)} data-combat-auto>
+                  Auto-assign
+                </Button>
+              )}
               <Button size="xs" variant="subtle" onClick={() => setRows(initial)}>
                 Reset
               </Button>

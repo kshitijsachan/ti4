@@ -1,0 +1,13 @@
+{
+  "name": "combat-ux-ground-hits",
+  "description": "combat-ux: ground combat hits land on ground forces on the planet only. mentak (pbd60@151, ground combat on andeara in 308) also has a cruiser in space: destroying it for a ground hit is refused; 1 infantry on andeara takes it.",
+  "base": { "recording": "pbd60", "index": 151 },
+  "setup": ["/add_units tile_name:308 unit_names:\"1 cruiser\" faction_or_color:mentak"],
+  "trigger": { "press": "getDamageButtons_308deleteThis_groundcombat", "as": "mentak" },
+  "steps": [
+    { "press": "FFCC_mentak_assignHits_308_1_ca_dawn", "as": "mentak", "refused": true },
+    { "press": "FFCC_mentak_assignHits_308_1_gf_andeara_dawn", "as": "mentak" },
+    { "answer": { "kind": "combat.assign_units", "option": "deleteButtons" }, "as": "mentak", "legacy": [ { "press": "deleteButtons", "as": "mentak" } ] }
+  ],
+  "expect": { "invariants": true }
+}

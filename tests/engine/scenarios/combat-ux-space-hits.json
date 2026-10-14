@@ -1,0 +1,25 @@
+{
+  "name": "combat-ux-space-hits",
+  "description": "combat-ux: space combat hits land on ships only. mentak owes 4 space hits in 308 (pbd60@131) and carries 2 infantry there: a plan destroying an infantry is refused (no gf may take a space hit), the legal plan (sustain 2 dn, destroy dd, destroy ff) goes through; the hits prompt's units list no gf.",
+  "base": { "recording": "pbd60", "index": 131 },
+  "setup": ["/add_units tile_name:308 unit_names:\"2 infantry\" faction_or_color:mentak"],
+  "steps": [
+    {
+      "answer": { "kind": "combat.hits", "action": "combat-plan", "body": { "plan": [ { "holder": "space", "unit": "gf", "action": "destroy", "count": 2 }, { "holder": "space", "unit": "dn", "action": "sustain", "count": 2 } ] } },
+      "as": "mentak", "refused": true, "legacy": []
+    },
+    {
+      "answer": { "kind": "combat.hits", "action": "combat-plan", "body": { "plan": [ { "holder": "space", "unit": "dn", "action": "sustain", "count": 2 }, { "holder": "space", "unit": "dd", "action": "destroy", "count": 1 }, { "holder": "space", "unit": "ff", "action": "destroy", "count": 1 } ] } },
+      "as": "mentak",
+      "legacy": [
+        { "press": "getDamageButtons_308deleteThis_spacecombat", "as": "mentak" },
+        { "press": "FFCC_mentak_assignDamage_308_1_dn_dawn", "as": "mentak" },
+        { "press": "FFCC_mentak_assignDamage_308_1_dn_dawn", "as": "mentak" },
+        { "press": "FFCC_mentak_assignHits_308_1_dd_dawn", "as": "mentak" },
+        { "press": "FFCC_mentak_assignHits_308_1_ff_dawn", "as": "mentak" },
+        { "press": "deleteButtons", "as": "mentak" }
+      ]
+    }
+  ],
+  "expect": { "invariants": true }
+}

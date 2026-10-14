@@ -153,3 +153,168 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* ---- one combat panel (CombatPanel): sides, rounds, step line, abilities, log ---- */
+
+.front {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--play-hairline);
+  background: var(--play-field);
+}
+
+.sideGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sideRow {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.sideSelf .sideName {
+  color: rgb(var(--play-blue));
+}
+
+.rounds {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  color: var(--play-ink);
+}
+
+.rounds td,
+.rounds th {
+  padding: 2px 4px 2px 0;
+  vertical-align: middle;
+  text-align: left;
+  font-weight: 400;
+}
+
+.roundStart td,
+.roundStart th {
+  border-top: 1px solid var(--play-hairline);
+}
+
+.roundLabel {
+  width: 32px;
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--play-ink-muted);
+}
+
+.roller {
+  width: 110px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dieGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+}
+
+.dieUnit {
+  font-size: 10px;
+  color: var(--play-ink-muted);
+  margin-right: 2px;
+}
+
+.hitTotal {
+  font-size: 11px;
+  color: var(--play-ink-muted);
+  margin-left: 2px;
+}
+
+.losses {
+  font-size: 11px;
+  color: rgb(var(--play-red));
+}
+
+.step {
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 5px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--play-hairline-strong);
+  color: var(--play-ink-bright);
+  background: var(--play-socket);
+}
+
+.stepMine {
+  border-color: rgb(var(--play-blue));
+}
+
+.stepOver {
+  color: rgb(var(--play-green));
+}
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--play-ink-muted);
+}
+
+.abilities {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--play-hairline);
+}
+
+.reasons {
+  margin: 0;
+  padding-left: 14px;
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.log {
+  font-size: 11px;
+  color: var(--play-ink);
+}
+
+.log summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
+
+.log ol {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowOff {
+  opacity: 0.55;
+}
+
+.reason {
+  font-size: 11px;
+  color: var(--play-ink-muted);
+}
