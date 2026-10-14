@@ -1,0 +1,29 @@
+{
+ "name": "pass-next-turn-start",
+ "description": "Soak pbd1204 (pt9-v5 rollback, 23:28:49): after Mentak's Pass the next player (Bastion, a bot seat) never got its turn start. Checks the Pass -> next turn path: Mentak passes (the original button), and within a few seconds the next player has an open turn.action. Base: pbd1204 undo save 109 (23:28:48, Mentak active after Crimson's End Turn).",
+ "base": {
+  "save": "saves/pt9-pbd1204-109.txt"
+ },
+ "steps": [
+  {
+   "press": "FFCC_mentak_passForRound",
+   "as": "mentak",
+   "click": true
+  },
+  {
+   "wait": 8000,
+   "expect": {
+    "decision": [
+     {
+      "kind": "turn.action",
+      "as": "bastion",
+      "open": true
+     }
+    ]
+   }
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

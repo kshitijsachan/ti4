@@ -39,7 +39,7 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BOT_URL, SHIM_URL, botToken, ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, readGameFile, shimState, sleep, undoFile, waitForStack } from "./lib/env.ts";
+import { BOT_URL, SHIM_URL, botToken, ENGINE_DIR, RECORDINGS_DIR, engineApi, ensureRunDir, gameFile, readGameFile, shimCategories, shimCommands, shimGameChannels, sleep, undoFile, waitForStack } from "./lib/env.ts";
 import { acquireForkLease, createFork, endFork, openFork, closeFork, clientFor, resetFork, identityMap, latestUndo, loadSave, mapIdsInCustomId, mirrorUserSettings, seatMap, waitForSaves } from "./lib/fork.ts";
 import { loadRecording, recordingSaves } from "./lib/recording.ts";
 import { parseSave, normalizeSave, diffNormalized } from "./lib/savefile.ts";
@@ -62,8 +62,7 @@ let commandCache = null;
 function commandSchema() {
   // The registry does not change during a run; the full shim state is large and re-read after every shim save.
   if (commandCache) return commandCache;
-  const cmds = shimState().commands;
-  return (commandCache = Array.isArray(cmds) ? cmds : Object.values(cmds ?? {}));
+  return (commandCache = shimCommands());
 }
 
 if (flag("--commands")) {
@@ -321,7 +320,7 @@ class Runner {
           if (d) hit = { d, o: optionFor(d, customId) };
           else await sleep(300);
         }
-        if (!hit?.o) return { ok: false, error: `the engine did not capture the carrier of ${customId}` };
+        if (!hit?.o) return { ok: false, error: `the engine did not capture the carrier of ${customId} (message ${m.id}, ${new Date().toISOString().slice(11, 23)})` };
       }
       const a = await answer(this.fork.game, hit.d.id, user, { optionId: hit.o.id });
       return a.ok || a.status === "needs_input" ? { ok: true, detail: `${hit.d.kind}/${hit.o.id} ${a.path ?? ""}`, kind: hit.d.kind } : { ok: false, error: `engine refused ${hit.d.kind}/${hit.o.id}: ${a.httpStatus} ${a.status} ${a.error}`, refused: true };
@@ -364,12 +363,15 @@ class Runner {
     // A channel is skipped only when it is known to belong to ANOTHER game (its name or its parent's name carries
     // that game's pbdN); channels/threads of unknown ownership stay eligible.
     const chans = new Map(c?.channels ?? []);
-    // The client may not have been sent every thread; the shim's state file knows all channels.
+    // The client may not have been sent every thread: the fork's own shard knows its channels and threads (one small
+    // file, never the whole store).
+    let mine = {};
     try {
-      for (const ch of Object.values(shimState().channels ?? {})) if (ch?.id && !chans.has(ch.id)) chans.set(ch.id, ch);
+      mine = shimGameChannels(this.fork.game);
     } catch {}
     const gameOf = (ch) => String(ch?.name ?? "").match(/(?:^|[^a-z0-9])(pbd\d+)(?![0-9])/i)?.[1]?.toLowerCase() ?? null;
     const owner = (id) => {
+      if (mine[id]) return String(this.fork.game).toLowerCase();
       const ch = chans.get(id);
       return gameOf(ch) ?? (ch?.parent_id ? gameOf(chans.get(ch.parent_id)) : null);
     };
@@ -520,16 +522,16 @@ async function checkExpect(run, expect) {
     // the end and the shim saves its store within 30 s.
     const ids = ["table_talk_channel", "main_game_channel"].map((k) => run.fork.channels.get(k)).filter(Boolean);
     const want = !!expect.channels.archived;
-    const archived = (ch) => !!ch?._archived || shimState().channels?.[ch?.parent_id]?.name === "The in-limbo PBD Archive";
+    const archived = (ch) => !!ch?._archived || shimCategories()[ch?.parent_id]?.name === "The in-limbo PBD Archive";
     let got;
     for (const end = Date.now() + (expect.channels.withinMs ?? 75000); ; ) {
-      got = ids.map((id) => shimState().channels?.[id]);
+      got = ids.map((id) => shimGameChannels(run.fork.game)[id]);
       if (got.every((ch) => ch && archived(ch) === want) || Date.now() > end) break;
       await sleep(2000);
     }
     const bad = got.filter((ch) => !ch || archived(ch) !== want);
     if (!ids.length || bad.length)
-      fails.push(`channels: expected ${want ? "archived" : "restored"}, got ${got.map((ch) => (ch ? `${ch.name} archived=${!!ch._archived} parent=${shimState().channels?.[ch.parent_id]?.name}` : "missing")).join("; ")}`);
+      fails.push(`channels: expected ${want ? "archived" : "restored"}, got ${got.map((ch) => (ch ? `${ch.name} archived=${!!ch._archived} parent=${shimCategories()[ch.parent_id]?.name}` : "missing")).join("; ")}`);
   }
   if (expect.decision) {
     // { kind, as?, scope?: "player"|"table", value?: {partial option value or window subject}, open: true|false, count?: n }

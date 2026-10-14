@@ -18,6 +18,7 @@ import { followHolds, followsOwed, owesFollow } from "../../follows";
 import { useMyDecisions } from "../../store";
 import { useEngineAnswer } from "../../link";
 import { factionName } from "../../names";
+import { displayLabel } from "@/decisions/model/phrasing";
 
 /**
  * A direct action payload for `answer`: the decision's kind-specific endpoint (`POST …/decisions/{id}/{action}`)
@@ -123,6 +124,9 @@ function turnLabel(o: TurnOpt, tactic: number | undefined): string {
   }
 }
 
+/** Steps of my tactical action that mean it is not over yet (End turn is refused until it is concluded). */
+const MID_ACTION = /^tactical\.(move|land|conclude)$/;
+
 /** The follow windows that hold this turn (the engine refuses end turn / pass until they close). */
 function followWaits(options: TurnOpt[], state: GameState | null | undefined): FollowWait[] {
   /* Live from the game state when the engine reports blocksTurn (it re-enables by itself as players answer); the
@@ -171,8 +175,28 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
       }),
     ),
   ];
-  const disabled = (o: TurnOpt) => owed.length > 0 || ((waits.length > 0 || overLimit.length > 0) && ends(o));
+  /* My tactical action is under way (Thunder's Edge Warfare posts this menu before it): the engine refuses End turn
+     until it is concluded (pt9 058). */
+  const midAction = mine.some((d) => MID_ACTION.test(d.kind) && d.target?.userId === me?.userId);
+  const endsTurn = (o: TurnOpt) => o.value!.action === "end_turn";
+  /* The card I played this turn has a mandatory primary part left (Imperial's secret / Mecatol point): the engine
+     refuses End turn until it is done (pt9). */
+  const primaryMissing = opts.map((o) => (o.value!.action === "end_turn" ? o.value!.primaryMissing : null)).find((x): x is string => !!x) ?? null;
+  const disabled = (o: TurnOpt) =>
+    owed.length > 0 ||
+    ((waits.length > 0 || overLimit.length > 0) && ends(o)) ||
+    ((midAction || !!primaryMissing) && endsTurn(o));
   const pending = waits.flatMap((w) => w.userIds.map((id, i) => state?.players.find((p) => p.userId === id)?.userName ?? factionName(w.factions[i] ?? id)));
+  /* One click to the missing part: that part's own buttons from my played card's panel (pt9 soak pbd821: the holder
+     waited on End turn without knowing where the primary was). */
+  const missingValue = opts.map((o) => (o.value!.action === "end_turn" ? o.value! : null)).find((v) => !!v?.primaryMissing);
+  const missingParts = missingValue && "primaryMissingParts" in missingValue ? (missingValue.primaryMissingParts ?? []) : [];
+  const missingCard = missingValue && "primaryMissingCard" in missingValue ? missingValue.primaryMissingCard : null;
+  const cardPanel = missingCard == null ? undefined : mine.find((d) => d.kind === "strategy_card.resolve" && d.options.some((o) => (o.value as { strategyCard?: number; who?: string } | null)?.strategyCard === missingCard && (o.value as { who?: string }).who !== "others"));
+  const partButtons = (cardPanel?.options ?? []).filter((o) => {
+    const v = o.value as { part?: string | null; who?: string } | null;
+    return !o.disabled && !!v?.part && v.who !== "others" && missingParts.includes(v.part);
+  });
   const reminders = waits
     .map((w) => {
       const panel = mine.find((d) => d.kind === "strategy_card.resolve" && d.options.some((o) => (o.value as { action?: string; strategyCard?: number } | null)?.action === "request_all" && (o.value as { strategyCard?: number }).strategyCard === w.strategyCard));
@@ -181,6 +205,8 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     })
     .filter((x) => x !== null);
   const label = (o: TurnOpt) => {
+    if (midAction && endsTurn(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · finish your tactical action first`;
+    if (primaryMissing && endsTurn(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${primaryMissing}`;
     if (overLimit.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${overLimit.join("; ")}`;
     if (waits.length && ends(o))
       return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow ${waits.map((w) => w.name).join(" and ")}`;
@@ -201,7 +227,9 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
           : { live: true, text: `Tactical action: click a system on the map to activate it (${tokens ?? "?"} tactic token${tokens === 1 ? "" : "s"}).` }
     : startsAction
       ? { live: false, text: "Tactical action: not offered on this menu (the game did not include it)." }
-      : null;
+      : opts.some(endsTurn)
+        ? { live: false, text: midAction ? "Tactical action: under way." : "Tactical action: you already took your action this turn." }
+        : null;
   const variant = (o: TurnOpt) =>
     o.value!.action === "pass" || o.value!.action === "end_turn" || o.value!.action === "another_action" ? "light" : "filled";
   return (
@@ -226,6 +254,12 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
             </Button>
           ))}
         {defer && waits.length > 0 && <OptionButton id={defer.id} label={turnLabel(defer, undefined)} answer={answer} variant="filled" />}
+        {cardPanel &&
+          partButtons.map((o) => (
+            <Button key={o.id} size="xs" variant="filled" onClick={() => answerOther(cardPanel, o.id)}>
+              {displayLabel(o.handler, o.label)}
+            </Button>
+          ))}
         {reminders.map((r) => (
           <Button key={r.option.id} size="xs" variant="subtle" onClick={() => answerOther(r.panel, r.option.id)}>
             Remind them ({r.name})
