@@ -1,6 +1,6 @@
 {
   "name": "faction-muaat",
-  "description": "Muaat: Star Forge (starforgeTile_<pos> -> starforge_destroyer_<pos>), agent Umbat (exhaustAgent_muaatagent_<faction> -> umbatTile_<pos>), commander Magmus (gain1tgFromMuaatCommander), hero Nova Seed (novaSeed_<pos>) audit-gaps-2: Umbat is an ACTION used here on Letnev's turn, so the base save carries agentTimingGate=off (TI4_AGENT_TIMING per-game switch).",
+  "description": "Muaat: Star Forge (starforgeTile_<pos> -> starforge_destroyer_<pos>), agent Umbat (exhaustAgent_muaatagent_<faction> -> umbatTile_<pos>), commander Magmus (gain1tgFromMuaatCommander), hero Nova Seed (novaSeed_<pos>) audit-gaps-2: Umbat is an ACTION used here on Letnev's turn, so the base save carries agentTimingGate=off (TI4_AGENT_TIMING per-game switch). Adjudicator Ba'al (PoK hero): 'Choose 1 system that contains 1 or more of your war suns; that system cannot be a home system or Mecatol Rex' -- the original scenario fired it on 304, Muaat's own home system (tile 04), which the leaders-audit check correctly refuses; it now expects that refusal and fires Nova Seed on a war sun in 103 (Lodor).",
   "base": {
     "save": "tests/engine/scenarios/saves/gaps2-pbd104-44-agenttiming-off.txt",
     "next": "tests/engine/scenarios/saves/gaps2-pbd104-44-agenttiming-off.next.txt",
@@ -8,6 +8,7 @@
   },
   "setup": [
     "/add_units tile_name:304 unit_names:\"warsun\" faction_or_color:muaat",
+    "/add_units tile_name:103 unit_names:\"warsun\" faction_or_color:muaat",
     "/player stats trade_goods:4 strategy_cc:3 faction_or_color:muaat",
     "/leaders unlock leader:muaatcommander faction_or_color:muaat",
     "/leaders unlock leader:muaathero faction_or_color:muaat"
@@ -39,6 +40,11 @@
     },
     {
       "press": "FFCC_muaat_novaSeed_304",
+      "as": "muaat",
+      "refused": true
+    },
+    {
+      "press": "FFCC_muaat_novaSeed_103",
       "as": "muaat"
     }
   ],
