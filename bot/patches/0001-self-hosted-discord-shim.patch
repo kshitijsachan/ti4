@@ -9280,7 +9280,7 @@ index 0000000..af65f22
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..0d1d22a
+index 0000000..a9b293e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
 @@ -0,0 +1,297 @@
@@ -9436,14 +9436,14 @@ index 0000000..0d1d22a
 +
 +    /**
 +     * Settles the game's prompts still captured ahead of their save once the interaction that posted them is over:
-+     * after a short delay, under the game's write lock (taken only when no handler holds it), against the game as it
++     * after a short delay (200 ms), under the game's write lock (taken only when no handler holds it), against the game as it
 +     * is in memory then — the handler's final state, whether it saved after the post or not.
 +     */
 +    static void settleAheadWhenIdle(String gameName) {
 +        if (!idleSettlePending.add(gameName)) return;
 +        Thread.ofVirtual().name("engine-settle-idle").start(() -> {
 +            try {
-+                Thread.sleep(1500);
++                Thread.sleep(200); // let the batch of posts of the same interaction land; the lock waits for the handler
 +                idleSettlePending.remove(gameName);
 +                ti4.executors.ExecutionLockManager.lock(gameName, ti4.executors.ExecutionLockType.WRITE);
 +                try {
@@ -11408,10 +11408,10 @@ index 0000000..b069fe6
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/PromptRecovery.java b/src/main/java/ti4/selfhost/engine/PromptRecovery.java
 new file mode 100644
-index 0000000..e4e9e00
+index 0000000..234b845
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/PromptRecovery.java
-@@ -0,0 +1,410 @@
+@@ -0,0 +1,415 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -11783,6 +11783,7 @@ index 0000000..e4e9e00
 +        Thread.ofVirtual().name("engine-recover").start(() -> {
 +            try {
 +                long lastSlow = System.currentTimeMillis();
++                long slowTick = -1;
 +                while (true) {
 +                    Thread.sleep(FAST_TICK_MS);
 +                    if (!JdaService.isReadyToReceiveCommands()) continue;
@@ -11793,9 +11794,13 @@ index 0000000..e4e9e00
 +                    }
 +                    if (System.currentTimeMillis() - lastSlow < TimeUnit.MINUTES.toMillis(2)) continue;
 +                    lastSlow = System.currentTimeMillis();
++                    slowTick++;
 +                    long now = System.currentTimeMillis();
 +                    for (ManagedGame mg : GameManager.getManagedGames()) {
 +                        if (mg.isHasEnded() || now - mg.getLastModifiedDate() > TimeUnit.HOURS.toMillis(24)) continue;
++                        // Each look parses the game file (GameManager.get does not cache): games idle over 1 h are
++                        // looked at every 30 min only (898 games saved in the last 24 h vs ~50 in the last hour).
++                        if (now - mg.getLastModifiedDate() > TimeUnit.HOURS.toMillis(1) && slowTick % 15 != 0) continue;
 +                        try {
 +                            Game game = mg.getGame();
 +                            if (game != null && !DecisionRegistry.openDecisions(mg.getName()).isEmpty())
@@ -29988,10 +29993,10 @@ index 0000000..3d95df7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
 new file mode 100644
-index 0000000..f029a43
+index 0000000..c8cdb76
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/StrategyCardResolveKind.java
-@@ -0,0 +1,603 @@
+@@ -0,0 +1,605 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -30535,7 +30540,9 @@ index 0000000..f029a43
 +            return null;
 +        }
 +        if ("follower".equals(parts[1])) return gained == 1 ? 4 : null;
-+        return gained == 1 ? 0 : gained == 2 ? 6 : null;
++        // Integer branches throughout: "gained == 2 ? 6 : null" is Integer, and an int first branch would unbox it (NPE).
++        if (gained == 1) return 0;
++        return gained == 2 ? Integer.valueOf(6) : null;
 +    }
 +
 +    @Override
