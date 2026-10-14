@@ -1,0 +1,40 @@
+{
+  "name": "core-cc-cap-commanding-presence",
+  "description": "Rules audit (core): every 'gain N command tokens' panel is capped by its source (CcGainCap). Panels the leaders/agendas audits capped already (Leadership, Acamar, ...); this round caps the remaining sources (Commanding Presence, Deliberate Action, Dark Purpose, explores, heroes, relics). Base: pbd88@269 (cc-gain-cap-empyrean); Empyrean is given Commanding Presence and unlocks a leader: the panel grants 1 token - the first increase is accepted, the second refused.",
+  "base": {
+    "recording": "pbd88",
+    "index": 269,
+    "repost": false
+  },
+  "setup": [
+    "/franken ability_add ability:commanding_presence faction_or_color:empyrean",
+    "/leaders lock leader:empyreancommander faction_or_color:empyrean"
+  ],
+  "steps": [
+    {
+      "command": "/leaders unlock leader:empyreancommander faction_or_color:empyrean"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_tactic_cc$"
+      },
+      "as": "empyrean"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc$"
+      },
+      "as": "empyrean",
+      "refused": true,
+      "legacy": []
+    }
+  ],
+  "expect": {
+    "invariants": false
+  }
+}

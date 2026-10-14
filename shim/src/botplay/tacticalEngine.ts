@@ -262,6 +262,12 @@ export class EngineTactical {
     plan.landed = true;
     plan.landedAt = Date.now();
     const r = await this.engine.land(plan.game, d, { landings, done: true }, landings.length ? `land ${landings.map((l) => `${l.count} on ${l.planet}`).join(", ")}` : "land nothing");
+    if (!r?.ok && landings.length && /space area/.test(String((r as { error?: unknown } | null)?.error ?? ""))) {
+      // Rules (core audit, MovementRules.landingRefusal): other players' ships are still in space - the space combat
+      // is not over. Not a failure: land once it is (the prompt stays open; retried on the next pass).
+      plan.landed = false;
+      return false;
+    }
     if (!r?.ok) {
       // Partial landing or a changed prompt: finish with Done Landing as it stands.
       const done = live(d).find((o) => o.value!.op === "done");

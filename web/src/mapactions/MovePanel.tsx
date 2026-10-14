@@ -367,6 +367,8 @@ type PanelProps = {
   distances: Map<string, number>;
   bonuses: MoveBonus[];
   moveBonus: ReturnType<typeof useMoveBonuses>;
+  /** Why nothing may move into the target (asteroid field / supernova), or null. */
+  blocked?: string | null;
 };
 
 /** The movement step's bar: what moves in, the capacity it needs, and one Move. */
@@ -388,6 +390,7 @@ export function MovePanel({
   distances,
   bonuses,
   moveBonus,
+  blocked = null,
 }: PanelProps) {
   const plan = useMapActions((s) => s.plan);
   const resetPlans = useMapActions((s) => s.resetPlans);
@@ -475,13 +478,15 @@ export function MovePanel({
           Out of reach by the map's count: {far.join("; ")}. The game will refuse it unless an ability covers it.
         </div>
       )}
+      {blocked && <div className={cx(classes.barText, classes.slow)}>{blocked}</div>}
       {error && <div className={classes.error}>{error}</div>}
       <div className={classes.barActions}>
         <button
           type="button"
           className={cx(classes.button, classes.primary)}
           onClick={() => void move()}
-          disabled={!!busy}
+          disabled={!!busy || (!!blocked && !sum.empty)}
+          title={blocked && !sum.empty ? blocked : undefined}
         >
           {sum.empty
             ? "Continue without moving"
