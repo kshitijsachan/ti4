@@ -1,3 +1,4 @@
+import { enemyShips } from "./range";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import { undoViaEngine } from "./engine";
 import cx from "clsx";
@@ -98,6 +99,8 @@ export function LandingPanel({
       await pressButton(conn, { ...prompt, customId: riftButton.customId });
     });
   const plan = useMapActions((s) => s.landing);
+  /* Rules (LRR 49, core audit MovementRules.landingRefusal): no landing while other players' ships remain in space. */
+  const shipsLeft = enemyShips(target, me.faction, web);
   const setLanding = useMapActions((s) => s.setLanding);
   const space = inSpace(target, me, web);
   const units = Object.keys(offer.units);
@@ -242,6 +245,11 @@ export function LandingPanel({
           </span>
         ))}
       </div>
+      {shipsLeft && (
+        <div className={cx(classes.barText, classes.slow)}>
+          Other players' ships are still in this system's space area: ground forces land once the space combat is won.
+        </div>
+      )}
       {busy && <div className={classes.barText}>{busy}</div>}
       {error && <div className={classes.error}>{error}</div>}
       <div className={classes.barActions}>
@@ -259,7 +267,8 @@ export function LandingPanel({
           type="button"
           className={cx(classes.button, !(riftButton && !rolled) && classes.primary)}
           onClick={() => void land()}
-          disabled={!!busy}
+          disabled={!!busy || (shipsLeft && total > 0)}
+          title={shipsLeft && total > 0 ? "The game refuses a landing while other players' ships are in space." : undefined}
         >
           {total ? `Land ${total}` : "Don't land"}
         </button>

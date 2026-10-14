@@ -1,6 +1,6 @@
 {
   "name": "move-rift-mark",
-  "description": "pbd104@59 + setup: letnev carrier and 2 infantry at 203; letnev activates 205 (trigger ringTile_205). 203->205 is 2 normally but 1 through the gravity rift at 204, so moving marks possiblyUsedRift (rift rolls offered later). Engine: direct /move (marks the rift itself); legacy: per-unit buttons + Done moving (TacticalActionOutputService.validateMoveValue marks it).",
+  "description": "pbd104@59 + setup: letnev carrier and 2 infantry at 203; letnev activates 205 (trigger ringTile_205). 203->205 is 2 normally but 1 through the gravity rift at 204, so moving marks possiblyUsedRift (rift rolls offered later). Engine: direct /move (marks the rift itself); legacy: per-unit buttons + Done moving (TacticalActionOutputService.validateMoveValue marks it). Since the core rules audit (MovementRules.forcedRiftRolls) the carrier, which can only reach 205 through the rift (move 1, no Gravity Drive), rolls at once on Done moving: possiblyUsedRift is cleared and riftRollsMade lists it (no optional rift button).",
   "base": {
     "recording": "pbd104",
     "index": 59
@@ -84,7 +84,11 @@
     "save": [
       {
         "key": "stored.possiblyUsedRift",
-        "eq": "yes"
+        "eq": ""
+      },
+      {
+        "key": "stored.riftRollsMade",
+        "match": "carrier"
       }
     ]
   }

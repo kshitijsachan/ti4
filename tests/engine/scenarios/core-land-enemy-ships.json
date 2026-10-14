@@ -1,0 +1,91 @@
+{
+  "name": "core-land-enemy-ships",
+  "description": "Rules audit (core): LRR 49 INVASION - ground forces are committed once the space combat is over, i.e. no other player's ships remain in the space area. The original offered landing at once after movement, even with enemy ships still there. Now landUnits_ / tactical.land validate refuse it (MovementRules.landingRefusal; option value.blocked, web Land greyed). Base: pbd104@59; letnev has a carrier with 2 infantry and muaat a destroyer at 205; letnev activates 205 and moves nothing: landing on Arinam is refused while the destroyer is there.",
+  "base": {
+    "recording": "pbd104",
+    "index": 59
+  },
+  "setup": [
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "205",
+        "unit_names": "carrier, 2 infantry",
+        "faction_or_color": "letnev"
+      }
+    },
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "205",
+        "unit_names": "destroyer",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
+      "command": "player turn_start",
+      "options": {
+        "faction_or_color": "letnev"
+      }
+    }
+  ],
+  "trigger": {
+    "press": "FFCC_letnev_ringTile_205",
+    "as": "letnev"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": []
+        }
+      },
+      "as": "letnev",
+      "legacy": [
+        {
+          "press": "FFCC_letnev_concludeMove_205"
+        }
+      ]
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "answer": {
+        "kind": "tactical.land",
+        "action": "land",
+        "body": {
+          "landings": [
+            {
+              "planet": "arinam",
+              "unit": "gf",
+              "count": 1
+            }
+          ],
+          "done": false
+        }
+      },
+      "as": "letnev",
+      "refused": true,
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "wait": 1000
+    }
+  ],
+  "expect": {
+    "invariants": false,
+    "save": [
+      {
+        "key": "player[letnev].planets",
+        "match": "^((?!arinam).)*$"
+      }
+    ]
+  }
+}

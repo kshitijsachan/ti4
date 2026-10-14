@@ -1,0 +1,43 @@
+{
+  "name": "core-vote-cap",
+  "description": "Rules audit (core, switch TI4_VOTE_CHECK, on by default): LRR 8 - votes come from exhausted planets' influence plus the voter's vote sources and vote action cards. The original's 'Modify Votes' accepted any number; now a confirmed count above what the voter had when they pressed Vote (AgendaHelper's vote total + 5 per Distinguished Councilor + trade goods with Bribery in hand) is refused (VoteRules: bot resolveAgendaVote_, agenda.vote_step validate). Base: pbd72@768 (winnu about to confirm a vote): winnu presses Vote, then confirming 40 votes is refused; 1 vote goes through.",
+  "base": {
+    "recording": "pbd72",
+    "index": 768
+  },
+  "steps": [
+    {
+      "press": "FFCC_winnu_vote",
+      "as": "winnu",
+      "click": true
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "press": "FFCC_winnu_resolveAgendaVote_40",
+      "as": "winnu",
+      "refused": true,
+      "legacy": [
+        {
+          "press": "FFCC_winnu_resolveAgendaVote_40",
+          "as": "winnu"
+        }
+      ]
+    },
+    {
+      "wait": 1500,
+      "expect": {
+        "save": [
+          {
+            "key": "stored.voteCapwinnu",
+            "match": "^\\d+$"
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "name": "core-rift-forced",
+  "description": "Rules audit (core): LRR 41 GRAVITY RIFT - every ship that moves out of or through a gravity rift rolls; 1-3 destroys it. The original offered 'Units Travelled Through Gravity Rift' and let the player pick which units roll (or none). Now MovementRules.forcedRiftRolls rolls on Done moving for ships leaving a rift and ships that can only reach through one (move value + every bonus they could have short of the plain distance). Base: pbd104@59, letnev carrier (move 1, no Gravity Drive) + 2 infantry at 203 move to 205 (2 away, 1 through the rift at 204): the carrier rolls by itself (stored riftRollsMade), the infantry do not.",
+  "base": {
+    "recording": "pbd104",
+    "index": 59
+  },
+  "setup": [
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "203",
+        "unit_names": "carrier, 2 infantry",
+        "faction_or_color": "letnev"
+      }
+    },
+    {
+      "command": "player turn_start",
+      "options": {
+        "faction_or_color": "letnev"
+      }
+    }
+  ],
+  "trigger": {
+    "press": "FFCC_letnev_ringTile_205",
+    "as": "letnev"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "203",
+              "holder": "space",
+              "unit": "cv",
+              "count": 1
+            },
+            {
+              "from": "203",
+              "holder": "space",
+              "unit": "gf",
+              "count": 2
+            }
+          ]
+        }
+      },
+      "as": "letnev",
+      "legacy": [
+        {
+          "press": "FFCC_letnev_tacticalMoveFrom_203"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_letnev_unitTacticalMove_203_1_cv_rainbow"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_letnev_unitTacticalMove_203_2_gf_rainbow"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_letnev_doneWithOneSystem_203"
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "press": "FFCC_letnev_concludeMove_205"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "stored.possiblyUsedRift",
+        "eq": ""
+      },
+      {
+        "key": "stored.riftRollsMade",
+        "match": "carrier"
+      }
+    ]
+  }
+}

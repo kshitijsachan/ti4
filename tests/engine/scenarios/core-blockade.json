@@ -1,0 +1,44 @@
+{
+  "name": "core-blockade",
+  "description": "Rules audit (core): LRR 14 BLOCKADED - a unit with PRODUCTION in a system with other players' ships and none of its owner's cannot produce ships. The original offered ships there. Base: pbd19@319 (ralnel building at 307); ralnel's dreadnought and fighters leave 307 and a letnev destroyer is placed there: producing a carrier is refused (place_ handler, production.produce validate/payload), infantry on Mez is still accepted.",
+  "base": {
+    "recording": "pbd19",
+    "index": 319
+  },
+  "setup": [
+    "/remove_units tile_name:307 unit_names:\"2 ff, dn\" faction_or_color:ralnel",
+    "/add_units tile_name:307 unit_names:dd faction_or_color:letnev"
+  ],
+  "steps": [
+    {
+      "press": "FFCC_ralnel_place_carrier_307",
+      "as": "ralnel",
+      "refused": true,
+      "legacy": [
+        {
+          "press": "FFCC_ralnel_place_carrier_307",
+          "as": "ralnel"
+        }
+      ]
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "press": "FFCC_ralnel_place_infantry_mez",
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": false,
+    "save": [
+      {
+        "key": "player[ralnel].produced_units",
+        "match": "^gf_307_mez,1;?$"
+      }
+    ]
+  }
+}

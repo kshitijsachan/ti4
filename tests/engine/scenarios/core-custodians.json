@@ -1,0 +1,84 @@
+{
+  "name": "core-custodians",
+  "description": "Rules audit (core): LRR 55 MECATOL REX - ground forces cannot be committed to Mecatol Rex while the custodians token is on it unless the player spends 6 influence. The original let the landing through, scored the point and posted a payment whose Done closed whatever was paid; now landing is refused when the player cannot pay 6 influence (ready planets' influence + trade goods: CustodiansRule, bot landUnits_ + tactical.land validate), and the payment's Done waits for 6. Base: pbd104@59; letnev (Arc Prime / Wren Terra: 1 influence, 0 trade goods) has a carrier with 2 infantry in Mecatol's system and activates it: landing on Mecatol Rex is refused and the custodians token stays.",
+  "base": {
+    "recording": "pbd104",
+    "index": 59
+  },
+  "setup": [
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "000",
+        "unit_names": "carrier, 2 infantry",
+        "faction_or_color": "letnev"
+      }
+    },
+    "/player stats trade_goods:0 faction_or_color:letnev",
+    {
+      "command": "player turn_start",
+      "options": {
+        "faction_or_color": "letnev"
+      }
+    }
+  ],
+  "trigger": {
+    "press": "FFCC_letnev_ringTile_000",
+    "as": "letnev"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": []
+        }
+      },
+      "as": "letnev",
+      "legacy": [
+        {
+          "press": "FFCC_letnev_concludeMove_000"
+        }
+      ]
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "answer": {
+        "kind": "tactical.land",
+        "action": "land",
+        "body": {
+          "landings": [
+            {
+              "planet": "mrte",
+              "unit": "gf",
+              "count": 1
+            }
+          ],
+          "done": false
+        }
+      },
+      "as": "letnev",
+      "refused": true,
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "wait": 1000
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[letnev].planets",
+        "match": "^((?!mrte).)*$"
+      }
+    ]
+  }
+}

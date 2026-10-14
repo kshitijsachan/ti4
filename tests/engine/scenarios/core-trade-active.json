@@ -1,0 +1,47 @@
+{
+  "name": "core-trade-active",
+  "description": "Rules audit (core, switch TI4_TRADE_RULES, on by default; =off restores trading off-turn): LRR 94 - during the action phase the active player transacts with each neighbour once per turn; other players do not transact with each other. The original accepted any transaction between neighbours at any time. Base: pbd1204 undo save 109 (action phase, Mentak active): Arborec, Bastion and Mentak each get a destroyer at Mecatol Rex (neighbours); Arborec's offer to Bastion (neither active) is refused, Mentak's (active) offer to Arborec goes out (trade.propose / sendOffer_ / acceptOffer_ / trade.offer validate: TradeRules).",
+  "base": {
+    "save": "saves/pt9-pbd1204-109.txt"
+  },
+  "setup": [
+    "/player stats trade_goods:3 faction_or_color:arborec",
+    "/add_units tile_name:000 unit_names:dd faction_or_color:arborec",
+    "/add_units tile_name:000 unit_names:dd faction_or_color:bastion",
+    "/add_units tile_name:000 unit_names:dd faction_or_color:mentak"
+  ],
+  "steps": [
+    {
+      "gameAction": "trade.propose",
+      "as": "arborec",
+      "body": {
+        "to": "bastion",
+        "give": {
+          "tg": 1
+        }
+      },
+      "refused": true,
+      "legacy": [
+        {
+          "wait": 300
+        }
+      ]
+    },
+    {
+      "gameAction": "trade.propose",
+      "as": "mentak",
+      "body": {
+        "to": "arborec",
+        "give": {
+          "tg": 0
+        },
+        "receive": {
+          "tg": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "invariants": false
+  }
+}
