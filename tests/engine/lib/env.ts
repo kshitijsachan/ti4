@@ -8,7 +8,7 @@
  *   SHIM_STATE      shim data dir or its state.json  (/home/user/run/shim-data/state.json; read with shim/tools/read-state.mjs)
  *   ENGINE_RUN_DIR  harness scratch (seats, forks)   (/home/user/run/engine)
  */
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readShimState, shimStateStamp } from "../../../shim/tools/read-state.mjs";
@@ -54,6 +54,64 @@ export function shimState(): Json {
   const mtime = shimStateStamp(SHIM_STATE);
   if (!shimCache || shimCache.mtime !== mtime) shimCache = { mtime, state: readShimState(SHIM_STATE) };
   return shimCache.state;
+}
+
+/*
+ * Light reads of the shim store: the whole state (shimState) is every game's channels AND messages (~2 GB parsed);
+ * a scenario only needs the slash-command registry (global.json) and its fork's channels (one game shard). The
+ * sharded store is read directly, file by file, cached on the file's mtime; the old single state.json falls back to
+ * shimState().
+ */
+const SHIM_DIR = SHIM_STATE.endsWith("state.json") ? dirname(SHIM_STATE) : SHIM_STATE;
+const STORE = join(SHIM_DIR, "store");
+const sharded = () => existsSync(join(STORE, "global.json"));
+const lightCache = new Map<string, { mtime: number; value: any }>();
+function readStoreJson(path: string, strip = false): any {
+  let mtime = 0;
+  try {
+    mtime = statSync(path).mtimeMs;
+  } catch {
+    return null;
+  }
+  const hit = lightCache.get(path);
+  if (hit && hit.mtime === mtime) return hit.value;
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+  const m = strip ? /^\{"seq":(\d+),/.exec(raw) : null;
+  const value = JSON.parse(m ? "{" + raw.slice(m[0].length) : raw);
+  lightCache.set(path, { mtime, value });
+  return value;
+}
+
+/** The shim's global state (users, seats, commands, admin token…) without any channel or message. */
+export function shimGlobal(): Json {
+  return sharded() ? readStoreJson(join(STORE, "global.json")) ?? {} : shimState();
+}
+
+/** The shim's slash-command registry (array). */
+export function shimCommands(): Json[] {
+  const cmds = sharded() ? readStoreJson(join(STORE, "global.json"))?.commands : shimState().commands;
+  return Array.isArray(cmds) ? cmds : Object.values(cmds ?? {});
+}
+
+/** The channel objects of one game (its shard: text channels, threads), keyed by id. No messages are read. */
+export function shimGameChannels(game: string): Record<string, Json> {
+  if (!sharded()) {
+    const all = shimState().channels ?? {};
+    const ids = new Set(Object.values(all).filter((c: any) => String(c?.name ?? "").toLowerCase().startsWith(`${game.toLowerCase()}-`)).map((c: any) => c.id));
+    return Object.fromEntries(Object.entries(all).filter(([id, c]: [string, any]) => ids.has(id) || ids.has(c?.parent_id)));
+  }
+  return readStoreJson(join(STORE, "shards", `game-${game}.json`), true)?.channels ?? {};
+}
+
+/** Category channels (the archive category included), keyed by id. */
+export function shimCategories(): Record<string, Json> {
+  if (!sharded()) return Object.fromEntries(Object.entries(shimState().channels ?? {}).filter(([, c]: [string, any]) => c?.type === 4));
+  return readStoreJson(join(STORE, "shards", "categories.json"), true)?.channels ?? {};
 }
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

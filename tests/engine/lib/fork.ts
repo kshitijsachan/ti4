@@ -15,8 +15,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readShimState } from "../../../shim/tools/read-state.mjs";
-import { BOT_STORAGE, BOT_URL, SHIM_STATE, SHIM_URL, botToken, ensureRunDir, gameFile, readGameFile, getJson, sleep, undoDir, undoFile, waitForStack, type Json } from "./env.ts";
+import { BOT_STORAGE, BOT_URL, SHIM_URL, shimGlobal, botToken, ensureRunDir, gameFile, readGameFile, getJson, sleep, undoDir, undoFile, waitForStack, type Json } from "./env.ts";
 import { GAME_CHANNEL_KEYS, PLAYER_CHANNEL_KEYS, isRealPlayer, parseSave, rewriteForFork, type ForkMap } from "./savefile.ts";
 import { ShimClient, controlsOf, type Msg } from "./shim.ts";
 import { openDecisions } from "./engine.ts";
@@ -34,7 +33,7 @@ export async function replaySeats(): Promise<Seat[]> {
   } catch {
     /* create below */
   }
-  const state = readShimState(SHIM_STATE);
+  const state = shimGlobal(); // users, seats and the admin key only: never the whole store
   const existing = Object.values(state.seats as Record<string, Json>)
     .map((s) => ({ ...s, name: state.users[s.user_id]?.global_name, username: state.users[s.user_id]?.username }))
     .filter((s) => SEAT_NAMES.includes(s.name));

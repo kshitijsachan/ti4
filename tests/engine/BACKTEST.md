@@ -130,4 +130,8 @@ the engine's result differs from the legacy result (legacy is right unless prove
   answerable; `--no-reset` skips it) and the base save is loaded as usual. Reused forks are never ended by the run.
 * **Clean up**: when done, end your forks — `/game end` from the fork's actions channel is what a person would do;
   simplest: tell your caller the fork names so they can be reused, and do not leave runs in the background.
+* scenario.mjs reads only what it needs from the shim store: the command registry (`store/global.json`) and its
+  forks' own shard (`store/shards/game-<fork>.json`, channels only), cached on mtime (lib/env.ts shimCommands /
+  shimGameChannels / shimCategories). A run stays around 120-170 MB RSS and a few CPU seconds (it used to re-read the
+  whole store, 1.2-2.2 GB). `shimState()` (the whole store) is for record.mjs only.
 * Never restart the bot/shim; if it restarts under you the harness waits and retries once.
