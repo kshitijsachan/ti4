@@ -73,7 +73,14 @@ export async function fetchEngineTrade(botBase: string, game: string, token: str
     counterparties: trade.partners.map((c) =>
       !c.canTrade || trade.mayTransactWith.includes(c.faction)
         ? c
-        : { ...c, canTrade: false, reason: "Not neighbours (only the agenda phase lifts that)" },
+        : {
+            ...c,
+            canTrade: false,
+            reason:
+              trade.phase === "action"
+                ? "Action phase: only the active player transacts, with each neighbour once per turn"
+                : "Not neighbours (only the agenda phase lifts that)",
+          },
     ),
     mayTransactWith: trade.mayTransactWith,
   };

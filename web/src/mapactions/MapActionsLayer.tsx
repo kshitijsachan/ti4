@@ -23,7 +23,7 @@ import { activateSystem as driveActivation } from "./activate";
 import { activateClick, activateLabel } from "./activateClick";
 import { buttonsOf, pressButton } from "./driver";
 import { promptHasMoves, unitsAt, type UnitGroup } from "./movement";
-import { distancesTo, maxBoost } from "./range";
+import { destinationBlocked, distancesTo, maxBoost } from "./range";
 import { useMoveBonuses } from "./bonuses";
 import { landingOffer } from "./landing";
 import { useMapActions } from "./store";
@@ -727,6 +727,7 @@ export function MapActionsLayer({
                 distances={distances}
                 bonuses={bonuses}
                 moveBonus={moveBonus}
+                blocked={destinationBlocked(tiles[target]?.systemId, me.techs ?? [], me.relics ?? [])}
               />
             ) : landing && target && prompt && offer && me ? (
               <LandingPanel

@@ -1,0 +1,68 @@
+{
+  "name": "core-move-asteroid",
+  "description": "Rules audit (core): LRR 12 ASTEROID FIELD - ships cannot move into an asteroid field without Antimass Deflectors. The original only posted a 'friendly reminder'; now Done moving / the direct move into one is refused (MovementRules.destinationRefusal: bot finishMovement, tactical.move validate, TacticalController) and the web move bar says why with Move greyed. Base: pbd104@59; muaat (no Antimass Deflectors) gets a cruiser at 102 and activates the asteroid field at 101 (activating is legal): moving the cruiser in is refused and the movement prompt stays.",
+  "base": {
+    "recording": "pbd104",
+    "index": 59
+  },
+  "setup": [
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "102",
+        "unit_names": "cruiser",
+        "faction_or_color": "muaat"
+      }
+    },
+    {
+      "command": "player turn_start",
+      "options": {
+        "faction_or_color": "muaat"
+      }
+    }
+  ],
+  "trigger": {
+    "press": "FFCC_muaat_ringTile_101",
+    "as": "muaat"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "102",
+              "holder": "space",
+              "unit": "ca",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "as": "muaat",
+      "refused": true,
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "wait": 1500,
+      "expect": {
+        "decision": [
+          {
+            "kind": "tactical.move",
+            "as": "muaat",
+            "open": true
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
