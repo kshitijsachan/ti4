@@ -7023,10 +7023,10 @@ index 0000000..99c695d
 +}
 diff --git a/src/main/java/ti4/selfhost/ShimRetryInterceptor.java b/src/main/java/ti4/selfhost/ShimRetryInterceptor.java
 new file mode 100644
-index 0000000..8b3306a
+index 0000000..c9e9460
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/ShimRetryInterceptor.java
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,129 @@
 +package ti4.selfhost;
 +
 +import java.io.IOException;
@@ -7070,8 +7070,10 @@ index 0000000..8b3306a
 +
 +    @Override
 +    public Response intercept(Chain chain) throws IOException {
-+        Request request = withNonce(chain.request());
-+        boolean retrySafe = retrySafe(request);
++        Request original = chain.request();
++        Request request = withNonce(original);
++        // A post we just gave an enforced nonce is retry-safe without parsing its body again.
++        boolean retrySafe = request != original || retrySafe(request);
 +        long start = System.currentTimeMillis();
 +        long delay = 250;
 +        for (int attempt = 1; ; attempt++) {
@@ -7826,10 +7828,10 @@ index 0000000..3ff9cb6
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionCapture.java b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
 new file mode 100644
-index 0000000..e2aaf91
+index 0000000..f3ea5d9
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionCapture.java
-@@ -0,0 +1,851 @@
+@@ -0,0 +1,855 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -8028,6 +8030,10 @@ index 0000000..e2aaf91
 +        if (AHEAD.containsKey(messageId)) {
 +            Game now = cachedGame(game.getName());
 +            if (now != null) Engine.settleAhead(now);
++            // Posted just after its interaction's save (the post is sent asynchronously and can land a few ms after
++            // the save: setup-player-obsolete-when-seated, pbd1323), no later save may come to settle it: settle it
++            // once that interaction is over (Engine.settleAheadWhenIdle).
++            if (AHEAD.containsKey(messageId)) Engine.settleAheadWhenIdle(game.getName());
 +        }
 +    }
 +
@@ -9274,10 +9280,10 @@ index 0000000..af65f22
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..4508c4d
+index 0000000..0d1d22a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,258 @@
+@@ -0,0 +1,297 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -9421,11 +9427,50 @@ index 0000000..4508c4d
 +     * obsolete() is judged and window / progress / option values are re-read against it, for every kind. Called on
 +     * each state change and right after such a capture (the save may already have landed).
 +     */
-+    static synchronized void settleAhead(Game game) {
++    static void settleAhead(Game game) {
++        settleAhead(game, false);
++    }
++
++    /** Games with a settleAheadWhenIdle pending. */
++    private static final java.util.Set<String> idleSettlePending = java.util.concurrent.ConcurrentHashMap.newKeySet();
++
++    /**
++     * Settles the game's prompts still captured ahead of their save once the interaction that posted them is over:
++     * after a short delay, under the game's write lock (taken only when no handler holds it), against the game as it
++     * is in memory then — the handler's final state, whether it saved after the post or not.
++     */
++    static void settleAheadWhenIdle(String gameName) {
++        if (!idleSettlePending.add(gameName)) return;
++        Thread.ofVirtual().name("engine-settle-idle").start(() -> {
++            try {
++                Thread.sleep(1500);
++                idleSettlePending.remove(gameName);
++                ti4.executors.ExecutionLockManager.lock(gameName, ti4.executors.ExecutionLockType.WRITE);
++                try {
++                    ti4.game.persistence.ManagedGame mg = ti4.game.persistence.GameManager.getManagedGame(gameName);
++                    Game g = mg == null ? null : mg.getGame();
++                    if (g != null) settleAhead(g, true);
++                } finally {
++                    ti4.executors.ExecutionLockManager.unlock(gameName, ti4.executors.ExecutionLockType.WRITE);
++                }
++            } catch (InterruptedException e) {
++                Thread.currentThread().interrupt();
++            } catch (Exception e) {
++                idleSettlePending.remove(gameName);
++                BotLogger.error("engine: idle settle failed for " + gameName, e);
++            }
++        });
++    }
++
++    /** force: settle every ahead prompt of the game against this state, whatever its save time (see above). */
++    static synchronized void settleAhead(Game game, boolean force) {
 +        if (DecisionCapture.AHEAD.isEmpty()) return;
 +        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
 +            if (!DecisionCapture.AHEAD.containsKey(d.source().messageId())) continue;
-+            if (!DecisionCapture.settles(d.source().messageId(), game)) continue;
++            if (force) {
++                if (DecisionCapture.AHEAD.remove(d.source().messageId()) == null) continue;
++                EngineMetrics.count("capture.settled_idle");
++            } else if (!DecisionCapture.settles(d.source().messageId(), game)) continue;
 +            EngineMetrics.count("capture.settled");
 +            KindSpec spec = DecisionKinds.byKind(d.kind());
 +            if (spec == null) continue;
@@ -11363,10 +11408,10 @@ index 0000000..b069fe6
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/PromptRecovery.java b/src/main/java/ti4/selfhost/engine/PromptRecovery.java
 new file mode 100644
-index 0000000..ff49c7d
+index 0000000..e4e9e00
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/PromptRecovery.java
-@@ -0,0 +1,405 @@
+@@ -0,0 +1,410 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -11421,6 +11466,8 @@ index 0000000..ff49c7d
 +    /** Between two re-posts of the same player's prompt for the same turn; at most MAX_ACTIVE_REPOSTS per turn. */
 +    private static final long ACTIVE_COOLDOWN_MS = 120_000L;
 +    private static final int MAX_ACTIVE_REPOSTS = 3;
++    /** Turns older than this are left alone (abandoned games); pbd1204's stall was 30 min. */
++    private static final long MAX_TURN_AGE_MS = TimeUnit.HOURS.toMillis(2);
 +    /** game → when the fast check first saw the active player's prompt missing. */
 +    private static final Map<String, Long> activeMissingSince = new ConcurrentHashMap<>();
 +    /** game|player|turn start → re-posts done for that turn, and when the last one was. */
@@ -11539,6 +11586,8 @@ index 0000000..ff49c7d
 +        if (!DecisionRebuild.isRebuilt(game.getName())) return null;
 +        long turnStart = game.getLastActivePlayerChange() == null ? 0 : game.getLastActivePlayerChange().getTime();
 +        if (System.currentTimeMillis() - turnStart < minTurnAgeMs) return null;
++        // A turn started hours ago with nothing happening since is an abandoned game (old scenario forks), not a stall.
++        if (System.currentTimeMillis() - turnStart > MAX_TURN_AGE_MS) return null;
 +        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
 +            boolean theirs = d.target() != null && p.getUserID().equals(d.target().userId());
 +            if (promptKind(phase, d.kind()) && (theirs || d.target() == null)) return null;
@@ -11575,6 +11624,7 @@ index 0000000..ff49c7d
 +        String active = mg.getActivePlayerId();
 +        if (active == null || mg.isHasEnded()) return false;
 +        if (now - mg.getLastActivePlayerChange() < minTurnAgeMs) return false;
++        if (now - mg.getLastActivePlayerChange() > MAX_TURN_AGE_MS) return false;
 +        for (Decision d : DecisionRegistry.openDecisions(mg.getName())) {
 +            if (d.target() != null && d.kind() != null && active.equals(d.target().userId())
 +                    && ("turn.action".equals(d.kind()) || "strategy_card.pick".equals(d.kind())
