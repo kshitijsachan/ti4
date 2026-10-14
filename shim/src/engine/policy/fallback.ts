@@ -404,8 +404,11 @@ export function draftBoardStale(d: Decision, state: GameState, me: string): bool
 }
 
 /**
- * The draft categories we still owe on our milty turn that no open draft.milty.pick decision offers (empty when it
- * is not our pick, or every owed category has a board).
+ * The draft categories we still owe on our milty turn that no open draft.milty.pick decision addressed to us offers
+ * (empty when it is not our pick, or every owed category has a board of ours). A board still addressed to the
+ * previous drafter is missing for us: the engine refuses our answer on it ("not target") and engineStep never sees it
+ * (live pbd1295 / pbd1655: a rebuild racing the first engine pick put the boards back on the drafter who had just
+ * picked; the next drafter's bot waited ~3 min for the legacy fallback). A re-snapshot re-reads their target.
  */
 export function draftBoardsMissing(open: Decision[], state: GameState | null, me: string): string[] {
   const draft = state?.draft;
@@ -416,7 +419,7 @@ export function draftBoardsMissing(open: Decision[], state: GameState | null, me
   const owed = ["slice", "faction", "order"].filter((c) => held[c] == null);
   const offered = new Set(
     open
-      .filter((d) => d.kind === "draft.milty.pick")
+      .filter((d) => d.kind === "draft.milty.pick" && (!d.target?.userId || d.target.userId === me))
       .flatMap((d) => d.options.filter((o) => !o.disabled).map((o) => (o.value as { category?: string } | null)?.category)),
   );
   return owed.filter((c) => !offered.has(c));
