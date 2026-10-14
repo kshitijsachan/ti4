@@ -1,0 +1,207 @@
+{
+ "name": "gaps3-combat-cards",
+ "description": "audit-gaps-3 (gate TI4_RULES_AC): combat action cards judged from the combat state (open hits prompts, combat round trackers, this activation's rolls) instead of 'you have units in the active system'. Base pbd60@122: space combat at 308, mentak (attacker) rolled round 1, muaat owes 5 space combat hits (setup: muaat destroyer and a damaged dreadnought there, as ac-timing-legal-action). Shields Holding ('Before you assign hits to your ships during a space combat') is legal for muaat and refused for mentak (no hits to assign); Maneuvering Jets ('Before you assign hits produced by another player's SPACE CANNON roll') refused for both; Rout ('if you are the defender') refused for the attacker; Waylay ('Before you roll dice for ANTI-FIGHTER BARRAGE') refused once round 1 is rolled; Scramble Frequency ('After another player makes a BOMBARDMENT, SPACE CANNON, or ANTI-FIGHTER BARRAGE roll') refused with no such roll; Reflective Shielding ('When one of your ships uses SUSTAIN DAMAGE during combat') legal for muaat (damaged dreadnought) and its resolution posts mentak's 2-hit prompt.",
+ "base": {
+  "recording": "pbd60",
+  "index": 122
+ },
+ "setup": [
+  "/add_units tile_name:308 unit_names:\"1 destroyer\" faction_or_color:muaat",
+  "/add_units tile_name:308 unit_names:\"1 dreadnought\" faction_or_color:muaat",
+  "/add_sustain_damage tile_name:308 unit_names:\"1 dreadnought\" faction_or_color:muaat"
+ ],
+ "steps": [
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sh2",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "sh2"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sh1",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "sh1"
+    }
+   },
+   "as": "mentak",
+   "refused": true
+  },
+  {
+   "wait": 800
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "mjets1",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "mjets1"
+    }
+   },
+   "as": "mentak",
+   "refused": true
+  },
+  {
+   "wait": 800
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "mjets2",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "mjets2"
+    }
+   },
+   "as": "muaat",
+   "refused": true
+  },
+  {
+   "wait": 800
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "rout",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "rout"
+    }
+   },
+   "as": "mentak",
+   "refused": true
+  },
+  {
+   "wait": 800
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "waylay",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "waylay"
+    }
+   },
+   "as": "muaat",
+   "refused": true
+  },
+  {
+   "wait": 800
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "scramble",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "scramble"
+    }
+   },
+   "as": "muaat",
+   "refused": true
+  },
+  {
+   "wait": 800
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "reflective",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "reflective"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "press": "FFCC_muaat_resolveReflective",
+   "as": "muaat"
+  },
+  {
+   "wait": 1500
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

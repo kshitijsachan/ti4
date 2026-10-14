@@ -1,0 +1,145 @@
+{
+ "name": "gaps3-move-cards-2",
+ "description": "audit-gaps-3 (switch TI4_MOVE_CHECK): Nav Suite (\"During the 'Movement' step of this tactical action, ignore the effect of anomalies.\") and In the Silence of Space (\"Choose 1 system. During this tactical action, your ships in the chosen system can move through systems that contain other players' ships.\") are modelled in the range check; the live bot turned it into a warning after either card. Base as core-move-range (pbd104@59): letnev activates 205 and plays both; its carrier at 314 is still out of range and is refused; the cruiser at 203 moves.",
+ "base": {
+  "recording": "pbd104",
+  "index": 59
+ },
+ "setup": [
+  {
+   "command": "add_units",
+   "options": {
+    "tile_name": "314",
+    "unit_names": "carrier",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "command": "add_units",
+   "options": {
+    "tile_name": "203",
+    "unit_names": "cruiser",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "command": "player turn_start",
+   "options": {
+    "faction_or_color": "letnev"
+   }
+  }
+ ],
+ "trigger": {
+  "press": "FFCC_letnev_ringTile_205",
+  "as": "letnev"
+ },
+ "steps": [
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "nav_suite",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "nav_suite"
+    }
+   },
+   "as": "letnev"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "silence_space",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "silence_space"
+    }
+   },
+   "as": "letnev"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "wait": 500,
+   "expect": {
+    "save": [
+     {
+      "key": "stored.mcNavSuite",
+      "match": "^letnev\\|205#"
+     },
+     {
+      "key": "stored.mcSilenceOfSpace",
+      "match": "^letnev\\|205#"
+     }
+    ]
+   }
+  },
+  {
+   "answer": {
+    "kind": "tactical.move",
+    "action": "move",
+    "body": {
+     "units": [
+      {
+       "from": "314",
+       "holder": "space",
+       "unit": "cv",
+       "count": 1
+      }
+     ]
+    }
+   },
+   "as": "letnev",
+   "refused": true,
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  },
+  {
+   "answer": {
+    "kind": "tactical.move",
+    "action": "move",
+    "body": {
+     "units": [
+      {
+       "from": "203",
+       "holder": "space",
+       "unit": "ca",
+       "count": 1
+      }
+     ]
+    }
+   },
+   "as": "letnev",
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}
