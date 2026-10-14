@@ -805,15 +805,27 @@ class SeatPilot {
   /** What the current think() is doing (named in the "hung" warning and the event-loop lag monitor). */
   private stage = "";
 
+  /**
+   * Bumped by every think() that starts and by the hang watchdog. A think() whose generation is no longer current was
+   * abandoned: it stops at its next yield and never clears `busy` or reschedules (that belongs to its successor).
+   * Without this the watchdog started a second think() while the hung one kept running (and the first one's `finally`
+   * then cleared `busy` under the second): every hang added a seat's worth of slices to the shared turn queue, so
+   * under load hangs fed more hangs (live 17:17-17:31: ~600 hung decides of 185 seats completed together at 17:31).
+   */
+  private thinkGen = 0;
+
   private async think() {
     if (this.busy && Date.now() - this.busySince > 120000) {
       log.warn(`autopilot ${this.name}: a decision has hung for 2 minutes (at: ${this.stage}); starting over`);
       this.busy = false;
+      this.thinkGen++; // abandon the hung think(): it bails out at its next yield
     }
     if (this.busy || this.stopped || !this.mgr.hub.gateway.botReady) return;
     this.busySince = Date.now();
     if (Date.now() < this.restUntil) return;
     this.busy = true;
+    const gen = ++this.thinkGen;
+    const abandoned = () => gen !== this.thinkGen;
     this.rotation++;
     const done = activity(`autopilot ${this.name}: think`);
     let slicer: Slicer | undefined;
@@ -826,6 +838,7 @@ class SeatPilot {
       this.stage = "live games";
       for (const game of await this.liveGames()) {
         await slicer.tick();
+        if (abandoned()) return;
         this.stage = `planner / trade desk in ${game}`;
         // A planner error must never keep the rule table from answering (it would stall the game).
         const acted = async (name: string, fn: () => Promise<boolean>) => {
@@ -837,16 +850,15 @@ class SeatPilot {
           }
         };
         if ((await acted("planner", () => this.brain.tick(game))) || (await acted("trade desk", () => (this.mgr.engine?.isLive ? this.trade.tick(game) : this.legacyTrade.tick(game))))) {
-          this.busy = false;
-          this.schedule();
+          if (!abandoned()) this.schedule(); // (finally clears busy)
           return;
         }
       }
       await slicer.tick();
+      if (abandoned()) return;
       this.stage = "engine step";
       if (await this.engineStep()) {
-        this.busy = false;
-        this.schedule();
+        if (!abandoned()) this.schedule(); // (finally clears busy)
         return;
       }
       await slicer.tick();
@@ -854,8 +866,10 @@ class SeatPilot {
       const stalled = await this.stalledPrompt();
       await slicer.tick();
       slicer.done(); // decide() slices (and accounts) itself
+      if (abandoned()) return;
       this.stage = "decide";
-      const choice = stalled ?? (await this.decide());
+      const choice = stalled ?? (await this.decide(abandoned));
+      if (abandoned()) return; // a hung decide must not press what it chose minutes ago
       if (!choice) {
         this.stage = "recover turns";
         await this.recoverTurns();
@@ -871,10 +885,10 @@ class SeatPilot {
       log.error(`autopilot ${this.name}: ${(e as Error).stack}`);
     } finally {
       slicer?.done();
-      this.busy = false;
+      if (!abandoned()) this.busy = false;
       done();
     }
-    this.schedule();
+    if (!abandoned()) this.schedule();
   }
 
   /** Per game: since when it has been our action-phase turn with no turn buttons of ours anywhere. */
@@ -1056,7 +1070,7 @@ class SeatPilot {
     return (this.chanIndex = { list, gen, at: Date.now(), byGame, gameOf: chanGame, actions });
   }
 
-  private async decide(): Promise<Choice | null> {
+  private async decide(abandoned: () => boolean = () => false): Promise<Choice | null> {
     const s = this.store.state;
     const me = this.userId;
     const choices: Choice[] = [];
@@ -1106,6 +1120,10 @@ class SeatPilot {
         }
         for (const m of list.slice(-WINDOW)) {
           await slicer.tick();
+          if (abandoned()) {
+            slicer.done();
+            return null;
+          }
           const c = await this.consider(m, ch, game);
           if (c && !(await this.mgr.ended(game))) choices.push(c);
         }
