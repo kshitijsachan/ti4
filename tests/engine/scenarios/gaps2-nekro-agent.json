@@ -1,0 +1,14 @@
+{
+  "name": "gaps2-nekro-agent",
+  "description": "Nekro Malleon (audit-gaps-2, gate TI4_RULES_LEADERS / rulesGateLeaders). Card text: 'During the action phase: You may exhaust this card to choose a player: that player may discard 1 action card or spend 1 command token from their command sheet to gain 2 trade goods.' The original gave the 2 trade goods first and left the cost optional. pbd101@46: Nekro chooses Ral Nel (0 trade goods) — no trade goods yet; Ral Nel spends 1 tactic token and gains 2; a second payment is refused.",
+  "base": { "recording": "pbd101", "index": 46, "repost": false },
+  "setup": [ "/player stats trade_goods:0 faction_or_color:ralnel" ],
+  "steps": [
+    { "press": "FFCC_nekro_nekroAgentRes_ralnel", "as": "nekro" },
+    { "wait": 1500 },
+    { "press": "FFCC_ralnel_nekroAgentPayCc_tactic", "as": "ralnel" },
+    { "wait": 1500 },
+    { "press": "FFCC_ralnel_nekroAgentPayCc_fleet", "as": "ralnel", "refused": true }
+  ],
+  "expect": { "invariants": true, "save": [ { "key": "player[ralnel].trade_goods", "eq": "2" } ] }
+}

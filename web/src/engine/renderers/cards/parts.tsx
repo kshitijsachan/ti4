@@ -22,16 +22,22 @@ export function AnswerButton({
   onAnswer: (optionId: string) => void;
 }) {
   const pending = pendingOptionId === option.id;
+  /* An option the engine says cannot be used now (value.unavailable: a closed timing window, a card-text limit):
+     greyed out with the reason, never hidden. */
+  const raw = (option.value as { unavailable?: unknown } | null | undefined)?.unavailable;
+  const why = typeof raw === "string" && raw ? raw : null;
   return (
     <UnstyledButton
       className={cx(classes.button, tone === "go" && classes.go, tone === "stop" && classes.stop)}
-      disabled={option.disabled || option.needsInput || !!pendingOptionId}
+      disabled={option.disabled || option.needsInput || !!pendingOptionId || !!why}
       data-pending={pending || undefined}
       aria-busy={pending}
+      title={why ?? undefined}
       onClick={() => onAnswer(option.id)}
     >
       {pending && <Loader size={12} color="currentColor" />}
       {label}
+      {why && <small> — {why}</small>}
     </UnstyledButton>
   );
 }
