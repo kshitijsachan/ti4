@@ -7,6 +7,7 @@ import { normalizeComponents, stripPrivate, type Hub } from "./hub.js";
 import { newRole, type Interaction, type Json, type StoredMessage } from "./store.js";
 import { log } from "./log.js";
 import { activity } from "./lag.js";
+import { NonceCache } from "./nonce.js";
 
 type Ctx = { req: IncomingMessage; res: ServerResponse; params: string[]; query: URLSearchParams; body: Body };
 type Handler = (ctx: Ctx) => void | Promise<void>;
@@ -14,6 +15,8 @@ type Handler = (ctx: Ctx) => void | Promise<void>;
 /** Discord REST API v10 subset, mounted at /api/v10. */
 export class Rest {
   private routes: { method: string; re: RegExp; handler: Handler }[] = [];
+  /** enforce_nonce message creates (the bot's retried posts): a repeat answers with the first message. */
+  readonly nonces = new NonceCache();
   /** Set by index.ts: Clients.mintComponentInteraction. */
   engineMint?: (userId: string, channelId: string, messageId: string, customId: string, componentType: number, values?: string[]) => { payload?: Json; error?: string };
 
@@ -440,6 +443,15 @@ export class Rest {
     this.on("POST", "/channels/:c/messages", (ctx) => {
       const ch = this.channelOr404(ctx, ctx.params[0]);
       if (!ch) return;
+      const enforced = NonceCache.enforced(ctx.body.json);
+      if (enforced) {
+        const prev = this.nonces.get(ch.id, enforced);
+        if (prev) {
+          const m = this.store.findMessage(ch.id, prev.id);
+          log.info(`message create: repeat of nonce ${enforced} in ${ch.id} answered with ${prev.id} (not posted again)`);
+          return sendJson(ctx.res, 200, m ? stripPrivate(m) : prev.json);
+        }
+      }
       const atts = this.hub.resolveAttachments(ctx.body.json, ctx.body.files) ?? [];
       const msg = this.hub.buildMessage(ch.id, s().bot_id, ctx.body.json, atts);
       // Engine answers have no interaction token: an ephemeral reply is a channel message with nonce "eph:<user>"
@@ -450,6 +462,7 @@ export class Rest {
         msg.flags = (msg.flags ?? 0) | 64;
       }
       this.hub.postMessage(msg);
+      if (enforced) this.nonces.set(ch.id, enforced, msg.id, stripPrivate(msg));
       sendJson(ctx.res, 200, stripPrivate(msg));
     });
     this.on("PATCH", "/channels/:c/messages/:m", (ctx) => {
