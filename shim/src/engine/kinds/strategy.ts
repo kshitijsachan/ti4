@@ -81,6 +81,11 @@ export type StrategyCardResolve = DecisionBaseOf<
     primaryParts: PrimaryPart[];
     /** construction_structure: "spacedock" | "pds" | "facility" | "monument" | "agesmonument". */
     unit?: string;
+    /**
+     * construction_structure: faction → why that player cannot place this structure now (Construction's count: the
+     * holder's second structure is a PDS, a follower places one; none left in reinforcements). Absent = allowed.
+     */
+    unavailableFor?: Record<string, string>;
     /** research: resources a follower pays (the holder's first technology is free). */
     followCost?: number;
     copy: boolean;
@@ -129,6 +134,8 @@ export type ConstructionPlace = DecisionBaseOf<
     /** Already on that planet (yours). */
     pds: number;
     spaceDock: number;
+    /** Why this placement is refused now (planet limit 1 space dock / 2 PDS, Construction's count), else null. */
+    unavailable?: string | null;
   }
 >;
 
