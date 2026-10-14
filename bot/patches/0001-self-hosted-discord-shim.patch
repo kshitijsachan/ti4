@@ -22567,10 +22567,10 @@ index 000000000..44bff3617
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
 new file mode 100644
-index 000000000..19b946fff
+index 000000000..b42169daf
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
-@@ -0,0 +1,1041 @@
+@@ -0,0 +1,1120 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayDeque;
@@ -23123,8 +23123,13 @@ index 000000000..19b946fff
 +            List<CombatRoll> rolls,
 +            /** Hits a player still has to assign in this system (open hits prompts / manual assignment menus). */
 +            List<HitsOwed> owed,
-+            /** The active player's faction (the attacker), or null. */
-+            String attacker) {}
++            /** The active player's faction (the attacker), or null (a combat outside the activation). */
++            String attacker,
++            /**
++             * Other combats under way (a system with a fight on that is not this one: /combat start_combat, abilities,
++             * simultaneous fights). Each has an empty elsewhere. This combat is the active system's when it has one.
++             */
++            List<CombatState> elsewhere) {}
 +
 +    /**
 +     * Hits owed by one player: source (space | ground | afb | spacecannonoffence), holder (space or the planet),
@@ -23183,21 +23188,96 @@ index 000000000..19b946fff
 +    private static CombatState buildState(Game game) {
 +        String pos = game.getActiveSystem();
 +        Tile tile = pos == null || pos.isBlank() ? null : game.getTileByPosition(pos);
-+        if (tile == null) return null;
-+        List<String> factions = new ArrayList<>();
-+        for (String f : game.getStoredValue("factionsInCombat").split("_")) if (!f.isBlank()) factions.add(f);
-+        List<String> sco = new ArrayList<>();
-+        Player active = game.getActivePlayer();
-+        if (active != null) {
-+            try {
-+                for (Player p : ButtonHelper.getPlayersWithPds2Cover(active, game, pos))
-+                    if (p != active && !sco.contains(p.getFaction())) sco.add(p.getFaction());
-+            } catch (Exception ignored) {
-+                // best effort
++        List<CombatRoll> rolls = ledgerRolls(game, true);
++        CombatState primary = null;
++        if (tile != null) {
++            List<String> factions = new ArrayList<>();
++            for (String f : game.getStoredValue("factionsInCombat").split("_")) if (!f.isBlank()) factions.add(f);
++            List<String> sco = new ArrayList<>();
++            Player active = game.getActivePlayer();
++            if (active != null) {
++                try {
++                    for (Player p : ButtonHelper.getPlayersWithPds2Cover(active, game, pos))
++                        if (p != active && !sco.contains(p.getFaction())) sco.add(p.getFaction());
++                } catch (Exception ignored) {
++                    // best effort
++                }
++            }
++            // factionsInCombat is the latest combat anywhere: here, only when they fight in this system.
++            if (!factions.isEmpty() && !factions.stream().allMatch(f -> {
++                Player p = game.getPlayerFromColorOrFaction(f);
++                return p != null && hasUnitsIn(p, tile);
++            }) && factions.stream().noneMatch(f -> trackedAt(game, f, pos))) factions = combatantFactions(game, tile);
++            if (!factions.isEmpty() || !sco.isEmpty() || rolls.stream().anyMatch(r -> pos.equals(r.tile())))
++                primary = stateAt(game, tile, factions, sco, rolls, active == null ? null : active.getFaction(), List.of());
++        }
++        // Combats outside the activation (/combat start_combat, abilities, a second fight): every other system with a
++        // fight on. With no combat in the active system, the first of them is the combat.
++        List<CombatState> elsewhere = new ArrayList<>();
++        for (Tile t : game.getTileMap().values()) {
++            if (t == tile || !fightAnywhere(game, t)) continue;
++            elsewhere.add(stateAt(game, t, combatantFactions(game, t), List.of(), rolls, null, List.of()));
++        }
++        if (primary == null && elsewhere.isEmpty()) return null;
++        if (primary == null) primary = elsewhere.removeFirst();
++        return new CombatState(
++                primary.tile(), primary.tileId(), primary.factions(), primary.fronts(), primary.spaceCannonOffence(),
++                primary.rolls(), primary.owed(), primary.attacker(), elsewhere);
++    }
++
++    /**
++     * A combat under way in this system: two fleets in its space area, or a planet where both sides have ground
++     * forces and a round has been rolled (ground forces may coexist without a combat).
++     */
++    private static boolean fightAnywhere(Game game, Tile t) {
++        for (UnitHolder uh : t.getUnitHolders().values()) {
++            if (!fightOn(game, t, uh.getName())) continue;
++            if ("space".equals(uh.getName())) return true;
++            for (Player p : combatants(game, t, uh.getName()))
++                if (roundsRolled(game, p, t.getPosition(), uh.getName()) > 0) return true;
++            if (rollPromptOpen(game, t.getPosition(), uh.getName())) return true;
++        }
++        return false;
++    }
++
++    /** An open combat roll prompt for this holder (the combat was started: engaged, not coexisting). */
++    private static boolean rollPromptOpen(Game game, String pos, String holder) {
++        for (ti4.selfhost.engine.EngineModels.Decision d : ti4.selfhost.engine.DecisionRegistry.openDecisions(game.getName())) {
++            if (!"combat.round".equals(d.kind())) continue;
++            for (ti4.selfhost.engine.EngineModels.Option o : d.options()) {
++                Map<String, Object> v = o.value();
++                if (v != null && "roll".equals(v.get("action")) && "combat".equals(v.get("rollType"))
++                        && pos.equals(v.get("tile")) && holder.equals(v.get("holder"))) return true;
 +            }
 +        }
-+        List<CombatRoll> rolls = ledgerRolls(game, true);
-+        if (factions.isEmpty() && sco.isEmpty() && rolls.isEmpty()) return null;
++        return false;
++    }
++
++    private static boolean trackedAt(Game game, String faction, String pos) {
++        String prefix = "combatRoundTracker" + faction + pos;
++        for (String k : game.getStoredValueMap().keySet()) if (k.startsWith(prefix)) return true;
++        return false;
++    }
++
++    /** Factions with units able to fight in some holder of this tile where a fight is on. */
++    private static List<String> combatantFactions(Game game, Tile t) {
++        List<String> out = new ArrayList<>();
++        for (UnitHolder uh : t.getUnitHolders().values()) {
++            if (!fightOn(game, t, uh.getName())) continue;
++            for (Player p : combatants(game, t, uh.getName())) if (!out.contains(p.getFaction())) out.add(p.getFaction());
++        }
++        return out;
++    }
++
++    private static CombatState stateAt(
++            Game game,
++            Tile tile,
++            List<String> factions,
++            List<String> sco,
++            List<CombatRoll> rolls,
++            String attacker,
++            List<CombatState> elsewhere) {
++        String pos = tile.getPosition();
 +        List<CombatFront> fronts = new ArrayList<>();
 +        if (factions.size() >= 2) {
 +            for (UnitHolder uh : tile.getUnitHolders().values()) {
@@ -23223,8 +23303,7 @@ index 000000000..19b946fff
 +                if (withUnits >= 2 || tracked) fronts.add(new CombatFront(uh.getName(), sides));
 +            }
 +        }
-+        return new CombatState(
-+                pos, tile.getTileID(), factions, fronts, sco, rolls, owed(game, pos), active == null ? null : active.getFaction());
++        return new CombatState(pos, tile.getTileID(), factions, fronts, sco, rolls, owed(game, pos), attacker, elsewhere);
 +    }
 +
 +    /** Open hits prompts (and manual menus under way) of this system whose player still has units to take them. */
