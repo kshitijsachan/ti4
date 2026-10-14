@@ -49,6 +49,8 @@ import { answer, act, openDecisions, optionFor, engineState, timingSummary } fro
 import { newNonce } from "./lib/materialize.ts";
 
 const SCEN_DIR = join(ENGINE_DIR, "scenarios");
+/** A kind pattern: exact, or "/regex/". */
+const kindMatches = (kind, pat) => (typeof pat === "string" && pat.startsWith("/") && pat.endsWith("/") ? new RegExp(pat.slice(1, -1)).test(kind ?? "") : kind === pat);
 const argv = process.argv.slice(2);
 const flag = (f) => argv.includes(f);
 const opt = (f, d) => (argv.includes(f) ? argv[argv.indexOf(f) + 1] : d);
@@ -282,6 +284,34 @@ class Runner {
       // screen) / prompt recovery, as after a bot restart.
       const r = await engineApi(`/${encodeURIComponent(this.fork.game)}/${st.engine}`, {});
       return r.status === 200 ? { ok: true, detail: `${st.engine} ${JSON.stringify(r.body)}` } : { ok: false, error: `${st.engine}: ${r.status} ${JSON.stringify(r.body).slice(0, 200)}` };
+    }
+    if (st.deleteDecision) {
+      // { deleteDecision: { kind }, as }: delete the message of the newest open decision of that kind targeted at the
+      // step's seat (Bot DELETE through the shim), as if the bot's post had never landed (soak pbd1204: a lost turn prompt).
+      const ds = (await openDecisions(this.fork.game)).filter((d) => kindMatches(d.kind, st.deleteDecision.kind) && (!d.target || d.target.userId === user));
+      const d = ds.sort((a, b) => b.seq - a.seq)[0];
+      if (!d?.source?.messageId) return { ok: false, error: `deleteDecision: no open ${st.deleteDecision.kind} for ${user}` };
+      const r = await fetch(`${SHIM_URL}/api/v10/channels/${d.source.channelId}/messages/${d.source.messageId}`, {
+        method: "DELETE",
+        headers: { authorization: `Bot ${botToken()}` },
+      });
+      return r.ok ? { ok: true, detail: `deleted ${d.kind} ${d.id}` } : { ok: false, error: `deleteDecision: ${r.status}` };
+    }
+    if (st.waitDecision) {
+      // { waitDecision: { kind, timeoutMs, open?, anyTarget? }, as }: wait until a decision of that kind is open for the
+      // step's seat (anyTarget: for any seat; open: false — until none is).
+      const t = Date.now();
+      const timeout = st.waitDecision.timeoutMs ?? 30000;
+      const wantOpen = st.waitDecision.open !== false;
+      while (Date.now() - t < timeout) {
+        const ds = await openDecisions(this.fork.game).catch(() => null);
+        const d = ds?.find((x) => kindMatches(x.kind, st.waitDecision.kind) && (st.waitDecision.anyTarget || !x.target || x.target.userId === user));
+        const secs = ((Date.now() - t) / 1000).toFixed(0);
+        if (ds && wantOpen && d) return { ok: true, detail: `${d.kind} ${d.id} open after ${secs} s` };
+        if (ds && !wantOpen && !d) return { ok: true, detail: `no ${st.waitDecision.kind} open after ${secs} s` };
+        await sleep(2000);
+      }
+      return { ok: false, error: `waitDecision: ${wantOpen ? "no" : "still a"} ${st.waitDecision.kind} for ${user} after ${timeout / 1000} s` };
     }
     if (st.answerOn) {
       // { answerOn: "<custom id>", pick?: "oldest" | "newest" }: answer the decision of a message already on screen
