@@ -211,4 +211,15 @@ const owed2 = bombHits(2, jord);
 expect("bombardment menu while the hits prompt is open: its plan assigns (hold)", menuPick([owed2], []), null);
 expect("bombardment menu, 2 owed, one removed: one more", menuPick([owed2], ["FFCC_letnev_assignHits_201_1_gf_jord_red"]), "FFCC_letnev_assignHits_201_1_gf_jord_red");
 
+// Letnev agent (Viscount Unlenn): on the combat controls (no roll window); used before our roll, then the roll waits for its picker.
+const agentOpt = (blocked: string | null, owner = "letnev") =>
+  opt("FFCC_letnev_getAgentSelection_letnevagent", { action: "ability", tile: "201", ability: "letnevagent", source: "agent", owner, name: "Viscount Unlenn", window: "At the start of a space combat round", blocked });
+const controls = (o: unknown): Decision => ({ ...round([]), id: "c1", window: null, options: [o] }) as unknown as Decision;
+const allPick = (d: Decision, s: GameState, all: Decision[], open: Decision[] = []) => chooseCombat(d, s, ME, open, [], all)?.option.id ?? null;
+expect("round agent: used from the controls", allPick(controls(agentOpt(null)), fight(0, 0), []), "FFCC_letnev_getAgentSelection_letnevagent");
+expect("round agent: roll waits while it is ready", allPick(round([]), fight(0, 0), [controls(agentOpt(null))]), null);
+expect("round agent: exhausted -> roll", allPick(round([]), fight(0, 0), [controls(agentOpt("the agent is exhausted"))]), "combatRoll_201_space");
+expect("round agent: not another faction's", allPick(controls(agentOpt(null, "sol")), fight(0, 0), []), null);
+const picker = { ...hits(ME, 0), id: "p1", kind: "leader.use", options: [opt("FFCC_letnev_exhaustAgent_letnevagent_letnev", { leader: "letnevagent", step: "exhaustAgent", action: "target", target: "letnev" })] } as unknown as Decision;
+expect("round agent: roll waits for its picker", allPick(round([]), fight(0, 0), [controls(agentOpt("the agent is exhausted"))], [picker]), null);
 process.exit(failed ? 1 : 0);
