@@ -167,14 +167,12 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   const ends = (o: TurnOpt) => o.value!.action === "end_turn" || o.value!.action === "pass";
   /* Rules (fleet pool, capacity): units over the limit go before the turn ends. The engine judges the board itself
      (a dismissed reminder changes nothing) and refuses End Turn / Pass while any system is over. */
-  const overLimit = [
-    ...new Set(
-      opts.flatMap((o) => {
-        const v = o.value as { action?: string; overLimits?: string[] } | null;
-        return (v?.action === "end_turn" || v?.action === "pass") && v.overLimits ? v.overLimits : [];
-      }),
-    ),
-  ];
+  /* Also (rules audit, core): over the action card hand limit (discard first), and Pass with a strategy card not yet
+     played. Each End turn / Pass option carries its own reasons. */
+  const overOf = (o: TurnOpt): string[] => {
+    const v = o.value as { action?: string; overLimits?: string[] } | null;
+    return (v?.action === "end_turn" || v?.action === "pass") && v.overLimits ? v.overLimits : [];
+  };
   /* My tactical action is under way (Thunder's Edge Warfare posts this menu before it): the engine refuses End turn
      until it is concluded (pt9 058). */
   const midAction = mine.some((d) => MID_ACTION.test(d.kind) && d.target?.userId === me?.userId);
@@ -184,7 +182,7 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   const primaryMissing = opts.map((o) => (o.value!.action === "end_turn" ? o.value!.primaryMissing : null)).find((x): x is string => !!x) ?? null;
   const disabled = (o: TurnOpt) =>
     owed.length > 0 ||
-    ((waits.length > 0 || overLimit.length > 0) && ends(o)) ||
+    ((waits.length > 0 || overOf(o).length > 0) && ends(o)) ||
     ((midAction || !!primaryMissing) && endsTurn(o));
   const pending = waits.flatMap((w) => w.userIds.map((id, i) => state?.players.find((p) => p.userId === id)?.userName ?? factionName(w.factions[i] ?? id)));
   /* One click to the missing part: that part's own buttons from my played card's panel (pt9 soak pbd821: the holder
@@ -207,7 +205,7 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   const label = (o: TurnOpt) => {
     if (midAction && endsTurn(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · finish your tactical action first`;
     if (primaryMissing && endsTurn(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${primaryMissing}`;
-    if (overLimit.length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${overLimit.join("; ")}`;
+    if (overOf(o).length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${overOf(o).join("; ")}`;
     if (waits.length && ends(o))
       return `${turnLabel(o, me?.commandTokens.tactic)} · waiting for ${pending.length} player${pending.length === 1 ? "" : "s"} to follow ${waits.map((w) => w.name).join(" and ")}`;
     return turnLabel(o, me?.commandTokens.tactic);

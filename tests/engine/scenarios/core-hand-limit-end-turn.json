@@ -1,0 +1,16 @@
+{
+  "name": "core-hand-limit-end-turn",
+  "description": "Rules audit (core): LRR 2 ACTION CARDS - a player with more than 7 action cards (3 under Executive Sanctions) must discard down. The original posted discard buttons and let the turn end / the player pass anyway; now End Turn and Pass are refused until the hand is within the limit (TurnRules.handLimitRefusal: bot turnEnd / passForRound / passingAbilities, turn.action validate; the web greys them with the reason from value.overLimits). Base: pbd1204 undo save 109 (Mentak active, 0 action cards, every strategy card played). Mentak draws 8: Pass is refused (engine and the button itself); after discarding 2 Pass goes through and Bastion's turn starts.",
+  "base": { "save": "saves/pt9-pbd1204-109.txt" },
+  "setup": [ "/ac draw count:8 faction_or_color:mentak" ],
+  "steps": [
+    { "wait": 1500 },
+    { "answer": { "kind": "turn.action", "option": "passForRound$" }, "as": "mentak", "refused": true, "legacy": [ { "wait": 300 } ] },
+    { "press": "FFCC_mentak_passForRound", "as": "mentak", "click": true },
+    { "wait": 4000, "expect": { "decision": [ { "kind": "turn.action", "as": "bastion", "open": false }, { "kind": "turn.action", "as": "mentak", "open": true } ] } },
+    { "command": "/ac discard_random count:2 faction_or_color:mentak" },
+    { "press": "FFCC_mentak_passForRound", "as": "mentak", "click": true },
+    { "wait": 8000, "expect": { "decision": [ { "kind": "turn.action", "as": "bastion", "open": true } ] } }
+  ],
+  "expect": { "invariants": true }
+}

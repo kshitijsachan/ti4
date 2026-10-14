@@ -1,0 +1,21 @@
+{
+  "name": "core-production-limit",
+  "description": "Rules audit (core): LRR 68 PRODUCTION - a tactical action's build is capped by the combined PRODUCTION of the player's units in the system (fighters and infantry count one each). The original only printed '### Warning! Exceeding PRODUCTION limit of 4!' (Helper.buildProducedUnitsMessage) and the web refused to commit past it; now the bot's place_ handler, production.produce validate and its payload refuse too (ProductionLimitRule). pbd19@319: ralnel builds at 307 (PRODUCTION 4). A 5-unit payload is refused; then carrier + 2 infantry + 1 infantry (4) is accepted and a 5th unit is refused; the save keeps 4 units produced.",
+  "base": { "recording": "pbd19", "index": 319 },
+  "steps": [
+    { "answer": { "kind": "production.produce", "payload": { "units": [ { "unit": "cv", "count": 1 }, { "unit": "infantry", "holder": "mez", "count": 4 } ] } },
+      "as": "ralnel", "refused": true, "legacy": [ { "wait": 500 } ] },
+    { "press": "FFCC_ralnel_place_carrier_307", "as": "ralnel" },
+    { "wait": 1500 },
+    { "press": "FFCC_ralnel_place_2gf_mez", "as": "ralnel" },
+    { "wait": 1500 },
+    { "press": "FFCC_ralnel_place_infantry_mez", "as": "ralnel" },
+    { "wait": 1500 },
+    { "press": "FFCC_ralnel_place_infantry_mez", "as": "ralnel", "refused": true, "legacy": [ { "press": "FFCC_ralnel_place_infantry_mez", "as": "ralnel" } ] },
+    { "wait": 1500 }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [ { "key": "player[ralnel].produced_units", "match": "gf_307_mez,3;" } ]
+  }
+}
