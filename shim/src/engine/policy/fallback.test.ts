@@ -452,6 +452,44 @@ test("pbd223: our milty turn owing a slice — faction / speaker boards are stal
   assert.equal(staleForBot(slices, theirs, ME), true);
 });
 
+test("pbd1295 / pbd1655: consecutive bot drafters — the next drafter picks at once; boards left on the previous drafter are missing", () => {
+  // OTHER (Bot Iota) just took slice A through the engine; it is now our (Bot Kappa's) first pick.
+  const draft = {
+    type: "milty",
+    status: "drafting",
+    currentPlayer: ME,
+    order: ["human", OTHER, ME, ME, OTHER, "human"],
+    players: [
+      { userId: "human", faction: "ralnel", slice: null, speakerOrder: null },
+      { userId: OTHER, faction: null, slice: "A", speakerOrder: null },
+      { userId: ME, faction: null, slice: null, speakerOrder: null },
+    ],
+    available: { slices: ["B", "C"], factions: ["mentak", "cabal"], speakerOrders: [1, 2, 3] },
+  };
+  const drafting = { ...state, phase: "miltydraft", draft } as unknown as GameState;
+  const board = (category: string, picks: string[], userId: string) =>
+    decision("draft.milty.pick", picks.map((p) => opt(`milty_${category}_${p}`, p, { category, pick: p })), {
+      id: `d-${category}`,
+      target: { userId, faction: null, color: null, resolvedBy: "draft_turn" },
+    } as Partial<Decision>);
+  const boards = (userId: string) => [board("slice", ["B", "C"], userId), board("faction", ["mentak", "cabal"], userId), board("order", ["1", "2", "3"], userId)];
+  // Retargeted to us (the save after the previous pick): every board is ours and answered right away.
+  const ours = boards(ME);
+  for (const d of ours) assert.equal(staleForBot(d, drafting, ME), false, d.id);
+  const picks = ours.map((d) => chooseTyped(d, drafting, ME, { history: [], open: ours.filter((x) => x !== d), all: ours }));
+  assert.deepEqual(picks.map((p) => p?.option?.id), ["milty_slice_B", "milty_faction_mentak", "milty_order_1"]);
+  assert.ok(picks.every((p) => p && !p.why.startsWith("fallback")), "the draft policy, not the fallback");
+  assert.deepEqual(draftBoardsMissing(ours, drafting, ME), []);
+  // Still addressed to the drafter who just picked (a rebuild raced the pick): not ours to answer, so they count as
+  // missing and the shim re-snapshots the draft instead of waiting for the legacy fallback.
+  const stale = boards(OTHER);
+  for (const d of stale) assert.equal(chooseTyped(d, drafting, ME, { history: [], open: [], all: stale }), null, d.id);
+  assert.deepEqual(draftBoardsMissing(stale, drafting, ME), ["slice", "faction", "order"]);
+  assert.deepEqual(draftBoardsMissing([...stale.slice(0, 2), ours[2]], drafting, ME), ["slice", "faction"]);
+  // Untargeted boards (captured before the draft knew its drafter) still count as offered.
+  assert.deepEqual(draftBoardsMissing(boards(null as unknown as string).map((d) => ({ ...d, target: null })), drafting, ME), []);
+});
+
 test("pbd228: starting technologies during setup — preferred pick, owned ones skipped, even without value.starting", () => {
   const tech = (t: string) => opt(`FFCC_sol_getTech_${t}__noPay__comp`, t, { tech: t, free: true, starting: false, flags: ["noPay", "comp"], type: "PROPULSION" });
   const d = decision("tech.gain", [tech("zzz"), tech("amd"), tech("nm")]);

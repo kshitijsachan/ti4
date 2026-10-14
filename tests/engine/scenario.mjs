@@ -337,6 +337,16 @@ class Runner {
       return a.ok || a.status === "needs_input" ? { ok: true, detail: `d${m.id}/${id} ${a.path ?? ""}` } : { ok: false, refused: true, error: `engine refused d${m.id}/${id}: ${a.httpStatus} ${a.status} ${a.error}` };
     }
     if (st.press) return this.press(interp(st.press, this.ctx), user, st);
+    if (st.answer && st.rebuild && this.via === "engine") {
+      // "rebuild": true — an engine re-capture of the game (POST …/rebuild, what a game's first decisions read or the
+      // shim's draft re-snapshot runs) races the answer (live pbd1655: the rebuild put the previous drafter back on the
+      // milty boards the answer's save had just retargeted).
+      let rebuilt = null;
+      const a = await this.answerStep(st.answer, user, () => (rebuilt = engineApi(`/${encodeURIComponent(this.fork.game)}/rebuild`, {})));
+      const r = rebuilt ? await rebuilt : null;
+      if (!r) return a.ok ? { ok: false, error: "rebuild: the answer was not sent as a single option answer" } : a;
+      return r.status === 200 ? { ...a, detail: `${a.detail ?? ""} (+ rebuild: ${r.body?.open ?? "?"} open)` } : { ok: false, error: `rebuild -> ${r.status} ${JSON.stringify(r.body).slice(0, 200)}` };
+    }
     if (st.answer) return this.answerStep(st.answer, user);
     if (st.gameAction) {
       // Game-level engine action (e.g. trade.propose): engine side only; the legacy fork runs the step's "legacy" presses.
@@ -471,7 +481,8 @@ class Runner {
     return undefined;
   }
 
-  async answerStep(spec, user) {
+  /** alongside: started right after an engine option answer is sent, before it returns (a race, see "rebuild"). */
+  async answerStep(spec, user, alongside) {
     const ds = await this.findDecision(spec, user);
     if (!ds.length) return { ok: false, error: `no open ${spec.kind ?? "decision"} for ${user}` };
     if (spec.payload || spec.inputs || spec.values || spec.action) {
@@ -486,7 +497,9 @@ class Runner {
       const o = this.pickOption(d, spec);
       if (!o) continue;
       if (this.via === "engine") {
-        const a = await answer(this.fork.game, d.id, user, { optionId: o.id });
+        const sent = answer(this.fork.game, d.id, user, { optionId: o.id });
+        alongside?.();
+        const a = await sent;
         return a.ok || a.status === "needs_input" ? { ok: true, detail: `${d.kind}/${o.id} ${a.path ?? ""}`, kind: d.kind } : { ok: false, refused: true, error: `engine refused ${d.kind}/${o.id}: ${a.httpStatus} ${a.status} ${a.error}` };
       }
       // Legacy: press the same component on the prompt message, as a player would.
