@@ -193,6 +193,8 @@ export type CombatSide = {
   units: HittableUnit[];
   /** Optional rolls this side has units for here. */
   abilities: ("afb" | "bombardment" | "spacecannondefence")[];
+  /** Space: the combat round this side announced a retreat for (this activation), 0 when none. Older engines: absent. */
+  retreatAnnounced?: number;
 };
 
 export type CombatFront = { holder: HolderName; sides: CombatSide[] };

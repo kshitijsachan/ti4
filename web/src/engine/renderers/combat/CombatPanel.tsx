@@ -6,7 +6,7 @@ import type { AnswerPayload } from "../../link";
 import { playerLabel } from "../../names";
 import { planetName, systemName } from "../tactical/names";
 import { renderers } from "./index";
-import { optionsOf, ROLL_LABEL, type AbilityChoice, type CombatView, type FrontView, type RollChoice, type RollView, type SideView } from "./combatView";
+import { optionsOf, retreatReason, ROLL_LABEL, type AbilityChoice, type CombatView, type FrontView, type RollChoice, type RollView, type SideView } from "./combatView";
 import { unitName } from "./types";
 import classes from "./combat.module.css";
 
@@ -85,7 +85,7 @@ function Front({ front, state }: { front: FrontView; state: GameState | null }) 
           <div key={s.faction} className={cx(classes.sideRow, s.self && classes.sideSelf)}>
             <span className={classes.sideName}>
               {sideName(state, s)}
-              <span className={classes.sub}>{s.attacker ? " attacker" : " defender"}</span>
+              {front.sides.some((x) => x.attacker) && <span className={classes.sub}>{s.attacker ? " attacker" : " defender"}</span>}
             </span>
             <Units side={s} />
           </div>
@@ -132,6 +132,7 @@ function Front({ front, state }: { front: FrontView; state: GameState | null }) 
 
 const CONTROL_LABEL: Record<string, string> = {
   announce_retreat: "Announce retreat",
+  retreat: "Retreat now",
   action_cards: "Combat action cards",
   repair: "Repair damage",
   automate: "Automate ground combat",
@@ -148,10 +149,7 @@ function abilityReason(a: AbilityChoice, view: CombatView): string | null {
 
 function controlReason(c: RollChoice, view: CombatView): string | null {
   const action = String((c.option.value as { action?: string }).action);
-  if (action === "announce_retreat") {
-    if (!view.current?.on) return "no combat under way";
-    if (view.step.kind !== "roll" && view.step.kind !== "wait_roll") return "only at the start of a round, before rolling";
-  }
+  if (action === "announce_retreat" || action === "retreat") return retreatReason(view, action);
   return null;
 }
 
@@ -174,17 +172,9 @@ export function CombatPanel({ view, state, extras, answer, pendingOptionId }: Pr
 
   return (
     <div className={classes.panel} data-combat-panel data-combat-step={step.kind}>
-      <div className={classes.head}>
-        {where}
-        <span className={classes.sub}>
-          {systemName(view.tile, view.tileId)}
-          {front && front.round > 0 ? (
-            <>
-              {" · "}
-              <span className={classes.mono}>round {front.round}</span>
-            </>
-          ) : null}
-        </span>
+      {/* The popup's title names the combat and round; this line names the system. */}
+      <div className={classes.sub} aria-label={where}>
+        {systemName(view.tile, view.tileId)}
       </div>
       {front && <Front front={front} state={state} />}
       {others.map((f) => (

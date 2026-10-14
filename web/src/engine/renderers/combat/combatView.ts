@@ -35,6 +35,8 @@ export type SideView = {
   attacker: boolean;
   units: HittableUnit[];
   roundsRolled: number;
+  /** The combat round this side announced a retreat for, 0 when none. */
+  retreatAnnounced: number;
 };
 
 export type RoundView = { round: number; rolls: RollView[] };
@@ -163,7 +165,7 @@ function roundsOf(combat: CombatState, holder: string, sides: SideView[]): Round
         losses: after && r.units?.length ? lossesBetween(r.units, after) : null,
       });
     }
-    rounds.push({ round: n, rolls: views });
+    if (views.length) rounds.push({ round: n, rolls: views });
   }
   return rounds;
 }
@@ -186,6 +188,7 @@ function frontsOf(combat: CombatState, me: string | null, names: Names): FrontVi
       attacker: s.faction === combat.attacker,
       units: s.units,
       roundsRolled: s.roundsRolled,
+      retreatAnnounced: s.retreatAnnounced ?? 0,
     }));
     sides.sort((a, b) => Number(b.attacker) - Number(a.attacker));
     const rounds = roundsOf(combat, f.holder, sides);
@@ -268,13 +271,37 @@ export function combatView(state: GameState | null, decisions: Decision[], me: s
         continue;
       }
       if (v.action === "temp_mod" && o.owner?.userId && o.owner.userId !== me) continue;
-      if (["announce_retreat", "action_cards", "repair", "temp_mod", "automate"].includes(String(v.action))) {
+      if (v.action === "retreat" && (v as { variant?: string | null }).variant) continue;
+      if (["announce_retreat", "retreat", "action_cards", "repair", "temp_mod", "automate"].includes(String(v.action))) {
         seen.add(key);
         controls.push({ decision: d, option: o });
       }
     }
   }
   return { tile, tileId: combat.tileId, fronts, current, step, owed, rolls, abilities, controls, log: logOf(fronts, me, names) };
+}
+
+/**
+ * Why I cannot announce a retreat / retreat now (LRR 78: announce at the start of a round, defender first; the
+ * retreat itself at the end of that round after the hits), or null. Mirrors the bot's RetreatRules (it refuses).
+ */
+export function retreatReason(view: CombatView, action: "announce_retreat" | "retreat"): string | null {
+  const space = view.fronts.find((f) => f.holder === "space");
+  const me = space?.sides.find((s) => s.self);
+  const them = space?.sides.find((s) => !s.self);
+  if (!space?.on || !me || !them) return "no space combat under way for you";
+  const round = Math.min(me.roundsRolled, them.roundsRolled) + 1;
+  if (action === "announce_retreat") {
+    if (me.roundsRolled !== them.roundsRolled) return "only at the start of a round, before anyone rolls it";
+    if (me.retreatAnnounced === round) return "already announced for this round";
+    if (me.attacker && them.retreatAnnounced === round) return "the defender announced a retreat: the attacker cannot";
+    return null;
+  }
+  if (!me.retreatAnnounced) return "announce it at the start of a round first";
+  if (me.roundsRolled < me.retreatAnnounced || them.roundsRolled < me.retreatAnnounced)
+    return `at the end of round ${me.retreatAnnounced}, after both sides roll`;
+  if (view.owed.some((o) => o.userId === me.userId)) return "assign your hits first";
+  return null;
 }
 
 /** Older engines (no GameState.combat.owed): the open hits prompts with hits left. */
