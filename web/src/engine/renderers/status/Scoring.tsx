@@ -133,9 +133,10 @@ export function StatusScoreSecretRenderer({ decision, state, answer }: StatusRen
         const v = o.value;
         if (!v) return null;
         const wrongPhase = inStatus && v.phase !== "status";
-        const blocked = o.disabled || v.met === false || wrongPhase;
+        const unmet = typeof v.unavailable === "string" && v.unavailable ? v.unavailable : null;
+        const blocked = o.disabled || v.met === false || wrongPhase || !!unmet;
         return (
-          <button key={o.id} type="button" className={`${classes.objective} ${classes.secret}`} disabled={blocked} onClick={() => answer(o.id)}>
+          <button key={o.id} type="button" className={`${classes.objective} ${classes.secret}`} disabled={blocked} title={unmet ?? undefined} onClick={() => answer(o.id)}>
             <span className={classes.name}>{objectiveName(v.secretObjective)}</span>
             {wrongPhase && <span className={classes.meta}>{v.phase} phase</span>}
             {!wrongPhase && v.met === true && <span className={classes.met}>met</span>}
