@@ -1,6 +1,6 @@
 {
  "name": "gaps3-combat-cards",
- "description": "audit-gaps-3 (gate TI4_RULES_AC): combat action cards judged from the combat state (open hits prompts, combat round trackers, this activation's rolls) instead of 'you have units in the active system'. Base pbd60@122: space combat at 308, mentak (attacker) rolled round 1, muaat owes 5 space combat hits (setup: muaat destroyer and a damaged dreadnought there, as ac-timing-legal-action). Shields Holding ('Before you assign hits to your ships during a space combat') is legal for muaat (a space combat with its ships there; mentak too); Maneuvering Jets ('Before you assign hits produced by another player's SPACE CANNON roll') refused for both; Rout ('if you are the defender') refused for the attacker; Waylay ('Before you roll dice for ANTI-FIGHTER BARRAGE') refused once round 1 is rolled; Scramble Frequency ('After another player makes a BOMBARDMENT, SPACE CANNON, or ANTI-FIGHTER BARRAGE roll') refused with no such roll; Reflective Shielding ('When one of your ships uses SUSTAIN DAMAGE during combat') legal for muaat (damaged dreadnought) and its resolution posts mentak's 2-hit prompt.",
+ "description": "audit-gaps-3 (gate TI4_RULES_AC): combat action cards judged from the combat state (open hits prompts, combat round trackers, this activation's rolls) instead of 'you have units in the active system'. Base pbd60@122: space combat at 308, mentak (attacker) rolled round 1, muaat owes 5 space combat hits (setup: muaat destroyer and a damaged dreadnought there, as ac-timing-legal-action). Shields Holding ('Before you assign hits to your ships during a space combat') is legal for muaat (a space combat with its ships there; mentak too); Maneuvering Jets ('Before you assign hits produced by another player's SPACE CANNON roll') refused for both; Rout ('if you are the defender') refused for the attacker; Waylay ('Before you roll dice for ANTI-FIGHTER BARRAGE') legal for muaat (its destroyer has ANTI-FIGHTER BARRAGE; the setup's /add_units restarted the combat, so no round is rolled yet); Scramble Frequency ('After another player makes a BOMBARDMENT, SPACE CANNON, or ANTI-FIGHTER BARRAGE roll') refused with no such roll; Reflective Shielding ('When one of your ships uses SUSTAIN DAMAGE during combat') legal for muaat (damaged dreadnought) and its resolution posts mentak's 2-hit prompt. (gate42: /add_units on 308 starts the combat afresh, resetting both round trackers.)",
  "base": {
   "recording": "pbd60",
   "index": 122
@@ -119,8 +119,7 @@
      "actionCard": "waylay"
     }
    },
-   "as": "muaat",
-   "refused": true
+   "as": "muaat"
   },
   {
    "wait": 800
