@@ -1,6 +1,6 @@
 {
   "name": "move-produce-payload",
-  "description": "pbd19@319: ralnel produces at 307 (PRODUCTION 4) after a tactical action. Engine: production.produce answered in one payload (carrier + destroyer in space, 3 infantry on Mez = 2gf + infantry presses = 5 units, over the limit); legacy: the place_ buttons one by one and Done Producing Units. The original only warns over the limit, so the engine must not refuse (regression: engine refused 'That is 5 units; the production limit here is 4').",
+  "description": "pbd19@319: ralnel produces at 307 (PRODUCTION 4) after a tactical action. Engine: production.produce answered in one payload (carrier + destroyer in space, 2 infantry on Mez = 4 units, exactly the limit); legacy: the place_ buttons one by one and Done Producing Units. (Before the core rules audit this payload had 5 units and asserted that the engine must not refuse a build over the limit; the limit is enforced now: ProductionLimitRule, scenario core-production-limit.)",
   "base": {
     "recording": "pbd19",
     "index": 319
@@ -18,7 +18,7 @@
             {
               "unit": "gf",
               "holder": "mez",
-              "count": 3
+              "count": 2
             },
             {
               "unit": "destroyer",
@@ -43,12 +43,6 @@
           "wait": 1500
         },
         {
-          "press": "FFCC_ralnel_place_infantry_mez"
-        },
-        {
-          "wait": 1500
-        },
-        {
           "press": "FFCC_ralnel_place_destroyer_307"
         },
         {
@@ -66,6 +60,10 @@
       {
         "key": "player[ralnel].produced_units",
         "match": "dd_307_space,1"
+      },
+      {
+        "key": "player[ralnel].produced_units",
+        "match": "gf_307_mez,2;"
       }
     ]
   }
