@@ -209,6 +209,7 @@ export class Rest {
     });
     this.on("POST", "/guilds/:g/channels", ({ res, body }) => {
       const ch = this.store.createChannel(body.json);
+      this.hub.denyEveryoneOnGameChannel(ch);
       this.hub.channelCreate(ch);
       sendJson(res, 201, ch);
     });
