@@ -286,10 +286,10 @@ index 5eb02e28a..0613db88e 100644
                  player.getRepresentationUnfogged() + ", use these buttons to pay the 3 resources for _Ubiquity_.",
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/AgendaCountButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/AgendaCountButtonHandler.java
 new file mode 100644
-index 000000000..477f4dfbe
+index 000000000..09d1f4003
 --- /dev/null
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/AgendaCountButtonHandler.java
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,140 @@
 +package ti4.discord.interactions.buttons.handlers.agenda;
 +
 +import java.util.ArrayList;
@@ -402,8 +402,10 @@ index 000000000..477f4dfbe
 +                if (e.getValue() == null || e.getValue() <= 0 || !player.unitBelongsToPlayer(key)) continue;
 +                ti4.model.UnitModel um = player.getUnitFromUnitKey(key);
 +                if (um == null || !Boolean.TRUE.equals(um.getIsShip()) || key.unitType() == ti4.helpers.Units.UnitType.Fighter) continue;
++                // Owner-prefixed: posted in the actions channel, an unprefixed prompt had no target and stayed untyped
++                // (soak pbd1859: a bot waited 189 s on it).
 +                buttons.add(Buttons.red(
-+                        "revolutionDestroy_" + tile.getPosition() + "_" + key.asyncID(),
++                        player.factionButtonChecker() + "revolutionDestroy_" + tile.getPosition() + "_" + key.asyncID(),
 +                        um.getName() + " in " + tile.getRepresentationForButtons(game, player)));
 +            }
 +        }
