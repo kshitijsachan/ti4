@@ -1,0 +1,10 @@
+{
+  "name": "core-afb-no-fighters",
+  "description": "Rules audit (core, user report): ANTI-FIGHTER BARRAGE targets only fighters (LRR 6). 306 holds mentak's cruiser + destroyer (AFB) and muaat's dreadnought + cruiser, no fighters on either side: starting the space combat posts no 'Roll ANTI-FIGHTER BARRAGE' prompt (log line 'ANTI-FIGHTER BARRAGE skipped: no fighters to target'), and combat round 1 is not held for a barrage. The original posted the AFB roll prompt in every space combat. Control: combat-afb-before-round1 (muaat gets 2 fighters) still gets the prompt.",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [ "/combat start_combat tile_name:306" ],
+  "steps": [
+    { "wait": 3000, "expect": { "decision": [ { "kind": "combat.round", "value": { "rollType": "afb" }, "open": false }, { "kind": "combat.round", "value": { "rollType": "combat" }, "open": true } ] } }
+  ],
+  "expect": { "invariants": true }
+}
