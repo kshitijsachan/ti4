@@ -211,15 +211,35 @@ function frontsOf(combat: CombatState, me: string | null, names: Names): FrontVi
   });
 }
 
-const optionTile = (o: AnyOption) => (o.value as { tile?: string | null } | null)?.tile ?? null;
+/**
+ * Option actions whose tile the engine fills in from the active system (their button ids carry no position): they say
+ * nothing about which combat a prompt belongs to.
+ */
+const ACTIVE_SYSTEM_TILE = new Set(["announce_retreat", "ready_for_dice", "action_cards", "decline_space_cannon", "automate", "ability", "temp_mod", "done"]);
+
+const optionTile = (o: AnyOption) => {
+  const v = o.value as { tile?: string | null; action?: string } | null;
+  return v && !ACTIVE_SYSTEM_TILE.has(String(v.action)) ? (v.tile ?? null) : null;
+};
+
+/** The system a combat prompt is about (its roll window, else the positions its buttons carry), or null. */
+export function decisionTile(d: Decision): string | null {
+  const subject = d.window?.subject.tile;
+  if (subject != null) return field(subject) || null;
+  return optionsOf(d).map(optionTile).find((t): t is string => !!t) ?? null;
+}
 
 /** Decisions about this combat: on its tile (or with no tile on their options). */
 function aboutTile(d: Decision, tile: string) {
   if (!d.kind.startsWith("combat.")) return false;
-  const subject = d.window?.subject.tile;
-  if (subject != null) return field(subject) === tile;
-  const tiles = optionsOf(d).map(optionTile).filter((t): t is string => !!t);
-  return !tiles.length || tiles.includes(tile);
+  const t = decisionTile(d);
+  return !t || t === tile;
+}
+
+/** Every combat in state: the active system's (or the first) and the others under way. */
+export function combatsOf(state: GameState | null): CombatState[] {
+  const c = state?.combat;
+  return c ? [c, ...(c.elsewhere ?? [])] : [];
 }
 
 /** A window subject field as text ("" when absent or not a string / number). */
@@ -231,8 +251,17 @@ const live = (o: AnyOption) => !o.disabled && !o.needsInput && !!o.value && !o.i
  * The combat view of the active system, or null when there is none. decisions: every open decision of the game
  * (mine and the others'), so the panel can say who it waits on.
  */
-export function combatView(state: GameState | null, decisions: Decision[], me: string | null, names: Names): CombatView | null {
-  const combat = state?.combat;
+export function combatView(
+  state: GameState | null,
+  decisions: Decision[],
+  me: string | null,
+  names: Names,
+  /** The combat's system (a prompt's); default: the combat I am in, else the active system's. */
+  at?: string | null,
+): CombatView | null {
+  const all = combatsOf(state);
+  const involves = (c: CombatState) => (c.owed ?? []).some((o) => o.userId === me) || c.fronts.some((f) => f.sides.some((s) => s.userId === me && s.units.length > 0));
+  const combat = at ? all.find((c) => c.tile === at) : (all.find(involves) ?? all[0]);
   if (!combat) return null;
   const tile = combat.tile;
   const myFaction = state?.players.find((p) => p.userId === me)?.faction ?? null;

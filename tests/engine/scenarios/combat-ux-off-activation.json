@@ -1,0 +1,30 @@
+{
+  "name": "combat-ux-off-activation",
+  "description": "combat-ux: a full space + ground combat OUTSIDE the active system (Mecatol Rex 000, opened by /combat start_combat; pbd117@45). Every combat-ux check must find this combat by its system, not the active one: retreat timing (hacan announces at the start of round 1, an immediate retreat is refused), hit rules (sol's transported infantry refused for a space-combat hit, a cruiser takes it), the Sol agent at the start of the ground combat on mrte (typed combat.round ability, not gated to the active system), and the ground round it adds a die to (stored solagent consumed).",
+  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "setup": [
+    "/add_units tile_name:000 unit_names:\"2 cruiser, 2 infantry, 2 infantry mrte\" faction_or_color:sol",
+    "/add_units tile_name:000 unit_names:\"2 cruiser, 2 infantry mrte\" faction_or_color:hacan",
+    "/leaders ready leader:solagent faction_or_color:sol",
+    "/combat start_combat tile_name:000"
+  ],
+  "steps": [
+    { "wait": 3000 },
+    { "press": "announceARetreat", "as": "hacan" },
+    { "press": "retreat_000", "as": "hacan", "refused": true },
+    { "press": "getDamageButtons_000_spacecombat", "as": "sol" },
+    { "press": "FFCC_sol_assignHits_000_1_gf_jupiter", "as": "sol", "refused": true },
+    { "press": "FFCC_sol_assignHits_000_1_ca_jupiter", "as": "sol" },
+    { "answer": { "kind": "combat.assign_units", "option": "deleteButtons" }, "as": "sol", "legacy": [ { "press": "deleteButtons", "as": "sol" } ] },
+    { "press": "startCombatOn_mrte", "as": "sol" },
+    { "wait": 3000 },
+    { "answer": { "kind": "combat.round", "option": "getAgentSelection_solagent" }, "as": "sol", "legacy": [ { "press": "FFCC_sol_getAgentSelection_solagent", "as": "sol" } ] },
+    { "press": "exhaustAgent_solagent_sol", "as": "sol" },
+    { "press": "combatRoll_000_mrte", "as": "sol" }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [ { "path": "players[faction=sol].leaders", "includes": "solagent:exhausted" } ],
+    "save": [ { "key": "stored.solagent", "exists": false } ]
+  }
+}
