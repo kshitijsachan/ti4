@@ -1,0 +1,70 @@
+{
+ "name": "pt9-imperial-nothing-to-score",
+ "description": "Soak pbd672 / pbd746 (pt9 rollback): Imperial's holder met no public objective and End Turn was refused forever ('finish Imperial: score a public'). Imperial scores a public objective only IF ABLE, so (bot pt9-followups, StrategyCardResolveKind.able) a conditional mandatory part binds only while it can be done: here Yssaril (pbd28@89, round 1) meets neither revealed public, so after the secret draw End Turn is accepted without pressing Score A Public; before the secret it is still refused.",
+ "base": {
+  "recording": "pbd28",
+  "index": 89
+ },
+ "steps": [
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "strategicAction_8$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_follow_8$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_8$"
+   },
+   "as": "deepwrought"
+  },
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "turnEnd$"
+   },
+   "as": "yssaril",
+   "refused": true
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_draw_so$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "turnEnd$"
+   },
+   "as": "yssaril"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

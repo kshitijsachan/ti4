@@ -1,0 +1,123 @@
+{
+ "name": "pt9-diplomacy-picker-twice",
+ "description": "Soak pbd1029 (pt9-v4 rollback): the holder opened the diplomacy picker twice (diploSystem in the thread and in #actions), picked once, and the leftover picker held End Turn 15+ min as 'an action still under way'. Design (coordinator): End Turn is blocked only by a missing mandatory primary part the player can still do, a tactical action under way, or the fleet limits; never by an open picker. The part is recorded when the pick is made (not when the picker opens), and the holder's leftover pickers close once the part is done as often as the primary lists it or the turn is over. Base: pt9-legacy-primary-diplomacy (pbd28@89, Yssaril holds Diplomacy).",
+ "base": {
+  "recording": "pbd28",
+  "index": 89
+ },
+ "setup": [
+  {
+   "command": "player sc_unplay",
+   "options": {
+    "strategy_card": "2",
+    "faction_or_color": "deepwrought"
+   }
+  },
+  {
+   "command": "player sc_unpick",
+   "options": {
+    "strategy_card": "2",
+    "faction_or_color": "deepwrought"
+   }
+  },
+  {
+   "command": "player sc_unpick",
+   "options": {
+    "strategy_card": "3",
+    "faction_or_color": "yssaril"
+   }
+  },
+  {
+   "command": "player sc_pick",
+   "options": {
+    "strategy_card": "2",
+    "faction_or_color": "yssaril"
+   }
+  },
+  {
+   "command": "player turn_start",
+   "options": {
+    "faction_or_color": "yssaril"
+   }
+  }
+ ],
+ "steps": [
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "strategicAction_2$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_2$"
+   },
+   "as": "mahact"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_2$"
+   },
+   "as": "naaz"
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "^sc_no_follow_2$"
+   },
+   "as": "deepwrought"
+  },
+  {
+   "press": "diploSystem",
+   "as": "yssaril",
+   "click": true
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "press": "diploSystem",
+   "as": "yssaril",
+   "click": true
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "answer": {
+    "kind": "strategy_card.diplomacy_system",
+    "option": "diplo_"
+   },
+   "as": "yssaril"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "answer": {
+    "kind": "turn.action",
+    "option": "turnEnd$"
+   },
+   "as": "yssaril"
+  },
+  {
+   "wait": 2500
+  }
+ ],
+ "expect": {
+  "invariants": true,
+  "decision": [
+   {
+    "kind": "strategy_card.diplomacy_system",
+    "as": "yssaril",
+    "open": false
+   }
+  ]
+ }
+}
