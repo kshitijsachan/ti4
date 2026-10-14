@@ -26,6 +26,9 @@ export type KeleresFlavor = "mentak" | "xxcha" | "argent";
 /**
  * Which Keleres to play. preset=true during the draft (changeable), false after it (sets the player up).
  * contested: that faction was drafted / is still on the board (a preset of it is cancelled if it gets picked).
+ * current (preset only): this flavour is already the preset; the bot refuses pressing it again (the preset handler
+ * re-posts its buttons after every press, so a preset prompt never closes by being answered). The preset is
+ * obsolete (closed, refused) once the draft is over.
  */
 export type SetupKeleresFlavor = DecisionBase<
   "setup.keleres_flavor",
@@ -34,6 +37,7 @@ export type SetupKeleresFlavor = DecisionBase<
     faction: FactionId;
     preset: boolean;
     contested: boolean;
+    current?: boolean;
     homePosition: TilePosition | null;
     speaker: boolean | null;
   }

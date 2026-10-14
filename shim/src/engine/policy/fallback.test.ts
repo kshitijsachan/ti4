@@ -356,6 +356,29 @@ test("pbd175: the Keleres preset once we play a flavour is stale; during the dra
   assert.equal(chooseTyped(preset([true, false, false]), drafting, ME, { history: [], open: [], all: [] })?.option?.id, "draftPresetKeleres_xxcha");
 });
 
+test("pbd1967 / pbd1195: the Keleres preset is answered once and never after the draft (it re-posts itself)", () => {
+  const preset = (current: string | null) =>
+    decision(
+      "setup.keleres_flavor",
+      ["mentak", "xxcha", "argent"].map((f) => opt(`draftPresetKeleres_${f}`, f, { flavor: f, faction: `keleres${f[0]}`, preset: true, contested: false, current: f === current, homePosition: null, speaker: null })),
+    );
+  const ctx = { history: [], open: [], all: [] };
+  const drafting = { ...unseated, setup: { stage: "draft", waitingOn: [], players: [] } } as unknown as GameState;
+  // Already preset (the re-posted prompt): nothing owed, not a stall, never re-pressed.
+  assert.equal(staleForBot(preset("mentak"), drafting, ME), true);
+  assert.equal(chooseTyped(preset("mentak"), drafting, ME, ctx)?.option ?? null, null);
+  // After the draft (player setup): the preset is over; only the setupStep5 flavour prompt counts.
+  const setup = { ...unseated, setup: { stage: "player_setup", waitingOn: [ME], players: [] } } as unknown as GameState;
+  assert.equal(staleForBot(preset(null), setup, ME), true);
+  assert.equal(chooseTyped(preset(null), setup, ME, ctx)?.option ?? null, null);
+  const flavour = decision(
+    "setup.keleres_flavor",
+    ["mentak", "xxcha"].map((f) => opt(`setupStep5_${ME}_keleres${f[0]}_null_313_no`, f, { flavor: f, faction: `keleres${f[0]}`, preset: false, contested: false, homePosition: "313", speaker: false })),
+  );
+  assert.equal(staleForBot(flavour, setup, ME), false);
+  assert.equal(chooseTyped(flavour, setup, ME, ctx)?.option?.id, `setupStep5_${ME}_keleresm_null_313_no`);
+});
+
 test("pbd181: a tactical action's prompts outside our action-phase turn are stale", () => {
   const conclude = decision("tactical.conclude", [opt("FFCC_sol_doneWithTacticalAction", "Conclude Tactical Action", { action: "conclude" })]);
   const move = decision("tactical.move", [opt("FFCC_sol_concludeMove_210", "Done moving", { op: "done" })]);

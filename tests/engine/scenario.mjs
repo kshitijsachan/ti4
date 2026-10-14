@@ -363,6 +363,9 @@ class Runner {
           if (d) hit = { d, o: optionFor(d, customId) };
           else await sleep(300);
         }
+        // A step expected to be refused: a prompt the engine does not open (obsolete at capture) cannot be answered
+        // through it either, which is the refusal (e.g. the Keleres preset after the draft).
+        if (!hit?.o && st.refused) return { ok: false, refused: true, error: `the engine did not open the carrier of ${customId} (obsolete at capture)` };
         if (!hit?.o) return { ok: false, error: `the engine did not capture the carrier of ${customId} (message ${m.id}, ${new Date().toISOString().slice(11, 23)})` };
       }
       const a = await answer(this.fork.game, hit.d.id, user, { optionId: hit.o.id });
