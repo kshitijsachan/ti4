@@ -1,0 +1,53 @@
+{
+  "name": "core-move-breach",
+  "description": "Rules audit (core, TI4_MOVE_CHECK): systems with active breaches are adjacent to each other (Thunder's Edge, Crimson Rebellion), and the move check counts that (CheckDistanceHelper / FoWHelper breach adjacency). Base pbd117@45 (Crimson in the game): active breaches at 301 and in the Crimson home (br); Arborec activates br and moves a cruiser (move 2) from 301 - accepted (1 system away through the breach).",
+  "base": {
+    "recording": "pbd117",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/add_token token:breachactive tile_name:301",
+    "/add_token token:breachactive tile_name:br"
+  ],
+  "trigger": {
+    "press": "FFCC_arborec_ringTile_br",
+    "as": "arborec"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "301",
+              "holder": "space",
+              "unit": "ca",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "as": "arborec",
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "wait": 2000
+    }
+  ],
+  "expect": {
+    "invariants": false,
+    "save": [
+      {
+        "key": "tile 301: grn\u2014ca",
+        "exists": false
+      }
+    ]
+  }
+}
