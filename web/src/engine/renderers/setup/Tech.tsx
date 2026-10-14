@@ -37,14 +37,17 @@ export const TechGainRenderer: Renderer<"tech.gain"> = ({ decision, state, answe
         {options.map((o) => {
           const t = getTechData(o.value!.tech);
           const have = owned.has(o.value!.tech);
+          // A research whose prerequisites are not met (engine value.unavailable): greyed, never hidden, with the reason.
+          const blocked = typeof o.value!.unavailable === "string" && o.value!.unavailable ? o.value!.unavailable : null;
           return (
             <Choice
               key={o.id}
               name={t?.name ?? o.label}
               icon={<TechDot type={t?.types?.[0]} />}
-              sub={have ? "Owned" : t?.requirements ? `Requires ${t.requirements}` : "No prerequisites"}
+              sub={have ? "Owned" : blocked ? "Prerequisites not met" : t?.requirements ? `Requires ${t.requirements}` : "No prerequisites"}
+              title={blocked ?? undefined}
               selected={o.id === selected}
-              disabled={o.disabled || have || !!pending}
+              disabled={o.disabled || have || !!blocked || !!pending}
               onClick={() => setSelected(o.id)}
             />
           );

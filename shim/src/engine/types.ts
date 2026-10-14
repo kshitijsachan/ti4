@@ -447,6 +447,8 @@ export type TechGain = DecisionBase<
     /** Prerequisite letters, e.g. "GG". */
     requirements?: string | null;
     factionTech?: boolean;
+    /** Why this research is not allowed right now (prerequisites not met; TI4_TECH_PREREQ gate), else null. */
+    unavailable?: string | null;
   }
 >;
 export type SecretObjectiveDiscard = DecisionBase<
