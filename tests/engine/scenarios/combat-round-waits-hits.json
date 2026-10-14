@@ -1,10 +1,21 @@
 {
   "name": "combat-round-waits-hits",
-  "description": "The next combat round waits for the previous round's hits (pbd203: a ground round was rolled while the opponent's hit was unassigned). pbd60@151: mentak owes 1 ground hit on andeara; its 'Roll Dice For Combat Round' is refused by the engine (the original code rolls; legacy fork: no press), then mentak auto-assigns on both forks.",
-  "base": { "recording": "pbd60", "index": 151 },
+  "description": "Both sides roll a round before its hits are assigned (LRR 78.4/40; combat-ux): pbd60@151 on andeara muaat rolled round 2, mentak (round 1) owes its 1 hit: mentak rolls round 2 first (allowed: the side still to roll is never held back by that round's hits), then auto-assigns. Was: the roll refused, which made the hit side lose dice (pbd203 over-corrected).",
+  "base": {
+    "recording": "pbd60",
+    "index": 151
+  },
   "steps": [
-    { "press": "combatRoll_308_andeara", "as": "mentak", "refused": true, "legacy": [] },
-    { "press": "FFCC_mentak_autoAssignGroundHits_andeara_1", "as": "mentak" }
+    {
+      "press": "combatRoll_308_andeara",
+      "as": "mentak"
+    },
+    {
+      "press": "FFCC_mentak_autoAssignGroundHits_andeara_1",
+      "as": "mentak"
+    }
   ],
-  "expect": { "invariants": true }
+  "expect": {
+    "invariants": true
+  }
 }

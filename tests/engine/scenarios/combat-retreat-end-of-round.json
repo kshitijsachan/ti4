@@ -1,0 +1,15 @@
+{
+  "name": "combat-retreat-end-of-round",
+  "description": "Retreat at the end of the announced round (LRR 78.6): pbd60@165, space combat at 306 (start_combat). mentak announces, both sides roll round 1 (muaat rolls although it owes mentak's hits: both roll, then assign), muaat's fleet is then removed (deterministic: no dice decide whether mentak owes hits), and mentak retreats to its home 307 (combat.round retreat -> combat.retreat retreatUnitsFrom_306_307).",
+  "base": { "recording": "pbd60", "index": 165, "repost": false },
+  "setup": [ "/combat start_combat tile_name:306" ],
+  "steps": [
+    { "press": "announceARetreat", "as": "mentak" },
+    { "press": "combatRoll_306_space", "as": "mentak" },
+    { "press": "combatRoll_306_space", "as": "muaat" },
+    { "command": "/remove_units tile_name:306 unit_names:\"dn, ca\" faction_or_color:muaat" },
+    { "press": "retreat_306", "as": "mentak" },
+    { "answer": { "kind": "combat.retreat", "option": "retreatUnitsFrom_306_307" }, "as": "mentak" }
+  ],
+  "expect": { "invariants": true }
+}

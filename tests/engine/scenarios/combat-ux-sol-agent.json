@@ -1,0 +1,60 @@
+{
+  "name": "combat-ux-sol-agent",
+  "description": "combat-ux: Sol agent (Evelyn Delouis) at the start of a ground combat round. A ground combat on Mecatol Rex (mrte; sol vs hacan infantry, pbd117@45): 'Use Sol Agent' on the combat controls is a typed combat.round ability (was value null, hidden in the web), sol targets itself, then rolls the round: the agent is exhausted and its +1 die is consumed by that roll (stored solagent cleared).",
+  "base": {
+    "recording": "pbd117",
+    "index": 45,
+    "repost": false
+  },
+  "setup": [
+    "/add_units tile_name:000 unit_names:\"2 infantry mr\" faction_or_color:sol",
+    "/add_units tile_name:000 unit_names:\"2 infantry mr\" faction_or_color:hacan",
+    "/leaders ready leader:solagent faction_or_color:sol",
+    "/combat start_combat tile_name:000"
+  ],
+  "steps": [
+    {
+      "press": "startCombatOn_mrte",
+      "as": "sol"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "answer": {
+        "kind": "combat.round",
+        "option": "getAgentSelection_solagent"
+      },
+      "as": "sol",
+      "legacy": [
+        {
+          "press": "FFCC_sol_getAgentSelection_solagent",
+          "as": "sol"
+        }
+      ]
+    },
+    {
+      "press": "exhaustAgent_solagent_sol",
+      "as": "sol"
+    },
+    {
+      "press": "combatRoll_000_mrte",
+      "as": "sol"
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [
+      {
+        "path": "players[faction=sol].leaders",
+        "includes": "solagent:exhausted"
+      }
+    ],
+    "save": [
+      {
+        "key": "stored.solagent",
+        "exists": false
+      }
+    ]
+  }
+}

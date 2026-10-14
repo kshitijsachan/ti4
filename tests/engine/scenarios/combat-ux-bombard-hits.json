@@ -1,0 +1,13 @@
+{
+  "name": "combat-ux-bombard-hits",
+  "description": "combat-ux: BOMBARDMENT hits land on ground forces on the planet. muaat (pbd60@144, mentak bombarded andeara in 308) also gets a destroyer in space: the bombardment menu refuses it, an infantry on andeara takes the hit.",
+  "base": { "recording": "pbd60", "index": 144, "repost": false },
+  "setup": ["/add_units tile_name:308 unit_names:\"1 destroyer\" faction_or_color:muaat"],
+  "trigger": { "press": "getDamageButtons_308_bombardment", "as": "muaat" },
+  "steps": [
+    { "press": "FFCC_muaat_assignHits_308_1_dd_bloodred", "as": "muaat", "refused": true },
+    { "press": "FFCC_muaat_assignHits_308_1_gf_andeara_bloodred", "as": "muaat" },
+    { "answer": { "kind": "combat.assign_units", "option": "deleteButtons" }, "as": "muaat", "legacy": [ { "press": "deleteButtons", "as": "muaat" } ] }
+  ],
+  "expect": { "invariants": true }
+}

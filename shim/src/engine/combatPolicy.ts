@@ -6,7 +6,7 @@
  * to roll, from the round trackers), never ahead of its opponent and never while it still owes hits; barrage and
  * space cannon once per prompt; it never bombards, retreats or cancels hits.
  */
-import type { CombatEngage, CombatUnitPickValue, CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
+import type { CombatState, CombatEngage, CombatUnitPickValue, CombatDecision, CombatHits, CombatRound, CombatAssignUnits, CombatControlValue, CombatBombard, CombatRetreat, UnitsRemove } from "./kinds/combat.js";
 import type { Decision, GameState, Option } from "./types.js";
 import { chooseCombatAutomate, chooseCombatModifier } from "./policy/units.js";
 
@@ -17,13 +17,13 @@ const isCombat = (d: Decision): d is CombatDecision => d.kind.startsWith("combat
 /** Dummy / NPC seats' copies of a button act as that seat (dummyPlayerSpoof<faction>_): never ours. */
 const forDummy = (o: Option<any>) => o.id.includes("dummyPlayerSpoof");
 
-export function chooseCombat(d: Decision, state: GameState | null, me: string, open: Decision[] = [], history: string[] = []): CombatChoice | null {
+export function chooseCombat(d: Decision, state: GameState | null, me: string, open: Decision[] = [], history: string[] = [], all: Decision[] = open): CombatChoice | null {
   if (!isCombat(d)) return null;
   switch (d.kind) {
     case "combat.round":
-      return roll(d, state, me, open);
+      return roll(d, state, me, open, all);
     case "combat.hits":
-      return autoAssign(d, me);
+      return autoAssign(d, me, state);
     case "combat.assign_units":
       // pickUnit only where hits are owed (progress): a removal list without progress that is over the limits is the
       // unit-limit desk's; pickUnit's "nothing owed: Done" there closed it before any removal (pbd114 loop).
@@ -120,11 +120,20 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
   return null;
 }
 
-function autoAssign(d: CombatHits, me: string): CombatChoice | null {
+/** Combat-round hits in a fight where we have not rolled the round yet: roll first (both roll, then both assign). */
+function rollFirst(state: GameState | null, me: string, tile: string, holder: string): boolean {
+  const front = combatAt(state, tile)?.fronts.find((f) => f.holder === holder);
+  const mine = front?.sides.find((s) => s.userId === me);
+  const theirs = front?.sides.find((s) => s.userId !== me);
+  return !!mine && !!theirs && mine.units.length > 0 && mine.roundsRolled < theirs.roundsRolled;
+}
+
+function autoAssign(d: CombatHits, me: string, state: GameState | null = null): CombatChoice | null {
   if (d.scope !== "player" || d.target?.userId !== me) return null;
   const auto = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "auto");
   if (!auto) return bombardmentPlan(d);
   if (auto.value?.action !== "auto") return null;
+  if ((auto.value.source === "space" || auto.value.source === "ground") && rollFirst(state, me, auto.value.tile, auto.value.holder)) return null;
   // Shields Holding cancelled some of the prompt's hits: the engine refuses "auto" (it would assign all of them); take
   // the cancels off with "Cancel a Hit" (each press re-posts the prompt one hit lower), as a person would.
   if ((auto.value.cancelled ?? 0) > 0) {
@@ -264,10 +273,23 @@ export function unitLimits(tile: string, state: GameState | null, me: string): {
   };
 }
 
-function roll(d: CombatRound, state: GameState | null, me: string, open: Decision[]): CombatChoice | null {
+/** Every combat in state: the active system's (or the first) and the others under way (elsewhere). */
+export function combatsOf(state: GameState | null): CombatState[] {
+  const c = state?.combat;
+  return c ? [c, ...(c.elsewhere ?? [])] : [];
+}
+
+/** The combat in this system, if state has it. */
+export function combatAt(state: GameState | null, tile: string | null | undefined): CombatState | null {
+  return combatsOf(state).find((c) => c.tile === tile) ?? null;
+}
+
+function roll(d: CombatRound, state: GameState | null, me: string, open: Decision[], all: Decision[] = open): CombatChoice | null {
   const w = d.window;
+  if (!w) return useRoundAgent(d, state, me, open);
   if (!w || w.kind !== "combat_roll" || !w.eligible.includes(me) || w.responded.includes(me)) return null;
-  const combat = state?.combat;
+  /* The combat this prompt is about: the active system's, or one outside the activation (elsewhere). */
+  const combat = w.subject.tile ? combatAt(state, String(w.subject.tile)) : (state?.combat ?? null);
   const self = state?.players.find((p) => p.userId === me);
   if (!self?.faction) return null;
   const rollType = String(w.subject.rollType ?? "");
@@ -276,13 +298,13 @@ function roll(d: CombatRound, state: GameState | null, me: string, open: Decisio
   if (w.subject.waitingFor) return null;
   // state.combat describes the active system only: another system's combat (two at once, pbd203) is judged from the
   // window alone (eligible / responded per round).
-  const sameTile = !!combat && (!w.subject.tile || combat.tile === String(w.subject.tile));
+  const sameTile = !!combat;
   const rolls = (o: Option<any>): o is Option<CombatControlValue & { action: "roll" }> =>
     !o.disabled && !forDummy(o) && o.value?.action === "roll";
   const options = d.options.filter(rolls);
   const pick = (type: string, h?: string) => options.find((o) => o.value!.rollType === type && (!h || o.value!.holder === h));
   const rolledSincePrompt = (type: string) =>
-    !!combat?.rolls.some((r) => r.faction === self.faction && r.rollType === type && r.at >= d.createdAt);
+    !!(combat ?? state?.combat)?.rolls.some((r) => r.faction === self.faction && r.rollType === type && r.at >= d.createdAt);
 
   if (rollType === "afb" || rollType === "spacecannonoffence") {
     if (rolledSincePrompt(rollType)) return null;
@@ -301,15 +323,66 @@ function roll(d: CombatRound, state: GameState | null, me: string, open: Decisio
   const theirs = front?.sides.find((s) => s.userId !== me);
   if (!front || !mine || !theirs || !mine.units.length || !theirs.units.length) return null;
   if (mine.roundsRolled > theirs.roundsRolled) return null;
-  // Hits we owe come first (the next round is rolled after assigning).
+  // Hits we owe come first (the next round is rolled after assigning) — except the round the opponent already rolled:
+  // we roll it too before assigning its hits (LRR: both roll, then both assign; assigning first lost our dice).
   // (Only hits this bot can auto-assign: a BOMBARDMENT prompt has no auto option and must not stall the ground combat.)
-  if (open.some((x) => x.kind === "combat.hits" && x.target?.userId === me && x.options.some((o) => !o.disabled && o.value?.action === "auto")))
+  if (
+    mine.roundsRolled >= theirs.roundsRolled &&
+    open.some((x) => x.kind === "combat.hits" && x.target?.userId === me && x.options.some((o) => !o.disabled && o.value?.action === "auto"))
+  )
     return null;
   // Space cannon defence before the first ground round, once.
   if (mine.roundsRolled === 0 && mine.abilities.includes("spacecannondefence") && !rolledSincePrompt("spacecannondefence")) {
     const scd = pick("spacecannondefence", holder);
     if (scd) return { option: scd, why: "combat: space cannon defence before ground combat" };
   }
+  // Start of the round: our own "+1 die" agent first (Sol on the ground, Letnev in space; pressed on the combat
+  // controls by useRoundAgent), then roll once it is set.
+  const controls = all.filter((x) => x.kind === "combat.round") as CombatRound[];
+  if (roundAgent([d, ...controls], open, me, self.faction, holder)) return null;
   const o = pick("combat", holder);
   return o ? { option: o, why: `combat: roll round ${mine.roundsRolled + 1}` } : null;
+}
+
+/** The combat controls (no roll window) carrying our ready round agent for a fight we are in: use it. */
+function useRoundAgent(d: CombatRound, state: GameState | null, me: string, open: Decision[]): CombatChoice | null {
+  const self = state?.players.find((p) => p.userId === me);
+  if (!self?.faction) return null;
+  for (const front of combatsOf(state).flatMap((c) => c.fronts)) {
+    const mine = front.sides.find((s) => s.userId === me);
+    const theirs = front.sides.find((s) => s.userId !== me);
+    if (!mine?.units.length || !theirs?.units.length || mine.roundsRolled > theirs.roundsRolled) continue;
+    const pick = roundAgent([d], open, me, self.faction, front.holder);
+    if (pick && pick !== "wait") return pick;
+  }
+  return null;
+}
+
+/** Whether a combat controls decision offers this faction's ready round agent (the bot loop takes it up). */
+export function offersRoundAgent(d: Decision, faction: string | null): boolean {
+  if (d.kind !== "combat.round" || !faction) return false;
+  return d.options.some((o) => {
+    const v = o.value as { action?: string; source?: string; owner?: string | null; blocked?: string | null; ability?: string } | null;
+    return !o.disabled && v?.action === "ability" && v.source === "agent" && v.owner === faction && !v.blocked && !!ROUND_AGENTS[String(v.ability)];
+  });
+}
+
+/** Agents a bot uses on itself at the start of a combat round (1 additional die that round): where they apply. */
+const ROUND_AGENTS: Record<string, "space" | "ground"> = { solagent: "ground", letnevagent: "space" };
+
+/**
+ * Our ready round agent on the combat controls (CombatAbilityValue), or "wait" while its target picker (leader.use,
+ * ours) is still open — the extra die only counts when it is set before the roll.
+ */
+function roundAgent(controls: CombatRound[], open: Decision[], me: string, faction: string, holder: string): CombatChoice | "wait" | null {
+  const pending = open.some(
+    (x) => x.kind === "leader.use" && x.target?.userId === me && x.options.some((o) => !o.disabled && ROUND_AGENTS[String((o.value as { leader?: string } | null)?.leader)]),
+  );
+  if (pending) return "wait";
+  const where = holder === "space" ? "space" : "ground";
+  const o = controls.flatMap((c) => c.options).find((x) => {
+    const v = x.value;
+    return !x.disabled && !forDummy(x) && v?.action === "ability" && v.source === "agent" && v.owner === faction && !v.blocked && ROUND_AGENTS[v.ability] === where;
+  });
+  return o ? { option: o, why: `combat: use ${(o.value as { name?: string | null }).name ?? "agent"} before rolling (+1 die)` } : null;
 }

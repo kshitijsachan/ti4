@@ -1,0 +1,12 @@
+{
+  "name": "combat-ux-sco-hits",
+  "description": "combat-ux: space cannon offence hits land on ships in the system. mentak (pbd60@165, 306) with 2 infantry on board: the pds menu refuses an infantry.",
+  "base": { "recording": "pbd60", "index": 165 },
+  "setup": ["/add_units tile_name:306 unit_names:\"2 infantry\" faction_or_color:mentak"],
+  "trigger": { "press": "getDamageButtons_306_pds", "as": "mentak" },
+  "steps": [
+    { "press": "FFCC_mentak_assignHits_306_1_gf_dawn", "as": "mentak", "refused": true },
+    { "answer": { "kind": "combat.assign_units", "option": "deleteButtons" }, "as": "mentak", "legacy": [ { "press": "deleteButtons", "as": "mentak" } ] }
+  ],
+  "expect": { "invariants": true }
+}

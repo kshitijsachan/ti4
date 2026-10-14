@@ -21,7 +21,7 @@ function state(combatTile: string | null, space: { color: string }[] = []): Game
       { userId: "u2", faction: "sol", color: "blue" },
     ],
     tiles: [{ position: "201", tileId: "25", holders: [{ name: "space", units: space.flatMap((s) => ships(s.color)), tokens: [], control: [] }] }],
-    combat: combatTile ? { tile: combatTile, tileId: "25", factions: [], fronts: [], spaceCannonOffence: [], rolls: [] } : null,
+    combat: combatTile ? { tile: combatTile, tileId: "25", factions: [], fronts: [], spaceCannonOffence: [], rolls: [], owed: [], attacker: null } : null,
   } as unknown as GameState;
 }
 
