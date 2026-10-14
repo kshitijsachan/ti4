@@ -513,7 +513,9 @@ async function webdataStale(game, retry = true) {
   const color = st.players.find((p) => p.userId === st.activePlayer)?.color ?? null;
   const diffs = [];
   if (w.gameRound !== st.round) diffs.push(`round ${w.gameRound} vs ${st.round}`);
-  if ((w.gameState?.phase ?? null) !== st.phase && st.phase !== "finished") diffs.push(`phase ${w.gameState?.phase} vs ${st.phase}`);
+  // web-data names phases "status.homework", the engine state the save's "statusHomework": compare letters only.
+  const phaseKey = (p) => String(p ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (phaseKey(w.gameState?.phase) !== phaseKey(st.phase) && st.phase !== "finished") diffs.push(`phase ${w.gameState?.phase} vs ${st.phase}`);
   if ((w.gameState?.activePlayer ?? null) !== color && st.activePlayer) diffs.push(`active ${w.gameState?.activePlayer} vs ${color}`);
   const prev = lastTags.get(game);
   if (tag && prev && prev.version !== st.stateVersion && prev.tag === tag) diffs.push(`ETag ${tag} unchanged across saves ${prev.version} -> ${st.stateVersion}`);

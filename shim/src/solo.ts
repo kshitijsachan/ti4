@@ -2,6 +2,8 @@ import type { Hub } from "./hub.js";
 import type { Clients } from "./clients.js";
 import type { Lobby } from "./lobby.js";
 import type { Json, StoredMessage } from "./store.js";
+import { archivedChannel } from "./store.js";
+import { WebDataCache } from "./webdata.js";
 import { log } from "./log.js";
 
 /*
@@ -56,7 +58,12 @@ export class SoloGames {
     private clients: Clients,
     private lobby: Lobby,
     private botApi: string,
-  ) {}
+  ) {
+    this.phases = new WebDataCache(botApi);
+  }
+
+  /** freeBots: whether each game is ongoing, from revalidated web-data reads. */
+  private phases: WebDataCache;
 
   private get store() {
     return this.hub.store;
@@ -637,14 +644,17 @@ export class SoloGames {
     const bots = this.existingBots();
     const gamesOf = new Map<string, string[]>();
     for (const c of Object.values(s.channels)) {
+      // An archived game is over: not ongoing, no need to ask the bot (soak: ~700 web-data reads per new game).
+      if (archivedChannel(s.channels, String(c.id))) continue;
       const m = /^Cards Info-(pbd\d+)-(.+)$/.exec(String(c.name ?? ""));
       if (m) gamesOf.set(m[2], [...(gamesOf.get(m[2]) ?? []), m[1]]);
     }
     const ongoing = new Map<string, boolean>();
     const isOngoing = async (game: string) => {
       if (!ongoing.has(game)) {
-        const web = await this.webData(game);
-        ongoing.set(game, !!web && web.gameState?.phase !== "finished" && !web.gameState?.winner);
+        // Revalidated with the bot's ETag (a 304 when the game was not saved since).
+        const on = await this.phases.get(game, "ongoing", 10_000, (web) => web.gameState?.phase !== "finished" && !web.gameState?.winner);
+        ongoing.set(game, !!on);
       }
       return ongoing.get(game)!;
     };
