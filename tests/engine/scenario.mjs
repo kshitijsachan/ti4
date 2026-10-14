@@ -299,15 +299,20 @@ class Runner {
       return r.ok ? { ok: true, detail: `deleted ${d.kind} ${d.id}` } : { ok: false, error: `deleteDecision: ${r.status}` };
     }
     if (st.waitDecision) {
-      // { waitDecision: { kind, timeoutMs }, as }: wait until a decision of that kind is open for the step's seat.
+      // { waitDecision: { kind, timeoutMs, open? }, as }: wait until a decision of that kind is open for the step's
+      // seat (open: false — until none is).
       const t = Date.now();
       const timeout = st.waitDecision.timeoutMs ?? 30000;
+      const wantOpen = st.waitDecision.open !== false;
       while (Date.now() - t < timeout) {
-        const d = (await openDecisions(this.fork.game).catch(() => [])).find((x) => kindMatches(x.kind, st.waitDecision.kind) && (!x.target || x.target.userId === user));
-        if (d) return { ok: true, detail: `${d.kind} ${d.id} open after ${((Date.now() - t) / 1000).toFixed(0)} s` };
+        const ds = await openDecisions(this.fork.game).catch(() => null);
+        const d = ds?.find((x) => kindMatches(x.kind, st.waitDecision.kind) && (!x.target || x.target.userId === user));
+        const secs = ((Date.now() - t) / 1000).toFixed(0);
+        if (ds && wantOpen && d) return { ok: true, detail: `${d.kind} ${d.id} open after ${secs} s` };
+        if (ds && !wantOpen && !d) return { ok: true, detail: `no ${st.waitDecision.kind} open after ${secs} s` };
         await sleep(2000);
       }
-      return { ok: false, error: `waitDecision: no ${st.waitDecision.kind} for ${user} within ${timeout / 1000} s` };
+      return { ok: false, error: `waitDecision: ${wantOpen ? "no" : "still a"} ${st.waitDecision.kind} for ${user} after ${timeout / 1000} s` };
     }
     if (st.answerOn) {
       // { answerOn: "<custom id>", pick?: "oldest" | "newest" }: answer the decision of a message already on screen

@@ -6,7 +6,7 @@
   "steps": [
     { "waitDecision": { "kind": "turn.action", "timeoutMs": 30000 }, "as": "crimson" },
     { "deleteDecision": { "kind": "turn.action" }, "as": "crimson" },
-    { "wait": 3000 },
+    { "waitDecision": { "kind": "turn.action", "open": false, "timeoutMs": 15000 }, "as": "crimson" },
     { "waitDecision": { "kind": "turn.action", "timeoutMs": 100000 }, "as": "crimson" }
   ],
   "expect": {
