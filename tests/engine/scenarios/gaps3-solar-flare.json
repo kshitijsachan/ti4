@@ -1,0 +1,103 @@
+{
+ "name": "gaps3-solar-flare",
+ "description": "audit-gaps-3 (gate TI4_RULES_AC): Solar Flare \u2014 \"After you activate a system: During the 'Movement' step of this tactical action, other players cannot use SPACE CANNON against your ships.\" Base pbd104@59: xxcha controls Meer (205) with a PDS; letnev activates 205, plays Solar Flare and moves its cruiser from 203 in. Xxcha's SPACE CANNON OFFENSE roll is refused (the original rolled it).",
+ "base": {
+  "recording": "pbd104",
+  "index": 59
+ },
+ "setup": [
+  "/planet add planet:meer faction_or_color:xxcha",
+  "/add_units tile_name:205 unit_names:\"pds meer\" faction_or_color:xxcha",
+  {
+   "command": "add_units",
+   "options": {
+    "tile_name": "203",
+    "unit_names": "cruiser",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "command": "player turn_start",
+   "options": {
+    "faction_or_color": "letnev"
+   }
+  }
+ ],
+ "trigger": {
+  "press": "FFCC_letnev_ringTile_205",
+  "as": "letnev"
+ },
+ "steps": [
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "solar_flare",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "solar_flare"
+    }
+   },
+   "as": "letnev"
+  },
+  {
+   "wait": 1500,
+   "expect": {
+    "save": [
+     {
+      "key": "stored.mcSolarFlare",
+      "match": "^letnev\\{pip\\}205#\\d+$"
+     }
+    ]
+   }
+  },
+  {
+   "answer": {
+    "kind": "tactical.move",
+    "action": "move",
+    "body": {
+     "units": [
+      {
+       "from": "203",
+       "holder": "space",
+       "unit": "ca",
+       "count": 1
+      }
+     ]
+    }
+   },
+   "as": "letnev",
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "press": "FFCC_xxcha_combatRoll_205_space_spacecannonoffence",
+   "as": "xxcha",
+   "refused": true,
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  },
+  {
+   "wait": 1000
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}
