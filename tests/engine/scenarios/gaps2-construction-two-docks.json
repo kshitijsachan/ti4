@@ -1,0 +1,88 @@
+{
+  "name": "gaps2-construction-two-docks",
+  "description": "User report (deliberate improvement over the original): Construction let a player place two space docks. Rules text (Prophecy of Kings Construction) primary: 'Place 1 PDS or 1 space dock on a planet you control. Place 1 PDS on a planet you control.'; secondary: 'Spend 1 token from your strategy pool ... you may place either 1 space dock or 1 PDS on a planet you control in that system.' pbd105@152 with the Prophecy of Kings card set (strategy_card_set pok in the base save; the recorded game uses Thunder's Edge Construction, see gaps2-construction-te). Naalu (holder) places a space dock on Qucenn; a second space dock (construction_spacedock) must be refused ('Construction's second structure must be a PDS'); a PDS on Maaluuk is accepted; a third structure is refused. Ral Nel (follower) places 1 PDS on Mez; a second structure is refused. Bot: ButtonHelperSCs.construction / ButtonHelperModifyUnits.genericPlaceUnit + ScFollowGate press hook (ConstructionLimits); engine: strategy_card.resolve / construction_place validate.",
+  "base": {
+    "save": "tests/engine/scenarios/saves/gaps2-pbd105-152-pokset.txt",
+    "next": "tests/engine/scenarios/saves/gaps2-pbd105-152-pokset.next.txt"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_spacedock$"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.construction_place",
+        "option": "place_spacedock_qucenn"
+      },
+      "as": "naalu"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_spacedock$"
+      },
+      "as": "naalu",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_pds$"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.construction_place",
+        "option": "place_pds_maaluuk"
+      },
+      "as": "naalu"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_pds$"
+      },
+      "as": "naalu",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_pds$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.construction_place",
+        "option": "place_pds_mez"
+      },
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_spacedock$"
+      },
+      "as": "ralnel",
+      "refused": true
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

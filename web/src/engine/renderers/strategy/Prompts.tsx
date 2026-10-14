@@ -182,19 +182,22 @@ export function ConstructionPlaceView({ decision, answer }: RendererProps<Constr
     <div className={classes.panel}>
       <Title>Construction: place a {unit}</Title>
       <div className={classes.choices}>
-        {opts.map((o) => (
-          <Choice key={o.id} option={o} onPick={answer}>
-            {planetName(o.value!.planet)}
-            <Meta>
-              {o.value!.resources}/{o.value!.influence}
-              {o.value!.home ? " · home" : ""}
-              {o.value!.pds ? ` · ${o.value!.pds} PDS` : ""}
-              {(o.value!.unit === "pds" && o.value!.pds >= 2) || (o.value!.unit === "spacedock" && o.value!.spaceDock >= 1)
-                ? " · at the limit"
-                : ""}
-            </Meta>
-          </Choice>
-        ))}
+        {opts.map((o) => {
+          /* At the planet's limit (1 space dock / 2 PDS) or Construction's count used up: greyed with the reason. */
+          const why = typeof o.value!.unavailable === "string" && o.value!.unavailable ? o.value!.unavailable : null;
+          return (
+            <Choice key={o.id} option={why ? { ...o, disabled: true } : o} onPick={answer} title={why ?? undefined}>
+              {planetName(o.value!.planet)}
+              <Meta>
+                {o.value!.resources}/{o.value!.influence}
+                {o.value!.home ? " · home" : ""}
+                {o.value!.pds ? ` · ${o.value!.pds} PDS` : ""}
+                {o.value!.spaceDock ? " · space dock" : ""}
+                {why ? ` · ${why}` : ""}
+              </Meta>
+            </Choice>
+          );
+        })}
       </div>
     </div>
   );

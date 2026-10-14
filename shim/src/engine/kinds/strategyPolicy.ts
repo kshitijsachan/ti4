@@ -152,6 +152,8 @@ function holderPart(d: StrategyCardResolve, opts: Option<StrategyCardResolve["op
       const want = first && self.planets.length >= 4 && room.spacedock ? "spacedock" : "pds";
       candidates = candidates.filter((o) => o.value!.unit === want).concat(candidates.filter((o) => o.value!.unit === "pds"));
       candidates = candidates.filter((o) => room[o.value!.unit as "spacedock" | "pds"] ?? true);
+      // Construction's count (the engine greys what this seat may not place: the second structure is a PDS).
+      candidates = candidates.filter((o) => !(o.value as { unavailableFor?: Record<string, string> }).unavailableFor?.[self.faction ?? ""]);
     }
     if (part === "imperial") candidates = candidates.filter((o) => (holdsMecatol ? o.value!.action === "score_imperial" : o.value!.action === "draw_secret"));
     // Warfare primary (pok6warfare: remove a token + redistribute; te6warfare: a tactical action): its follow-ups are
@@ -234,7 +236,7 @@ function agenda(d: PoliticsAgenda): StrategyChoice | null {
 }
 
 function constructionPlace(d: ConstructionPlace, state: GameState | null, me: string): StrategyChoice | null {
-  const opts = live(d).filter((o) => o.value);
+  const opts = live(d).filter((o) => o.value && !o.value.unavailable);
   if (!opts.length) return null;
   const unit = opts[0].value!.unit;
   if (overSupply(unit, state, me)) return null; // never past the unit supply (pbd171)
@@ -334,7 +336,7 @@ export function redistributeTokens(d: Decision, opts: Option<any>[], state: Game
 /** Technology primary: the next preferred technology among those offered whose prerequisites are met. */
 export function chooseResearch(options: Option<any>[], owned: string[]): Option<any> | null {
   const rank = (a: string) => (TECH_PREFERENCE.indexOf(a) < 0 ? 99 : TECH_PREFERENCE.indexOf(a));
-  const offered = options.filter((o) => !o.disabled && o.value?.tech && !owned.includes(o.value.tech) && researchable(o.value.tech, owned));
+  const offered = options.filter((o) => !o.disabled && !o.value?.unavailable && o.value?.tech && !owned.includes(o.value.tech) && researchable(o.value.tech, owned));
   offered.sort((a, b) => rank(a.value.tech) - rank(b.value.tech));
   return offered[0] ?? null;
 }
