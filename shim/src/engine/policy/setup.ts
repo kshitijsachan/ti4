@@ -47,7 +47,9 @@ export function chooseSetup(d: Decision, state: GameState | null, me: string, hi
     case "setup.keleres_flavor": {
       // The preset during the draft is optional but waited on by the watchdog: pre-select the first flavour nobody
       // else holds (pbd175); once we play a flavour it is stale (fallback.staleForBot). After the draft the flavour
-      // prompt blocks our setup: answer it.
+      // prompt blocks our setup: answer it. A preset is answered once: its handler re-posts the buttons after every
+      // press (bot drafts pressed it ~0.5 s apart until the draft ended, pbd196 x95), and never after the draft.
+      if (live.some((o) => o.value.preset) && (live.some((o) => o.value.current) || presetOver(state))) return null;
       const pick = live.find((o) => !o.value.contested) ?? (live.some((o) => o.value.preset) ? undefined : live[0]);
       if (!pick) return null;
       return { option: pick, why: `setup: Keleres flavour ${pick.value.flavor}` };
@@ -144,6 +146,11 @@ function tableStep(d: Decision, state: GameState, live: Option<any>[]): SetupCho
   if (d.kind === "setup.reveal_objectives" && stage === "reveal_objectives")
     return { option: live[0], why: "setup: everyone kept a secret objective; reveal objectives" };
   return null;
+}
+
+/** The draft-time Keleres preset is over once setup left the draft (the bot closes it; the flavour prompt follows). */
+export function presetOver(state: GameState): boolean {
+  return !!state.setup && state.setup.stage !== "draft" && state.setup.stage !== "settings";
 }
 
 /** Players other than me still choosing a Keleres flavour or starting technologies (Keleres takes from theirs). */

@@ -1,0 +1,17 @@
+{
+  "name": "setup-keleres-preset-after-draft",
+  "description": "Keleres preset after the draft (regress pbd1967 / pbd1195: the e2e human answered the draft-time preset draftPresetKeleres_mentak every ~5 s for minutes; each press only re-posted the preset buttons, FinishDraftService had already read the preset, and the real flavour prompt setupStep5_<uid>_keleres<m|x|a>_... waited). pbd75@23 (draft finished, Bot Eta = seat2 owes the flavour): the preset is obsolete, so pressing it is refused; the setupStep5 flavour prompt then sets the seat up.",
+  "base": { "recording": "pbd75", "index": 23 },
+  "diffIgnore": [ "stored.keleresFlavorPreset" ],
+  "steps": [
+    { "press": "draftPresetKeleres_mentak", "as": "seat2", "refused": true },
+    { "wait": 1000 },
+    { "press": "setupStep5_${seat2}_keleresm_null_313_no", "as": "seat2" },
+    { "wait": 3000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [ { "path": "players[userId=${seat2}].faction", "eq": "keleresm" } ],
+    "decision": [ { "kind": "setup.keleres_flavor", "as": "seat2", "open": false } ]
+  }
+}

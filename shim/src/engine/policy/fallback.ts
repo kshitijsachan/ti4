@@ -13,6 +13,7 @@
  * may deliberately hold the answer (combat rolls ahead of the opponent, a strategy card primary waiting for its
  * sub-prompt, the tactical planner, payment / production).
  */
+import { presetOver } from "./setup.js";
 import { followWaits, turnStale, unplayedCards } from "./turn.js";
 import type { TurnActionValue } from "../kinds/tactical.js";
 import { awaits, optionsFor, type Decision, type DecisionKind, type GameState, type Option } from "../types.js";
@@ -354,7 +355,9 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
   // The draft-time Keleres preset once we play a flavour (pbd175: still open in setup, reported as a stall).
   if (d.kind === "setup.keleres_flavor" && d.options.some((o) => (o.value as { preset?: boolean } | null)?.preset)) {
     const f: string = state.players.find((p) => p.userId === me)?.faction ?? "";
-    return f.startsWith("keleres") && f !== "keleres";
+    // Already preset (its handler re-posts the buttons after each press), or the draft is over (regress pbd1967).
+    if (d.options.some((o) => (o.value as { current?: boolean } | null)?.current)) return true;
+    return (f.startsWith("keleres") && f !== "keleres") || presetOver(state);
   }
   // Hits taken before a fight (bombardment before ground combat, anti-fighter barrage before space combat) are past
   // once that fight has rolled a round in the system (pbd60: a bombardment opener re-pressed every minute after a
