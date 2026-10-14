@@ -477,7 +477,7 @@ teammate_ids 1558606604373458944
 tech_exhausted 
 tech_purged 
 planets winnu,perimeter,lodor,tempesta,abyz,fria
-planets_exhausted fria,perimeter
+planets_exhausted 
 planets_ability_exhausted 
 tactical_cc 6
 fleet_cc 4
