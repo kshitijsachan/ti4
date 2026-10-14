@@ -15,8 +15,8 @@ type Answer = (d: Decision, choice: string | AnswerPayload) => void;
 type Props = {
   view: CombatView;
   state: GameState | null;
-  /** The combat decision the popup is on (mine), when it is not the step's own (bombardment targets, modifiers…). */
-  focus: Decision | null;
+  /** My other open prompts of this combat (bombardment targets, Morale Boost / Supercharge modifiers, the manual menu…): shown under the step. */
+  extras: Decision[];
   answer?: Answer;
   pendingOptionId?: string | null;
 };
@@ -159,7 +159,7 @@ function controlReason(c: RollChoice, view: CombatView): string | null {
  * One panel per combat: both sides' units, every round's dice and hits, the step the table is on with only that
  * step's actions live, the abilities posted with the combat (greyed with why when not usable), and a short log.
  */
-export function CombatPanel({ view, state, focus, answer, pendingOptionId }: Props) {
+export function CombatPanel({ view, state, extras, answer, pendingOptionId }: Props) {
   const step = view.step;
   const can = !!answer;
   const press = (d: Decision, choice: string | AnswerPayload) => answer?.(d, choice);
@@ -167,8 +167,9 @@ export function CombatPanel({ view, state, focus, answer, pendingOptionId }: Pro
   const where = front ? (front.holder === "space" ? "Space combat" : `Ground combat · ${planetName(front.holder)}`) : "Combat";
   const others = view.fronts.filter((f) => f !== front && (f.on || f.result));
   const StepBody = step.decision && step.mine && (step.kind === "assign" || step.kind === "retreat") ? renderers[step.decision.kind] : undefined;
-  const extra = focus && focus.id !== step.decision?.id && focus.kind !== "combat.round" ? focus : null;
-  const ExtraBody = extra ? renderers[extra.kind] : undefined;
+  const more = extras.filter(
+    (d) => d.id !== step.decision?.id && d.kind !== "combat.round" && !(step.kind === "assign" && d.kind === "combat.hits") && !!renderers[d.kind],
+  );
   const busy = !!pendingOptionId;
 
   return (
@@ -218,12 +219,15 @@ export function CombatPanel({ view, state, focus, answer, pendingOptionId }: Pro
           <StepBody decision={step.decision} state={state} answer={(c: string | AnswerPayload) => press(step.decision!, c)} />
         </div>
       )}
-      {ExtraBody && extra && (
-        <div className={classes.stepBody}>
-          <span className={classes.label}>Also open</span>
-          <ExtraBody decision={extra} state={state} answer={(c: string | AnswerPayload) => press(extra, c)} />
-        </div>
-      )}
+      {more.map((extra) => {
+        const ExtraBody = renderers[extra.kind];
+        return (
+          <div key={extra.id} className={classes.stepBody} data-combat-extra={extra.kind}>
+            <span className={classes.label}>Also open</span>
+            <ExtraBody decision={extra} state={state} answer={(c: string | AnswerPayload) => press(extra, c)} />
+          </div>
+        );
+      })}
 
       {(view.abilities.length > 0 || view.controls.length > 0) && (
         <div className={classes.abilities}>

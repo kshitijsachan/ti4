@@ -391,7 +391,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
               </div>
             </header>
             <div className={classes.body}>
-              <CombatPanel view={combat} state={state} focus={null} answer={(d, choice) => answer(d, choice)} pendingOptionId={null} />
+              <CombatPanel view={combat} state={state} extras={[]} answer={(d, choice) => answer(d, choice)} pendingOptionId={null} />
             </div>
           </section>
           {offerPill}
@@ -559,7 +559,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
                 <CombatPanel
                   view={combat}
                   state={state}
-                  focus={shown}
+                  extras={queue.filter((d) => d.kind.startsWith("combat.") && inCombat(d, combat))}
                   answer={(d, choice) => answer(d, choice)}
                   pendingOptionId={Object.values(pending)[0]?.optionId ?? null}
                 />
