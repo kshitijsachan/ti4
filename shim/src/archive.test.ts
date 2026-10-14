@@ -170,3 +170,43 @@ test("restore: a game whose role the bot deleted at End Game gets a new one for 
   assert.equal(hub.restoreGameRole("pbd346", [tt, act], ids), false);
   done();
 });
+
+test("game categories and game channels never come out visible to @everyone (pbd2159)", () => {
+  const { store, hub, done } = setup();
+  try {
+    const everyone = store.state.guild_id;
+    const denies = (ch: any) => (ch.permission_overwrites ?? []).some((o: any) => o.id === everyone && (BigInt(o.deny ?? 0) & 1024n) === 1024n);
+    // The shim's own category for a restored game whose category is gone.
+    const orphan = store.createChannel({ type: 0, name: "pbd2158-actions", parent_id: hub.ensureArchiveCategory().id });
+    const cat = hub.gameCategoryFor("pbd2158", orphan);
+    assert.equal(cat.name, "PBD #2150-2159");
+    assert.ok(denies(cat), "a category the shim creates denies @everyone");
+    // A bare category (the bot's rewind un-end before its fix) and a game channel copied from it.
+    const bare = store.createChannel({ type: 4, name: "PBD #2160-2169" });
+    assert.equal(hub.denyEveryoneOnGameChannel(bare), true);
+    assert.ok(denies(bare));
+    const ch = store.createChannel({ type: 0, name: "pbd2161-actions", parent_id: bare.id, permission_overwrites: [{ id: "42", type: 0, allow: "1024", deny: "0" }] });
+    assert.equal(hub.denyEveryoneOnGameChannel(ch), true);
+    assert.ok(denies(ch));
+    assert.equal(hub.denyEveryoneOnGameChannel(ch), false, "already denied: unchanged");
+    // An @everyone overwrite that allows view is turned into a deny.
+    const allowed = store.createChannel({ type: 0, name: "pbd2162-Some-Name", parent_id: bare.id, permission_overwrites: [{ id: everyone, type: 0, allow: "1024", deny: "0" }] });
+    hub.denyEveryoneOnGameChannel(allowed);
+    assert.ok(denies(allowed));
+    assert.equal(allowed.permission_overwrites.find((o: any) => o.id === everyone).allow, "0");
+    // Not game channels: left alone.
+    const lobby = store.createChannel({ type: 0, name: "lobby" });
+    assert.equal(hub.denyEveryoneOnGameChannel(lobby), false);
+    const other = store.createChannel({ type: 4, name: "General" });
+    assert.equal(hub.denyEveryoneOnGameChannel(other), false);
+    // Every live game channel denies @everyone: no seat that is not in the game can see it.
+    for (const c of Object.values(store.state.channels) as any[]) {
+      if (c.type === 0 && /^pbd\d+-/.test(c.name) && store.state.channels[c.parent_id]?.name?.startsWith("PBD #")) {
+        hub.denyEveryoneOnGameChannel(c);
+        assert.ok(denies(c), c.name);
+      }
+    }
+  } finally {
+    done();
+  }
+});
