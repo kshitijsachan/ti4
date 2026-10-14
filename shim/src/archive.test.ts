@@ -210,3 +210,40 @@ test("game categories and game channels never come out visible to @everyone (pbd
     done();
   }
 });
+
+test("public non-game channels never get the @everyone deny (lobby and the logs stay visible)", () => {
+  const { store, hub, done } = setup();
+  try {
+    const everyone = store.state.guild_id;
+    const archive = hub.ensureArchiveCategory();
+    const community = store.createChannel({ type: 4, name: "Community" });
+    const pub = [
+      store.createChannel({ type: 0, name: "lobby", topic: "Create and join games here" }),
+      store.createChannel({ type: 0, name: "general" }),
+      store.createChannel({ type: 0, name: "general", parent_id: community.id }),
+      store.createChannel({ type: 0, name: "bot-log" }),
+      store.createChannel({ type: 0, name: "button-log" }),
+      store.createChannel({ type: 0, name: "slash-command-log" }),
+      store.createChannel({ type: 4, name: "General" }),
+      community,
+      archive,
+      // Game-like names outside a "PBD #a-b" category are not game channels for this check.
+      store.createChannel({ type: 0, name: "pbd2159-actions", parent_id: archive.id }),
+      store.createChannel({ type: 0, name: "pbd77-lounge", parent_id: community.id }),
+      store.createChannel({ type: 0, name: "lobby", permission_overwrites: [{ id: everyone, type: 0, allow: "1024", deny: "0" }] }),
+    ];
+    // A thread under a game channel is not a text channel: untouched too.
+    const cat = store.createChannel({ type: 4, name: "PBD #2170-2179" });
+    hub.denyEveryoneOnGameChannel(cat);
+    pub.push(store.createChannel({ type: 11, name: "pbd2171-thread", parent_id: cat.id }));
+    for (const ch of pub) {
+      const before = JSON.stringify(ch.permission_overwrites ?? []);
+      assert.equal(hub.denyEveryoneOnGameChannel(ch), false, `${ch.name} (type ${ch.type})`);
+      assert.equal(JSON.stringify(ch.permission_overwrites ?? []), before, `${ch.name} overwrites unchanged`);
+      const denied = (ch.permission_overwrites ?? []).some((o: any) => o.id === everyone && (BigInt(o.deny ?? 0) & 1024n) === 1024n);
+      assert.equal(denied, ch.id === archive.id ? denied : false, `${ch.name} still visible to @everyone`);
+    }
+  } finally {
+    done();
+  }
+});

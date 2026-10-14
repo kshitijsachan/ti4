@@ -3602,10 +3602,10 @@ index d91d9d548..507bd4e23 100644
      private static void sendUndoConfirmationMessage(
 diff --git a/src/main/java/ti4/game/persistence/UnendedGameChannels.java b/src/main/java/ti4/game/persistence/UnendedGameChannels.java
 new file mode 100644
-index 000000000..bf2e8c037
+index 000000000..a37264e7f
 --- /dev/null
 +++ b/src/main/java/ti4/game/persistence/UnendedGameChannels.java
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,142 @@
 +package ti4.game.persistence;
 +
 +import java.util.ArrayList;
@@ -3723,7 +3723,8 @@ index 000000000..bf2e8c037
 +        if (name == null) return null;
 +        List<Category> found = guild.getCategoriesByName(name, true);
 +        if (!found.isEmpty()) return found.getFirst();
-+        return guild.createCategory(name).complete();
++        // With the game category's overrides (@everyone denied): a bare one made later games in it public.
++        return CreateGameService.createGameCategory(guild, name);
 +    }
 +
 +    private static Guild guild(Game game) {
@@ -41603,7 +41604,7 @@ index 64abce240..954a2fed5 100644
          ReactionService.addReaction(event, game, player, "IS PERFORMING A **SACRIFICE**.");
  
 diff --git a/src/main/java/ti4/service/game/CreateGameService.java b/src/main/java/ti4/service/game/CreateGameService.java
-index 5b8e62aa5..a4f228a9b 100644
+index 5b8e62aa5..6287b9fab 100644
 --- a/src/main/java/ti4/service/game/CreateGameService.java
 +++ b/src/main/java/ti4/service/game/CreateGameService.java
 @@ -59,8 +59,9 @@ import ti4.settings.users.UserSettingsManager;
@@ -41618,7 +41619,25 @@ index 5b8e62aa5..a4f228a9b 100644
  
      public static Game createNewGame(String gameName, Member gameOwner) {
          Game newGame = new Game();
-@@ -348,6 +349,7 @@ public class CreateGameService {
+@@ -173,6 +174,8 @@ public class CreateGameService {
+         TextChannel chatChannel = guild.createTextChannel(newChatChannelName, categoryChannel)
+                 .syncPermissionOverrides()
+                 .addRolePermissionOverride(gameRoleID, permission, 0)
++                // Hidden from @everyone even when the category lacks the deny (never a public game).
++                .addRolePermissionOverride(guild.getPublicRole().getIdLong(), 0, Permission.VIEW_CHANNEL.getRawValue())
+                 .complete();
+         newGame.setTableTalkChannelID(chatChannel.getId());
+ 
+@@ -180,6 +183,8 @@ public class CreateGameService {
+         TextChannel actionsChannel = guild.createTextChannel(newActionsChannelName, categoryChannel)
+                 .syncPermissionOverrides()
+                 .addRolePermissionOverride(gameRoleID, permission, 0)
++                // Hidden from @everyone even when the category lacks the deny (never a public game).
++                .addRolePermissionOverride(guild.getPublicRole().getIdLong(), 0, Permission.VIEW_CHANNEL.getRawValue())
+                 .complete();
+         newGame.setMainChannelID(actionsChannel.getId());
+         List<Member> nonGameBothelpers = new ArrayList<>();
+@@ -348,6 +353,7 @@ public class CreateGameService {
          //         tfOptions);
  
          setupButtons.add(Buttons.green("frankenSetup", "Start Franken Setup"));
@@ -41626,7 +41645,7 @@ index 5b8e62aa5..a4f228a9b 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  actionsChannel, "These buttons can help you setup alternate game modes.", setupButtons);
  
-@@ -592,7 +594,7 @@ public class CreateGameService {
+@@ -592,7 +598,7 @@ public class CreateGameService {
          int roleCount = guild.getRoles().size();
          if (roleCount >= MAX_ROLE_COUNT) {
              BotLogger.warning("`CreateGameService.serverHasRoomForNewRole` Cannot create a new role. Server **"
@@ -41635,7 +41654,7 @@ index 5b8e62aa5..a4f228a9b 100644
              return false;
          }
          return true;
-@@ -630,7 +632,7 @@ public class CreateGameService {
+@@ -630,7 +636,7 @@ public class CreateGameService {
              BotLogger.warning(
                      "`CreateGameService.serverHasRoomForNewFullCategory` Cannot create a new category. Server **"
                              + guild.getName() + "** currently has " + channelCount
@@ -41644,7 +41663,35 @@ index 5b8e62aa5..a4f228a9b 100644
                              + channelCountRequiredForNewCategory
                              + " new channels (including 1 for the category itself)");
              return false;
-@@ -746,6 +748,8 @@ public class CreateGameService {
+@@ -719,6 +725,16 @@ public class CreateGameService {
+             return categories.getFirst();
+         }
+ 
++        return createGameCategory(guild, categoryName);
++    }
++
++    /**
++     * A "PBD #a-b" category: hidden from @everyone, visible to Bothelper and Spectator. Every path that creates a game
++     * category goes through here: game channels copy their category's overrides (syncPermissionOverrides), so a bare
++     * category makes every game later created in it visible to everyone (self-host pbd2159: the category was
++     * re-created bare by a rewind that un-ended pbd2158, and 190 seats then saw and played in pbd2159).
++     */
++    public static Category createGameCategory(Guild guild, String categoryName) {
+         EnumSet<Permission> allow = EnumSet.of(Permission.VIEW_CHANNEL);
+         EnumSet<Permission> deny = EnumSet.of(Permission.VIEW_CHANNEL);
+         Role bothelperRole = DiscordRoleUtility.getRole("Bothelper", guild);
+@@ -731,8 +747,8 @@ public class CreateGameService {
+         if (spectatorRole != null)
+             createCategoryAction =
+                     createCategoryAction.addRolePermissionOverride(spectatorRole.getIdLong(), allow, null);
+-        if (everyoneRole != null)
+-            createCategoryAction = createCategoryAction.addRolePermissionOverride(everyoneRole.getIdLong(), null, deny);
++        createCategoryAction = createCategoryAction.addRolePermissionOverride(
++                everyoneRole != null ? everyoneRole.getIdLong() : guild.getPublicRole().getIdLong(), null, deny);
+         return createCategoryAction.complete();
+     }
+ 
+@@ -746,6 +762,8 @@ public class CreateGameService {
      }
  
      public static boolean isLockedFromCreatingGames(GenericInteractionCreateEvent event) {
