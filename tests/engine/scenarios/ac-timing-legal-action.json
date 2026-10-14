@@ -1,6 +1,6 @@
 {
  "name": "ac-timing-legal-action",
- "description": "Positive control for ActionCardTiming (audit-acs): every action-phase window class played at a LEGAL moment must be ACCEPTED. pbd60 save 122: action phase, mentak active, 308 activated (mentak ships; muaat holds Andeara with ground forces, setup adds a muaat destroyer and a muaat command token at 308; ghost has passed). Reaction on another player's turn: muaat Sabotages mentak's Morale Boost. OWN_ACTIVATION (Flank Speed, Lost Star Chart, Silence of Space, Nav Suite, Solar Flare, Rally), OWN_TURN (Master Plan), ACTION_PHASE (War Machine, Infiltrate; Reparations, Crisis by muaat), TACTICAL (Direct Hit, Scramble), IN_ACTIVE_SYSTEM by the active player (Intercept, Waylay, Disable, Fighter Prototype, Maneuvering Jets, Reflective Shielding, Reveal Prototype) and by the non-active defender (Morale Boost, Shields Holding, Rout), OTHER_ACTIVATION (Forward Supply Base, Decoy Operation, Rescue, Ghost Squad, Counterstroke), OTHER_TURN (Coup, Extreme Duress: mentak still holds unplayed SCs 4 and 7), PASSED (Puppets on a String by ghost). Already covered elsewhere at this base: Upgrade, Emergency Repairs, Parley, Salvage, Bunker, Crash Landing, Skilled Retreat, Fire Team, Experimental Battlestation, Courageous, Blitz, Lucky Shot, Scuttle (ac-combat-suite); ACTION cards (ac-action-board/econ, ac-timing-windows). Each card is drawn right before it is played (hand limit). audit-gaps-2 (TI4_RULES_AC): Direct Hit needs another player's damaged ship in the active system (a SUSTAIN DAMAGE was used) and Experimental Battlestation a space dock of yours in or adjacent to it \u2014 the setup adds a damaged muaat dreadnought.",
+ "description": "Positive control for ActionCardTiming (audit-acs): every action-phase window class played at a LEGAL moment must be ACCEPTED. pbd60 save 122: action phase, mentak active, 308 activated (mentak ships; muaat holds Andeara with ground forces, setup adds a muaat destroyer and a muaat command token at 308; ghost has passed). Reaction on another player's turn: muaat Sabotages mentak's Morale Boost. OWN_ACTIVATION (Flank Speed, Lost Star Chart, Silence of Space, Nav Suite, Solar Flare, Rally), OWN_TURN (Master Plan), ACTION_PHASE (War Machine, Infiltrate; Reparations, Crisis by muaat), TACTICAL (Direct Hit, Scramble), IN_ACTIVE_SYSTEM by the active player (Intercept, Waylay, Disable, Fighter Prototype, Maneuvering Jets, Reflective Shielding, Reveal Prototype) and by the non-active defender (Morale Boost, Shields Holding, Rout), OTHER_ACTIVATION (Forward Supply Base, Decoy Operation, Rescue, Ghost Squad, Counterstroke), OTHER_TURN (Coup, Extreme Duress: mentak still holds unplayed SCs 4 and 7), PASSED (Puppets on a String by ghost). Already covered elsewhere at this base: Upgrade, Emergency Repairs, Parley, Salvage, Bunker, Crash Landing, Skilled Retreat, Fire Team, Experimental Battlestation, Courageous, Blitz, Lucky Shot, Scuttle (ac-combat-suite); ACTION cards (ac-action-board/econ, ac-timing-windows). Each card is drawn right before it is played (hand limit). audit-gaps-2 (TI4_RULES_AC): Direct Hit needs another player's damaged ship in the active system (a SUSTAIN DAMAGE was used) and Experimental Battlestation a space dock of yours in or adjacent to it \u2014 the setup adds a damaged muaat dreadnought. audit-gaps-3 (TI4_RULES_AC): Maneuvering Jets, Waylay, Reflective Shielding (by mentak), Scramble Frequency and Rout are no longer legal in this state (no SPACE CANNON hits owed, round 1 already rolled, no damaged mentak ship, no BOMBARDMENT / SPACE CANNON / AFB roll, rounds not level) and moved to gaps3-combat-cards (refused here, legal there).",
  "base": {
   "recording": "pbd60",
   "index": 122
@@ -275,28 +275,6 @@
   {
    "command": "ac draw_specific_ac",
    "options": {
-    "ac_id": "scramble",
-    "faction_or_color": "mentak"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "scramble"
-    }
-   },
-   "as": "mentak"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
     "ac_id": "intercept",
     "faction_or_color": "mentak"
    }
@@ -309,28 +287,6 @@
     "kind": "action_card.play",
     "value": {
      "actionCard": "intercept"
-    }
-   },
-   "as": "mentak"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "waylay",
-    "faction_or_color": "mentak"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "waylay"
     }
    },
    "as": "mentak"
@@ -375,50 +331,6 @@
     "kind": "action_card.play",
     "value": {
      "actionCard": "f_prototype"
-    }
-   },
-   "as": "mentak"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "mjets1",
-    "faction_or_color": "mentak"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "mjets1"
-    }
-   },
-   "as": "mentak"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "reflective",
-    "faction_or_color": "mentak"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "reflective"
     }
    },
    "as": "mentak"
@@ -485,28 +397,6 @@
     "kind": "action_card.play",
     "value": {
      "actionCard": "sh2"
-    }
-   },
-   "as": "muaat"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "rout",
-    "faction_or_color": "muaat"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "rout"
     }
    },
    "as": "muaat"
