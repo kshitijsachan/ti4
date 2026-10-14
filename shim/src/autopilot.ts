@@ -1,6 +1,7 @@
 import type { Hub } from "./hub.js";
 import type { Clients } from "./clients.js";
 import type { Json, StoredMessage } from "./store.js";
+import { archivedChannel } from "./store.js";
 import { log } from "./log.js";
 import { activity, nextTurn, Slicer } from "./lag.js";
 import { Brain } from "./botplay/brain.js";
@@ -890,7 +891,7 @@ class SeatPilot {
     if (Date.now() - this.lastRecover < 15000) return;
     this.lastRecover = Date.now();
     for (const ch of this.store.visibleChannels(this.userId)) {
-      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? ""))) continue;
+      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? "")) || ch._archived) continue;
       const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
       // Only live games (something happened in the last hour).
       const last = this.store.messages(ch.id).at(-1);
@@ -1041,6 +1042,9 @@ class SeatPilot {
     const chanGame = new Map<string, string>();
     const actions: { ch: Json; game: string }[] = [];
     for (const ch of list) {
+      // An archived game is over (Hub.sweepEndedGames; a rewind past its end restores the channels first): nothing to
+      // play, and its messages stay on disk (Store.isCold) instead of being read back on every pass.
+      if (archivedChannel(s.channels, String(ch.id))) continue;
       if (ch.type === 0 && /^[a-z]+\d+-actions$/i.test(String(ch.name ?? ""))) actions.push({ ch, game: /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1] });
       if (![0, 11, 12].includes(ch.type)) continue;
       const game = gameOf(ch, s.channels);

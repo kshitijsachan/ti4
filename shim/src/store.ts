@@ -115,6 +115,17 @@ type ViewCache = {
 
 /** How often the verifier re-checks a slice of the files for unmarked changes (see ShardStore.verifySome). */
 const VERIFY_EVERY_MS = 5000;
+/** Store.evictArchived: how often, and how long an archived channel's messages stay in memory after a read. */
+const EVICT_EVERY_MS = 60_000;
+const COLD_IDLE_MS = 10 * 60_000;
+
+/** A channel of an archived game (or a thread of one): Hub.archiveChannel sets `_archived` on the channel. */
+export function archivedChannel(channels: Record<string, Json>, id: string): boolean {
+  const ch = channels[id];
+  if (!ch) return false;
+  const base = [10, 11, 12].includes(ch.type) && ch.parent_id ? channels[ch.parent_id] : ch;
+  return !!base?._archived;
+}
 
 export class Store {
   state: State;
@@ -135,7 +146,10 @@ export class Store {
     const legacy = join(dir, "state.json");
     if (this.disk.exists()) {
       const t0 = Date.now();
-      this.state = this.disk.load();
+      // Archived channels' messages (ended games: 780 of the store's 1170 MB heap, live 2026-10-14) stay on disk until
+      // read; SHIM_COLD_ARCHIVE=0 keeps everything in memory as before.
+      this.state = this.disk.load(this.coldArchive ? { cold: (id, channels) => archivedChannel(channels, id) } : {});
+      if (this.disk.coldCount) log.info(`store: ${this.disk.coldCount} archived channels' messages left on disk until read`);
       log.info(`state loaded from ${this.disk.root} in ${Date.now() - t0}ms`);
       this.repairOverwrites();
     } else if (existsSync(legacy)) {
@@ -156,6 +170,52 @@ export class Store {
       this.saveNow();
     }
     if (opts.verifier !== false) setInterval(() => this.verifyTick(), VERIFY_EVERY_MS).unref();
+    if (this.coldArchive && opts.verifier !== false) setInterval(() => this.evictArchived(), EVICT_EVERY_MS).unref();
+  }
+
+  private readonly coldArchive = process.env.SHIM_COLD_ARCHIVE !== "0";
+  /** Archived channels with messages in memory: since when we know (for evictArchived). */
+  private archivedSeen = new Map<string, number>();
+
+  /**
+   * Archived channels whose messages were loaded (read since, or archived while in memory) go back to disk once
+   * COLD_IDLE_MS passed and they are exactly what is on disk (ShardStore.evict). Returns how many were evicted.
+   */
+  evictArchived(now = Date.now(), idleMs = COLD_IDLE_MS): number {
+    if (this.disk.pending) return 0; // marks not yet saved (ShardStore.evict also checks the channel's own)
+    let n = 0;
+    const channels = this.state.channels;
+    for (const id of Object.keys(this.state.messages)) {
+      if (this.disk.isCold(id)) continue;
+      if (!archivedChannel(channels, id)) {
+        this.archivedSeen.delete(id);
+        continue;
+      }
+      let seen = this.archivedSeen.get(id);
+      if (seen === undefined) this.archivedSeen.set(id, (seen = now));
+      if (now - Math.max(seen, this.disk.loadedSince(id)) < idleMs) continue;
+      if (this.disk.evict(this.state, id)) {
+        this.archivedSeen.delete(id);
+        n++;
+      }
+    }
+    if (n) log.info(`store: ${n} archived channels' messages back on disk (${this.disk.coldCount} on disk)`);
+    return n;
+  }
+
+  /** Whether a channel's messages are on disk only (archived, not read lately). */
+  isCold(channelId: string): boolean {
+    return this.disk.isCold(channelId);
+  }
+
+  /** A channel's messages without loading a cold channel into memory (for whole-store scans). */
+  peekMessages(channelId: string): StoredMessage[] {
+    return this.disk.peek(this.state, channelId);
+  }
+
+  /** The message lists in memory (cold channels skipped). */
+  *loadedMessageLists(): Iterable<StoredMessage[]> {
+    for (const id of Object.keys(this.state.messages)) if (!this.disk.isCold(id)) yield this.state.messages[id];
   }
 
   /** Safety net for changes made without scheduleSave(channelId): see ShardStore.verifySome. */
@@ -391,8 +451,9 @@ export class Store {
     return undefined;
   }
 
+  /** Searches the channels in memory (a message of a cold, archived channel is found through its channel). */
   findMessageAnywhere(messageId: string): StoredMessage | undefined {
-    for (const list of Object.values(this.state.messages)) {
+    for (const list of this.loadedMessageLists()) {
       for (let i = list.length - 1; i >= 0; i--) if (list[i].id === messageId) return list[i];
     }
     return undefined;

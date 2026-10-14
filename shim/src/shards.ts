@@ -81,6 +81,8 @@ function stripSeq(raw: string): { seq: number; body: string } {
 }
 
 const CHUNK_LABEL = "chunk:";
+/** ShardStore.detached: how long an evicted list is kept for holders of it. */
+const DETACHED_MS = 5 * 60_000;
 const TAIL_LABEL = "tail:";
 
 export class ShardStore {
@@ -112,6 +114,18 @@ export class ShardStore {
   private cursor = 0;
   /** Files whose content changed without a mark (found by a verify): for the caller to log. */
   unmarked: string[] = [];
+  /**
+   * Cold channels: their messages stay on disk (segments are immutable) until something reads them. In the state they
+   * are a getter that loads them (materialize) and turns into the plain list; evict turns an unchanged list back.
+   */
+  private cold = new Set<string>();
+  /** When a cold channel's messages were last loaded (materialize), for the eviction sweep. */
+  private loadedAt = new Map<string, number>();
+  /**
+   * Lists evicted in the last DETACHED_MS: a caller may still hold one (or a message of it) across an await and change
+   * it. Reading the channel again brings back that same list, and a save marked for it in the meantime takes it.
+   */
+  private detached = new Map<string, { list: StoredMessage[]; byId: Map<string, Seg> | undefined; at: number }>();
 
   constructor(dataDir: string) {
     this.root = join(dataDir, "store");
@@ -171,7 +185,8 @@ export class ShardStore {
 
   // ---- load ----
 
-  load(): State {
+  /** `cold(id, channels)`: keep that channel's messages on disk until read (see `cold`). */
+  load(opts: { cold?: (id: string, channels: Record<string, Json>) => boolean } = {}): State {
     const globalRaw = readFileSync(join(this.root, "global.json"), "utf8");
     const g = JSON.parse(globalRaw) as Json;
     const order: Order = g.order ?? { channels: [], thread_members: [], messages: [] };
@@ -226,6 +241,16 @@ export class ShardStore {
           return;
         }
         const ref = chosen.value as SegRef;
+        if (opts.cold && state.channels && opts.cold(id, state.channels)) {
+          // Named only: hash and size are read with the messages (materialize); nothing compares them before.
+          const chunks: Seg[] = [];
+          for (const name of ref.chunks ?? []) chunks.push(this.coldSeg(name, id, referenced));
+          if (chunks.length) this.chunksOf.set(id, chunks);
+          if (ref.tail) this.tailOf.set(id, this.coldSeg(ref.tail, id, referenced));
+          this.cold.add(id);
+          this.defineCold(out, id);
+          return;
+        }
         const all: StoredMessage[] = [];
         const chunks: Seg[] = [];
         const byId = new Map<string, Seg>();
@@ -326,7 +351,15 @@ export class ShardStore {
     this.forced.clear();
 
     // What to check.
-    const markedTails = new Set<string>([...this.dirtyTails].filter((id) => id in state.messages));
+    // A cold channel's messages are what its segments hold: nothing to check (a channel mark re-checks the tail),
+    // unless it was evicted moments ago and marked since: a holder of its list changed it; take that list back.
+    // (Its chunk marks were lost with the eviction: check every chunk.)
+    for (const id of this.dirtyTails) {
+      if (!this.cold.has(id) || !this.detached.has(id)) continue;
+      void state.messages[id];
+      for (const c of this.chunksOf.get(id) ?? []) this.dirtyChunks.add(c);
+    }
+    const markedTails = new Set<string>([...this.dirtyTails].filter((id) => id in state.messages && !this.cold.has(id)));
     const markedChunks = new Set<Seg>([...this.dirtyChunks].filter((s) => this.segByName.get(s.name) === s));
     this.dirtyTails.clear();
     this.dirtyChunks.clear();
@@ -334,18 +367,18 @@ export class ShardStore {
     const checkChunks = new Set(markedChunks);
     const checkShards = new Set(dirty);
     if (all) {
-      for (const id of Object.keys(state.messages)) checkTails.add(id);
-      for (const list of this.chunksOf.values()) for (const s of list) checkChunks.add(s);
+      for (const id of Object.keys(state.messages)) if (!this.cold.has(id)) checkTails.add(id);
+      for (const [id, list] of this.chunksOf) if (!this.cold.has(id)) for (const s of list) checkChunks.add(s);
       for (const k of members.keys()) checkShards.add(k);
       for (const k of this.shardHash.keys()) checkShards.add(k);
     }
     for (const v of opts.verify ?? []) {
       if (v.startsWith(CHUNK_LABEL)) {
         const s = this.segByName.get(v.slice(CHUNK_LABEL.length));
-        if (s && this.chunksOf.get(s.channel)?.includes(s)) checkChunks.add(s);
+        if (s && this.chunksOf.get(s.channel)?.includes(s) && !this.cold.has(s.channel)) checkChunks.add(s);
       } else if (v.startsWith(TAIL_LABEL)) {
         const id = v.slice(TAIL_LABEL.length);
-        if (id in state.messages) checkTails.add(id);
+        if (id in state.messages && !this.cold.has(id)) checkTails.add(id);
       } else if (v !== GLOBAL) checkShards.add(v);
     }
     const touch = (id: string) => {
@@ -558,6 +591,165 @@ export class ShardStore {
     this.chunksOf.delete(id);
     this.tailOf.delete(id);
     this.messageChunk.delete(id);
+    this.cold.delete(id);
+    this.loadedAt.delete(id);
+  }
+
+  // ---- cold channels ----
+
+  private coldSeg(name: string, channel: string, referenced: Set<string>): Seg {
+    referenced.add(name);
+    const seg: Seg = { name, channel, hash: "", size: 0 };
+    this.segByName.set(name, seg);
+    return seg;
+  }
+
+  /** The state's entry for a cold channel: reading it loads the messages, assigning it replaces them. */
+  private defineCold(messages: Record<string, StoredMessage[]>, id: string) {
+    const self = this;
+    Object.defineProperty(messages, id, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return self.materialize(messages, id);
+      },
+      set(value: StoredMessage[]) {
+        self.cold.delete(id);
+        Object.defineProperty(messages, id, { value, writable: true, enumerable: true, configurable: true });
+      },
+    });
+  }
+
+  /** Loads a cold channel's messages from its segments; from then on its entry is the plain list. */
+  private materialize(messages: Record<string, StoredMessage[]>, id: string): StoredMessage[] {
+    const back = this.detached.get(id);
+    if (back) {
+      this.detached.delete(id);
+      if (back.byId) this.messageChunk.set(id, back.byId);
+      this.cold.delete(id);
+      this.loadedAt.set(id, Date.now());
+      Object.defineProperty(messages, id, { value: back.list, writable: true, enumerable: true, configurable: true });
+      return back.list;
+    }
+    const all: StoredMessage[] = [];
+    const chunks: Seg[] = [];
+    const byId = new Map<string, Seg>();
+    const read = (seg: Seg): StoredMessage[] | null => {
+      try {
+        const raw = readFileSync(join(this.segDir, `${seg.name}.json`), "utf8");
+        seg.hash = digest(raw);
+        seg.size = raw.length;
+        return JSON.parse(raw) as StoredMessage[];
+      } catch {
+        // Cannot happen (segments of a cold channel are never rewritten or removed): as at load, rewrite its shard.
+        console.error(`store: segment ${seg.name} of channel ${id} is missing`);
+        this.segByName.delete(seg.name);
+        const key = this.assigned.get(id);
+        if (key) this.forced.add(key);
+        return null;
+      }
+    };
+    for (const seg of this.chunksOf.get(id) ?? []) {
+      const msgs = read(seg);
+      if (!msgs) continue;
+      chunks.push(seg);
+      for (const m of msgs) {
+        byId.set(m.id, seg);
+        all.push(m);
+      }
+    }
+    if (chunks.length) {
+      this.chunksOf.set(id, chunks);
+      this.messageChunk.set(id, byId);
+    } else {
+      this.chunksOf.delete(id);
+      this.messageChunk.delete(id);
+    }
+    const tail = this.tailOf.get(id);
+    if (tail) {
+      const msgs = read(tail);
+      if (msgs) all.push(...msgs);
+      else this.tailOf.delete(id);
+    }
+    this.cold.delete(id);
+    this.loadedAt.set(id, Date.now());
+    Object.defineProperty(messages, id, { value: all, writable: true, enumerable: true, configurable: true });
+    return all;
+  }
+
+  isCold(id: string): boolean {
+    return this.cold.has(id);
+  }
+
+  get coldCount(): number {
+    return this.cold.size;
+  }
+
+  /** When a channel's messages were last loaded from disk (0: not since start, or never cold). */
+  loadedSince(id: string): number {
+    return this.loadedAt.get(id) ?? 0;
+  }
+
+  /**
+   * Drops a channel's messages from memory (its entry becomes a loading getter again) if exactly what its segments
+   * hold: no pending mark, and every chunk and the tail serialize to the hash on disk (a change nobody marked is
+   * kept, and saved by the verifier or the next save). Returns whether it was evicted.
+   */
+  evict(state: State, id: string): boolean {
+    if (this.cold.has(id) || this.allDirty || this.dirtyTails.has(id) || this.dirtyMeta.has(id)) return false;
+    if (!Object.prototype.hasOwnProperty.call(state.messages, id) || !this.assigned.has(id)) return false;
+    const chunks = this.chunksOf.get(id) ?? [];
+    for (const c of this.dirtyChunks) if (c.channel === id) return false;
+    const list = state.messages[id];
+    const byId = this.messageChunk.get(id);
+    const groups = new Map<Seg, StoredMessage[]>(chunks.map((c) => [c, []]));
+    const tail: StoredMessage[] = [];
+    let at = 0;
+    for (const m of list) {
+      const seg = byId?.get(m.id);
+      if (!seg) {
+        tail.push(m);
+        at = chunks.length;
+        continue;
+      }
+      const i = chunks.indexOf(seg, at);
+      if (i < 0) return false;
+      at = i;
+      groups.get(seg)!.push(m);
+    }
+    for (const c of chunks) {
+      const msgs = groups.get(c)!;
+      if (!msgs.length || !c.hash || digest(JSON.stringify(msgs)) !== c.hash) return false;
+    }
+    const t = this.tailOf.get(id);
+    if (tail.length ? !t || !t.hash || digest(JSON.stringify(tail)) !== t.hash : !!t) return false;
+    const now = Date.now();
+    for (const [k, d] of this.detached) if (now - d.at > DETACHED_MS) this.detached.delete(k);
+    this.detached.set(id, { list, byId, at: now });
+    this.messageChunk.delete(id);
+    this.loadedAt.delete(id);
+    this.cold.add(id);
+    this.defineCold(state.messages, id);
+    return true;
+  }
+
+  /** A channel's messages without keeping them: a cold channel's are read from disk and not held. */
+  peek(state: State, id: string): StoredMessage[] {
+    if (!this.cold.has(id)) return state.messages[id] ?? [];
+    const back = this.detached.get(id);
+    if (back) return back.list;
+    const all: StoredMessage[] = [];
+    const segs = [...(this.chunksOf.get(id) ?? [])];
+    const tail = this.tailOf.get(id);
+    if (tail) segs.push(tail);
+    for (const seg of segs) {
+      try {
+        all.push(...(JSON.parse(readFileSync(join(this.segDir, `${seg.name}.json`), "utf8")) as StoredMessage[]));
+      } catch {
+        /* reported (and repaired) when the channel is loaded */
+      }
+    }
+    return all;
   }
 
   /**
@@ -566,8 +758,8 @@ export class ShardStore {
    */
   verifySome(state: State, budgetBytes = 1_000_000): SaveStats {
     const labels = [GLOBAL, ...[...this.shardHash.keys()].sort()];
-    for (const [id, list] of [...this.chunksOf].sort((a, b) => (a[0] < b[0] ? -1 : 1))) for (const s of list) labels.push(CHUNK_LABEL + s.name);
-    for (const id of [...this.tailOf.keys()].sort()) labels.push(TAIL_LABEL + id);
+    for (const [id, list] of [...this.chunksOf].sort((a, b) => (a[0] < b[0] ? -1 : 1))) if (!this.cold.has(id)) for (const s of list) labels.push(CHUNK_LABEL + s.name);
+    for (const id of [...this.tailOf.keys()].sort()) if (!this.cold.has(id)) labels.push(TAIL_LABEL + id);
     const pick: string[] = [];
     let budget = 0;
     for (let n = 0; n < labels.length && budget < budgetBytes; n++) {

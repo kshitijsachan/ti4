@@ -30,7 +30,7 @@ export class Hub {
   readonly retention: Retention;
 
   constructor(public store: Store, public gateway: Gateway, private publicUrl: () => string) {
-    this.retention = new Retention(() => this.store.state, this.store.dataDir);
+    this.retention = new Retention(() => this.store.state, this.store.dataDir, undefined, (id) => this.store.peekMessages(id));
   }
 
   // ---- attachments ----

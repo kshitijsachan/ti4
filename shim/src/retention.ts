@@ -92,7 +92,7 @@ function fileOf(filesDir: string, id: string): { path: string; bytes: number; sh
 export async function planRetention(
   state: State,
   filesDir: string,
-  opts: { keep?: number; now?: number; yieldEvery?: number } = {},
+  opts: { keep?: number; now?: number; yieldEvery?: number; messagesOf?: (channelId: string) => StoredMessage[] } = {},
 ): Promise<Plan> {
   const keep = opts.keep ?? KEEP_RENDERS;
   const now = opts.now ?? Date.now();
@@ -107,7 +107,9 @@ export async function planRetention(
   const drop = new Map<string, string>(); // id -> reason
   const finalMap = new Map<string, { id: string; msgId: string }>(); // ended game -> newest map render
   let n = 0;
-  for (const [channelId, msgs] of Object.entries(state.messages)) {
+  // messagesOf: read archived channels from disk without keeping them in memory (Store.peekMessages).
+  for (const channelId of Object.keys(state.messages)) {
+    const msgs = opts.messagesOf ? opts.messagesOf(channelId) : state.messages[channelId];
     if (opts.yieldEvery && ++n % opts.yieldEvery === 0) await new Promise((r) => setImmediate(r));
     const ch = channels[channelId];
     const game = gameOfChannel(ch, channels);
@@ -212,6 +214,7 @@ export class Retention {
     private state: () => State,
     dataDir: string,
     private keep = KEEP_RENDERS,
+    private messagesOf?: (channelId: string) => StoredMessage[],
   ) {
     this.filesDir = join(dataDir, "files");
     this.logFile = process.env.SHIM_FREED_LOG ?? join(dirname(dataDir), "freed-files.log");
@@ -276,7 +279,7 @@ export class Retention {
 
   /** Periodic sweep (after the archive sweep): see planRetention. Returns the bytes freed. */
   async sweep(): Promise<{ files: number; bytes: number; byReason: Plan["byReason"] }> {
-    const plan = await planRetention(this.state(), this.filesDir, { keep: this.keep, yieldEvery: 50 });
+    const plan = await planRetention(this.state(), this.filesDir, { keep: this.keep, yieldEvery: 50, messagesOf: this.messagesOf });
     const bytes = applyRemovals(this.filesDir, plan.removals, this.logFile);
     return { files: plan.removals.length, bytes, byReason: plan.byReason };
   }
