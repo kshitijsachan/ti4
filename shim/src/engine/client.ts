@@ -33,6 +33,11 @@ export class EngineClient {
   private live = false;
   private stopped = false;
   private stateCache = new Map<string, { at: number; state: GameState }>();
+  /**
+   * The last state read per game|viewer with its ETag, kept across invalidations (bounded): a re-read sends
+   * If-None-Match and a 304 (the bot built the same state) reuses it without receiving and parsing it again.
+   */
+  private stateTags = new Map<string, { etag: string; state: GameState }>();
   private listeners = new Set<(e: EngineEvent) => void>();
   private resetListeners = new Set<() => void>();
   private primed = new Set<string>();
@@ -78,10 +83,23 @@ export class EngineClient {
   private async readState(game: string, viewer: string | undefined, key: string): Promise<GameState | null> {
     try {
       const q = viewer ? `?viewer=${encodeURIComponent(viewer)}` : "";
-      const res = await fetch(this.url(`/${encodeURIComponent(game)}/state${q}`), { headers: this.headers(), signal: AbortSignal.timeout(8000) });
-      if (!res.ok) return null;
-      const state = (await res.json()) as GameState;
-      contractValidator.state(state, `state ${game}`);
+      const tagged = this.stateTags.get(key);
+      const headers = tagged ? { ...this.headers(), "if-none-match": tagged.etag } : this.headers();
+      const res = await fetch(this.url(`/${encodeURIComponent(game)}/state${q}`), { headers, signal: AbortSignal.timeout(8000) });
+      let state: GameState;
+      if (res.status === 304 && tagged) {
+        state = tagged.state;
+      } else {
+        if (!res.ok) return null;
+        state = (await res.json()) as GameState;
+        contractValidator.state(state, `state ${game}`);
+        const etag = res.headers.get("etag");
+        this.stateTags.delete(key);
+        if (etag) {
+          this.stateTags.set(key, { etag, state });
+          if (this.stateTags.size > STATE_TAGS_MAX) this.stateTags.delete(this.stateTags.keys().next().value!);
+        }
+      }
       this.available = true;
       this.stateCache.set(key, { at: Date.now(), state });
       return state;
@@ -94,7 +112,10 @@ export class EngineClient {
   async factionOf(game: string, userId: string): Promise<FactionId | null> {
     const s = await this.state(game, undefined, 5000);
     let p = s?.players.find((x) => x.userId === userId);
-    if (s && !p?.faction) p = (await this.state(game, undefined, 0))?.players.find((x) => x.userId === userId);
+    // No faction yet: maybe just picked. While the stream is live, a pick's save (state.changed) already dropped the
+    // cached state; otherwise re-read, at most once a second (an undrafted seat asked on every pass: live pbd336
+    // read its public state ~1/s).
+    if (s && !p?.faction && !this.live) p = (await this.state(game, undefined, 1000))?.players.find((x) => x.userId === userId);
     return p?.faction ?? null;
   }
 
@@ -380,6 +401,8 @@ export class EngineClient {
 }
 
 const RING_SIZE = 3000;
+/** EngineClient.stateTags: game|viewer pairs remembered for revalidation (oldest dropped). */
+const STATE_TAGS_MAX = 1500;
 /** No bytes (not even the 15 s ping) for this long: the stream is stalled; reconnect. */
 const STREAM_SILENT_MS = 45_000;
 

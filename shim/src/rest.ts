@@ -710,7 +710,8 @@ export class Rest {
   private webhookMessage(ctx: Ctx): StoredMessage | undefined {
     const hook = this.channelWebhook(ctx);
     if (hook) {
-      const m = this.store.findMessageAnywhere(ctx.params[2]);
+      // Its own channel first: an archived channel's messages are only searched through it (Store.isCold).
+      const m = (hook.channel_id ? this.store.findMessage(String(hook.channel_id), ctx.params[2]) : undefined) ?? this.store.findMessageAnywhere(ctx.params[2]);
       return m && m.webhook_id === hook.id ? m : undefined;
     }
     const inter = this.store.interactionsByToken.get(ctx.params[1]);
