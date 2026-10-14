@@ -4,6 +4,7 @@ import { extname, join, normalize } from "node:path";
 import { WebSocketServer } from "ws";
 import { Store } from "./store.js";
 import { Gateway } from "./gateway.js";
+import { ReconnectRecovery } from "./reconnect.js";
 import { Hub } from "./hub.js";
 import { Rest } from "./rest.js";
 import { Clients } from "./clients.js";
@@ -87,6 +88,9 @@ lobby.autopilot.engine = engine;
 engine?.onEvent((e) => {
   if (e.type === "game.rewound") lobby.autopilot?.rewound(e.game, "event", e.reason);
 });
+// After the bot's gateway (re)connects, have it re-post any waiting player's prompt a stall swallowed (reconnect.ts).
+const reconnectRecovery = new ReconnectRecovery(BOT_API, () => store.state.bot_token);
+gateway.onStatusChange((ready) => reconnectRecovery.onStatus(ready));
 // One-click solo test games (autopilot opponents, set up as the human).
 lobby.solo = new SoloGames(hub, clients, lobby, BOT_API);
 void lobby.solo.resumeStewards();
