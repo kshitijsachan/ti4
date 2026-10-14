@@ -1,16 +1,35 @@
 {
   "name": "faction-xxcha",
-  "description": "Xxcha: Peace Accords (peaceAccords_<planet>), Quash (quash), Nullification Field (nullificationField_<tile>_<target>), agent Ggrocuto Rinn on another player's infantry (xxchaAgentRemoveInfantry_<target>_<planet>)",
-  "base": { "recording": "pbd104", "index": 44, "repost": false },
+  "description": "Xxcha: Peace Accords (peaceAccords_<planet>), Quash (quash), Nullification Field (nullificationField_<tile>_<target>), agent Ggrocuto Rinn on another player's infantry (xxchaAgentRemoveInfantry_<target>_<planet>) audit-gaps-2 (TI4_RULES_LEADERS): Ggrocuto Rinn removes an infantry only from a planet in a system adjacent to a planet Xxcha controls; Arcprime (301) is not adjacent to Xxcha's home (316), so that press is now refused.",
+  "base": {
+    "recording": "pbd104",
+    "index": 44,
+    "repost": false
+  },
   "setup": [
     "/tech add tech:nf faction_or_color:xxcha",
     "/player stats trade_goods:3 strategy_cc:3 faction_or_color:xxcha"
   ],
-  "trigger": { "press": "FFCC_xxcha_peaceAccords_mehar", "as": "xxcha" },
+  "trigger": {
+    "press": "FFCC_xxcha_peaceAccords_mehar",
+    "as": "xxcha"
+  },
   "steps": [
-    { "press": "quash", "as": "xxcha" },
-    { "press": "nullificationField_301_letnev", "as": "xxcha" },
-    { "press": "xxchaAgentRemoveInfantry_letnev_arcprime", "as": "xxcha" }
+    {
+      "press": "quash",
+      "as": "xxcha"
+    },
+    {
+      "press": "nullificationField_301_letnev",
+      "as": "xxcha"
+    },
+    {
+      "press": "xxchaAgentRemoveInfantry_letnev_arcprime",
+      "as": "xxcha",
+      "refused": true
+    }
   ],
-  "expect": { "invariants": true }
+  "expect": {
+    "invariants": true
+  }
 }

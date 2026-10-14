@@ -1,16 +1,33 @@
 {
   "name": "faction-sol",
-  "description": "Sol: commander Claire Gibson (utilizeSolCommander_<planet>), Orbital Drop mech follow-up (orbitalMechDrop_<planet>), agent Evelyn Delouis (getAgentSelection_solagent -> exhaustAgent_solagent_<faction>)",
-  "base": { "recording": "pbd117", "index": 45, "repost": false },
+  "description": "Sol: commander Claire Gibson (utilizeSolCommander_<planet>), Orbital Drop mech follow-up (orbitalMechDrop_<planet>), agent Evelyn Delouis (getAgentSelection_solagent -> exhaustAgent_solagent_<faction>) audit-gaps-2: the agent is used outside its card window (no active system), so the base save carries agentTimingGate=off (TI4_AGENT_TIMING per-game switch); gaps2-agent-timing covers the window.",
+  "base": {
+    "save": "tests/engine/scenarios/saves/gaps2-pbd117-45-agenttiming-off.txt",
+    "repost": false
+  },
   "setup": [
     "/leaders unlock leader:solcommander faction_or_color:sol",
     "/player stats trade_goods:4 faction_or_color:sol"
   ],
-  "trigger": { "press": "FFCC_sol_utilizeSolCommander_jord", "as": "sol" },
+  "trigger": {
+    "press": "FFCC_sol_utilizeSolCommander_jord",
+    "as": "sol"
+  },
   "steps": [
-    { "press": "orbitalMechDrop_jord", "as": "sol" },
-    { "press": "getAgentSelection_solagent", "as": "sol" },
-    { "press": "exhaustAgent_solagent_sol", "as": "sol" }
+    {
+      "press": "orbitalMechDrop_jord",
+      "as": "sol"
+    },
+    {
+      "press": "getAgentSelection_solagent",
+      "as": "sol"
+    },
+    {
+      "press": "exhaustAgent_solagent_sol",
+      "as": "sol"
+    }
   ],
-  "expect": { "invariants": true }
+  "expect": {
+    "invariants": true
+  }
 }

@@ -1,6 +1,6 @@
 {
   "name": "audit-factions-harrow",
-  "description": "Rules audit (factions): L1Z1X Harrow — during ground combat on tarmann (210), the active L1Z1X player's ground-combat prompt offers 'Harrow: BOMBARDMENT' (the engine answer finds that option; the original offered no bombardment after the invasion started). (TE: start_combat posts the coexist/engage choice first; L1Z1X engages.)",
+  "description": "Rules audit (factions): L1Z1X Harrow \u2014 during ground combat on tarmann (210), the active L1Z1X player's ground-combat prompt offers 'Harrow: BOMBARDMENT' (the engine answer finds that option; the original offered no bombardment after the invasion started). (TE: start_combat posts the coexist/engage choice first; L1Z1X engages.) audit-gaps-2: Harrow is used at the END of a round (TI4_RULES_FACTIONS), so both sides roll round 1 first.",
   "base": {
     "recording": "pbd104",
     "index": 44,
@@ -31,6 +31,32 @@
     },
     {
       "wait": 3000
+    },
+    {
+      "press": "FFCC_l1z1x_combatRoll_210_tarmann",
+      "as": "l1z1x"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "combat.hits",
+        "value": {
+          "action": "auto"
+        }
+      },
+      "as": "xxcha"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "press": "FFCC_xxcha_combatRoll_210_tarmann",
+      "as": "xxcha"
+    },
+    {
+      "wait": 1500
     },
     {
       "answer": {
