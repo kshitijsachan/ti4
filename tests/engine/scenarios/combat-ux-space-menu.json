@@ -1,0 +1,13 @@
+{
+  "name": "combat-ux-space-menu",
+  "description": "combat-ux: the manual space-combat menu offers no transported infantry, and a stale 'destroy infantry' press is refused by the engine (CombatAssignUnitsKind.validate) and by the bot handler (AssignHitsButtonHandlers.refuseIllegalHit). mentak, 2 infantry in 308 space, pbd60@131.",
+  "base": { "recording": "pbd60", "index": 131 },
+  "setup": ["/add_units tile_name:308 unit_names:\"2 infantry\" faction_or_color:mentak"],
+  "trigger": { "press": "getDamageButtons_308deleteThis_spacecombat", "as": "mentak" },
+  "steps": [
+    { "press": "FFCC_mentak_assignHits_308_1_gf_dawn", "as": "mentak", "refused": true },
+    { "press": "FFCC_mentak_assignHits_308_1_dd_dawn", "as": "mentak" },
+    { "answer": { "kind": "combat.assign_units", "option": "deleteButtons" }, "as": "mentak", "legacy": [ { "press": "deleteButtons", "as": "mentak" } ] }
+  ],
+  "expect": { "invariants": true, "decision": { "kind": "combat.assign_units", "as": "mentak", "open": false } }
+}

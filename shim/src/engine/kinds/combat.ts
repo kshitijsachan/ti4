@@ -207,8 +207,8 @@ export type CombatRoll = {
   round: number | null;
   hits: number;
   dice: { unit: UnitId; threshold: number; results: number[] }[];
-  /** Combat rounds: the roller's units able to fight in that holder when it rolled (losses = difference to its next roll / now). */
-  units: HittableUnit[];
+  /** Combat rounds: the roller's units able to fight in that holder when it rolled (losses = difference to its next roll / now). Older engines: absent. */
+  units?: HittableUnit[];
 };
 
 /** Hits a player still has to assign in the active system (an open hits prompt / manual menu). */
@@ -237,10 +237,10 @@ export type CombatState = {
   spaceCannonOffence: FactionId[];
   /** Rolls of this game, oldest first (persisted ledger, last 60; older entries may have no dice). */
   rolls: CombatRoll[];
-  /** Hits owed in this system right now. */
-  owed: HitsOwed[];
-  /** The active player's faction (the attacker), or null. */
-  attacker: FactionId | null;
+  /** Hits owed in this system right now. Older engines: absent. */
+  owed?: HitsOwed[];
+  /** The active player's faction (the attacker), or null. Older engines: absent. */
+  attacker?: FactionId | null;
 };
 
 // ---------------------------------------------------------------- plan answer (POST …/decisions/{id}/combat-plan)

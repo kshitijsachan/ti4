@@ -152,14 +152,15 @@ function roundsOf(combat: CombatState, holder: string, sides: SideView[]): Round
       const r = [...rolls].reverse().find((x) => x.faction === s.faction && x.round === n);
       if (!r) continue;
       const next = [...rolls].reverse().find((x) => x.faction === s.faction && x.round === n + 1);
-      const after = next ? next.units : s.roundsRolled === n ? s.units : null;
+      /* Older engines send no per-roll units: losses unknown then. */
+      const after = next ? (next.units ?? null) : s.roundsRolled === n ? s.units : null;
       views.push({
         faction: s.faction,
         rollType: "combat",
         round: n,
         hits: r.hits,
         dice: dice(r),
-        losses: after && r.units.length ? lossesBetween(r.units, after) : null,
+        losses: after && r.units?.length ? lossesBetween(r.units, after) : null,
       });
     }
     rounds.push({ round: n, rolls: views });

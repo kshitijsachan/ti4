@@ -1,0 +1,13 @@
+{
+  "name": "combat-ux-afb-hits",
+  "description": "combat-ux: anti-fighter barrage hits land on fighters only. muaat (pbd60@165, 306) gets 3 fighters; the barrage menu refuses its dreadnought, takes a fighter.",
+  "base": { "recording": "pbd60", "index": 165 },
+  "setup": ["/add_units tile_name:306 unit_names:\"3 ff\" faction_or_color:muaat"],
+  "trigger": { "press": "getDamageButtons_306_afb", "as": "muaat" },
+  "steps": [
+    { "press": "FFCC_muaat_assignHits_306_1_dn_bloodred", "as": "muaat", "refused": true },
+    { "press": "FFCC_muaat_assignHits_306_1_ff_bloodred", "as": "muaat" },
+    { "answer": { "kind": "combat.assign_units", "option": "deleteButtons" }, "as": "muaat", "legacy": [ { "press": "deleteButtons", "as": "muaat" } ] }
+  ],
+  "expect": { "invariants": true }
+}
