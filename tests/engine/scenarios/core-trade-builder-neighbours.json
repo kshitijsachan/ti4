@@ -1,0 +1,40 @@
+{
+  "name": "core-trade-builder-neighbours",
+  "description": "Rules audit (core): LRR 94 - in the action phase only neighbours transact (unless an ability lifts it). The engine's trade.propose refused it, but the Discord transaction builder only posted a 'friendly reminder' and sent the offer. Now sendOffer_ / acceptOffer_ refuse it (TransactionHelper.canTheseTwoTransact). Base: pbd1204 undo save 109 (action phase, Mentak active, no neighbours): Mentak builds an offer of 1 trade good to Arborec in the Discord builder and presses Send: no offer reaches Arborec.",
+  "base": {
+    "save": "saves/pt9-pbd1204-109.txt"
+  },
+  "setup": [
+    "/player stats trade_goods:3 faction_or_color:mentak"
+  ],
+  "steps": [
+    {
+      "press": "offerToTransact_TGs_camouflage_blight_1",
+      "as": "mentak",
+      "click": true
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "press": "sendOffer_blight",
+      "as": "mentak",
+      "click": true
+    },
+    {
+      "wait": 3000,
+      "expect": {
+        "decision": [
+          {
+            "kind": "trade.offer",
+            "as": "arborec",
+            "open": false
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

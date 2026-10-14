@@ -23,7 +23,7 @@ function wormholesOf(tile: Tile, web?: PlayerDataResponse) {
   return out;
 }
 
-function enemyShips(
+export function enemyShips(
   position: string,
   faction: string,
   web?: PlayerDataResponse,
