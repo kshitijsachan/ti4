@@ -2461,11 +2461,98 @@ index 05ddef3..44bc29f 100644
                          }
                      }
                  }
+diff --git a/src/main/java/ti4/game/persistence/GameManager.java b/src/main/java/ti4/game/persistence/GameManager.java
+index bc93eb1..86a133f 100644
+--- a/src/main/java/ti4/game/persistence/GameManager.java
++++ b/src/main/java/ti4/game/persistence/GameManager.java
+@@ -164,6 +164,7 @@ public class GameManager {
+     @Nullable
+     public static Game reload(String gameName) {
+         waitFor(gameNamesLoadedLatch);
++        GameRevision.bump(gameName); // the file was replaced outside the save paths (restore, test bed)
+         Game game = GameLoadService.load(gameName);
+         if (game == null) {
+             game = GameUndoService.loadUndoForMissingGame(gameName);
+diff --git a/src/main/java/ti4/game/persistence/GameRevision.java b/src/main/java/ti4/game/persistence/GameRevision.java
+new file mode 100644
+index 0000000..a500f1a
+--- /dev/null
++++ b/src/main/java/ti4/game/persistence/GameRevision.java
+@@ -0,0 +1,61 @@
++package ti4.game.persistence;
++
++import java.io.IOException;
++import java.nio.file.Files;
++import java.nio.file.attribute.BasicFileAttributes;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicLong;
++import javax.annotation.Nullable;
++import lombok.experimental.UtilityClass;
++import ti4.helpers.Constants;
++import ti4.helpers.Storage;
++
++/**
++ * A cheap revision tag of a game's save file, for caches of data derived from it (web-data) and HTTP ETags: one stat
++ * of the file (mtime in ns + size) plus an in-memory counter that every write path bumps after it wrote the file
++ * (save, undo / rewind, delete). The counter covers two writes within one mtime tick with equal size; the stat covers
++ * anything that writes the file without going through those paths. A boot id makes tags of an earlier process never
++ * match (derived data may change with the code).
++ *
++ * <p>Use: read the tag BEFORE loading the game, then cache what was derived under that tag. A write that lands in
++ * between only makes the cached data newer than its tag, so the next reader sees a different tag and recomputes;
++ * data older than the current tag is never served.</p>
++ */
++@UtilityClass
++public class GameRevision {
++
++    private static final String BOOT = Long.toString(System.currentTimeMillis(), 36);
++    private static final ConcurrentHashMap<String, AtomicLong> COUNTERS = new ConcurrentHashMap<>();
++
++    /** After the game file was written, replaced or removed. */
++    public static void bump(String gameName) {
++        COUNTERS.computeIfAbsent(gameName, k -> new AtomicLong()).incrementAndGet();
++    }
++
++    /** The current tag (a quoted HTTP entity tag), or null when the game has no save file. */
++    @Nullable
++    public static String etag(String gameName) {
++        AtomicLong c = COUNTERS.get(gameName);
++        long counter = c == null ? 0 : c.get(); // before the stat (see class doc)
++        try {
++            BasicFileAttributes a = Files.readAttributes(
++                    Storage.getGamePath(gameName + Constants.TXT), BasicFileAttributes.class);
++            return "\"" + BOOT + "-" + counter + "-" + a.lastModifiedTime().to(TimeUnit.NANOSECONDS) + "-" + a.size()
++                    + "\"";
++        } catch (IOException e) {
++            return null;
++        }
++    }
++
++    /** Whether an If-None-Match header value matches {@code etag} (a list, or "*"). */
++    public static boolean matches(@Nullable String ifNoneMatch, @Nullable String etag) {
++        if (ifNoneMatch == null || etag == null) return false;
++        for (String t : ifNoneMatch.split(",")) {
++            String s = t.trim();
++            if (s.startsWith("W/")) s = s.substring(2);
++            if (s.equals("*") || s.equals(etag)) return true;
++        }
++        return false;
++    }
++}
 diff --git a/src/main/java/ti4/game/persistence/GameSaveService.java b/src/main/java/ti4/game/persistence/GameSaveService.java
-index c8dcdf7..eec5076 100644
+index c8dcdf7..3650c62 100644
 --- a/src/main/java/ti4/game/persistence/GameSaveService.java
 +++ b/src/main/java/ti4/game/persistence/GameSaveService.java
-@@ -100,6 +100,8 @@ class GameSaveService {
+@@ -85,6 +85,7 @@ class GameSaveService {
+             PosixFileSystemUtility.setPermissionsIfPosix(temporarySavePath);
+ 
+             Files.move(temporarySavePath, gameSavePath, StandardCopyOption.REPLACE_EXISTING);
++            GameRevision.bump(game.getName());
+         } catch (Exception e) {
+             BotLogger.critical(new LogOrigin(game), "Could not save map: " + game.getName(), e);
+             MessageHelper.sendMessageToChannel(
+@@ -100,6 +101,8 @@ class GameSaveService {
  
      private static void updateBeforeSave(Game game) {
          TransientGameInfoUpdater.update(game);
@@ -2474,8 +2561,19 @@ index c8dcdf7..eec5076 100644
  
          // Ugly fix to update seen tiles data for fog since doing it in
          // MapGenerator/TileGenerator won't save changes anymore
+@@ -1315,7 +1318,9 @@ class GameSaveService {
+             }
+             File deletedMapStorage =
+                     Storage.getDeletedGame(gameName + "_" + System.currentTimeMillis() + Constants.TXT);
+-            return mapStorage.renameTo(deletedMapStorage);
++            boolean moved = mapStorage.renameTo(deletedMapStorage);
++            GameRevision.bump(gameName);
++            return moved;
+         });
+     }
+ }
 diff --git a/src/main/java/ti4/game/persistence/GameUndoService.java b/src/main/java/ti4/game/persistence/GameUndoService.java
-index d91d9d5..da15b1a 100644
+index d91d9d5..1202e18 100644
 --- a/src/main/java/ti4/game/persistence/GameUndoService.java
 +++ b/src/main/java/ti4/game/persistence/GameUndoService.java
 @@ -54,7 +54,10 @@ class GameUndoService {
@@ -2526,7 +2624,19 @@ index d91d9d5..da15b1a 100644
              return loadedGame;
          } catch (Exception e) {
              BotLogger.error(new LogOrigin(gameToUndo), "Error trying to undo: " + gameName, e);
-@@ -155,12 +175,22 @@ class GameUndoService {
+@@ -148,19 +168,33 @@ class GameUndoService {
+ 
+     private static void replaceGameFileWithUndo(String gameName, int undoIndex, Path gameFilePath) throws IOException {
+         Path undoFilePath = Storage.getGameUndo(gameName, getUndoFileName(gameName, undoIndex));
+-        Files.copy(undoFilePath, gameFilePath, StandardCopyOption.REPLACE_EXISTING);
++        try {
++            Files.copy(undoFilePath, gameFilePath, StandardCopyOption.REPLACE_EXISTING);
++        } finally {
++            GameRevision.bump(gameName); // web-data / ETag caches (GameRevision): a rewind is a new revision
++        }
+     }
+ 
+     private static String getUndoFileName(String gameName, int undoIndex) {
          return gameName + "_" + undoIndex + Constants.TXT;
      }
  
@@ -2553,7 +2663,7 @@ index d91d9d5..da15b1a 100644
          List<String> undoCommands = new ArrayList<>();
          for (int i = latestUndoIndex; i > undoIndex; i--) {
              String fileName = getUndoFileName(gameToUndo.getName(), i);
-@@ -170,8 +200,15 @@ class GameUndoService {
+@@ -170,8 +204,15 @@ class GameUndoService {
                  BotLogger.error(new LogOrigin(gameToUndo), "Failed to delete undo file: " + currentUndo);
              }
          }
@@ -9643,10 +9753,10 @@ index 0000000..b1f3f8f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineController.java b/src/main/java/ti4/selfhost/engine/EngineController.java
 new file mode 100644
-index 0000000..5053ac3
+index 0000000..5585b05
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineController.java
-@@ -0,0 +1,286 @@
+@@ -0,0 +1,289 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -9701,7 +9811,10 @@ index 0000000..5053ac3
 +        Game g = game(game);
 +        if (g == null) return notFound();
 +        String v = trusted(auth) ? viewer : null; // without the bot token: public view (no hand)
-+        return ok(StateSnapshotBuilder.build(g, v));
++        // no-cache instead of no-store: EngineStateEtagFilter tags it, the shim revalidates with If-None-Match.
++        return ResponseEntity.ok()
++                .cacheControl(CacheControl.noCache().cachePrivate())
++                .body(StateSnapshotBuilder.build(g, v));
 +    }
 +
 +    @GetMapping("/api/public/selfhost/engine/{game}/decisions")
@@ -10575,6 +10688,38 @@ index 0000000..81380cd
 +     * decision is set for decision.* (on closed: only id/game/target meaningful), reason for closed.
 +     */
 +    public record EngineEvent(long seq, String type, String game, long stateVersion, Decision decision, String reason) {}
++}
+diff --git a/src/main/java/ti4/selfhost/engine/EngineStateEtagFilter.java b/src/main/java/ti4/selfhost/engine/EngineStateEtagFilter.java
+new file mode 100644
+index 0000000..7f0ace8
+--- /dev/null
++++ b/src/main/java/ti4/selfhost/engine/EngineStateEtagFilter.java
+@@ -0,0 +1,26 @@
++package ti4.selfhost.engine;
++
++import jakarta.servlet.http.HttpServletRequest;
++import org.jetbrains.annotations.NotNull;
++import org.springframework.stereotype.Component;
++import org.springframework.web.filter.ShallowEtagHeaderFilter;
++
++/**
++ * ETag (body hash) and 304 on If-None-Match for the shim's GET /api/public/selfhost/engine/{game}/state: the state
++ * also reads in-memory decisions and combat bookkeeping, so it is built every time, but an unchanged answer is not
++ * sent (and parsed by the shim) again. Only that endpoint: the engine SSE stream must never be buffered.
++ */
++@Component
++public class EngineStateEtagFilter extends ShallowEtagHeaderFilter {
++
++    private static final String PREFIX = "/api/public/selfhost/engine/";
++
++    @Override
++    protected boolean shouldNotFilter(@NotNull HttpServletRequest request) {
++        String uri = request.getRequestURI();
++        return !"GET".equals(request.getMethod())
++                || uri == null
++                || !uri.startsWith(PREFIX)
++                || !uri.endsWith("/state");
++    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/GameRewind.java b/src/main/java/ti4/selfhost/engine/GameRewind.java
 new file mode 100644
@@ -13775,10 +13920,10 @@ index 0000000..0262cf0
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/UndoGroup.java b/src/main/java/ti4/selfhost/engine/UndoGroup.java
 new file mode 100644
-index 0000000..7a5ff7b
+index 0000000..bca9f63
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/UndoGroup.java
-@@ -0,0 +1,161 @@
+@@ -0,0 +1,162 @@
 +package ti4.selfhost.engine;
 +
 +import java.nio.charset.StandardCharsets;
@@ -13867,6 +14012,7 @@ index 0000000..7a5ff7b
 +            if (prompt != null) {
 +                replaceSavedPrompt(target, prompt);
 +                replaceSavedPrompt(Storage.getGameFile(gameName + Constants.TXT).toPath(), prompt);
++                ti4.game.persistence.GameRevision.bump(gameName);
 +            }
 +        } catch (Exception e) {
 +            BotLogger.error("engine: could not group the undo snapshots of an answer in " + gameName, e);
@@ -39663,6 +39809,195 @@ index 0000000..6a3ff03
 +        return new String[] {"", command};
 +    }
 +}
+diff --git a/src/main/java/ti4/spring/api/webdata/GameWebDataController.java b/src/main/java/ti4/spring/api/webdata/GameWebDataController.java
+index 58b4a31..63c6f35 100644
+--- a/src/main/java/ti4/spring/api/webdata/GameWebDataController.java
++++ b/src/main/java/ti4/spring/api/webdata/GameWebDataController.java
+@@ -2,14 +2,19 @@ package ti4.spring.api.webdata;
+ 
+ import java.util.List;
+ import lombok.RequiredArgsConstructor;
++import org.springframework.http.CacheControl;
++import org.springframework.http.HttpStatus;
+ import org.springframework.http.MediaType;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.web.bind.annotation.GetMapping;
+ import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.RequestHeader;
+ import org.springframework.web.bind.annotation.RequestMapping;
+ import org.springframework.web.bind.annotation.RestController;
+ import ti4.game.Game;
++import ti4.game.persistence.GameRevision;
+ import ti4.spring.context.RequestContext;
++import ti4.spring.context.SetupRequestContext;
+ import ti4.spring.service.gameevent.GameEventDto;
+ import ti4.spring.service.gameevent.GameEventService;
+ import ti4.website.model.WebGameState;
+@@ -22,16 +27,31 @@ public class GameWebDataController {
+     private final GameWebDataService gameWebDataService;
+     private final GameEventService gameEventService;
+ 
++    /**
++     * The game's web data, built once per save revision (GameWebDataService.current) and tagged with it (ETag): with
++     * a matching If-None-Match the answer is a 304 that costs a stat of the save file. No request context: the game
++     * is loaded only when the cached payload is out of date (the interceptor used to parse the save for every call).
++     */
+     @GetMapping(value = "/web-data", produces = MediaType.APPLICATION_JSON_VALUE)
+-    public ResponseEntity<String> get(@PathVariable String gameName) {
+-        Game game = RequestContext.getGame();
+-        if (game == null) {
++    @SetupRequestContext(false)
++    public ResponseEntity<byte[]> get(
++            @PathVariable String gameName,
++            @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
++        GameWebDataService.Served served = gameWebDataService.current(gameName);
++        if (served == null || served.fow()) {
+             return ResponseEntity.notFound().build();
+         }
+-        if (game.isFowMode()) {
+-            return ResponseEntity.notFound().build();
++        if (GameRevision.matches(ifNoneMatch, served.etag())) {
++            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
++                    .eTag(served.etag())
++                    .cacheControl(CacheControl.noCache())
++                    .build();
+         }
+-        return ResponseEntity.ok(gameWebDataService.getOrCompute(gameName));
++        return ResponseEntity.ok()
++                .eTag(served.etag())
++                .cacheControl(CacheControl.noCache())
++                .contentType(MediaType.APPLICATION_JSON)
++                .body(served.json());
+     }
+ 
+     @GetMapping(value = "/game-state", produces = MediaType.APPLICATION_JSON_VALUE)
+diff --git a/src/main/java/ti4/spring/api/webdata/GameWebDataService.java b/src/main/java/ti4/spring/api/webdata/GameWebDataService.java
+index 853237e..f892939 100644
+--- a/src/main/java/ti4/spring/api/webdata/GameWebDataService.java
++++ b/src/main/java/ti4/spring/api/webdata/GameWebDataService.java
+@@ -8,11 +8,17 @@ import java.util.HashMap;
+ import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import javax.annotation.Nullable;
+ import org.springframework.stereotype.Service;
+ import ti4.cache.CacheManager;
++import ti4.executors.ExecutionLockManager;
++import ti4.executors.ExecutionLockType;
+ import ti4.game.Game;
+ import ti4.game.Player;
+ import ti4.game.persistence.GameManager;
++import ti4.game.persistence.GameRevision;
++import ti4.game.persistence.ManagedGame;
+ import ti4.json.JsonMapperManager;
+ import ti4.website.model.WebBorderAnomalies;
+ import ti4.website.model.WebCardPool;
+@@ -33,11 +39,75 @@ public class GameWebDataService {
+     private static final Duration WEB_DATA_TTL = Duration.ofMinutes(30);
+     private static final String CACHE_NAME = "gameWebDataCache";
+     private static final int MAX_GAMES_IN_MEMORY = 500;
++    /** Serialized REST payloads by game, ~50 KB each: bounded by bytes (the soak plays ~700 games at once). */
++    private static final long SERVED_MAX_BYTES = 128L << 20;
+ 
++    /** Websocket diff baseline (WebSocketNotifier): the payload last published on /topic/game/{name}/state. */
+     private final Cache<String, String> webDataCache = createCache();
+ 
+-    public String getOrCompute(String gameName) {
+-        return webDataCache.get(gameName, GameWebDataService::computeForGameName);
++    /**
++     * What GET /web-data serves, per game, tagged with the save file's revision it was built from (GameRevision,
++     * read before the load). Served only while the tag is still current, so a save, undo, rewind or reload is never
++     * answered with older data; a request costs a stat when nothing changed (and a 304 with If-None-Match).
++     */
++    private final Cache<String, Served> served = Caffeine.newBuilder()
++            .maximumWeight(SERVED_MAX_BYTES)
++            .weigher((String k, Served v) -> v.json().length + 128)
++            .recordStats()
++            .build();
++
++    {
++        CacheManager.registerCache("gameWebDataServed", served);
++    }
++
++    private final Map<String, Object> computeLocks = new ConcurrentHashMap<>();
++
++    /** A game's web-data as of save revision {@code etag}; {@code fow}: not served (fog of war), json empty. */
++    public record Served(String etag, byte[] json, boolean fow) {}
++
++    /** The current web-data of a game (built at most once per save revision); null when it has no save file. */
++    @Nullable
++    public Served current(String gameName) {
++        Served hit = currentIfCached(gameName);
++        if (hit != null) return hit;
++        // One build per game at a time: the other requests for it wait and take its result.
++        synchronized (computeLocks.computeIfAbsent(gameName, k -> new Object())) {
++            hit = currentIfCached(gameName);
++            if (hit != null) return hit;
++            ExecutionLockManager.lock(gameName, ExecutionLockType.READ); // as the request interceptor did
++            try {
++                String etag = GameRevision.etag(gameName); // before the load: the data is at least this new
++                if (etag == null) return null;
++                ManagedGame managedGame = GameManager.getManagedGame(gameName);
++                Game game = managedGame == null ? null : managedGame.getGame();
++                if (game == null) return null;
++                Served built = game.isFowMode()
++                        ? new Served(etag, new byte[0], true)
++                        : new Served(etag, serializeBytes(game), false);
++                served.put(gameName, built);
++                return built;
++            } finally {
++                ExecutionLockManager.unlock(gameName, ExecutionLockType.READ);
++            }
++        }
++    }
++
++    @Nullable
++    private Served currentIfCached(String gameName) {
++        Served hit = served.getIfPresent(gameName);
++        if (hit == null) return null;
++        String etag = GameRevision.etag(gameName);
++        return hit.etag().equals(etag) ? hit : null;
++    }
++
++    /**
++     * A payload just built elsewhere (the websocket pipeline after a save) from the game loaded after {@code etag}
++     * was read: kept for REST while that revision is current. Never replaces a newer tag's entry with an older one
++     * (only stored when the tag is still current).
++     */
++    public void offer(String gameName, @Nullable String etag, byte[] json) {
++        if (etag == null || !etag.equals(GameRevision.etag(gameName))) return;
++        served.put(gameName, new Served(etag, json, false));
+     }
+ 
+     public String getIfCached(String gameName) {
+@@ -48,14 +118,6 @@ public class GameWebDataService {
+         webDataCache.put(gameName, serializedWebData);
+     }
+ 
+-    private static String computeForGameName(String gameName) {
+-        var managedGame = GameManager.getManagedGame(gameName);
+-        if (managedGame == null || managedGame.getGame() == null) {
+-            throw new IllegalArgumentException("Unknown game: " + gameName);
+-        }
+-        return serialize(managedGame.getGame());
+-    }
+-
+     private static Cache<String, String> createCache() {
+         Cache<String, String> cache = Caffeine.newBuilder()
+                 .maximumSize(MAX_GAMES_IN_MEMORY)
+@@ -66,9 +128,9 @@ public class GameWebDataService {
+         return cache;
+     }
+ 
+-    private static String serialize(Game game) {
++    private static byte[] serializeBytes(Game game) {
+         try {
+-            return JsonMapperManager.basic().writeValueAsString(buildWebData(game));
++            return JsonMapperManager.basic().writeValueAsBytes(buildWebData(game));
+         } catch (Exception e) {
+             throw new IllegalStateException("Could not serialize web data for game " + game.getName(), e);
+         }
 diff --git a/src/main/java/ti4/spring/resilience/ErrorLoggingFilter.java b/src/main/java/ti4/spring/resilience/ErrorLoggingFilter.java
 index 7362c9d..a50ac76 100644
 --- a/src/main/java/ti4/spring/resilience/ErrorLoggingFilter.java
@@ -39686,7 +40021,7 @@ index 7362c9d..a50ac76 100644
      protected void doFilterInternal(
              @NotNull HttpServletRequest request,
 diff --git a/src/main/java/ti4/spring/websocket/GameWebStatePipeline.java b/src/main/java/ti4/spring/websocket/GameWebStatePipeline.java
-index e668642..2bf3983 100644
+index e668642..5503e3f 100644
 --- a/src/main/java/ti4/spring/websocket/GameWebStatePipeline.java
 +++ b/src/main/java/ti4/spring/websocket/GameWebStatePipeline.java
 @@ -28,6 +28,7 @@ public class GameWebStatePipeline {
@@ -39697,6 +40032,52 @@ index e668642..2bf3983 100644
          if (game == null || game.isFowMode() || System.getenv("TESTING") != null) return;
          WebSocketNotifier notifier = getNotifierIfAvailable();
          if (notifier == null) return;
+@@ -68,7 +69,9 @@ public class GameWebStatePipeline {
+         try {
+             ManagedGame managedGame = GameManager.getManagedGame(gameName);
+             if (managedGame == null) return;
+-            notifier.notifyGameStateChanged(managedGame.getGame());
++            // Read before the load: the payload built from it also serves GET /web-data while this revision is current.
++            String etag = ti4.game.persistence.GameRevision.etag(gameName);
++            notifier.notifyGameStateChanged(managedGame.getGame(), etag);
+         } catch (Exception e) {
+             BotLogger.error("Failed to publish web state for game " + gameName + ".", e);
+         }
+diff --git a/src/main/java/ti4/spring/websocket/WebSocketNotifier.java b/src/main/java/ti4/spring/websocket/WebSocketNotifier.java
+index 4d80d94..1096fb2 100644
+--- a/src/main/java/ti4/spring/websocket/WebSocketNotifier.java
++++ b/src/main/java/ti4/spring/websocket/WebSocketNotifier.java
+@@ -27,8 +27,9 @@ import tools.jackson.databind.node.ObjectNode;
+  * actually changed against an in-memory baseline, and publishes only the
+  * changed fields as an RFC 7386-style merge patch (client deep-merges;
+  * {@code null} deletes a key; arrays replace wholesale). The baseline is the
+- * serialized payload in {@link GameWebDataService}'s cache — the same cache
+- * that serves the REST endpoint — so the two views can never drift. Nothing is
++ * serialized payload last published (GameWebDataService#getIfCached); the
++ * same build also serves GET /web-data while its save revision is current
++ * (GameWebDataService#offer), so the two views agree. Nothing is
+  * persisted, so undo needs no special handling: the post-undo snapshot diffs
+  * against the last published one like any other change; a cache eviction just
+  * costs one full snapshot resend.</p>
+@@ -50,12 +51,18 @@ public class WebSocketNotifier {
+     }
+ 
+     void notifyGameStateChanged(Game game) {
++        notifyGameStateChanged(game, null);
++    }
++
++    /** {@code etag}: the save revision read before {@code game} was loaded (GameRevision), or null. */
++    void notifyGameStateChanged(Game game, String etag) {
+         try {
+             if (game == null || game.isFowMode()) return;
+ 
+             String gameId = game.getName();
+             // Build the snapshot outside the lock (pure computation, no shared state).
+             JsonNode current = MAPPER.valueToTree(GameWebDataService.buildWebData(game));
++            gameWebDataService.offer(gameId, etag, MAPPER.writeValueAsBytes(current));
+ 
+             synchronized (perGameLocks.computeIfAbsent(gameId, k -> new Object())) {
+                 // Sole writer of the web-data cache: if anything else wrote it, the diff
 diff --git a/src/test/java/ti4/helpers/DoneRoleTest.java b/src/test/java/ti4/helpers/DoneRoleTest.java
 new file mode 100644
 index 0000000..6ee6544
