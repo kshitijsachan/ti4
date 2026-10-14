@@ -118,6 +118,15 @@ void test("step: my roll, their roll, blocked, assign, wait for their assignment
   assert.equal(o.step.text, "You win the space combat (round 1)");
 });
 
+void test("both roll, then both assign: behind on rounds, the roll comes before the hits", () => {
+  const behindState = state({ owed: [{ faction: "sol", userId: ME, tile: "305", holder: "space", source: "space", hits: 1, assigned: 0, decisionId: "h1" }] });
+  behindState.combat!.fronts[0].sides[0].roundsRolled = 0;
+  const hits = { id: "h1", kind: "combat.hits", target: { userId: ME }, window: null, options: [] } as unknown as Decision;
+  const v = combatView(behindState, [rollPrompt([BOT]), hits], ME, names)!;
+  assert.equal(v.step.kind, "roll");
+  assert.equal(v.step.text, "Roll for round 1, then assign 1 hit");
+});
+
 void test("abilities: mine (greyed reason kept), never another faction's; roll offered only for the step", () => {
   const v = combatView(state(), [rollPrompt([]), controls("the agent is exhausted")], ME, names)!;
   assert.deepEqual(v.abilities.map((a) => a.option.value), [

@@ -184,8 +184,8 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
     () => combatView(state, Object.values(openIds), myUserId, (who) => playerLabel(state, who)),
     [state, openIds, myUserId],
   );
-  const combatShown = !!combat && !!shown && shown.kind.startsWith("combat.") && inCombat(shown, combat);
-  const more = queue.filter((d) => d.id !== shown?.id && !(combatShown && combat && d.kind.startsWith("combat.") && inCombat(d, combat))).length;
+  const combatShown = !!combat && !!shown && partOfCombat(shown, combat);
+  const more = queue.filter((d) => d.id !== shown?.id && !(combatShown && combat && partOfCombat(d, combat))).length;
   /* Nothing asked of me, but a combat I fight in is under way: the panel shows it (what the other side rolled, who it waits on). */
   const combatWatch = !shown && !!combat && combatInvolves(combat, myUserId);
   const collapsed = !!shown && collapsedId === shown.id && !errors[shown.id];
@@ -559,7 +559,7 @@ export function EngineDecisionHost({ gameName, placement = "contained", rightIns
                 <CombatPanel
                   view={combat}
                   state={state}
-                  extras={queue.filter((d) => d.kind.startsWith("combat.") && inCombat(d, combat))}
+                  extras={queue.filter((d) => partOfCombat(d, combat))}
                   answer={(d, choice) => answer(d, choice)}
                   pendingOptionId={Object.values(pending)[0]?.optionId ?? null}
                 />
@@ -601,6 +601,17 @@ function inCombat(d: Decision, view: CombatView): boolean {
   if (subject != null) return (typeof subject === "string" || typeof subject === "number" ? String(subject) : "") === view.tile;
   const tiles = d.options.map((o) => (o.value as { tile?: string | null } | null)?.tile).filter((t): t is string => !!t);
   return !tiles.length || tiles.includes(view.tile);
+}
+
+/**
+ * A prompt that is a step of the combat on screen: its combat decisions, and faction abilities / leaders offered for
+ * that system while the fight is on (Mentak Ambush, agents posted on their own message): one panel, not a queue.
+ */
+function partOfCombat(d: Decision, view: CombatView): boolean {
+  if (d.kind.startsWith("combat.")) return inCombat(d, view);
+  if (d.kind !== "faction.ability" && d.kind !== "leader.use") return false;
+  if (!view.fronts.some((f) => f.on)) return false;
+  return d.options.some((o) => (o.value as { tile?: unknown } | null)?.tile === view.tile);
 }
 
 /** I fight in a combat under way there, or hits are owed in it to or by me. */

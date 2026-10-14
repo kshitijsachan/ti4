@@ -23,7 +23,7 @@ export function chooseCombat(d: Decision, state: GameState | null, me: string, o
     case "combat.round":
       return roll(d, state, me, open, all);
     case "combat.hits":
-      return autoAssign(d, me);
+      return autoAssign(d, me, state);
     case "combat.assign_units":
       // pickUnit only where hits are owed (progress): a removal list without progress that is over the limits is the
       // unit-limit desk's; pickUnit's "nothing owed: Done" there closed it before any removal (pbd114 loop).
@@ -120,11 +120,21 @@ export function chooseUnitsRemove(d: UnitsRemove, me: string, history: string[],
   return null;
 }
 
-function autoAssign(d: CombatHits, me: string): CombatChoice | null {
+/** Combat-round hits in a fight where we have not rolled the round yet: roll first (both roll, then both assign). */
+function rollFirst(state: GameState | null, me: string, tile: string, holder: string): boolean {
+  if (state?.combat?.tile !== tile) return false;
+  const front = state.combat.fronts.find((f) => f.holder === holder);
+  const mine = front?.sides.find((s) => s.userId === me);
+  const theirs = front?.sides.find((s) => s.userId !== me);
+  return !!mine && !!theirs && mine.units.length > 0 && mine.roundsRolled < theirs.roundsRolled;
+}
+
+function autoAssign(d: CombatHits, me: string, state: GameState | null = null): CombatChoice | null {
   if (d.scope !== "player" || d.target?.userId !== me) return null;
   const auto = d.options.find((o) => !o.disabled && !forDummy(o) && o.value?.action === "auto");
   if (!auto) return bombardmentPlan(d);
   if (auto.value?.action !== "auto") return null;
+  if ((auto.value.source === "space" || auto.value.source === "ground") && rollFirst(state, me, auto.value.tile, auto.value.holder)) return null;
   // Shields Holding cancelled some of the prompt's hits: the engine refuses "auto" (it would assign all of them); take
   // the cancels off with "Cancel a Hit" (each press re-posts the prompt one hit lower), as a person would.
   if ((auto.value.cancelled ?? 0) > 0) {
@@ -302,9 +312,13 @@ function roll(d: CombatRound, state: GameState | null, me: string, open: Decisio
   const theirs = front?.sides.find((s) => s.userId !== me);
   if (!front || !mine || !theirs || !mine.units.length || !theirs.units.length) return null;
   if (mine.roundsRolled > theirs.roundsRolled) return null;
-  // Hits we owe come first (the next round is rolled after assigning).
+  // Hits we owe come first (the next round is rolled after assigning) — except the round the opponent already rolled:
+  // we roll it too before assigning its hits (LRR: both roll, then both assign; assigning first lost our dice).
   // (Only hits this bot can auto-assign: a BOMBARDMENT prompt has no auto option and must not stall the ground combat.)
-  if (open.some((x) => x.kind === "combat.hits" && x.target?.userId === me && x.options.some((o) => !o.disabled && o.value?.action === "auto")))
+  if (
+    mine.roundsRolled >= theirs.roundsRolled &&
+    open.some((x) => x.kind === "combat.hits" && x.target?.userId === me && x.options.some((o) => !o.disabled && o.value?.action === "auto"))
+  )
     return null;
   // Space cannon defence before the first ground round, once.
   if (mine.roundsRolled === 0 && mine.abilities.includes("spacecannondefence") && !rolledSincePrompt("spacecannondefence")) {

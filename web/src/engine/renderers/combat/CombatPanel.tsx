@@ -5,12 +5,18 @@ import type { Decision, GameState } from "../../../../../shim/src/engine/types";
 import type { AnswerPayload } from "../../link";
 import { playerLabel } from "../../names";
 import { planetName, systemName } from "../tactical/names";
+import type { ComponentType } from "react";
+import { rendererFor } from "../../registry";
 import { renderers } from "./index";
 import { optionsOf, retreatReason, ROLL_LABEL, type AbilityChoice, type CombatView, type FrontView, type RollChoice, type RollView, type SideView } from "./combatView";
 import { unitName } from "./types";
 import classes from "./combat.module.css";
 
 type Answer = (d: Decision, choice: string | AnswerPayload) => void;
+
+/** Combat kinds draw with the combat renderers; other steps of the combat (faction abilities, leaders) with theirs. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const rendererOf = (kind: string): ComponentType<any> | undefined => renderers[kind] ?? (kind.startsWith("combat.") ? undefined : rendererFor(kind));
 
 type Props = {
   view: CombatView;
@@ -165,9 +171,17 @@ export function CombatPanel({ view, state, extras, answer, pendingOptionId }: Pr
   const where = front ? (front.holder === "space" ? "Space combat" : `Ground combat · ${planetName(front.holder)}`) : "Combat";
   const others = view.fronts.filter((f) => f !== front && (f.on || f.result));
   const StepBody = step.decision && step.mine && (step.kind === "assign" || step.kind === "retreat") ? renderers[step.decision.kind] : undefined;
-  const more = extras.filter(
-    (d) => d.id !== step.decision?.id && d.kind !== "combat.round" && !(step.kind === "assign" && d.kind === "combat.hits") && !!renderers[d.kind],
-  );
+  /* The bot posts some prompts twice (actions channel and combat thread): one copy each. */
+  const seenPrompt = new Set<string>();
+  const more = extras.filter((d) => {
+    if (d.id === step.decision?.id || d.kind === "combat.round" || (step.kind === "assign" && d.kind === "combat.hits") || !rendererOf(d.kind)) return false;
+    const key = `${d.kind}|${optionsOf(d)
+      .map((o) => o.id)
+      .join(",")}`;
+    if (seenPrompt.has(key)) return false;
+    seenPrompt.add(key);
+    return true;
+  });
   const busy = !!pendingOptionId;
 
   return (
@@ -210,11 +224,11 @@ export function CombatPanel({ view, state, extras, answer, pendingOptionId }: Pr
         </div>
       )}
       {more.map((extra) => {
-        const ExtraBody = renderers[extra.kind];
+        const ExtraBody = rendererOf(extra.kind)!;
         return (
           <div key={extra.id} className={classes.stepBody} data-combat-extra={extra.kind}>
             <span className={classes.label}>Also open</span>
-            <ExtraBody decision={extra} state={state} answer={(c: string | AnswerPayload) => press(extra, c)} />
+            <ExtraBody decision={extra} state={state} answer={(c: string | AnswerPayload) => press(extra, c)} pendingOptionId={pendingOptionId} />
           </div>
         );
       })}

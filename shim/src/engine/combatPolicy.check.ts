@@ -222,4 +222,8 @@ expect("round agent: exhausted -> roll", allPick(round([]), fight(0, 0), [contro
 expect("round agent: not another faction's", allPick(controls(agentOpt(null, "sol")), fight(0, 0), []), null);
 const picker = { ...hits(ME, 0), id: "p1", kind: "leader.use", options: [opt("FFCC_letnev_exhaustAgent_letnevagent_letnev", { leader: "letnevagent", step: "exhaustAgent", action: "target", target: "letnev" })] } as unknown as Decision;
 expect("round agent: roll waits for its picker", allPick(round([]), fight(0, 0), [controls(agentOpt("the agent is exhausted"))], [picker]), null);
+// Both sides roll a round before its hits are assigned: behind on rounds, we roll first and only then assign.
+expect("behind: rolls the round although its hits are owed", pick(round([]), fight(0, 1), [hits(ME, 2)]), "combatRoll_201_space");
+expect("behind: does not assign before rolling", pick(hits(ME, 2), fight(0, 1)), null);
+expect("level again: assigns", pick(hits(ME, 2), fight(1, 1)), "FFCC_letnev_autoAssignSpaceHits_201_2");
 process.exit(failed ? 1 : 0);

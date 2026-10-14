@@ -320,11 +320,21 @@ function owedFromDecisions(decisions: Decision[], state: GameState | null, tile:
 
 function stepOf(decisions: Decision[], fronts: FrontView[], owed: HitsOwed[], me: string | null, names: Names): StepView {
   const base = { decision: null, holder: null, rollType: null } as const;
+  const roll = rollStepOf(decisions, fronts, me, names);
+  /* Both sides roll a round, then both assign its hits: the side still to roll this round rolls first. */
+  const behind = (o: HitsOwed) => {
+    if (o.source !== "space" && o.source !== "ground") return false;
+    const f = fronts.find((x) => x.holder === o.holder);
+    const s = f?.sides.find((x) => x.userId === o.userId);
+    const t = f?.sides.find((x) => x.userId !== o.userId);
+    return !!s && !!t && s.roundsRolled < t.roundsRolled;
+  };
   const mineOwed = owed.find((o) => o.userId === me);
   if (mineOwed) {
+    const left = mineOwed.hits - mineOwed.assigned;
+    if (behind(mineOwed) && roll?.kind === "roll") return { ...roll, text: `${roll.text}, then assign ${plural(left, "hit")}` };
     const d = decisions.find((x) => x.id === mineOwed.decisionId) ?? null;
     const menu = decisions.find((x) => x.kind === "combat.assign_units" && x.target?.userId === me) ?? null;
-    const left = mineOwed.hits - mineOwed.assigned;
     return {
       ...base,
       kind: "assign",
@@ -337,7 +347,8 @@ function stepOf(decisions: Decision[], fronts: FrontView[], owed: HitsOwed[], me
   const retreat = decisions.find((x) => x.kind === "combat.retreat" && x.target?.userId === me);
   if (retreat) return { ...base, kind: "retreat", mine: true, decision: retreat, text: "Retreat: choose where your ships go" };
   const theirs = owed[0];
-  if (theirs)
+  if (theirs) {
+    if (behind(theirs) && roll?.kind === "wait_roll") return roll;
     return {
       ...base,
       kind: "wait_assign",
@@ -345,7 +356,16 @@ function stepOf(decisions: Decision[], fronts: FrontView[], owed: HitsOwed[], me
       holder: theirs.holder,
       text: `Waiting for ${names(theirs.faction)} to assign ${plural(theirs.hits - theirs.assigned, "hit")} (${SOURCE_NAME[theirs.source] ?? theirs.source})`,
     };
+  }
+  if (roll) return roll;
+  const on = fronts.find((f) => f.on);
+  if (on) return { ...base, kind: "idle", mine: false, holder: on.holder, text: `Round ${on.round}: waiting for the next roll prompt` };
+  const last = [...fronts].reverse().find((f) => f.result);
+  return { ...base, kind: "over", mine: false, holder: last?.holder ?? null, text: last?.result ?? "Combat over" };
+}
 
+/** The roll the table is on (from the engine's roll windows): mine to roll, someone else's, or held back. */
+function rollStepOf(decisions: Decision[], fronts: FrontView[], me: string | null, names: Names): StepView | null {
   const open = decisions.filter((d) => d.kind === "combat.round" && d.window?.kind === "combat_roll").filter((d) => {
     const w = d.window!;
     const holder = field(w.subject.holder, "space");
@@ -354,24 +374,19 @@ function stepOf(decisions: Decision[], fronts: FrontView[], owed: HitsOwed[], me
     return !!w.subject.waitingFor || w.eligible.some((u) => !w.responded.includes(u));
   });
   const minePending = open.find((d) => !d.window!.subject.waitingFor && !!me && d.window!.eligible.includes(me) && !d.window!.responded.includes(me));
-  const pick = minePending ?? open[0];
-  if (pick) {
-    const w = pick.window!;
-    const holder = field(w.subject.holder, "space");
-    const rollType = field(w.subject.rollType, "combat") as RollType;
-    const front = fronts.find((f) => f.holder === holder);
-    const what = rollType === "combat" ? `round ${front?.round ?? 1}` : ROLL_LABEL[rollType];
-    if (typeof w.subject.waitingFor === "string")
-      return { kind: "blocked", mine: false, decision: null, holder, rollType, text: `Not yet: ${w.subject.waitingFor}` };
-    if (pick === minePending)
-      return { kind: "roll", mine: true, decision: pick, holder, rollType, text: rollType === "combat" ? `Roll for ${what}` : `Roll ${what}` };
-    const waiting = w.eligible.filter((u) => !w.responded.includes(u)).map((u) => names(u));
-    return { kind: "wait_roll", mine: false, decision: null, holder, rollType, text: `Waiting for ${waiting.join(", ")} to roll ${what}` };
-  }
-  const on = fronts.find((f) => f.on);
-  if (on) return { ...base, kind: "idle", mine: false, holder: on.holder, text: `Round ${on.round}: waiting for the next roll prompt` };
-  const last = [...fronts].reverse().find((f) => f.result);
-  return { ...base, kind: "over", mine: false, holder: last?.holder ?? null, text: last?.result ?? "Combat over" };
+  const pick = minePending ?? open.find((d) => !d.window!.subject.waitingFor) ?? open[0];
+  if (!pick) return null;
+  const w = pick.window!;
+  const holder = field(w.subject.holder, "space");
+  const rollType = field(w.subject.rollType, "combat") as RollType;
+  const front = fronts.find((f) => f.holder === holder);
+  const what = rollType === "combat" ? `round ${front?.round ?? 1}` : ROLL_LABEL[rollType];
+  if (typeof w.subject.waitingFor === "string")
+    return { kind: "blocked", mine: false, decision: null, holder, rollType, text: `Not yet: ${w.subject.waitingFor}` };
+  if (pick === minePending)
+    return { kind: "roll", mine: true, decision: pick, holder, rollType, text: rollType === "combat" ? `Roll for ${what}` : `Roll ${what}` };
+  const waiting = w.eligible.filter((u) => !w.responded.includes(u)).map((u) => names(u));
+  return { kind: "wait_roll", mine: false, decision: null, holder, rollType, text: `Waiting for ${waiting.join(", ")} to roll ${what}` };
 }
 
 function lossText(losses: Loss[] | null): string {
