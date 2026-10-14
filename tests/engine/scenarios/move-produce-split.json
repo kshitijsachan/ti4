@@ -44,7 +44,7 @@
           "wait": 1500
         },
         {
-          "press": "FFCC_ralnel_deleteButtons_tacticalAction_307"
+          "press": "FFCC_ralnel_deleteButtons_tacticalAction_307~prod"
         }
       ]
     }
