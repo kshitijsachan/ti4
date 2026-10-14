@@ -1,29 +1,106 @@
 {
   "name": "setup-deepwrought-starting-tech",
-  "description": "User report (engine UI, Deepwrought): 'Choose a technology type / Get a technology' showed only 'Choose a technology (Free)' and 'Done'; the first press seemed to do nothing. Deepwrought starts with two open starting technologies, posted as two identical 'Get a Technology' + 'Done' prompts (PlayerSetupService). The first press worked, but the type picker it opened queued behind the identical second prompt (web order: every tech.choose_type ranked as an in-progress step, oldest first), so the panel looked unchanged; pressing 'Done' on that second prompt (integrator e2e pbd1410) threw away a starting technology and setup waited forever. Fix: web order leads with the step my answer opened; 'Done' on a starting prompt is greyed while starting technologies are owed and refused by the engine (TechTypeChoiceKind.validate). Here (pbd75, before Deepwrought's picks): Get a Technology -> Biotic -> Neural Motivator, Done on the remaining starting prompt is refused, then Get a Technology -> Propulsion -> Antimass Deflectors: Deepwrought owes none and setup no longer waits on it.",
-  "base": { "recording": "pbd75", "index": 24 },
+  "description": "User report (engine UI, Deepwrought): 'Choose a technology type / Get a technology' showed only 'Choose a technology (Free)' and 'Done'; the first press seemed to do nothing. Deepwrought starts with two open starting technologies, posted as two identical 'Get a Technology' + 'Done' prompts (PlayerSetupService). The first press worked, but the type picker it opened queued behind the identical second prompt (web order: every tech.choose_type ranked as an in-progress step, oldest first), so the panel looked unchanged; pressing 'Done' on that second prompt (integrator e2e pbd1410) threw away a starting technology and setup waited forever. Fix: web order leads with the step my answer opened; 'Done' on a starting prompt is greyed while starting technologies are owed and refused by the engine (TechTypeChoiceKind.validate). Here (pbd75@21: Keleres' last draft pick posts every setup prompt, Deepwrought's two included): Get a Technology -> Biotic -> Neural Motivator, Done on the remaining starting prompt is refused, then Get a Technology -> Propulsion -> Antimass Deflectors: Deepwrought owes none and setup no longer waits on it. The Done refusal needs bot dw-starttech (4980e2f); the rest passes on the old bot too.",
+  "base": {
+    "recording": "pbd75",
+    "index": 21
+  },
   "steps": [
-    { "answer": { "kind": "tech.choose_type", "option": "^acquireAFreeTech$" }, "as": "deepwrought" },
-    { "wait": 1500 },
-    { "answer": { "kind": "tech.choose_type", "option": "getAllTechOfType_biotic" }, "as": "deepwrought" },
-    { "wait": 1500 },
-    { "answer": { "kind": "tech.gain", "option": "getTech_nm" }, "as": "deepwrought" },
-    { "wait": 1500 },
-    { "answer": { "kind": "tech.choose_type", "option": "deleteButtons" }, "as": "deepwrought", "refused": true },
-    { "answer": { "kind": "tech.choose_type", "option": "^acquireAFreeTech$" }, "as": "deepwrought" },
-    { "wait": 1500 },
-    { "answer": { "kind": "tech.choose_type", "option": "getAllTechOfType_propulsion" }, "as": "deepwrought" },
-    { "wait": 1500 },
-    { "answer": { "kind": "tech.gain", "option": "getTech_amd" }, "as": "deepwrought" },
-    { "wait": 2000 }
+    {
+      "press": "milty_order_3",
+      "as": "seat2"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "answer": {
+        "kind": "tech.choose_type",
+        "option": "^acquireAFreeTech$"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "tech.choose_type",
+        "option": "getAllTechOfType_biotic"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "getTech_nm"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "tech.choose_type",
+        "option": "deleteButtons"
+      },
+      "as": "deepwrought",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "tech.choose_type",
+        "option": "^acquireAFreeTech$"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "tech.choose_type",
+        "option": "getAllTechOfType_propulsion"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "getTech_amd"
+      },
+      "as": "deepwrought"
+    },
+    {
+      "wait": 2000
+    }
   ],
   "expect": {
     "invariants": true,
     "state": [
-      { "path": "players[faction=deepwrought].techs", "includes": "nm" },
-      { "path": "players[faction=deepwrought].techs", "includes": "amd" },
-      { "path": "setup.players[faction=deepwrought].startingTechsNeeded", "eq": 0 },
-      { "path": "setup.waitingOn", "excludes": "${faction:deepwrought}" }
+      {
+        "path": "players[faction=deepwrought].techs",
+        "includes": "nm"
+      },
+      {
+        "path": "players[faction=deepwrought].techs",
+        "includes": "amd"
+      },
+      {
+        "path": "setup.players[faction=deepwrought].startingTechsNeeded",
+        "eq": 0
+      },
+      {
+        "path": "setup.waitingOn",
+        "excludes": "${faction:deepwrought}"
+      }
     ]
   }
 }
