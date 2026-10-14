@@ -1,15 +1,39 @@
 {
   "name": "audit-factions-argent-flagship-sco",
-  "description": "Rules audit (factions): Quetzecoatl (Argent flagship) — other players cannot use SPACE CANNON against Argent's ships in its system. Argent flagship + destroyer in 210, ghost PDS on vorhal: ghost's SPACE CANNON OFFENCE roll is refused by the engine and by the legacy handler.",
-  "base": { "recording": "pbd118", "index": 140, "repost": false },
+  "description": "Rules audit (factions): Quetzecoatl (Argent flagship) \u2014 other players cannot use SPACE CANNON against Argent's ships in its system. Argent flagship + destroyer in 210, ghost PDS on vorhal: ghost's SPACE CANNON OFFENCE roll is refused by the engine and by the legacy handler. Base: pbd118 save 140 pinned with Argent active and 210 the active system (saves/argent-flagship-sco-pbd118-140.txt). The recorded save has no active system, so the engine closed the re-posted space cannon prompt as obsolete (CombatSupport.scoOver: no SCO outside the active system), sometimes before the harness could answer it ('the engine did not capture the carrier', intermittent) and sometimes just after it was opened. Either way the Quetzecoatl rule was never reached. With 210 active the prompt stays open and the engine refuses the roll for Quetzecoatl.",
+  "base": {
+    "save": "saves/argent-flagship-sco-pbd118-140.txt",
+    "repost": false
+  },
   "setup": [
     "/add_units tile_name:210 unit_names:\"flagship, dd\" faction_or_color:argent",
     "/add_units tile_name:210 unit_names:\"pds vorhal\" faction_or_color:ghost"
   ],
   "steps": [
-    { "press": "combatRoll_210_space_spacecannonoffence", "as": "ghost", "refused": true,
-      "legacy": [ { "press": "combatRoll_210_space_spacecannonoffence", "as": "ghost" } ] },
-    { "wait": 1500 }
+    {
+      "press": "combatRoll_210_space_spacecannonoffence",
+      "as": "ghost",
+      "refused": true,
+      "legacy": [
+        {
+          "press": "combatRoll_210_space_spacecannonoffence",
+          "as": "ghost"
+        }
+      ],
+      "expect": {
+        "decision": [
+          {
+            "kind": "combat.round",
+            "open": true
+          }
+        ]
+      }
+    },
+    {
+      "wait": 1500
+    }
   ],
-  "expect": { "invariants": true }
+  "expect": {
+    "invariants": true
+  }
 }
