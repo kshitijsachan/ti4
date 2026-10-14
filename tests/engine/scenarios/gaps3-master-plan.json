@@ -1,0 +1,78 @@
+{
+ "name": "gaps3-master-plan",
+ "description": "audit-gaps-3 (gate TI4_RULES_AC): Master Plan \u2014 \"After you perform an action: Perform an additional action.\" The original offered \"Use Ability To Do Another Action\" after every action (only warning afterwards). Base pbd105@179: Ral Nel's end-of-turn menu after a tactical action, no second-action source (no Fleet Logistics, no Master Plan). The press is refused; with Master Plan in hand it is still refused (\"Play Master Plan first\"); once Ral Nel plays it, the additional action is taken (recorded used: a second press is refused).",
+ "base": {
+  "recording": "pbd105",
+  "index": 179
+ },
+ "steps": [
+  {
+   "press": "FFCC_ralnel_confirmSecondAction",
+   "as": "ralnel",
+   "refused": true,
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "master_plan",
+    "faction_or_color": "ralnel"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "press": "FFCC_ralnel_confirmSecondAction",
+   "as": "ralnel",
+   "refused": true,
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "master_plan"
+    }
+   },
+   "as": "ralnel"
+  },
+  {
+   "wait": 1500,
+   "expect": {
+    "save": [
+     {
+      "key": "stored.masterPlanPlayedralnel",
+      "match": "\\{pip\\}\\d+$"
+     }
+    ]
+   }
+  },
+  {
+   "press": "FFCC_ralnel_confirmSecondAction",
+   "as": "ralnel"
+  },
+  {
+   "wait": 1500,
+   "expect": {
+    "save": [
+     {
+      "key": "stored.masterPlanUsedralnel",
+      "match": "\\{cln\\}ralnel\\{cln\\}"
+     }
+    ]
+   }
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}
