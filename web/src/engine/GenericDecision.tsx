@@ -29,6 +29,12 @@ function OptionEmoji({ emoji }: { emoji: string | null }) {
 /** Prompt text longer than this folds behind "Show more". */
 const LONG_PROMPT = 420;
 
+/** value.unavailable (a string) of an option, else null. */
+function unavailableReason(o: Option<unknown>): string | null {
+  const r = (o.value as { unavailable?: unknown } | null | undefined)?.unavailable;
+  return typeof r === "string" && r ? r : null;
+}
+
 /**
  * Any decision without its own renderer (all `legacy` ones): the engine's prompt and its options as buttons, the
  * real choices first, then step-backs, with utilities under "More". Options locked to another player are hidden.
@@ -44,21 +50,26 @@ export function GenericDecision({ decision, answer, pendingOptionId }: EngineRen
   const main = options.filter((o) => optionRole(o) === "main");
   const long = (decision.prompt?.length ?? 0) > LONG_PROMPT;
 
-  const button = (o: Option<unknown>, quiet = false) => (
-    <UnstyledButton
-      key={o.id}
-      className={cx(classes.option, !quiet && STYLE_CLASS[o.style], quiet && classes.quiet)}
-      disabled={o.disabled || busy}
-      data-pending={pendingOptionId === o.id || undefined}
-      aria-busy={pendingOptionId === o.id}
-      title={o.needsInput ? "Opens a form" : undefined}
-      onClick={() => answer(o.id)}
-    >
-      {pendingOptionId === o.id ? <Loader size={12} color="currentColor" /> : <OptionEmoji emoji={o.emoji} />}
-      {o.label && <span>{o.label}</span>}
-      {!o.label && !o.emoji && <span>Choose</span>}
-    </UnstyledButton>
-  );
+  const button = (o: Option<unknown>, quiet = false) => {
+    // An option the engine says cannot be used right now (value.unavailable): greyed, never hidden, with the reason.
+    const why = unavailableReason(o);
+    return (
+      <UnstyledButton
+        key={o.id}
+        className={cx(classes.option, !quiet && STYLE_CLASS[o.style], quiet && classes.quiet)}
+        disabled={o.disabled || busy || !!why}
+        data-pending={pendingOptionId === o.id || undefined}
+        aria-busy={pendingOptionId === o.id}
+        title={why ?? (o.needsInput ? "Opens a form" : undefined)}
+        onClick={() => answer(o.id)}
+      >
+        {pendingOptionId === o.id ? <Loader size={12} color="currentColor" /> : <OptionEmoji emoji={o.emoji} />}
+        {o.label && <span>{o.label}</span>}
+        {!o.label && !o.emoji && <span>Choose</span>}
+        {why && <small className={classes.quiet}> — {why}</small>}
+      </UnstyledButton>
+    );
+  };
 
   return (
     <div className={classes.root}>

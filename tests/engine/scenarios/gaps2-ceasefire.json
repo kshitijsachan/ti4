@@ -1,0 +1,17 @@
+{
+  "name": "gaps2-ceasefire",
+  "description": "Ceasefire (audit-gaps-2, off switch TI4_RULES_AGENDAS / rulesGateAgendas). Card text: 'After the [color] player activates a system that contains 1 or more of your units: The [color] player cannot move units to the active system. Then return this card to the [color] player.' pbd28@54: Yssaril (holding Deepwrought's Ceasefire, 1 destroyer in 209) — Deepwrought activates 209, Yssaril plays the Ceasefire, Deepwrought's move of a carrier from 313 into 209 is refused (original: moved). The engine /move and the legacy unitTacticalMove_ / concludeMove_ are refused alike.",
+  "base": { "recording": "pbd28", "index": 54 },
+  "setup": [
+    "/pn send promissory_note_id:navy_cf target_faction_or_color:yssaril faction_or_color:deepwrought",
+    "/add_units tile_name:209 unit_names:\"1 destroyer\" faction_or_color:yssaril"
+  ],
+  "steps": [
+    { "answer": { "kind": "tactical.activate", "option": "ringTile_209" }, "as": "deepwrought" },
+    { "wait": 1500 },
+    { "press": "resolvePNPlay_navy_cf", "as": "yssaril" },
+    { "wait": 1500 },
+    { "answer": { "kind": "tactical.move", "action": "move", "body": { "units": [ { "from": "313", "holder": "space", "unit": "cv", "count": 1 } ] } }, "as": "deepwrought", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}
