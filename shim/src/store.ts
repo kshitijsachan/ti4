@@ -605,8 +605,9 @@ export class Store {
    * `seq`, or null when the log no longer reaches back that far or global state changed meanwhile (assume anything
    * changed). For caches of derived per-channel / per-game state (SeatPilot.decide).
    */
-  changedSince(seq: number, globalGen: number): Set<string> | null {
-    if (globalGen !== this.globalGen) return null;
+  changedSince(seq: number, globalGen?: number): Set<string> | null {
+    // Without globalGen: the channels changed since seq, whatever global state changed meanwhile.
+    if (globalGen !== undefined && globalGen !== this.globalGen) return null;
     if (seq === this.changeSeq) return new Set();
     const first = this.changeLog[0];
     // Entries are coalesced (one entry per run of changes to the same channel, numbered by the run's last change).

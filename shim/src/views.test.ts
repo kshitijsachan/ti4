@@ -155,6 +155,11 @@ test("changedSince: the channels whose messages / channel changed after a change
     s.addUser("someone");
     assert.equal(s.changedSince(s.changeSequence, gen), null);
     assert.deepEqual(s.changedSince(s.changeSequence, s.globalGeneration), new Set());
+    // Without a generation: only the channels, whatever global state changed (Autopilot.syncGameCache).
+    assert.deepEqual(s.changedSince(mid), new Set([b.id]));
+    s.addUser("someone else");
+    s.insertMessage({ id: "14", channel_id: a.id, content: "z", timestamp: new Date().toISOString() } as never);
+    assert.deepEqual(s.changedSince(mid), new Set([a.id, b.id]));
   } finally {
     done();
   }
