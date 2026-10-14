@@ -84,7 +84,7 @@
     "save": [
       {
         "key": "stored.possiblyUsedRift",
-        "eq": ""
+        "exists": false
       },
       {
         "key": "stored.riftRollsMade",
