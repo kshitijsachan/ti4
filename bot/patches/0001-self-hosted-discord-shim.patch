@@ -286,10 +286,10 @@ index 5eb02e28a..0613db88e 100644
                  player.getRepresentationUnfogged() + ", use these buttons to pay the 3 resources for _Ubiquity_.",
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/AgendaCountButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/AgendaCountButtonHandler.java
 new file mode 100644
-index 000000000..c926b7fff
+index 000000000..477f4dfbe
 --- /dev/null
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/agenda/AgendaCountButtonHandler.java
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,138 @@
 +package ti4.discord.interactions.buttons.handlers.agenda;
 +
 +import java.util.ArrayList;
@@ -319,7 +319,8 @@ index 000000000..c926b7fff
 +        List<Button> buttons = new ArrayList<>();
 +        for (String planet : player.getExhaustedPlanets())
 +            buttons.add(Buttons.green("checksReady_" + planet, Helper.getPlanetRepresentation(planet, game)));
-+        buttons.add(Buttons.red("checksReadyDone", "Done Readying Planets"));
++        // The prompt's owner only (every player gets one: an unprefixed Done answered the newest, someone else's).
++        buttons.add(Buttons.red(player.factionButtonChecker() + "checksReadyDone", "Done Readying Planets"));
 +        AgendaRules.startCount(game, player, true, 3);
 +        return buttons;
 +    }
@@ -329,7 +330,7 @@ index 000000000..c926b7fff
 +        List<Button> buttons = new ArrayList<>();
 +        for (String planet : player.getReadiedPlanets())
 +            buttons.add(Buttons.red("revolutionExhaust_" + planet, Helper.getPlanetRepresentation(planet, game)));
-+        buttons.add(Buttons.gray("revolutionExhaustDone", "Done Exhausting"));
++        buttons.add(Buttons.gray(player.factionButtonChecker() + "revolutionExhaustDone", "Done Exhausting"));
 +        AgendaRules.startCount(game, player, false, player.getTechs().size());
 +        return buttons;
 +    }
@@ -2056,20 +2057,21 @@ index 592fe8368..21bc9b06d 100644
                  player.getCorrectChannel(),
                  player.getRepresentationUnfogged() + ", use these buttons to pay the 6 resources.",
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/tech/specific/IntegratedEconomyButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/tech/specific/IntegratedEconomyButtonHandler.java
-index be2c5483b..82ee5b799 100644
+index be2c5483b..ab33d01ba 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/tech/specific/IntegratedEconomyButtonHandler.java
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/tech/specific/IntegratedEconomyButtonHandler.java
-@@ -26,6 +26,10 @@ class IntegratedEconomyButtonHandler {
-         if (uH instanceof Planet plan) {
+@@ -27,6 +27,11 @@ class IntegratedEconomyButtonHandler {
              resources = plan.getResources();
          }
+         List<Button> buttons = Helper.getPlaceUnitButtons(event, player, game, tile, "integrated" + planet, "place");
 +        // audit-gaps-2 (TI4_RULES_TECH): the combined cost is capped at the planet's resources (was: message only).
++        // Set after getPlaceUnitButtons, which clears any earlier production's cap (gate35: set before, it was lost).
 +        if (tile != null && ti4.helpers.RulesGate.TECH.judges(game))
 +            ti4.helpers.ProductionCapHelper.set(
 +                    game, player, ti4.helpers.ProductionCapHelper.integratedEconomy(tile.getPosition(), resources));
-         List<Button> buttons = Helper.getPlaceUnitButtons(event, player, game, tile, "integrated" + planet, "place");
          String message = player.getRepresentation()
                  + " is using _Integrated Economy_ on " + Helper.getPlanetRepresentation(planet, game)
+                 + ". Use the buttons to produce units with a combined cost up to the planet (" + resources
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/unit/AssignHitsButtonHandlers.java b/src/main/java/ti4/discord/interactions/buttons/handlers/unit/AssignHitsButtonHandlers.java
 index 7f0a6c598..eb335cae9 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/unit/AssignHitsButtonHandlers.java
@@ -22463,10 +22465,10 @@ index 000000000..ab0d7886c
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatAbilities.java b/src/main/java/ti4/selfhost/engine/kinds/CombatAbilities.java
 new file mode 100644
-index 000000000..57cca1df4
+index 000000000..5627f242e
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatAbilities.java
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,161 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -22526,6 +22528,20 @@ index 000000000..57cca1df4
 +            v.put("name", "War Funding");
 +            v.put("window", "After you roll dice for a space combat round");
 +            v.put("blocked", holder == null ? "nobody holds War Funding" : null);
++            return v;
++        }
++        if (handlerId.startsWith("harrowBombard_")) {
++            // audit-gaps-2 (TI4_RULES_FACTIONS): L1Z1X Harrow, at the end of a ground combat round, once per round.
++            String[] a = handlerId.substring("harrowBombard_".length()).split("_", 2);
++            Player owner = null;
++            if (game != null) for (Player p : game.getRealPlayers()) if (p.hasAbility("harrow")) owner = p;
++            v.put("ability", "harrow");
++            v.put("source", "faction");
++            v.put("owner", owner == null ? null : owner.getFaction());
++            v.put("name", "Harrow");
++            v.put("window", "At the end of each round of ground combat");
++            v.put("blocked", game == null || owner == null || a.length < 2 ? null
++                    : ti4.service.combat.HarrowRules.refusal(game, owner, a[0], a[1]));
 +            return v;
 +        }
 +        String id = handlerId.split("_")[0];
@@ -23620,10 +23636,10 @@ index 000000000..bb2fb1453
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
 new file mode 100644
-index 000000000..0ce252427
+index 000000000..a27ef3256
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
-@@ -0,0 +1,202 @@
+@@ -0,0 +1,206 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -23756,6 +23772,16 @@ index 000000000..0ce252427
 +    /** A combat round may not be rolled while hits are owed there or before anti-fighter barrage (pbd203). */
 +    @Override
 +    public String validate(Game game, Player answering, Decision decision, String optionId) {
++        // audit-gaps-2 (TI4_RULES_FACTIONS): Harrow at the end of a ground combat round, once per round (HarrowRules).
++        // First: combat-ux types harrowBombard_ as a combat "ability" option, whose branch below returns early
++        // (gate35: Harrow was answered at the start of the combat).
++        String hh = optionId == null ? ""
++                : ti4.discord.interactions.routing.ComponentIdEnvelope.decode(optionId.split("#")[0]).handlerId()
++                        .replaceFirst("^FFCC_[^_]+_", "");
++        if (hh.startsWith("harrowBombard_")) {
++            String[] a = hh.substring("harrowBombard_".length()).split("_", 2);
++            return a.length < 2 ? null : ti4.service.combat.HarrowRules.refusal(game, answering, a[0], a[1]);
++        }
 +        Map<String, Object> av = StrategyCards.optionValue(decision, optionId);
 +        if (av != null && "ability".equals(av.get("action"))) {
 +            Map<String, Object> now = CombatAbilities.value(
@@ -23780,12 +23806,6 @@ index 000000000..0ce252427
 +            if (r != null) return "You cannot retreat now: " + r + ".";
 +        }
 +        String h = optionId == null ? null : ti4.discord.interactions.routing.ComponentIdEnvelope.decode(optionId).handlerId();
-+        // audit-gaps-2 (TI4_RULES_FACTIONS): Harrow at the end of a ground combat round, once per round (HarrowRules).
-+        String hh = h == null ? "" : h.replaceFirst("^FFCC_[^_]+_", "");
-+        if (hh.startsWith("harrowBombard_")) {
-+            String[] a = hh.substring("harrowBombard_".length()).split("_", 2);
-+            return a.length < 2 ? null : ti4.service.combat.HarrowRules.refusal(game, answering, a[0], a[1]);
-+        }
 +        String why = CombatSupport.rollBlocked(game, h, answering);
 +        if (why != null) return "Not yet: " + why + ".";
 +        // Rules audit (factions): L4 Disruptors / the Argent flagship forbid these SPACE CANNON rolls.
@@ -29441,10 +29461,10 @@ index 000000000..a3866b8f5
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/PaymentSpendKind.java b/src/main/java/ti4/selfhost/engine/kinds/PaymentSpendKind.java
 new file mode 100644
-index 000000000..1dbd3e576
+index 000000000..51f3c5181
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/PaymentSpendKind.java
-@@ -0,0 +1,415 @@
+@@ -0,0 +1,428 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -29493,6 +29513,19 @@ index 000000000..1dbd3e576
 +    @Override
 +    public int priority() {
 +        return 100;
++    }
++
++    /**
++     * audit-gaps-2 (TI4_RULES_AC): an action card's cost Done (deleteButtons_acCost) before the cost is paid is refused
++     * here as in DeleteButtonsButtonHandler (gate35: the bot refused it with an ephemeral, the engine answered it).
++     */
++    @Override
++    public String validate(
++            Game game, ti4.game.Player answering, ti4.selfhost.engine.EngineModels.Decision decision, String optionId) {
++        if (game == null || answering == null || optionId == null) return null;
++        String h = ti4.discord.interactions.routing.ComponentIdEnvelope.decode(optionId.split("#")[0]).handlerId();
++        if (h == null || !h.startsWith("deleteButtons_acCost")) return null;
++        return ti4.helpers.AcCosts.doneRefusal(game, answering);
 +    }
 +
 +    /**
