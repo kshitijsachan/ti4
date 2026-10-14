@@ -128,8 +128,25 @@ async function capturing<T>(client: ShimClient, fn: () => Promise<T>): Promise<{
   }
 }
 
-/** Stored values written only by engine display hooks (kinds/ExploreLog.java), absent from older recordings. */
-const ENGINE_DISPLAY_STORED = ["stored.engineExploreLog"];
+/**
+ * Stored values written only by engine display hooks (kinds/ExploreLog.java) or core-rule bookkeeping (rules audit:
+ * VoteRules cap, TurnRules discard prompt, TradeRules turn record, CustodiansRule debt, MovementRules card flags and
+ * rift record), absent from older recordings. A trailing "*" matches a prefix (per-faction keys).
+ */
+const ENGINE_DISPLAY_STORED = [
+  "stored.engineExploreLog",
+  "stored.voteCap*",
+  "stored.handLimitPrompted*",
+  "stored.transactedThisTurn",
+  "stored.custodiansOwed*",
+  "stored.navSuitePlayed*",
+  "stored.moveRulesUnmodelled",
+  "stored.riftRollsMade",
+];
+
+const storedKeyOf = (line: string) => line.slice(0, line.indexOf(" ") < 0 ? line.length : line.indexOf(" "));
+const matchesStored = (k: string, line: string) =>
+  k.endsWith("*") ? storedKeyOf(line).startsWith(k.slice(0, -1)) : line.startsWith(`${k} `);
 
 function compare(expected: string, actual: string, fork: Fork, map: ForkMap, ignore: string[]): SaveDiff[] {
   const reverse = new Map([...map.users].map(([o, f]) => [f, o]));
@@ -138,7 +155,7 @@ function compare(expected: string, actual: string, fork: Fork, map: ForkMap, ign
   // Display-only stored values the engine hooks added after a recording was made (ExploreLog): a recording without
   // them cannot show them, so they are only compared when the recorded save has them.
   for (const k of ENGINE_DISPLAY_STORED) {
-    if (!e.some((l) => l.startsWith(`${k} `))) a = a.filter((l) => !l.startsWith(`${k} `));
+    if (!e.some((l) => matchesStored(k, l))) a = a.filter((l) => !matchesStored(k, l));
   }
   return diffNormalized(e, a);
 }
