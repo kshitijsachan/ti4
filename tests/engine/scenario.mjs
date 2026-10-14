@@ -298,14 +298,14 @@ class Runner {
       return r.ok ? { ok: true, detail: `deleted ${d.kind} ${d.id}` } : { ok: false, error: `deleteDecision: ${r.status}` };
     }
     if (st.waitDecision) {
-      // { waitDecision: { kind, timeoutMs, open? }, as }: wait until a decision of that kind is open for the step's
-      // seat (open: false — until none is).
+      // { waitDecision: { kind, timeoutMs, open?, anyTarget? }, as }: wait until a decision of that kind is open for the
+      // step's seat (anyTarget: for any seat; open: false — until none is).
       const t = Date.now();
       const timeout = st.waitDecision.timeoutMs ?? 30000;
       const wantOpen = st.waitDecision.open !== false;
       while (Date.now() - t < timeout) {
         const ds = await openDecisions(this.fork.game).catch(() => null);
-        const d = ds?.find((x) => kindMatches(x.kind, st.waitDecision.kind) && (!x.target || x.target.userId === user));
+        const d = ds?.find((x) => kindMatches(x.kind, st.waitDecision.kind) && (st.waitDecision.anyTarget || !x.target || x.target.userId === user));
         const secs = ((Date.now() - t) / 1000).toFixed(0);
         if (ds && wantOpen && d) return { ok: true, detail: `${d.kind} ${d.id} open after ${secs} s` };
         if (ds && !wantOpen && !d) return { ok: true, detail: `no ${st.waitDecision.kind} open after ${secs} s` };
