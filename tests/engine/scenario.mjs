@@ -3,6 +3,9 @@
 //
 //   node tests/engine/scenario.mjs <scenario file|name> [--diff] [--via engine|press] [--forks pbdA,pbdB] [--keep]
 //        [--json] [--out report.json] [--quiet]
+//   --webdata: after every step, the bot's (revision-cached) web-data must agree with the engine state built from the
+//        save (round, phase, active player) and carry a new ETag whenever the save changed (no stale cache after a
+//        save, undo or rewind)
 //   --buttons [--values]: after every step print the prompts (decisions) it opened: kind, target, option ids (+ typed values)
 //   node tests/engine/scenario.mjs --list            scenarios in tests/engine/scenarios/
 //   node tests/engine/scenario.mjs --commands ac     the bot's slash commands (sub-commands, options) matching "ac"
@@ -497,6 +500,33 @@ class Runner {
   }
 }
 
+/* ------------------------------------------------------------------ web-data freshness (--webdata) */
+
+const lastTags = new Map();
+
+/** null when GET /web-data agrees with the engine's state of the same save; else what differs (one retry: async saves). */
+async function webdataStale(game, retry = true) {
+  const [res, st] = await Promise.all([fetch(`${BOT_URL}/api/public/game/${encodeURIComponent(game)}/web-data`), engineState(game)]);
+  if (!res.ok || !st) return `web-data ${res.status}, state ${st ? "ok" : "null"}`;
+  const w = await res.json();
+  const tag = res.headers.get("etag");
+  const color = st.players.find((p) => p.userId === st.activePlayer)?.color ?? null;
+  const diffs = [];
+  if (w.gameRound !== st.round) diffs.push(`round ${w.gameRound} vs ${st.round}`);
+  // web-data names phases "status.homework", the engine state the save's "statusHomework": compare letters only.
+  const phaseKey = (p) => String(p ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (phaseKey(w.gameState?.phase) !== phaseKey(st.phase) && st.phase !== "finished") diffs.push(`phase ${w.gameState?.phase} vs ${st.phase}`);
+  if ((w.gameState?.activePlayer ?? null) !== color && st.activePlayer) diffs.push(`active ${w.gameState?.activePlayer} vs ${color}`);
+  const prev = lastTags.get(game);
+  if (tag && prev && prev.version !== st.stateVersion && prev.tag === tag) diffs.push(`ETag ${tag} unchanged across saves ${prev.version} -> ${st.stateVersion}`);
+  if (diffs.length && retry) {
+    await sleep(1500);
+    return webdataStale(game, false);
+  }
+  lastTags.set(game, { tag, version: st.stateVersion });
+  return diffs.length ? diffs.join("; ") : null;
+}
+
 /* ------------------------------------------------------------------ expectations */
 
 function getPath(obj, path) {
@@ -663,7 +693,8 @@ for (const { phase, st } of all) {
     const out = await r.step(st).catch((e) => ({ ok: false, error: `${e.message}${e.cause ? ` (${e.cause.code ?? e.cause.message ?? e.cause})` : ""}${process.env.SCEN_STACK ? `\n${e.stack}` : ""}` }));
     if (flag("--buttons")) out.prompts = await r.newPrompts().catch((e) => [`(prompts: ${e.message})`]);
     const vs = r.invariants(`${phase}${n}`, JSON.stringify(st));
-    res.push({ fork: r.fork.game, via: r.label, ...out, invariants: vs.map((v) => `${v.id}: ${v.message}`) });
+    const stale = flag("--webdata") ? await webdataStale(r.fork.game).catch((e) => `check failed: ${e.message}`) : null;
+    res.push({ fork: r.fork.game, via: r.label, ...out, invariants: [...vs.map((v) => `${v.id}: ${v.message}`), ...(stale ? [`webdata.fresh: ${stale}`] : [])] });
   }
   let diffs;
   if (diffMode) {

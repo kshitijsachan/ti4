@@ -79,7 +79,8 @@ const sweepArchive = async (retriesLeft = 0): Promise<void> => {
 setTimeout(() => void sweepArchive(30), 120_000);
 setInterval(() => void sweepArchive(3), 6 * 3600_000);
 // Threads created before mention auto-join existed: replay it over stored messages (idempotent).
-for (const list of Object.values(store.state.messages)) for (const m of list) hub.autoJoinMentioned(m);
+// (Archived channels' messages stay on disk: their games are over.)
+for (const list of store.loadedMessageLists()) for (const m of list) hub.autoJoinMentioned(m);
 const lobby = new Lobby(hub, clients);
 // Seats flagged `autopilot` are played by the shim itself (solo testing).
 lobby.autopilot = new Autopilot(hub, clients, BOT_API);

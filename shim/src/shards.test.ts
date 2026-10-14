@@ -277,3 +277,69 @@ test("a save that dies after writing segments but before its shard: the store lo
   assert.deepEqual(readdirSync(join(crashed, "store", "segments")).sort(), readdirSync(join(crashed, "store", "segments")).filter((f) => !w.some((n) => f === `${n}.json`)).sort());
   same(JSON.stringify(new Store(d, { verifier: false }).state), JSON.stringify(s.state));
 });
+
+test("archived channels: messages stay on disk until read, survive saves untouched, come back identical, evict again", () => {
+  const dir = tmp();
+  const s1 = new Store(dir, { verifier: false });
+  const { a1, t1, b1 } = populate(s1);
+  for (let i = 0; i < TAIL_MAX + 5; i++) msg(s1, a1.id, `long ${i}`); // a1 gets sealed chunks and a tail
+  s1.state.channels[a1.id]._archived = true; // pbd1 ended: its channels and their threads are cold
+  s1.scheduleSave(a1.id);
+  s1.saveNow(true);
+  const expected = JSON.stringify(s1.state);
+  const filesBefore = readdirSync(join(dir, "store", "segments")).sort();
+
+  const s2 = new Store(dir, { verifier: false });
+  assert.ok(s2.isCold(a1.id) && s2.isCold(t1.id) && !s2.isCold(b1.id));
+  assert.deepEqual(Object.keys(s2.state.messages), Object.keys(s1.state.messages)); // order kept, nothing read
+  assert.ok(a1.id in s2.state.messages);
+  // Saves (also a full one) neither read nor rewrite cold channels; a channel mark rewrites only its shard.
+  s2.scheduleSave(a1.id);
+  const st = s2.saveNow(true);
+  assert.ok(s2.isCold(a1.id));
+  assert.equal(st.written.filter((n) => n.includes(".")).length, 0);
+  assert.deepEqual(readdirSync(join(dir, "store", "segments")).sort(), filesBefore);
+  // Whole-store scans that must not load: findMessageAnywhere skips, peek reads without keeping.
+  const last = s1.messages(a1.id).at(-1)!;
+  assert.equal(s2.findMessageAnywhere(last.id), undefined);
+  assert.equal(s2.peekMessages(a1.id).length, s1.messages(a1.id).length);
+  assert.ok(s2.isCold(a1.id));
+  // Reading it: identical state.
+  assert.equal(s2.findMessage(a1.id, last.id)?.content, last.content);
+  assert.ok(!s2.isCold(a1.id));
+  same(JSON.stringify(s2.state), expected);
+  // Evicted only after the idle time, and only while unchanged.
+  assert.equal(s2.evictArchived(Date.now(), 60_000), 0);
+  s2.messages(a1.id).at(-1)!.content = "edited, unmarked";
+  s2.evictArchived(Date.now() + 120_000, 60_000);
+  assert.ok(!s2.isCold(a1.id)); // differs from disk: kept (its thread, unchanged, went back)
+  assert.ok(s2.isCold(t1.id));
+  s2.scheduleSave(a1.id, s2.messages(a1.id).at(-1)!.id);
+  s2.saveNow();
+  assert.ok(s2.evictArchived(Date.now() + 120_000, 60_000) >= 1);
+  assert.ok(s2.isCold(a1.id));
+  // A holder of the evicted list changes it and marks it: the save takes that list back.
+  const held = s2.peekMessages(a1.id); // (the detached list itself)
+  held.push({ id: "1999999999999999999", channel_id: a1.id, content: "late", author: { id: s2.state.bot_id }, components: [] });
+  s2.scheduleSave(a1.id, "1999999999999999999");
+  s2.saveNow();
+  const s3 = new Store(dir, { verifier: false });
+  assert.equal(s3.messages(a1.id).at(-1)?.content, "late");
+  assert.equal(s3.messages(a1.id).at(-2)?.content, "edited, unmarked");
+  // Un-archived (a rewind past the end): read on demand, then never evicted.
+  s3.state.channels[a1.id]._archived = false;
+  s3.messages(a1.id);
+  assert.equal(s3.evictArchived(Date.now() + 3_600_000, 1), 0);
+  // Deleting a cold channel removes its segments with it.
+  const s4 = new Store(dir, { verifier: false });
+  assert.ok(s4.isCold(t1.id));
+  delete s4.state.channels[t1.id];
+  delete s4.state.messages[t1.id];
+  delete s4.state.thread_members[t1.id];
+  s4.scheduleSave();
+  s4.saveNow();
+  const s5 = new Store(dir, { verifier: false });
+  assert.ok(!(t1.id in s5.state.messages));
+  const reread = readShimState(dir);
+  assert.equal(reread.messages[a1.id].at(-1).content, "late");
+});
