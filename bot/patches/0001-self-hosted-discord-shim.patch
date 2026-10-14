@@ -1,17 +1,25 @@
 diff --git a/src/main/java/ti4/discord/JdaService.java b/src/main/java/ti4/discord/JdaService.java
-index b3bb870..fca05dd 100644
+index b3bb870..25a45f6 100644
 --- a/src/main/java/ti4/discord/JdaService.java
 +++ b/src/main/java/ti4/discord/JdaService.java
-@@ -148,7 +148,7 @@ public class JdaService {
+@@ -147,8 +147,14 @@ public class JdaService {
+ 
      public static void startJdaAndRegisterListeners(String[] args) {
          BotLogger.info("STARTING JDA");
-         RestAction.setDefaultTimeout(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+-        RestAction.setDefaultTimeout(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 -        jda = JDABuilder.createDefault(args[0])
++        // Self-hosted: a frozen shim (soak pbd1204: 115 s under load) must not make JDA drop the requests queued behind
++        // the stalled one ("RestAction has timed out"); ShimRetryInterceptor holds a post for up to 5 min.
++        RestAction.setDefaultTimeout(
++                System.getenv("DISCORD_API_BASE") != null
++                        ? ti4.selfhost.ShimRetryInterceptor.MAX_STALL_WAIT_MS / 1000 + 60
++                        : DISCORD_REQUEST_TIMEOUT_SECONDS,
++                TimeUnit.SECONDS);
 +        JDABuilder builder = JDABuilder.createDefault(args[0])
                  .setEventPool(EVENT_EXECUTOR)
                  .enableIntents(
                          // Needed to listen for joins/leaves
-@@ -165,8 +165,28 @@ public class JdaService {
+@@ -165,8 +171,28 @@ public class JdaService {
                  .setChunkingFilter(ChunkingFilter.ALL)
                  .disableCache(DISABLED_JDA_CACHE_FLAGS)
                  // This allows us to use our own ShutdownHook, created below
@@ -3030,7 +3038,7 @@ index 0000000..3394a7d
 +    }
 +}
 diff --git a/src/main/java/ti4/helpers/AgendaHelper.java b/src/main/java/ti4/helpers/AgendaHelper.java
-index 9b27bd5..cb00433 100644
+index 9b27bd5..83841f7 100644
 --- a/src/main/java/ti4/helpers/AgendaHelper.java
 +++ b/src/main/java/ti4/helpers/AgendaHelper.java
 @@ -907,7 +907,7 @@ public final class AgendaHelper {
@@ -3097,6 +3105,15 @@ index 9b27bd5..cb00433 100644
                                          tile.getRepresentationForButtons(game, winningR));
                                  buttons.add(starTile);
                              }
+@@ -1543,7 +1544,7 @@ public final class AgendaHelper {
+         return new int[] {voteCount, hasXxchaHero, hasXxchaAlliance};
+     }
+ 
+-    private static List<Player> getVotingOrder(Game game) {
++    public static List<Player> getVotingOrder(Game game) {
+         List<Player> orderList = Helper.getSpeakerOrFullPriorityOrder(game);
+         String speakerName = game.getSpeakerUserID();
+         Optional<Player> optSpeaker = orderList.stream()
 @@ -3289,7 +3290,7 @@ public final class AgendaHelper {
          }
          if (nekro != null && players.contains(nekro)) {
@@ -7006,37 +7023,79 @@ index 0000000..99c695d
 +}
 diff --git a/src/main/java/ti4/selfhost/ShimRetryInterceptor.java b/src/main/java/ti4/selfhost/ShimRetryInterceptor.java
 new file mode 100644
-index 0000000..35c108f
+index 0000000..8b3306a
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/ShimRetryInterceptor.java
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,127 @@
 +package ti4.selfhost;
 +
 +import java.io.IOException;
++import java.io.InterruptedIOException;
 +import java.net.ConnectException;
++import java.util.UUID;
++import java.util.regex.Pattern;
++import net.dv8tion.jda.api.utils.data.DataObject;
 +import okhttp3.Interceptor;
++import okhttp3.MediaType;
++import okhttp3.Request;
++import okhttp3.RequestBody;
 +import okhttp3.Response;
++import okio.Buffer;
 +import ti4.logging.BotLogger;
 +
 +/**
-+ * Self-hosted only: the shim restarts on deploys. A REST call that cannot connect at all (nothing was sent, so it is
-+ * safe to repeat) is retried with backoff for up to ~60s instead of being dropped, so the game's messages stay in sync.
++ * Self-hosted only: the shim restarts on deploys and can freeze under machine load (soak pbd1204: its event loop
++ * stalled 115 s at load 55; the next player's "it is now your turn" post timed out and was never retried, the game
++ * idled 30 min).
++ * <ul>
++ *   <li>A REST call that cannot connect at all (nothing was sent, so it is safe to repeat) is retried with backoff for
++ *   up to ~60 s (a message post or edit: up to {@link #MAX_STALL_WAIT_MS}) instead of being dropped.</li>
++ *   <li>A message post or edit that was sent but got no answer (read timeout, connection reset: the shim may have
++ *   stored it, or not) is retried with backoff for up to {@link #MAX_STALL_WAIT_MS} until the shim answers. Posts are
++ *   made idempotent first: a JSON message create without a nonce gets {@code nonce} + {@code enforce_nonce} (Discord
++ *   semantics; the shim answers a repeat with the message the first attempt created), so a post that did land is not
++ *   posted twice. Edits (PATCH) are idempotent as they are.</li>
++ * </ul>
++ * JdaService also lengthens JDA's per-request deadline in this mode, so the requests queued behind a stalled one are
++ * not dropped as "RestAction has timed out" while it waits. Prompts lost anyway are re-posted by the engine's
++ * PromptRecovery (the waiting player's turn / pick / vote prompt).
 + */
 +public final class ShimRetryInterceptor implements Interceptor {
 +    private static final long MAX_WAIT_MS = 60_000;
++    /** How long a message post / edit waits for a frozen or restarting shim before it is given up. */
++    public static final long MAX_STALL_WAIT_MS = 5 * 60_000;
++
++    private static final Pattern MESSAGE_CREATE = Pattern.compile("^/api/v\\d+/channels/\\d+/messages/?$");
++    private static final Pattern MESSAGE_EDIT = Pattern.compile("^/api/v\\d+/channels/\\d+/messages/\\d+/?$");
 +
 +    @Override
 +    public Response intercept(Chain chain) throws IOException {
++        Request request = withNonce(chain.request());
++        boolean retrySafe = retrySafe(request);
 +        long start = System.currentTimeMillis();
 +        long delay = 250;
 +        for (int attempt = 1; ; attempt++) {
 +            try {
-+                return chain.proceed(chain.request());
-+            } catch (ConnectException e) {
-+                if (System.currentTimeMillis() - start + delay > MAX_WAIT_MS) throw e;
++                Response res = chain.proceed(request);
++                if (attempt > 1) {
++                    BotLogger.info("Shim answered " + request.method() + " " + request.url().encodedPath()
++                            + " after " + attempt + " attempts (" + (System.currentTimeMillis() - start) + " ms)");
++                }
++                return res;
++            } catch (IOException e) {
++                boolean connect = e instanceof ConnectException;
++                if (!connect && (!retrySafe || chain.call().isCanceled() || isInterrupt(e))) throw e;
++                long budget = retrySafe ? MAX_STALL_WAIT_MS : MAX_WAIT_MS;
++                if (System.currentTimeMillis() - start + delay > budget) {
++                    if (!retrySafe) throw e;
++                    BotLogger.warning("Shim did not answer " + request.method() + " " + request.url().encodedPath()
++                            + " in " + attempt + " attempts; giving it up (" + e + ")");
++                    // Not a SocketException: JDA would send it once more with a fresh nonce (a possible double post).
++                    throw new IOException("shim did not answer after " + attempt + " attempts", e);
++                }
 +                if (attempt == 1) {
-+                    BotLogger.info("Shim unreachable (" + e.getMessage() + "); retrying "
-+                            + chain.request().method() + " " + chain.request().url().encodedPath());
++                    BotLogger.info("Shim " + (connect ? "unreachable" : "did not answer") + " (" + e + "); retrying "
++                            + request.method() + " " + request.url().encodedPath());
 +                }
 +                try {
 +                    Thread.sleep(delay);
@@ -7044,8 +7103,54 @@ index 0000000..35c108f
 +                    Thread.currentThread().interrupt();
 +                    throw e;
 +                }
-+                delay = Math.min(delay * 2, 4_000);
++                delay = Math.min(delay * 2, retrySafe ? 8_000 : 4_000);
 +            }
++        }
++    }
++
++    /** A cancelled call / interrupted thread (not a socket timeout, which is also an InterruptedIOException). */
++    private static boolean isInterrupt(IOException e) {
++        return e instanceof InterruptedIOException
++                && !(e instanceof java.net.SocketTimeoutException)
++                && Thread.currentThread().isInterrupted();
++    }
++
++    /** Message posts carrying enforce_nonce (made so by withNonce) and message edits may be sent again. */
++    static boolean retrySafe(Request request) {
++        String path = request.url().encodedPath();
++        // JSON bodies only: a multipart body (files) may be readable once.
++        if ("PATCH".equals(request.method())) return MESSAGE_EDIT.matcher(path).matches() && jsonBody(request) != null;
++        if (!"POST".equals(request.method()) || !MESSAGE_CREATE.matcher(path).matches()) return false;
++        DataObject json = jsonBody(request);
++        return json != null && json.getBoolean("enforce_nonce", false) && json.hasKey("nonce") && !json.isNull("nonce");
++    }
++
++    /** A JSON message create without a nonce gets a fresh one with enforce_nonce (repeats return the first message). */
++    static Request withNonce(Request request) {
++        if (!"POST".equals(request.method()) || !MESSAGE_CREATE.matcher(request.url().encodedPath()).matches())
++            return request;
++        DataObject json = jsonBody(request);
++        if (json == null) return request;
++        if (json.hasKey("nonce") && !json.isNull("nonce")) return request; // the caller's own nonce (eph:<user>, …)
++        json.put("nonce", "rt" + UUID.randomUUID().toString().replace("-", "").substring(0, 23));
++        json.put("enforce_nonce", true);
++        return request.newBuilder()
++                .method(request.method(), RequestBody.create(json.toJson(), request.body().contentType()))
++                .build();
++    }
++
++    private static DataObject jsonBody(Request request) {
++        RequestBody body = request.body();
++        if (body == null || body.contentType() == null) return null;
++        MediaType t = body.contentType();
++        if (!"application".equals(t.type()) || !"json".equals(t.subtype())) return null;
++        try {
++            Buffer buf = new Buffer();
++            body.writeTo(buf);
++            String text = buf.readUtf8();
++            return text.trim().startsWith("{") ? DataObject.fromJson(text) : null;
++        } catch (Exception e) {
++            return null;
 +        }
 +    }
 +}
@@ -8657,10 +8762,10 @@ index 0000000..53c264b
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionRebuild.java b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
 new file mode 100644
-index 0000000..efa3dbe
+index 0000000..ccde157
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,241 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -8700,6 +8805,11 @@ index 0000000..efa3dbe
 +    private static final Set<String> rebuilt = ConcurrentHashMap.newKeySet();
 +    private static volatile boolean startupDone;
 +    private static final java.util.Map<String, Long> lastAttempt = new ConcurrentHashMap<>();
++
++    /** The game's registry was re-read from the posted messages since startup (so a missing decision is really missing). */
++    public static boolean isRebuilt(String gameName) {
++        return rebuilt.contains(gameName);
++    }
 +
 +    /**
 +     * Before the startup pass reaches a game (it takes a minute or more with ~80 live games), a reader would see an
@@ -9164,10 +9274,10 @@ index 0000000..af65f22
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 0000000..e85edbf
+index 0000000..4508c4d
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,258 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -9203,6 +9313,20 @@ index 0000000..e85edbf
 +    public static void registerListeners(JDA jda) {
 +        if (!ENABLED) return;
 +        jda.addEventListener(new InteractionTracker());
++        // A prompt deleted by anyone but the bot's own REST call (a player, the shim, an admin tool) closes its
++        // decision too, so PromptRecovery sees the waiting player's prompt as missing.
++        jda.addEventListener(new net.dv8tion.jda.api.hooks.ListenerAdapter() {
++            @Override
++            public void onMessageDelete(@javax.annotation.Nonnull net.dv8tion.jda.api.events.message.MessageDeleteEvent e) {
++                DecisionRegistry.closeByMessage(e.getMessageId(), "deleted");
++            }
++
++            @Override
++            public void onMessageBulkDelete(
++                    @javax.annotation.Nonnull net.dv8tion.jda.api.events.message.MessageBulkDeleteEvent e) {
++                for (String id : e.getMessageIds()) DecisionRegistry.closeByMessage(id, "deleted");
++            }
++        });
 +        ti4.selfhost.engine.interaction.NativeCoverage.warmUp();
 +        BotLogger.info("engine: decision capture on (" + DecisionKinds.all().size() + " typed kinds)");
 +        DecisionRebuild.scheduleStartupRebuild();
@@ -9474,10 +9598,10 @@ index 0000000..b1f3f8f
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/EngineController.java b/src/main/java/ti4/selfhost/engine/EngineController.java
 new file mode 100644
-index 0000000..3574fa2
+index 0000000..5053ac3
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/EngineController.java
-@@ -0,0 +1,271 @@
+@@ -0,0 +1,286 @@
 +package ti4.selfhost.engine;
 +
 +import java.io.IOException;
@@ -9571,6 +9695,21 @@ index 0000000..3574fa2
 +        if (!trusted(auth)) return unauthorized();
 +        String step = PromptRecovery.recover(game);
 +        return ok(Map.of("recovered", step == null ? "nothing missing" : step));
++    }
++
++    /**
++     * Re-posts, in every live game, the waiting player's prompt (turn menu / strategy-card pick / agenda vote) when no
++     * open decision offers it (see PromptRecovery). The shim calls this after the bot's gateway reconnects: posts made
++     * while the shim was unreachable or frozen may never have landed. 503 until the bot is ready.
++     */
++    @PostMapping("/api/public/selfhost/engine/recover-all")
++    public ResponseEntity<?> recoverAll(
++            @RequestParam(required = false) String reason,
++            @RequestHeader(value = "Authorization", required = false) String auth) {
++        if (!trusted(auth)) return unauthorized();
++        if (!JdaService.isReadyToReceiveCommands())
++            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", "bot not ready"));
++        return ok(Map.of("recovered", PromptRecovery.recoverAll(reason == null ? "recover-all" : reason)));
 +    }
 +
 +    /** Re-reads the game's recent bot messages and re-captures every prompt still on screen (after a restart). */
@@ -11224,10 +11363,10 @@ index 0000000..b069fe6
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/PromptRecovery.java b/src/main/java/ti4/selfhost/engine/PromptRecovery.java
 new file mode 100644
-index 0000000..f641b0f
+index 0000000..ff49c7d
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/PromptRecovery.java
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,405 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -11261,6 +11400,12 @@ index 0000000..f641b0f
 + * homework prompt ("Ready For …" + command tokens), the one that stalled soak games (pbd113). Manual:
 + * POST /api/public/selfhost/engine/{game}/recover; automatic: a sweep every 2 min re-posts a prompt missing for 5 min
 + * (at most once per 15 min per game).
++ *
++ * <p>The waiting player's own prompt — the action-phase turn menu, the strategy-card pick, the agenda vote — is checked
++ * every {@link #FAST_TICK_MS}: when the active player has had no such open decision (and no step of their own under
++ * way) for {@link #ACTIVE_MISSING_MS}, it is re-posted (soak pbd1204: the shim froze 115 s under load, the next
++ * player's "it is now your turn" post timed out and the game idled 30 min). POST
++ * /api/public/selfhost/engine/recover-all (the shim, on gateway reconnect) runs the same check for every live game now.
 + */
 +public final class PromptRecovery {
 +    private static final long MISSING_FOR_MS = TimeUnit.MINUTES.toMillis(5);
@@ -11268,6 +11413,18 @@ index 0000000..f641b0f
 +    private static final Map<String, Long> lastRecovery = new ConcurrentHashMap<>();
 +    /** game → when the sweep first saw the step missing. */
 +    private static final Map<String, Long> missingSince = new ConcurrentHashMap<>();
++
++    /** How often the active player's prompt is checked. */
++    static final long FAST_TICK_MS = 10_000L;
++    /** The active player has been without their prompt this long (and their turn started at least this long ago). */
++    static final long ACTIVE_MISSING_MS = 60_000L;
++    /** Between two re-posts of the same player's prompt for the same turn; at most MAX_ACTIVE_REPOSTS per turn. */
++    private static final long ACTIVE_COOLDOWN_MS = 120_000L;
++    private static final int MAX_ACTIVE_REPOSTS = 3;
++    /** game → when the fast check first saw the active player's prompt missing. */
++    private static final Map<String, Long> activeMissingSince = new ConcurrentHashMap<>();
++    /** game|player|turn start → re-posts done for that turn, and when the last one was. */
++    private static final Map<String, long[]> activeReposts = new ConcurrentHashMap<>();
 +
 +    private PromptRecovery() {}
 +
@@ -11324,7 +11481,10 @@ index 0000000..f641b0f
 +        ExecutionLockManager.lock(gameName, ExecutionLockType.WRITE);
 +        try {
 +            String step = missingStep(game);
-+            if (step == null) return null;
++            if (step == null) {
++                // Manual / reconnect recovery: the waiting player's own prompt (no age threshold beyond a fresh turn).
++                return recoverActive(game, 15_000L, "manual");
++            }
 +            if ("status_homework".equals(step)) postHomework(game);
 +            if ("draft_board".equals(step)) {
 +                try {
@@ -11341,6 +11501,208 @@ index 0000000..f641b0f
 +        } finally {
 +            ExecutionLockManager.unlock(gameName, ExecutionLockType.WRITE);
 +        }
++    }
++
++    // ------------------------------------------------------------------ the waiting player's own prompt
++
++    /**
++     * A step of an action (or an effect) the player started this turn: while one is open the turn menu is not owed.
++     * Not the reminders / hand trays turnStart itself posts (cards-info buttons, action_card.play, …).
++     */
++    private static final java.util.regex.Pattern BUSY = java.util.regex.Pattern.compile(
++            "^(component\\.action|action_card\\.(resolve|step|target)|promissory_note\\.resolve|payment\\.spend"
++                    + "|tactical\\.|combat\\.|production\\.|explore\\.|tech\\.|choose\\.|relic\\.|te\\."
++                    + "|strategy_card\\.(resolve|construction_|diplomacy_system|politics_|strategic_action))");
++
++    /** Kinds that are "the active player's prompt" for each phase; one open of them (theirs or untargeted) suffices. */
++    private static boolean promptKind(String phase, String kind) {
++        if (kind == null) return false;
++        return switch (phase) {
++            case "action" -> "turn.action".equals(kind);
++            case "strategy" -> "strategy_card.pick".equals(kind);
++            case "agendaVoting" -> kind.startsWith("agenda.");
++            default -> false;
++        };
++    }
++
++    /**
++     * Which prompt the active player is owed but has no open decision for: "turn_prompt", "sc_pick", "agenda_vote", or
++     * null. Conservative: nothing while the registry was not re-read since startup, while the player has any open
++     * decision of their own opened since their turn began (they are doing something), or mid tactical action / primary.
++     */
++    static String missingActivePrompt(Game game, long minTurnAgeMs) {
++        if (game == null || game.isHasEnded()) return null;
++        String phase = game.getPhaseOfGame() == null ? "" : game.getPhaseOfGame();
++        if (!"action".equals(phase) && !"strategy".equals(phase) && !"agendaVoting".equals(phase)) return null;
++        Player p = game.getActivePlayer();
++        if (p == null || !p.isRealPlayer() || p.isNpc() || p.isEliminated()) return null;
++        if (!DecisionRebuild.isRebuilt(game.getName())) return null;
++        long turnStart = game.getLastActivePlayerChange() == null ? 0 : game.getLastActivePlayerChange().getTime();
++        if (System.currentTimeMillis() - turnStart < minTurnAgeMs) return null;
++        for (Decision d : DecisionRegistry.openDecisions(game.getName())) {
++            boolean theirs = d.target() != null && p.getUserID().equals(d.target().userId());
++            if (promptKind(phase, d.kind()) && (theirs || d.target() == null)) return null;
++            if (theirs && d.kind() != null && d.createdAt() >= turnStart && BUSY.matcher(d.kind()).find()) return null; // mid-step
++        }
++        switch (phase) {
++            case "action" -> {
++                if (p.isPassed()) return null;
++                if (ScFollowGate.midAction(game, p) != null) return null;
++                return "turn_prompt";
++            }
++            case "strategy" -> {
++                if (p.getSCs().size() >= game.getStrategyCardsPerPlayer()) return null;
++                return "sc_pick";
++            }
++            case "agendaVoting" -> {
++                if (game.getCurrentAgendaInfo() == null) return null;
++                // Already voted, or the last in line (after them the vote is over: the resolve step is owed, not a vote).
++                for (String v : game.getCurrentAgendaVotes().values())
++                    for (String part : v.split(";"))
++                        if (part.toLowerCase().startsWith(p.getFaction().toLowerCase() + "_")) return null;
++                List<Player> order = ti4.helpers.AgendaHelper.getVotingOrder(game);
++                if (!order.isEmpty() && order.getLast() == p) return null;
++                return "agenda_vote";
++            }
++            default -> {
++                return null;
++            }
++        }
++    }
++
++    /** Cheap pre-filter on the managed game (no load): an active player whose prompt is not open. */
++    private static boolean maybeMissingActive(ManagedGame mg, long now, long minTurnAgeMs) {
++        String active = mg.getActivePlayerId();
++        if (active == null || mg.isHasEnded()) return false;
++        if (now - mg.getLastActivePlayerChange() < minTurnAgeMs) return false;
++        for (Decision d : DecisionRegistry.openDecisions(mg.getName())) {
++            if (d.target() != null && d.kind() != null && active.equals(d.target().userId())
++                    && ("turn.action".equals(d.kind()) || "strategy_card.pick".equals(d.kind())
++                            || d.kind().startsWith("agenda."))) return false;
++        }
++        return true;
++    }
++
++    /**
++     * Re-posts the active player's missing prompt (caller holds the game's write lock or takes none: posting only
++     * reads the game). Throttled per turn; returns the step re-posted, or null.
++     */
++    private static String recoverActive(Game game, long minTurnAgeMs, String why) {
++        String step = missingActivePrompt(game, minTurnAgeMs);
++        if (step == null) return null;
++        Player p = game.getActivePlayer();
++        long turnStart = game.getLastActivePlayerChange() == null ? 0 : game.getLastActivePlayerChange().getTime();
++        String key = game.getName() + "|" + p.getUserID() + "|" + turnStart;
++        long now = System.currentTimeMillis();
++        long[] done = activeReposts.computeIfAbsent(key, k -> new long[] {0, 0});
++        if (done[0] >= MAX_ACTIVE_REPOSTS || now - done[1] < ACTIVE_COOLDOWN_MS) return null;
++        done[0]++;
++        done[1] = now;
++        switch (step) {
++            case "turn_prompt" -> postTurnPrompt(game, p);
++            case "sc_pick" -> postScPick(game, p);
++            case "agenda_vote" -> postAgendaVote(game, p);
++            default -> {}
++        }
++        activeMissingSince.remove(game.getName());
++        BotLogger.warning("engine: PROMPT RECOVERY (" + why + ") re-posted the missing " + step + " for "
++                + p.getFaction() + " in " + game.getName() + " (phase " + game.getPhaseOfGame() + ", turn started "
++                + (now - turnStart) / 1000 + " s ago, re-post " + done[0] + "/" + MAX_ACTIVE_REPOSTS + ")");
++        EngineMetrics.count("recover." + step);
++        return step;
++    }
++
++    /** Runs the active-player check for every live game now (the shim calls this after the gateway reconnects). */
++    public static Map<String, String> recoverAll(String why) {
++        Map<String, String> out = new java.util.LinkedHashMap<>();
++        if (!JdaService.isReadyToReceiveCommands()) return out;
++        long now = System.currentTimeMillis();
++        for (ManagedGame mg : GameManager.getManagedGames()) {
++            if (mg.isHasEnded() || now - mg.getLastModifiedDate() > TimeUnit.HOURS.toMillis(24)) continue;
++            try {
++                // A game not re-read since startup yet is skipped (missingActivePrompt), not rebuilt here: right after a
++                // bot restart the startup pass is doing that.
++                if (!maybeMissingActive(mg, now, 15_000L)) continue;
++                String step = recover(mg.getName());
++                if (step != null) out.put(mg.getName(), step);
++            } catch (Exception e) {
++                BotLogger.error("engine: " + why + " recovery failed for " + mg.getName(), e);
++            }
++        }
++        if (!out.isEmpty()) BotLogger.warning("engine: PROMPT RECOVERY (" + why + ") re-posted " + out);
++        return out;
++    }
++
++    /** The fast check: one pass over the live games (see FAST_TICK_MS). */
++    private static void activeSweep() {
++        long now = System.currentTimeMillis();
++        for (ManagedGame mg : GameManager.getManagedGames()) {
++            if (mg.isHasEnded() || now - mg.getLastModifiedDate() > TimeUnit.HOURS.toMillis(24)) continue;
++            try {
++                if (!maybeMissingActive(mg, now, ACTIVE_MISSING_MS)) {
++                    activeMissingSince.remove(mg.getName());
++                    continue;
++                }
++                Game game = mg.getGame();
++                if (missingActivePrompt(game, ACTIVE_MISSING_MS) == null) {
++                    activeMissingSince.remove(mg.getName());
++                    continue;
++                }
++                long since = activeMissingSince.computeIfAbsent(mg.getName(), k -> now);
++                // Seen missing on two looks at least FAST_TICK_MS apart: not a prompt being posted right now.
++                if (now - since < FAST_TICK_MS) continue;
++                ExecutionLockManager.lock(mg.getName(), ExecutionLockType.WRITE);
++                try {
++                    recoverActive(mg.getGame(), ACTIVE_MISSING_MS, "sweep"); // the current instance, under the lock
++                } finally {
++                    ExecutionLockManager.unlock(mg.getName(), ExecutionLockType.WRITE);
++                }
++            } catch (Exception e) {
++                BotLogger.error("engine: active prompt recovery failed for " + mg.getName(), e);
++            }
++        }
++        activeReposts.entrySet().removeIf(e -> now - e.getValue()[1] > TimeUnit.HOURS.toMillis(6));
++    }
++
++    /**
++     * The turn menu as StartTurnService.turnStart posts it (getStartOfTurnButtons; after an action this turn, the
++     * "end turn or another action" menu), without the turn start's side effects (no turn count, no start-of-turn
++     * abilities).
++     */
++    private static void postTurnPrompt(Game game, Player p) {
++        boolean doneAction = !game.getStoredValue("currentActionSummary" + p.getFaction()).isEmpty()
++                || !game.getStoredValue(ti4.helpers.ButtonHelperTacticalAction.TACTICAL_ACTION_LOGGED).isEmpty();
++        List<Button> buttons = ti4.service.turn.StartTurnService.getStartOfTurnButtons(p, game, doneAction, null);
++        String text = p.getRepresentationUnfogged() + ", it is your turn (re-posted: the earlier turn prompt was lost)."
++                + " Use buttons to do your turn.";
++        var channel = game.isFowMode() ? p.getPrivateChannel() : game.getMainGameChannel();
++        ti4.message.MessageHelper.sendMessageToChannelWithButtons(channel, text, buttons);
++    }
++
++    /** The strategy-card pick, as StartPhaseService / PickStrategyCardService post it. */
++    private static void postScPick(Game game, Player p) {
++        String text = p.getRepresentationUnfogged() + " is up to pick a strategy card (re-posted: the earlier prompt"
++                + " was lost). Please use the buttons to pick a strategy card.";
++        ti4.message.MessageHelper.sendMessageToChannelWithButtons(
++                p.getCorrectChannel(), text, ti4.helpers.Helper.getRemainingSCButtons(game, p));
++    }
++
++    /** The "up to vote" prompt, as AgendaHelper.startTheVoting / resolvingAnAgendaVote post it. */
++    private static void postAgendaVote(Game game, Player p) {
++        String pFaction = p.getFlexibleDisplayName();
++        String checker = "FFCC_" + p.getFaction() + "_";
++        Button abstain = p.hasAbility("future_sight") && game.getStoredValue("executiveOrder").isEmpty()
++                ? Buttons.red(checker + "resolveAgendaVote_0", pFaction + " Choose To Abstain (You Have Future Sight)")
++                : Buttons.red(checker + "resolveAgendaVote_0", pFaction + " Choose To Abstain");
++        List<Button> buttons = List.of(
++                Buttons.blue(checker + "vote", pFaction + " Choose To Vote"),
++                abstain,
++                Buttons.gray("forceAbstainForPlayer_" + p.getFaction(), "(For Others) Abstain For This Player"));
++        String text = ti4.helpers.AgendaSummaryHelper.getSummaryOfVotes(game, true) + "\n" + p.getRepresentationUnfogged()
++                + " up to vote (re-posted: the earlier prompt was lost)! Please use the buttons to choose the outcome"
++                + " you wish to vote for.";
++        var channel = game.isFowMode() ? p.getPrivateChannel() : p.getCorrectChannel();
++        ti4.message.MessageHelper.sendMessageToChannelWithButtons(channel, text, buttons);
 +    }
 +
 +    /** The status homework prompt, as StartPhaseService.startStatusHomework posts it (buttons only, no side effects). */
@@ -11363,13 +11725,24 @@ index 0000000..f641b0f
 +                        new GameMessage(message.getId(), GameMessageType.STATUS_END, game.getLastModifiedDate())));
 +    }
 +
-+    /** Started from Engine.registerListeners: every 2 min, re-post prompts missing for MISSING_FOR_MS. */
++    /**
++     * Started from Engine.registerListeners: every FAST_TICK_MS the active player's prompt (activeSweep); every 2 min,
++     * re-post other prompts missing for MISSING_FOR_MS.
++     */
 +    static void scheduleSweep() {
 +        Thread.ofVirtual().name("engine-recover").start(() -> {
 +            try {
++                long lastSlow = System.currentTimeMillis();
 +                while (true) {
-+                    Thread.sleep(TimeUnit.MINUTES.toMillis(2));
++                    Thread.sleep(FAST_TICK_MS);
 +                    if (!JdaService.isReadyToReceiveCommands()) continue;
++                    try {
++                        activeSweep();
++                    } catch (Exception e) {
++                        BotLogger.error("engine: active prompt sweep failed", e);
++                    }
++                    if (System.currentTimeMillis() - lastSlow < TimeUnit.MINUTES.toMillis(2)) continue;
++                    lastSlow = System.currentTimeMillis();
 +                    long now = System.currentTimeMillis();
 +                    for (ManagedGame mg : GameManager.getManagedGames()) {
 +                        if (mg.isHasEnded() || now - mg.getLastModifiedDate() > TimeUnit.HOURS.toMillis(24)) continue;
