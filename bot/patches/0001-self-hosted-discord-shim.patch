@@ -6663,10 +6663,10 @@ index 000000000..c940894df
 +}
 diff --git a/src/main/java/ti4/helpers/MovementRules.java b/src/main/java/ti4/helpers/MovementRules.java
 new file mode 100644
-index 000000000..216db4702
+index 000000000..79efadbcb
 --- /dev/null
 +++ b/src/main/java/ti4/helpers/MovementRules.java
-@@ -0,0 +1,341 @@
+@@ -0,0 +1,346 @@
 +package ti4.helpers;
 +
 +import java.util.ArrayList;
@@ -6704,7 +6704,10 @@ index 000000000..216db4702
 + *   and fighters that cannot move on their own must be within reach of a ship with capacity that leaves their system
 + *   or passes it. Effects the bot does not model (Lost Star Chart, Nav Suite, Silence of Space, Saar agent, Empyrean
 + *   Aetherpassage / Void Tethers, Firmament agent, Nomad / Deepwrought / Firmament flagships, L1Z1X hero, homebrew)
-+ *   turn the range check into a warning: nothing is refused that the player may legally do.</li>
++ *   turn the range check into a warning: nothing is refused that the player may legally do. Distances come from
++ *   CheckDistanceHelper / FoWHelper adjacency, which models hyperlanes, wormholes incl. tokens (Wormhole Generator,
++ *   Creuss gate / flagship delta, Quantum Entanglement, Wormhole Reconstruction, Lazax Gate Folding, Mallice), active
++ *   breaches (Crimson Rebellion) and ingress / egress; an origin it cannot reach at all is never refused.</li>
 + *   <li><b>Gravity rifts</b> (LRR 41): ships that move out of a gravity rift, or could only reach the active system
 + *   through one, roll (1-3: destroyed) without a choice; see {@link #forcedRiftRolls}.</li>
 + * </ul>
@@ -6875,7 +6878,9 @@ index 000000000..216db4702
 +            if (!ship(m, mv.key()) || m.getMoveValue() <= 0) continue;
 +            int max = maxMove(game, owner, from, dest, m, fastest);
 +            int d = distance(game, owner, mv.from(), dest.getPosition());
-+            if (d < 0) continue;
++            // Unknown (negative) or unreachable by the bot's own map (>= 90: an adjacency it does not see): never
++            // refused - the original printed only a warning there.
++            if (d < 0 || d >= 90) continue;
 +            if (d > max)
 +                return m.getName() + " from " + mv.from() + " is " + (d >= 90 ? "out of reach" : d + " systems away")
 +                        + "; its move value with every bonus you could apply is " + max + ".";
@@ -6889,7 +6894,7 @@ index 000000000..216db4702
 +            UnitType t = mv.key().unitType();
 +            if (t != UnitType.Infantry && t != UnitType.Mech && t != UnitType.Fighter) continue;
 +            int d = distance(game, owner, mv.from(), dest.getPosition());
-+            if (d < 0) continue;
++            if (d < 0 || d >= 90) continue;
 +            Tile from = game.getTileByPosition(mv.from());
 +            // A fighter that may move on its own (Fighter II) and reaches.
 +            if (t == UnitType.Fighter && m.getMoveValue() > 0 && from != null
@@ -6905,7 +6910,7 @@ index 000000000..216db4702
 +                        break;
 +                    }
 +                    int leg = distance(game, (Player) c[2], o, mv.from());
-+                    if (leg >= 0 && leg + d <= max) {
++                    if (leg < 0 || leg >= 90 || leg + d <= max) { // unknown leg: not refused
 +                        ok = true;
 +                        break;
 +                    }
@@ -21206,10 +21211,10 @@ index 000000000..ab0d7886c
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatAbilities.java b/src/main/java/ti4/selfhost/engine/kinds/CombatAbilities.java
 new file mode 100644
-index 000000000..f573dafd0
+index 000000000..57cca1df4
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatAbilities.java
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,147 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -21310,10 +21315,15 @@ index 000000000..f573dafd0
 +        if (l.isLocked()) return "the agent is locked";
 +        String pos = game.getActiveSystem();
 +        Tile tile = pos == null || pos.isBlank() ? null : game.getTileByPosition(pos);
-+        if (tile == null) return "no combat under way";
-+        boolean any = false;
-+        for (UnitHolder uh : tile.getUnitHolders().values()) any |= CombatSupport.fightOn(game, tile, uh.getName());
-+        return any ? null : "no combat under way";
++        if (tile != null && fightIn(game, tile)) return null;
++        // A combat opened outside the activation (/combat start_combat, an ability): any system with a fight on.
++        for (Tile t : game.getTileMap().values()) if (t != tile && fightIn(game, t)) return null;
++        return "no combat under way";
++    }
++
++    private static boolean fightIn(Game game, Tile tile) {
++        for (UnitHolder uh : tile.getUnitHolders().values()) if (CombatSupport.fightOn(game, tile, uh.getName())) return true;
++        return false;
 +    }
 +
 +    @Nullable
@@ -22356,10 +22366,10 @@ index 000000000..a7e73161a
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
 new file mode 100644
-index 000000000..385778a2b
+index 000000000..44bff3617
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,195 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -22508,7 +22518,8 @@ index 000000000..385778a2b
 +        if (av != null && answering != null && "retreat".equals(av.get("action")) && av.get("variant") == null) {
 +            String pos = String.valueOf(av.get("tile"));
 +            String r = ti4.service.combat.RetreatRules.retreatRefusal(game, answering, pos);
-+            if (r == null) {
++            // Hits of the round come before its retreat (step 3, then 4) — while there is still a fight to leave.
++            if (r == null && ti4.service.combat.RetreatRules.combatPosition(game, answering) != null) {
 +                for (CombatSupport.HitsOwed o : CombatSupport.owed(game, pos))
 +                    if (answering.getFaction().equals(o.faction())) r = "assign your " + o.hits() + " hit(s) first";
 +            }
@@ -37206,10 +37217,10 @@ index 000000000..6cb9b745a
 +}
 diff --git a/src/main/java/ti4/service/combat/RetreatRules.java b/src/main/java/ti4/service/combat/RetreatRules.java
 new file mode 100644
-index 000000000..4724708d0
+index 000000000..cf1598c1f
 --- /dev/null
 +++ b/src/main/java/ti4/service/combat/RetreatRules.java
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,136 @@
 +package ti4.service.combat;
 +
 +import javax.annotation.Nullable;
@@ -37278,12 +37289,42 @@ index 000000000..4724708d0
 +        return null;
 +    }
 +
++    /**
++     * The system where this player fights a space combat: the active system when it has an enemy fleet there, else a
++     * system with both its ships and an enemy's (a combat started outside the activation: a combat thread opened by
++     * /combat start_combat or an ability), preferring one where the player has rolled. Null when none.
++     */
++    @Nullable
++    public static String combatPosition(Game game, Player p) {
++        String active = game.getActiveSystem();
++        Tile at = active == null || active.isBlank() ? null : game.getTileByPosition(active);
++        if (at != null && opponent(game, p, at) != null && hasShips(p, at)) return active;
++        String found = null;
++        for (Tile t : game.getTileMap().values()) {
++            if (!hasShips(p, t) || opponent(game, p, t) == null) continue;
++            if (rounds(game, p, t.getPosition()) > 0) return t.getPosition();
++            if (found == null) found = t.getPosition();
++        }
++        return found;
++    }
++
++    private static boolean hasShips(Player p, Tile tile) {
++        UnitHolder space = tile.getSpaceUnitHolder();
++        if (space == null) return false;
++        for (UnitKey k : space.getUnitKeys()) {
++            if (!p.unitBelongsToPlayer(k) || space.getUnitCount(k) <= 0) continue;
++            UnitModel m = p.getUnitFromUnitKey(k);
++            if (m != null && m.getIsShip()) return true;
++        }
++        return false;
++    }
++
 +    /** Null when the player may announce a retreat now, else why not. */
 +    @Nullable
 +    public static String announceRefusal(Game game, Player p) {
-+        String pos = game.getActiveSystem();
-+        Tile tile = pos == null || pos.isBlank() ? null : game.getTileByPosition(pos);
-+        if (tile == null) return "no combat under way";
++        String pos = combatPosition(game, p);
++        Tile tile = pos == null ? null : game.getTileByPosition(pos);
++        if (tile == null) return "no space combat under way for you";
 +        Player o = opponent(game, p, tile);
 +        if (o == null) return "no space combat under way for you";
 +        int mine = rounds(game, p, pos), theirs = rounds(game, o, pos);
@@ -37297,8 +37338,8 @@ index 000000000..4724708d0
 +    }
 +
 +    public static void recordAnnouncement(Game game, Player p) {
-+        String pos = game.getActiveSystem();
-+        if (pos == null || pos.isBlank()) return;
++        String pos = combatPosition(game, p);
++        if (pos == null) return;
 +        game.setStoredValue(key(p, pos), activation(game) + "|" + (rounds(game, p, pos) + 1));
 +    }
 +
