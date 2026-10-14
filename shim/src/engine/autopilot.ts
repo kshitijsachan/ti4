@@ -102,7 +102,11 @@ function chooseSpecific(d: Decision, state: GameState | null, me: string, ctx: P
   // (command_tokens.adjust belongs to the status area; only its Leadership panel is answered here.)
   const kind: string = d.kind;
   const leadershipPanel = kind === "command_tokens.adjust" && (d.options as Option<any>[]).some((o) => o.handler.replace(/~\w+$/, "") === "deleteButtons_leadership");
-  if (STRATEGY_POLICY_KINDS.has(kind) && (kind !== "command_tokens.adjust" || leadershipPanel)) {
+  // The redistribute panel outside the status phase (Warfare's offer; Done = deleteButtons~ccredist) is the strategy
+  // policy's too (redistributeTokens) — without this a bot that opened it never answered it (local pbd13, Bot Delta).
+  const redistributePanel = kind === "command_tokens.adjust" && state?.status?.step !== "homework" && !d.progress?.required?.status &&
+    (d.options as Option<any>[]).some((o) => /^deleteButtons/.test(o.handler) && /~ccredist$/.test(o.handler));
+  if (STRATEGY_POLICY_KINDS.has(kind) && (kind !== "command_tokens.adjust" || leadershipPanel || redistributePanel)) {
     if (d.scope === "player" && d.target?.userId !== me) return null;
     return chooseStrategy(d, state, me, ctx);
   }

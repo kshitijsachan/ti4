@@ -4,10 +4,10 @@ What the stack needs (one machine runs everything via `deploy/docker-compose.yml
 
 | piece | RAM | notes |
 |---|---|---|
-| bot (AsyncTI4, Java) | 2–3 GB | `BOT_MEMORY` (default `3g`); heap = 75% of that |
+| bot (AsyncTI4, Java) | 3–4 GB | `BOT_MEMORY` (default `5g`); heap = 75% of that. At 3g it fills up and clicks lag |
 | postgres 16 | ~100–300 MB | capped at 512 MB |
 | shim + web | ~150–400 MB | capped at 768 MB |
-| **total** | **~4 GB in use, 8 GB box recommended** | 4 GB works with `BOT_MEMORY=2500m` + swap (deploy.sh adds 4 GB swap on small boxes) |
+| **total** | **~5–6 GB in use, 8 GB box recommended** | 4 GB works with `BOT_MEMORY=2500m` + swap (deploy.sh adds 4 GB swap on small boxes) |
 | disk | ~5 GB images + game data | 20 GB+ disk is plenty |
 | build | ~2 GB peak (Vite), ~10–20 min the first time on 2–4 vCPU (mostly downloads + the Maven build) | |
 
