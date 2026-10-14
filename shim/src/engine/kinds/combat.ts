@@ -241,8 +241,13 @@ export type CombatState = {
   rolls: CombatRoll[];
   /** Hits owed in this system right now. Older engines: absent. */
   owed?: HitsOwed[];
-  /** The active player's faction (the attacker), or null. Older engines: absent. */
+  /** The active player's faction (the attacker), or null (a combat outside the activation). Older engines: absent. */
   attacker?: FactionId | null;
+  /**
+   * Other combats under way (systems with a fight on besides this one: /combat start_combat, abilities, simultaneous
+   * fights); each has an empty elsewhere. This combat is the active system's when it has one. Older engines: absent.
+   */
+  elsewhere?: CombatState[];
 };
 
 // ---------------------------------------------------------------- plan answer (POST …/decisions/{id}/combat-plan)
