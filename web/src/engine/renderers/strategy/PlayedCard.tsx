@@ -64,7 +64,7 @@ export function PlayedCard({ decision, state, answer }: RendererProps<StrategyCa
       <Title sc={sc} sub={`Played by ${playerName(state, first.holder)}`}>
         {first.name}
       </Title>
-      {isHolder ? <Primary opts={opts} parts={first.primaryParts} pressed={pressed} done={serverDone(decision)} holdsMecatol={holdsMecatol(me.planets)} onPick={pick} onDone={() => engineStore.getState().defer(decision.id)} /> : <Follow opts={opts} status={reaction?.status ?? "pending"} reason={reaction?.cantFollowReason ?? null} onPick={pick} />}
+      {isHolder ? <Primary opts={opts} parts={first.primaryParts} pressed={pressed} done={serverDone(decision)} holdsMecatol={holdsMecatol(me.planets)} faction={me.faction} onPick={pick} onDone={() => engineStore.getState().defer(decision.id)} /> : <Follow opts={opts} status={reaction?.status ?? "pending"} reason={reaction?.cantFollowReason ?? null} faction={me.faction} onPick={pick} />}
       {card && card.reactions.length > 0 && (
         <div className={classes.reactions}>
           {card.reactions.map((r) => (
@@ -94,6 +94,15 @@ function imperialBlock(o: Opt, mecatol: boolean): string | null {
   return null;
 }
 
+/**
+ * Why this option is closed for me (engine value.unavailableFor[faction]: Construction's structure count — the holder's
+ * second structure is a PDS, a follower places one — or no structure of that type left in reinforcements).
+ */
+function limitFor(o: Opt, faction: string | null | undefined): string | null {
+  const m = (o.value as { unavailableFor?: Record<string, string> } | null)?.unavailableFor;
+  return faction && m && typeof m[faction] === "string" ? m[faction] : null;
+}
+
 /** The primary parts the engine has recorded as done (window subject `primaryDone`). */
 function serverDone(d: StrategyCardResolve): string[] {
   const v = (d.window?.subject as { primaryDone?: unknown } | undefined)?.primaryDone;
@@ -107,9 +116,11 @@ function Primary({
   pressed,
   done,
   holdsMecatol: mecatol,
+  faction,
   onPick,
   onDone,
 }: {
+  faction?: string | null;
   opts: Opt[];
   parts: PrimaryPart[];
   pressed: string[];
@@ -158,7 +169,7 @@ function Primary({
       )}
       <div className={classes.choices}>
         {mine.map((o) => {
-          const blocked = imperialBlock(o, mecatol) ?? (partDone(o) ? "done" : null);
+          const blocked = imperialBlock(o, mecatol) ?? (partDone(o) ? "done" : null) ?? limitFor(o, faction);
           const part = o.value!.part;
           const partial = !!part && needed(part) > 1 && doneCount(part) > 0 && doneCount(part) < needed(part);
           return (
@@ -181,7 +192,7 @@ function Primary({
 }
 
 /** Follow (spending a strategy token, with the card's secondary) or decline; once, never on your own card. */
-function Follow({ opts, status, reason, onPick }: { opts: Opt[]; status: string; reason: string | null; onPick: (id: string) => void }) {
+function Follow({ opts, status, reason, faction, onPick }: { opts: Opt[]; status: string; reason: string | null; faction?: string | null; onPick: (id: string) => void }) {
   const others = opts.filter((o) => o.value!.who !== "holder");
   /* Declined by the game (no strategy token…): the follow stays listed, greyed with why (never hidden). */
   if (status === "declined" && !reason) return <p className={classes.sub}>You are not following this card.</p>;
@@ -191,9 +202,15 @@ function Follow({ opts, status, reason, onPick }: { opts: Opt[]; status: string;
   if (status === "followed") {
     return (
       <div className={classes.choices}>
-        {secondary.map((o) => (
-          <Choice key={o.id} option={o} onPick={onPick} />
-        ))}
+        {secondary.map((o) => {
+          const lim = limitFor(o, faction);
+          return (
+            <Choice key={o.id} option={lim ? { ...o, disabled: true } : o} onPick={onPick} title={lim ?? undefined}>
+              {o.label}
+              {lim && <Meta>{lim}</Meta>}
+            </Choice>
+          );
+        })}
       </div>
     );
   }
@@ -205,13 +222,17 @@ function Follow({ opts, status, reason, onPick }: { opts: Opt[]; status: string;
       <span className={classes.sectionLabel}>Follow</span>
       {why && <p className={classes.warn}>{status === "declined" ? `${why} You were marked as not following.` : why}</p>}
       <div className={classes.choices}>
-        {main.map((o) => (
-          <Choice key={o.id} option={why ? { ...o, disabled: true } : o} onPick={onPick} title={why ?? undefined}>
+        {main.map((o) => {
+          const lim = why ?? limitFor(o, faction);
+          return (
+          <Choice key={o.id} option={lim ? { ...o, disabled: true } : o} onPick={onPick} title={lim ?? undefined}>
             {o.label}
+            {!why && lim && <Meta>{lim}</Meta>}
             {o.value!.spendsToken && <Meta>1 strategy token{o.value!.followCost ? ` + ${o.value!.followCost} resources` : ""}</Meta>}
             {!o.value!.spendsToken && o.value!.action.endsWith("_free") && <Meta>free — only if the holder agreed</Meta>}
           </Choice>
-        ))}
+          );
+        })}
         {decline && status !== "declined" && <Choice option={decline} onPick={onPick} quiet />}
       </div>
     </>

@@ -1,0 +1,12 @@
+{
+  "name": "gaps2-construction-same-planet-dock",
+  "description": "User report follow-up: one space dock per planet on EVERY Construction path. Naalu (holder, pbd105) places a space dock on Qucenn, then presses the stale space-dock picker button for Qucenn again (place_spacedock_qucenn~construction): refused (planet limit 'A planet can hold at most 1 space dock' and Construction's 'second structure must be a PDS'). Rules: a planet can contain at most 1 space dock (LRR 'Space Dock'); Construction primary 'Place 1 PDS or 1 space dock ... Place 1 PDS'.",
+  "base": { "recording": "pbd105", "index": 152 },
+  "steps": [
+    { "answer": { "kind": "strategy_card.resolve", "option": "^construction_spacedock$" }, "as": "naalu" },
+    { "answer": { "kind": "strategy_card.construction_place", "option": "place_spacedock_qucenn" }, "as": "naalu" },
+    { "wait": 1500 },
+    { "press": "place_spacedock_qucenn~construction", "as": "naalu", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}
