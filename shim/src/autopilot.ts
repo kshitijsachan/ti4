@@ -451,7 +451,8 @@ export class Autopilot {
     if (reason === "restored") {
       if (!this.settling.delete(game)) return;
       log.info(`autopilot: ${game}: the restored prompts are in place; playing on`);
-      for (const pilot of this.pilots.values()) pilot.wake();
+      // Only the game's own seats have anything to do there (a fork / rollback used to wake all ~185 seats).
+      for (const pilot of this.pilots.values()) if (pilot.inGame(game)) pilot.wake();
       return;
     }
     if (!newRewind(this.lastRewind, game, via)) return;
@@ -464,8 +465,15 @@ export class Autopilot {
     this.lastReveal.delete(game);
     this.lastStrategyStart.delete(game);
     const scope = this.scopeOf(game);
-    log.info(`autopilot: ${game} was rolled back (${via}): ${this.pilots.size} seats forget its ${scope.messageIds.size} messages' history`);
-    for (const pilot of this.pilots.values()) pilot.rewound(scope);
+    // Every seat forgets (cheap map deletes), but only the game's own seats are woken: waking every seat on each
+    // fork / rollback filled the shared decide queue (gate38's forks, 17:10-17:30 hang wave).
+    let woken = 0;
+    for (const pilot of this.pilots.values()) {
+      const seated = pilot.inGame(game);
+      if (seated) woken++;
+      pilot.rewound(scope, seated);
+    }
+    log.info(`autopilot: ${game} was rolled back (${via}): ${this.pilots.size} seats forget its ${scope.messageIds.size} messages' history; ${woken} seated woken`);
   }
 
   /** The game's channels (actions, table talk, threads, private channels) and every message stored in them. */
@@ -715,8 +723,14 @@ class SeatPilot {
     this.schedule();
   }
 
-  /** The game was rolled back (Autopilot.rewound): forget everything about it, then look again. */
-  rewound(scope: GameScope) {
+  /** This seat can see the game's actions channel (it sits in the game). */
+  inGame(game: string): boolean {
+    const actions = this.mgr.gameChannels(game).find((c) => c.name === `${game}-actions`);
+    return !!actions && this.store.canView(this.userId, String(actions.id));
+  }
+
+  /** The game was rolled back (Autopilot.rewound): forget everything about it, then look again if seated there. */
+  rewound(scope: GameScope, wake = true) {
     const n = forgetGameKeys(
       [
         this.pressed, this.pressCount, this.fails, this.miltyPress, this.miltyTurn, this.startingTechChecked, this.factions,
@@ -732,7 +746,7 @@ class SeatPilot {
     this.gameCache.delete(scope.game); // its nudges went above: read them again
     this.brain.rewound(scope);
     if (n) log.info(`autopilot ${this.name}: ${scope.game} rolled back: forgot ${n} remembered presses / answers / caps`);
-    this.schedule();
+    if (wake) this.schedule();
   }
 
   private onFrame(f: Json) {
