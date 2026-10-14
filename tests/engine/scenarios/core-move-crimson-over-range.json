@@ -1,0 +1,53 @@
+{
+  "name": "core-move-crimson-over-range",
+  "description": "Rules audit (core, TI4_MOVE_CHECK): the over-range refusal also holds in a Crimson Rebellion game. Base pbd117@45: the Crimson home (br) has only an inactive breach, so an Arborec cruiser (move 2) at 301 is 7 systems away: moving it in is refused (gate32 pbd1682 saw this as a false refusal; it is the rule - the Sundered scenario now opens breaches first).",
+  "base": {
+    "recording": "pbd117",
+    "index": 45,
+    "repost": false
+  },
+  "trigger": {
+    "press": "FFCC_arborec_ringTile_br",
+    "as": "arborec"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "301",
+              "holder": "space",
+              "unit": "ca",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "as": "arborec",
+      "refused": true,
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "wait": 1000,
+      "expect": {
+        "decision": [
+          {
+            "kind": "tactical.move",
+            "as": "arborec",
+            "open": true
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
