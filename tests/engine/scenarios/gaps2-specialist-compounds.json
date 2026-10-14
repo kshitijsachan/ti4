@@ -1,0 +1,13 @@
+{
+  "name": "gaps2-specialist-compounds",
+  "description": "Specialist Compounds (Jol-Nar breakthrough, Thunder's Edge) — implemented by audit-gaps-2 (gate TI4_RULES_TECH / rulesGateTech). Card text: 'When you research technology using the Technology strategy card, you may exhaust a planet that has a technology specialty instead of spending resources; if you do, you must research a technology of that color.' (Jol-Nar synergy: green counts as yellow and vice versa.) pbd88@320 (Jol-Nar controls Meer, a WARFARE specialty): the pay-with-planet press is refused while the breakthrough is locked; after unlocking, Meer cannot pay for Gravity Drive (blue) but pays for Plasma Scoring (red) and is exhausted (original: not automated at all).",
+  "base": { "recording": "pbd88", "index": 320, "repost": false },
+  "steps": [
+    { "press": "FFCC_jolnar_jolnarbtPay_meer_ps", "as": "jolnar", "refused": true },
+    { "command": "/breakthrough unlock breakthrough:jolnarbt faction_or_color:jolnar" },
+    { "press": "FFCC_jolnar_jolnarbtPay_meer_gd", "as": "jolnar", "refused": true },
+    { "press": "FFCC_jolnar_jolnarbtPay_meer_ps", "as": "jolnar" },
+    { "wait": 1500 }
+  ],
+  "expect": { "invariants": true, "save": [ { "key": "player[jolnar].planets_exhausted", "match": "meer" } ] }
+}
