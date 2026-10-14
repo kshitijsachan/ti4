@@ -749,6 +749,20 @@ class SeatPilot {
     if (wake) this.schedule();
   }
 
+  /**
+   * Whether a frame about this channel can give the seat something to do: only a game's channels can (decide(),
+   * engineStep() and the planners look at nothing else). The lobby is visible to every seat, and each fork / solo game
+   * created there (the slash command, its reply, Launch Game) woke all ~190 seats into a decide at the same moment,
+   * right as the new game's role and members bumped the global generation (live 20:02:54, 20:08:29, 20:12:41: ~100
+   * seats' think() started together, 108 of them "hung for 2 minutes" at 20:14).
+   */
+  private wakesFor(channelId: unknown): boolean {
+    if (channelId === undefined || channelId === null) return true;
+    const ch = this.store.channel(String(channelId));
+    if (!ch) return true; // unknown yet (a new channel): look
+    return gameOf(ch, this.store.state.channels) !== null;
+  }
+
   private onFrame(f: Json) {
     switch (f.t) {
       case "message_create":
@@ -775,12 +789,18 @@ class SeatPilot {
           const a = this.answered.get(this.lastPressed);
           if (a) a.at = Math.min(a.at, Date.now() - RETRY_MS + 3000);
         }
-        this.schedule();
+        if (f.message?.ephemeral || this.wakesFor(f.message?.channel_id)) this.schedule();
         break;
       case "message_update":
+        if (this.wakesFor(f.message?.channel_id)) this.schedule();
+        break;
       case "message_delete":
-      case "channels":
+        if (this.wakesFor(f.channel_id)) this.schedule();
+        break;
       case "channel_upsert":
+        if (this.wakesFor(f.channel?.id)) this.schedule();
+        break;
+      case "channels":
         this.schedule();
         break;
       case "interaction_done":
@@ -1045,13 +1065,20 @@ class SeatPilot {
   private syncGameCache(index: ChannelIndex) {
     const store = this.store;
     const mark = this.gameCacheMark;
-    const changed = mark && mark.index === index ? store.changedSince(mark.seq, mark.gen) : null;
-    if (!changed) this.gameCache.clear();
-    else
+    // What a game's derived state holds (newest activity, nudges read) comes from its own channels' messages only:
+    // a global change (users, members, roles: every game created or ended bumps it) or a rebuilt channel index (other
+    // games' channels created / archived, or the index's 10 s refresh) leaves every other game's entry valid. Dropping
+    // them all made each of ~190 seats re-derive every game at once on each fork start / end.
+    const changed = mark ? store.changedSince(mark.seq) : null;
+    if (!mark || !changed) this.gameCache.clear();
+    else {
       for (const id of changed) {
-        const game = index.gameOf.get(id);
+        const game = index.gameOf.get(id) ?? mark.index.gameOf.get(id);
         if (game) this.gameCache.delete(game);
       }
+      if (mark.index !== index)
+        for (const game of this.gameCache.keys()) if (!sameChannels(mark.index.byGame.get(game), index.byGame.get(game))) this.gameCache.delete(game);
+    }
     this.gameCacheMark = { seq: store.changeSequence, gen: store.globalGeneration, index };
   }
 
@@ -2270,6 +2297,13 @@ function family(faction: string | undefined) {
 }
 
 /** The game a channel belongs to: `pbd7` for `pbd7-actions`, its table talk, and their threads. */
+/** Whether a game has the same channels (the same objects, in the same order) in two channel indexes. */
+function sameChannels(a: Json[] | undefined, b: Json[] | undefined): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 function gameOf(ch: Json, channels: Record<string, Json>): string | null {
   let c: Json | undefined = ch;
   if ([10, 11, 12].includes(c.type)) {
