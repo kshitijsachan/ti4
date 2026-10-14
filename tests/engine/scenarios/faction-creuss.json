@@ -1,47 +1,48 @@
 {
-  "name": "faction-creuss",
-  "description": "Creuss: mech (creussMechStep1_ -> creussMechStep2_<pos> -> creussMechStep3_<pos>_<wh>), IFF PN (creussIFFStart_<wh> -> creussIFFResolve_<wh>_<pos>), hero (creussHeroStep1_<pos> -> creussHeroStep2_), commander (placeGhostCommanderFF_<pos>)",
-  "base": {
-    "recording": "pbd94",
-    "index": 43,
-    "repost": false
+ "name": "faction-creuss",
+ "description": "Creuss: mech (creussMechStep1_ -> creussMechStep2_<pos> -> creussMechStep3_<pos>_<wh>), IFF PN (creussIFFStart_<wh> -> creussIFFResolve_<wh>_<pos>), hero (creussHeroStep1_<pos> -> creussHeroStep2_), commander (placeGhostCommanderFF_<pos>) audit-gaps-2 (TI4_RULES_LEADERS): Riftwalker Meian swaps 2 systems 'other than the Creuss system, Ahk Creuxx system, or the Wormhole Nexus' \u2014 tr holds Creuss, so creussHeroStep1_tr is refused.",
+ "base": {
+  "recording": "pbd94",
+  "index": 43,
+  "repost": false
+ },
+ "setup": [
+  "/leaders unlock leader:ghosthero faction_or_color:ghost",
+  "/leaders unlock leader:ghostcommander faction_or_color:ghost",
+  "/add_units tile_name:tr unit_names:\"mech creuss\" faction_or_color:ghost"
+ ],
+ "trigger": {
+  "press": "creussMechStep1_",
+  "as": "ghost"
+ },
+ "steps": [
+  {
+   "press": "creussMechStep2_tr",
+   "as": "ghost"
   },
-  "setup": [
-    "/leaders unlock leader:ghosthero faction_or_color:ghost",
-    "/leaders unlock leader:ghostcommander faction_or_color:ghost",
-    "/add_units tile_name:tr unit_names:\"mech creuss\" faction_or_color:ghost"
-  ],
-  "trigger": {
-    "press": "creussMechStep1_",
-    "as": "ghost"
+  {
+   "press": "creussMechStep3_tr_alpha",
+   "as": "ghost"
   },
-  "steps": [
-    {
-      "press": "creussMechStep2_tr",
-      "as": "ghost"
-    },
-    {
-      "press": "creussMechStep3_tr_alpha",
-      "as": "ghost"
-    },
-    {
-      "press": "creussIFFStart_beta",
-      "as": "ghost"
-    },
-    {
-      "press": "creussIFFResolve_beta_310",
-      "as": "ghost"
-    },
-    {
-      "press": "FFCC_ghost_creussHeroStep1_tr",
-      "as": "ghost"
-    },
-    {
-      "press": "FFCC_ghost_placeGhostCommanderFF_tr",
-      "as": "ghost"
-    }
-  ],
-  "expect": {
-    "invariants": true
+  {
+   "press": "creussIFFStart_beta",
+   "as": "ghost"
+  },
+  {
+   "press": "creussIFFResolve_beta_310",
+   "as": "ghost"
+  },
+  {
+   "press": "FFCC_ghost_creussHeroStep1_tr",
+   "as": "ghost",
+   "refused": true
+  },
+  {
+   "press": "FFCC_ghost_placeGhostCommanderFF_tr",
+   "as": "ghost"
   }
+ ],
+ "expect": {
+  "invariants": true
+ }
 }

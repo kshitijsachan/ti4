@@ -1,12 +1,30 @@
 {
-  "name": "gaps2-naalu-agent-home",
-  "description": "Z'eu (Naalu agent, Prophecy of Kings; audit-gaps-2, gate TI4_RULES_LEADERS). Card text: 'ACTION: Exhaust this card and choose a player. That player may perform a tactical action in a non-home system without placing a command token.' The original only said 'you cannot do a tactical action in a home system this way' in its message. pbd105@152 (Naalu's turn): Naalu uses Z'eu on itself; activating its home system (310) is refused; Qucenn's system (207) is accepted.",
-  "base": { "recording": "pbd105", "index": 152, "repost": false },
-  "steps": [
-    { "press": "FFCC_naalu_exhaustAgent_naaluagent_naalu", "as": "naalu" },
-    { "wait": 1500 },
-    { "press": "FFCC_naalu_ringTile_310", "as": "naalu", "refused": true },
-    { "press": "FFCC_naalu_ringTile_207", "as": "naalu" }
-  ],
-  "expect": { "invariants": true }
+ "name": "gaps2-naalu-agent-home",
+ "description": "Z'eu (Naalu agent, Prophecy of Kings; audit-gaps-2, gate TI4_RULES_LEADERS). Card text: 'ACTION: Exhaust this card and choose a player. That player may perform a tactical action in a non-home system without placing a command token.' The original only said 'you cannot do a tactical action in a home system this way' in its message. pbd105@152 (Naalu's turn): Naalu uses Z'eu on itself; activating its home system (310) is refused; Qucenn's system (207) is accepted. (gate38: pbd105's Naalu holds the Thunder's Edge Z'eu (naaluagent-te: 'return that token to that player's reinforcements'), not the PoK one; the base save gives Naalu the PoK naaluagent so the press names a leader it owns.)",
+ "base": {
+  "save": "tests/engine/scenarios/saves/gaps2-pbd105-152-naalu-pok.txt",
+  "next": "tests/engine/scenarios/saves/gaps2-pbd105-152-naalu-pok.next.txt",
+  "repost": false
+ },
+ "steps": [
+  {
+   "press": "FFCC_naalu_exhaustAgent_naaluagent_naalu",
+   "as": "naalu"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "press": "FFCC_naalu_ringTile_310",
+   "as": "naalu",
+   "refused": true
+  },
+  {
+   "press": "FFCC_naalu_ringTile_207",
+   "as": "naalu"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
 }

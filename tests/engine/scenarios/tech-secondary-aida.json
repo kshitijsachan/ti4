@@ -1,72 +1,74 @@
 {
-  "name": "tech-secondary-aida",
-  "description": "Technology secondary (pbd101 r1): Ral Nel (owns AI Development Algorithm, given AMD + Plasma Scoring) follows, researches Carrier II, exhausts AI Development from the payment prompt, then pays Mez + Rep through payment.spend. audit-gaps-2 (TI4_TECH_PREREQ on): Carrier II needs AIDA's skip, so the research exhausts AIDA itself (the payment prompt no longer offers 'Exhaust AI Development Algorithm'); with the gate off the old press flow applies.",
-  "base": {
-    "recording": "pbd101",
-    "index": 46
+ "name": "tech-secondary-aida",
+ "description": "Technology secondary (pbd101 r1): Ral Nel (owns AI Development Algorithm, given AMD + Plasma Scoring) follows, researches Carrier II, exhausts AI Development from the payment prompt, then pays Mez + Rep through payment.spend. audit-gaps-2 (TI4_TECH_PREREQ on): Carrier II needs AIDA's skip, so the research exhausts AIDA itself (the payment prompt no longer offers 'Exhaust AI Development Algorithm'); with the gate off the old press flow applies. (gate38: AI Development Algorithm gives no research discount \u2014 'ignore any 1 prerequisite'; its cost reduction is for PRODUCTION \u2014 so the Technology secondary's 4 resources need 1 trade good on top of Mez + Rep (3); the original paid the 4th with an AIDA exhaust.)",
+ "base": {
+  "recording": "pbd101",
+  "index": 46
+ },
+ "setup": [
+  "/tech add tech:amd faction_or_color:ralnel",
+  "/tech add tech:ps faction_or_color:ralnel",
+  "/player stats trade_goods:1 faction_or_color:ralnel"
+ ],
+ "steps": [
+  {
+   "answer": {
+    "kind": "strategy_card.resolve",
+    "option": "acquireATechWithSC_first"
+   },
+   "as": "ralnel"
   },
-  "setup": [
-    "/tech add tech:amd faction_or_color:ralnel",
-    "/tech add tech:ps faction_or_color:ralnel"
-  ],
-  "steps": [
-    {
-      "answer": {
-        "kind": "strategy_card.resolve",
-        "option": "acquireATechWithSC_first"
-      },
-      "as": "ralnel"
-    },
-    {
-      "answer": {
-        "kind": "tech.gain",
-        "option": "getTech_cv2"
-      },
-      "as": "ralnel"
-    },
-    {
-      "answer": {
-        "kind": "payment.spend",
-        "payload": {
-          "planets": [
-            "mez",
-            "rep"
-          ]
-        }
-      },
-      "as": "ralnel",
-      "legacy": [
-        {
-          "answer": {
-            "kind": "payment.spend",
-            "option": "spend_mez_restech"
-          },
-          "as": "ralnel"
-        },
-        {
-          "answer": {
-            "kind": "payment.spend",
-            "option": "spend_rep_restech"
-          },
-          "as": "ralnel"
-        },
-        {
-          "answer": {
-            "kind": "payment.spend",
-            "option": "Done Exhausting"
-          },
-          "as": "ralnel"
-        }
-      ]
+  {
+   "answer": {
+    "kind": "tech.gain",
+    "option": "getTech_cv2"
+   },
+   "as": "ralnel"
+  },
+  {
+   "answer": {
+    "kind": "payment.spend",
+    "payload": {
+     "planets": [
+      "mez",
+      "rep"
+     ],
+     "tg": 1
     }
-  ],
-  "expect": {
-    "invariants": true,
-    "state": [
-      {
-        "path": "players[faction=ralnel].techs",
-        "includes": "cv2"
-      }
-    ]
+   },
+   "as": "ralnel",
+   "legacy": [
+    {
+     "answer": {
+      "kind": "payment.spend",
+      "option": "spend_mez_restech"
+     },
+     "as": "ralnel"
+    },
+    {
+     "answer": {
+      "kind": "payment.spend",
+      "option": "spend_rep_restech"
+     },
+     "as": "ralnel"
+    },
+    {
+     "answer": {
+      "kind": "payment.spend",
+      "option": "Done Exhausting"
+     },
+     "as": "ralnel"
+    }
+   ]
   }
+ ],
+ "expect": {
+  "invariants": true,
+  "state": [
+   {
+    "path": "players[faction=ralnel].techs",
+    "includes": "cv2"
+   }
+  ]
+ }
 }
