@@ -1457,10 +1457,10 @@ index e68223d..40bb518 100644
 +    }
  }
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/phases/GamePhaseButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/phases/GamePhaseButtonHandler.java
-index 87d3885..67a1767 100644
+index 87d3885..ceabc2f 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/phases/GamePhaseButtonHandler.java
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/phases/GamePhaseButtonHandler.java
-@@ -45,18 +45,30 @@ class GamePhaseButtonHandler {
+@@ -45,18 +45,40 @@ class GamePhaseButtonHandler {
      public static void finishComponentAction(ButtonInteractionEvent event, Player player, Game game) {
          String message = "Use buttons to end turn or do another action.";
          List<Button> systemButtons = StartTurnService.getStartOfTurnButtons(player, game, true, event);
@@ -1477,13 +1477,23 @@ index 87d3885..67a1767 100644
  
      @ButtonHandler("passForRound")
      public static void passForRound(ButtonInteractionEvent event, Player player, Game game) {
-+        if (refusePassOutsideActionPhase(event, game)) return;
++        if (refusePassOutsideActionPhase(event, game, player)) return;
          PassService.passPlayerForRound(event, game, player, false);
          ButtonHelper.deleteMessage(event);
      }
  
-+    private static boolean refusePassOutsideActionPhase(ButtonInteractionEvent event, Game game) {
-+        if (!PassService.passIsOutsideActionPhase(game)) return false;
++    private static boolean refusePassOutsideActionPhase(ButtonInteractionEvent event, Game game, Player player) {
++        if (!PassService.passIsOutsideActionPhase(game)) {
++            // Rules audit (core): no pass with an unplayed strategy card or over the action card hand limit.
++            String why = ti4.service.turn.TurnRules.passRefusal(game, player);
++            if (why == null) {
++                why = ti4.service.turn.TurnRules.handLimitRefusal(game, player);
++                if (why != null) ti4.service.turn.TurnRules.ensureDiscardPrompt(game, player);
++            }
++            if (why == null) return false;
++            MessageHelper.sendEphemeralMessageToEventChannel(event, why);
++            return true;
++        }
 +        MessageHelper.sendEphemeralMessageToEventChannel(
 +                event, "The action phase is over (" + game.getPhaseOfGame() + "); there is nothing to pass.");
 +        ButtonHelper.deleteMessage(event);
@@ -1493,16 +1503,16 @@ index 87d3885..67a1767 100644
      @ButtonHandler("endOfTurnAbilities")
      public static void endOfTurnAbilities(ButtonInteractionEvent event, Player player, Game game) {
          String msg = "Use buttons to do an end of turn ability";
-@@ -72,6 +84,7 @@ class GamePhaseButtonHandler {
+@@ -72,6 +94,7 @@ class GamePhaseButtonHandler {
  
      @ButtonHandler("passingAbilities")
      private static void passingAbilities(ButtonInteractionEvent event, Player player, Game game) {
-+        if (refusePassOutsideActionPhase(event, game)) return;
++        if (refusePassOutsideActionPhase(event, game, player)) return;
          String msg = "Use these buttons to do an ability when you pass.";
          List<Button> buttons = ButtonHelper.getPassingAbilities(player, game);
          buttons.addFirst(Buttons.red(player.factionButtonChecker() + "passForRound", "Pass"));
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/phases/TurnEndButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/phases/TurnEndButtonHandler.java
-index a7bc053..9e9b953 100644
+index a7bc053..d919d82 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/phases/TurnEndButtonHandler.java
 +++ b/src/main/java/ti4/discord/interactions/buttons/handlers/phases/TurnEndButtonHandler.java
 @@ -16,6 +16,13 @@ import ti4.service.turn.EndTurnService;
@@ -1519,6 +1529,20 @@ index a7bc053..9e9b953 100644
      @ButtonHandler("turnEnd")
      public static void turnEnd(ButtonInteractionEvent event, Game game, Player player) {
          if (player.hasAbility("the_starlit_path")
+@@ -35,6 +42,13 @@ class TurnEndButtonHandler {
+                     "You are not the active player. If you need to, you can force end the current player's turn with `/player turn_end`.");
+             return;
+         }
++        // Rules audit (core): discard down to the action card hand limit before the turn ends.
++        String overHand = ti4.service.turn.TurnRules.handLimitRefusal(game, player);
++        if (overHand != null) {
++            ti4.service.turn.TurnRules.ensureDiscardPrompt(game, player);
++            MessageHelper.sendEphemeralMessageToEventChannel(event, overHand);
++            return;
++        }
+         CommanderUnlockCheckService.checkPlayer(player, "naaz", "empyrean", "ghost", "obsidian", "firmament");
+         CommanderUnlockCheckService.checkPlayer(
+                 player,
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/planet/PlanetExhaustButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/planet/PlanetExhaustButtonHandler.java
 index 4652fc9..d686eb4 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/planet/PlanetExhaustButtonHandler.java
@@ -4673,7 +4697,7 @@ index b485701..fcd83a8 100644
                          "creussHeroStep1_" + tile.getPosition(), tile.getRepresentationForButtons(game, player)));
              }
 diff --git a/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java b/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
-index 9f3070e..f7c84bb 100644
+index 9f3070e..4523c6e 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperModifyUnits.java
 @@ -69,6 +69,7 @@ import ti4.service.fow.FOWCombatThreadMirroring;
@@ -4843,7 +4867,7 @@ index 9f3070e..f7c84bb 100644
          String unitNPlanet = buttonID.replace("place_", "");
          boolean placingParturitionMonument = unitNPlanet.startsWith("parturitionMonument_");
          String unitLong = placingParturitionMonument ? "monument" : unitNPlanet.substring(0, unitNPlanet.indexOf('_'));
-@@ -2047,9 +2107,43 @@ public final class ButtonHelperModifyUnits {
+@@ -2047,9 +2107,51 @@ public final class ButtonHelperModifyUnits {
                  : unitNPlanet.replace(unitLong + "_", "");
          String unitID = AliasHandler.resolveUnit(unitLong.replace("2", ""));
          UnitKey unitKey = Mapper.getUnitKey(unitID, player.getColorID());
@@ -4867,6 +4891,14 @@ index 9f3070e..f7c84bb 100644
 +            capRefusal = UnitComponentLimit.refusal(
 +                    game, player, unitID, Character.isDigit(unitLong.charAt(0)) ? unitLong.charAt(0) - '0' : 1);
 +        }
++        if (capRefusal == null && !constructionPlacement && event != null) {
++            // Rules audit (core): a tactical action's build stops at the system's PRODUCTION limit (was a warning).
++            String[] ctx = ProductionLimitRule.contextOf(event.getMessage());
++            if (ctx != null) {
++                capRefusal = ProductionLimitRule.refusal(
++                        game, player, ctx[0], ctx[1], Character.isDigit(unitLong.charAt(0)) ? unitLong.charAt(0) - '0' : 1);
++            }
++        }
 +        if (capRefusal != null) {
 +            MessageHelper.sendEphemeralMessageToEventChannel(event, capRefusal);
 +            return;
@@ -4887,7 +4919,7 @@ index 9f3070e..f7c84bb 100644
          String spaceOrPlanet;
  
          String successMessage;
-@@ -2325,7 +2419,8 @@ public final class ButtonHelperModifyUnits {
+@@ -2325,7 +2427,8 @@ public final class ButtonHelperModifyUnits {
              }
          }
          if (("sd".equalsIgnoreCase(unitID) || "pds".equalsIgnoreCase(unitLong) || "monument".equalsIgnoreCase(unitLong))
@@ -4897,7 +4929,7 @@ index 9f3070e..f7c84bb 100644
              if (game.isFowMode()
                      || (!"action".equalsIgnoreCase(game.getPhaseOfGame())
                              && !"statusScoring".equalsIgnoreCase(game.getPhaseOfGame()))) {
-@@ -2429,31 +2524,19 @@ public final class ButtonHelperModifyUnits {
+@@ -2429,31 +2532,19 @@ public final class ButtonHelperModifyUnits {
                  String producedInput = unitID + "_" + tile.getPosition() + "_" + planetName;
                  player.produceUnit(producedInput);
              }
@@ -4942,7 +4974,7 @@ index 9f3070e..f7c84bb 100644
          }
          if ("sd".equalsIgnoreCase(unitID)) {
              tile = game.getTileFromPlanet(planetName);
-@@ -2558,6 +2641,19 @@ public final class ButtonHelperModifyUnits {
+@@ -2558,6 +2649,19 @@ public final class ButtonHelperModifyUnits {
          String producedOrPlaced = "produced";
  
          boolean willSkipBuild = skipbuild.contains("skipbuild");
@@ -4962,7 +4994,7 @@ index 9f3070e..f7c84bb 100644
          boolean xxchaTEhero = skipbuild.contains("xxcha");
          boolean orbitalDrop = skipbuild.contains("orbital");
          if (willSkipBuild) {
-@@ -2714,9 +2810,9 @@ public final class ButtonHelperModifyUnits {
+@@ -2714,9 +2818,9 @@ public final class ButtonHelperModifyUnits {
          }
          Button DoneExhausting;
          if (!buttonID.contains("deleteButtons")) {
@@ -4974,7 +5006,7 @@ index 9f3070e..f7c84bb 100644
          }
          buttons.add(DoneExhausting);
          if (!willSkipBuild) {
-@@ -3051,6 +3147,7 @@ public final class ButtonHelperModifyUnits {
+@@ -3051,6 +3155,7 @@ public final class ButtonHelperModifyUnits {
          List<Button> systemButtons = TacticalActionService.getLandingTroopsButtons(game, player, tile);
          String msg = player.getFactionEmojiOrColor() + " turned " + numff + " infantry into "
                  + StringHelper.pluralize(numff, "fighter") + " using Assault Machina, the Mirveda commander.";
@@ -4982,7 +5014,7 @@ index 9f3070e..f7c84bb 100644
          event.getMessage()
                  .editMessage(msg)
                  .setComponents(ButtonHelper.turnButtonListIntoActionRowList(systemButtons))
-@@ -3068,6 +3165,7 @@ public final class ButtonHelperModifyUnits {
+@@ -3068,6 +3173,7 @@ public final class ButtonHelperModifyUnits {
          List<Button> systemButtons = TacticalActionService.getLandingTroopsButtons(game, player, tile);
          String msg = player.getFactionEmojiOrColor() + " turned " + StringHelper.pluralize(numff, "fighter") + " into "
                  + numff + " infantry using their **Combat Drones** ability.";
@@ -6553,6 +6585,110 @@ index 0000000..be62abb
 +
 +    private static String fmt(float f) {
 +        return f == Math.floor(f) ? String.valueOf((int) f) : String.valueOf(f);
++    }
++}
+diff --git a/src/main/java/ti4/helpers/ProductionLimitRule.java b/src/main/java/ti4/helpers/ProductionLimitRule.java
+new file mode 100644
+index 0000000..ed59259
+--- /dev/null
++++ b/src/main/java/ti4/helpers/ProductionLimitRule.java
+@@ -0,0 +1,98 @@
++package ti4.helpers;
++
++import java.util.List;
++import javax.annotation.Nullable;
++import lombok.experimental.UtilityClass;
++import net.dv8tion.jda.api.components.buttons.Button;
++import net.dv8tion.jda.api.entities.Message;
++import ti4.discord.interactions.buttons.handlers.faction.homebrew.bluereverie.XinTechHandler;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.game.Tile;
++
++/**
++ * PRODUCTION limit of a tactical action's production (LRR 68 PRODUCTION: "the player can produce a number of units up
++ * to the combined PRODUCTION value of their units in that system"; fighters and infantry count one each). Rules audit
++ * (core rules): the original only warned ("### Warning! Exceeding PRODUCTION limit of N!",
++ * Helper.buildProducedUnitsMessage) and the web already refused to commit past it; the bot's place_ handler and the
++ * engine now refuse the unit that goes past it too.
++ *
++ * <p>Same limit and same scope as that warning: the build of a tactical action ("Done Producing Units" carries
++ * context {@code tacticalAction}) in the active system with PRODUCTION there, the larger of the system's PRODUCTION
++ * and Veiled Networking Star, +4 War Machine, -Liquidation, +2 Vuil'raith commander; none for the factions whose units
++ * produce anywhere (Arborec, Letani, Deepwrought mech) or while Bellum Gloriosum's own limit applies. Games with
++ * homebrew content are left as in the original (abilities there raise the limit in ways the bot does not track).
++ */
++@UtilityClass
++public class ProductionLimitRule {
++
++    public static final String TACTICAL = "tacticalAction";
++
++    /** The PRODUCTION limit enforced for a build in this context and system, or null where none is enforced. */
++    @Nullable
++    public static Integer limit(Game game, Player player, @Nullable String context, @Nullable String pos) {
++        if (game == null || player == null || !TACTICAL.equals(context) || pos == null) return null;
++        if (game.hasHomebrew() && !game.isFowMode()) return null;
++        Tile tile = game.getTileByPosition(pos);
++        String active = game.getActiveSystem();
++        if (tile == null || active == null || !pos.equalsIgnoreCase(active)) return null;
++        if (player.hasUnit("arborec_mech")
++                || player.hasUnit("arborec_infantry")
++                || player.hasUnit("arborec_infantry2")
++                || player.hasUnit("tf-lataniwarrior")
++                || player.hasUnit("deepwrought_mech")) return null;
++        if (player.hasUnlockedBreakthrough("solbt")
++                && player.getSpentThingsThisWindow().stream().anyMatch(s -> s.startsWith("solBtBuild"))) return null;
++        int systemProduction = Helper.getProductionValue(player, game, tile, false);
++        int veiled = XinTechHandler.getVeiledNetworkingStarProductionValue(player, game, tile);
++        if (systemProduction <= 0 && veiled <= 0) return null;
++        int limit = Math.max(systemProduction, veiled);
++        if (player.getSpentThingsThisWindow().contains("warmachine")) limit += 4;
++        for (String spent : player.getSpentThingsThisWindow()) {
++            if (spent.startsWith("liquidation") && spent.replace("liquidation", "").matches("\\d+"))
++                limit -= Integer.parseInt(spent.replace("liquidation", ""));
++        }
++        if (game.playerHasLeaderUnlockedOrAlliance(player, "cabalcommander")) limit += 2;
++        return limit;
++    }
++
++    /** Why producing {@code adding} more units goes past the limit, or null. */
++    @Nullable
++    public static String refusal(Game game, Player player, @Nullable String context, @Nullable String pos, int adding) {
++        Integer limit = limit(game, player, context, pos);
++        if (limit == null || adding < 1) return null;
++        int already = Helper.calculateCostOfProducedUnits(player, game, false);
++        if (already + adding <= limit) return null;
++        return "Over the PRODUCTION limit: this system can produce " + limit + " unit" + (limit == 1 ? "" : "s")
++                + " (already producing " + already + "); fighters and infantry count one each.";
++    }
++
++    /** The production context and system of a production message's "Done Producing Units" ({context, pos}), or null. */
++    @Nullable
++    public static String[] contextOf(@Nullable Message message) {
++        if (message == null) return null;
++        try {
++            List<Button> buttons = message.getComponentTree().findAll(Button.class);
++            for (Button b : buttons) {
++                String[] c = contextOfDone(b.getCustomId());
++                if (c != null) return c;
++            }
++        } catch (Exception ignored) {
++            // no components
++        }
++        return null;
++    }
++
++    /** {context, pos} of a Done Producing Units id (deleteButtons_&lt;context&gt;_&lt;pos&gt;~prod), or null. */
++    @Nullable
++    public static String[] contextOfDone(@Nullable String id) {
++        if (id == null || DoneRole.of(id) != DoneRole.PRODUCE) return null;
++        String base = DoneRole.strip(id);
++        int at = base.indexOf("deleteButtons_");
++        if (at < 0) return null;
++        String rest = base.substring(at + "deleteButtons_".length());
++        int us = rest.lastIndexOf('_');
++        if (us <= 0) return null;
++        return new String[] {rest.substring(0, us), rest.substring(us + 1)};
 +    }
 +}
 diff --git a/src/main/java/ti4/helpers/PromissoryNoteHelper.java b/src/main/java/ti4/helpers/PromissoryNoteHelper.java
@@ -27744,10 +27880,10 @@ index 0000000..7c0ec8a
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ProductionProduceKind.java b/src/main/java/ti4/selfhost/engine/kinds/ProductionProduceKind.java
 new file mode 100644
-index 0000000..42efba5
+index 0000000..6389f95
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ProductionProduceKind.java
-@@ -0,0 +1,403 @@
+@@ -0,0 +1,420 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -27934,6 +28070,9 @@ index 0000000..42efba5
 +            String limit = ti4.helpers.UnitComponentLimit.refusal(
 +                    game, answering, String.valueOf(v.get("unit")), PaymentSupport.intOf(v.get("count"), 1));
 +            if (limit != null) return limit;
++            // Rules audit (core): a tactical action's build stops at the system's PRODUCTION limit (bot place_ too).
++            String over = productionLimitRefusal(game, answering, decision, PaymentSupport.intOf(v.get("count"), 1));
++            if (over != null) return over;
 +            if (cap == null) return null;
 +            return ProductionCapHelper.refusal(
 +                    game,
@@ -27943,6 +28082,17 @@ index 0000000..42efba5
 +                    PaymentSupport.intOf(v.get("count"), 1));
 +        }
 +        return null;
++    }
++
++    /** The tactical PRODUCTION limit refusal for {@code adding} more units on this production (its Done's context). */
++    @Nullable
++    static String productionLimitRefusal(Game game, Player player, Decision d, int adding) {
++        Option done = PaymentSupport.firstWith(d, "action", "done");
++        if (done == null || done.value() == null) return null;
++        Object context = done.value().get("context");
++        Object tile = done.value().get("tile");
++        return ti4.helpers.ProductionLimitRule.refusal(
++                game, player, context == null ? null : String.valueOf(context), tile == null ? null : String.valueOf(tile), adding);
 +    }
 +
 +    /** place_&lt;unitLong&gt;_&lt;where&gt; → async unit id, count, holder ("space" or planet id), tile position. */
@@ -28123,10 +28273,13 @@ index 0000000..42efba5
 +                }
 +            }
 +        }
-+        // A capped production's cap (above) IS a rule the bot's place_ handler enforces too. The original code never
-+        // refuses a build over the PRODUCTION limit (Helper.buildProducedUnitsMessage only
-+        // warns: abilities, cards and homebrew raise it in ways the bot does not track), so neither does the engine;
-+        // productionLimit / unitCount in the Done option tell a client where it stands.
++        // A capped production's cap (above) IS a rule the bot's place_ handler enforces too. So is a tactical action's
++        // PRODUCTION limit (rules audit, core: the original only warned; ProductionLimitRule, official content only).
++        int total = 0;
++        for (Object o : PaymentSupport.listOf(payload.get("units")))
++            if (o instanceof Map<?, ?> req) total += PaymentSupport.intOf(req.get("count"), 1);
++        String over = productionLimitRefusal(game, player, d, total);
++        if (over != null) return over;
 +
 +        for (String id : presses) a.press(id);
 +        Player after = a.player();
@@ -33804,10 +33957,10 @@ index 0000000..300def7
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
 new file mode 100644
-index 0000000..8d50630
+index 0000000..6d243d4
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,233 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -33911,6 +34064,15 @@ index 0000000..8d50630
 +            // Systems over the fleet pool / capacity: End Turn / Pass are refused until the units go.
 +            List<String> over = new java.util.ArrayList<>();
 +            UnitsRemoveKind.overLimits(ctx.game(), p).forEach((pos, r) -> over.add(UnitsRemoveKind.describe(pos, r)));
++            // Rules audit (core): over the action card hand limit, End Turn / Pass wait for the discard; Pass also
++            // waits for every strategy card held to be played (TurnRules). The web greys them with these reasons.
++            String hand = ti4.service.turn.TurnRules.handLimitRefusal(ctx.game(), p);
++            if (hand != null) over.add(hand);
++            if ("pass".equals(action) && ctx.game() != null
++                    && !ti4.service.turn.PassService.passIsOutsideActionPhase(ctx.game())) {
++                String sc = ti4.service.turn.TurnRules.passRefusal(ctx.game(), p);
++                if (sc != null) over.add(sc);
++            }
 +            v.put("overLimits", over);
 +        }
 +        if ("end_turn".equals(action) && ctx.game() != null && p != null) {
@@ -33994,6 +34156,16 @@ index 0000000..8d50630
 +                // dismissed reminder changes nothing: fuzz pbd385 / pbd386, playtest 8 pbd469).
 +                String over = overLimitMessage(game, answering);
 +                if (over != null) return over;
++                // Rules audit (core): hand limit before the turn ends; every strategy card played before passing.
++                String hand = ti4.service.turn.TurnRules.handLimitRefusal(game, answering);
++                if (hand != null) {
++                    ti4.service.turn.TurnRules.ensureDiscardPrompt(game, answering);
++                    return hand;
++                }
++                if ("pass".equals(action) && !ti4.service.turn.PassService.passIsOutsideActionPhase(game)) {
++                    String sc = ti4.service.turn.TurnRules.passRefusal(game, answering);
++                    if (sc != null) return sc;
++                }
 +                // The action is not over (a tactical action under way, the played card's primary not started, the
 +                // holder's own action steps open): the turn cannot end yet (playtest 9 pbd539).
 +                if ("end_turn".equals(action)) {
@@ -35321,10 +35493,18 @@ index b6fb6af..8135930 100644
              return;
          }
 diff --git a/src/main/java/ti4/service/combat/BombardmentService.java b/src/main/java/ti4/service/combat/BombardmentService.java
-index a2dc7ab..67887ec 100644
+index a2dc7ab..d4f0461 100644
 --- a/src/main/java/ti4/service/combat/BombardmentService.java
 +++ b/src/main/java/ti4/service/combat/BombardmentService.java
-@@ -25,7 +25,9 @@ public class BombardmentService {
+@@ -14,6 +14,7 @@ import ti4.helpers.BombardmentAssignment;
+ import ti4.helpers.BombardmentAssignmentType;
+ import ti4.helpers.ButtonHelper;
+ import ti4.helpers.FoWHelper;
++import ti4.helpers.Units;
+ import ti4.model.UnitModel;
+ import tools.jackson.databind.ObjectMapper;
+ 
+@@ -25,7 +26,9 @@ public class BombardmentService {
          for (Planet planetUH : tile.getPlanetUnitHolders()) {
              if (!player.getPlanetsAllianceMode().contains(planetUH.getName())
                      || FoWHelper.otherPlayersHaveUnitsOnPlanet(player, planetUH)) {
@@ -35335,6 +35515,32 @@ index a2dc7ab..67887ec 100644
                      planets.add(planetUH.getName());
                  }
              }
+@@ -34,6 +37,25 @@ public class BombardmentService {
+         return planets;
+     }
+ 
++    /**
++     * Whether BOMBARDMENT has a target here: a planet it may bombard that holds another player's ground forces (its
++     * hits destroy only ground forces). Rules audit (core): with none, the post-movement "Roll BOMBARDMENT" is not
++     * offered (pointless roll).
++     */
++    public static boolean hasTargets(Player player, Game game, Tile tile) {
++        if (player == null || tile == null) return false;
++        for (String name : getBombardablePlanets(player, game, tile)) {
++            Planet planet = game.getUnitHolderFromPlanet(name);
++            if (planet == null) continue;
++            for (Player o : game.getRealPlayersNNeutral()) {
++                if (o == player || player.getAllianceMembers().contains(o.getFaction())) continue;
++                if (planet.getUnitCount(Units.UnitType.Infantry, o) > 0 || planet.getUnitCount(Units.UnitType.Mech, o) > 0)
++                    return true;
++            }
++        }
++        return false;
++    }
++
+     public static void autoAssignAllBombardmentToAPlanet(Player player, Game game, Tile tile) {
+         game.removeStoredValue("assignedBombardment" + player.getFaction());
+         if (tile == null) {
 diff --git a/src/main/java/ti4/service/combat/CombatRollService.java b/src/main/java/ti4/service/combat/CombatRollService.java
 index ade82fc..e6de162 100644
 --- a/src/main/java/ti4/service/combat/CombatRollService.java
@@ -35577,7 +35783,7 @@ index 0000000..1a98a07
 +    }
 +}
 diff --git a/src/main/java/ti4/service/combat/StartCombatService.java b/src/main/java/ti4/service/combat/StartCombatService.java
-index 8b1a9b8..e6e4c6a 100644
+index 8b1a9b8..9c38737 100644
 --- a/src/main/java/ti4/service/combat/StartCombatService.java
 +++ b/src/main/java/ti4/service/combat/StartCombatService.java
 @@ -944,7 +944,29 @@ public class StartCombatService {
@@ -35611,7 +35817,45 @@ index 8b1a9b8..e6e4c6a 100644
          if (tile.isScar(game)) {
              MessageHelper.sendMessageToChannel(
                      threadChannel, "## Reminder that you cannot use any unit abilities in an Entropic Scar.");
-@@ -1525,6 +1547,18 @@ public class StartCombatService {
+@@ -1440,6 +1462,23 @@ public class StartCombatService {
+         }
+     }
+ 
++    /**
++     * Whether ANTI-FIGHTER BARRAGE has anything to hit in this system's space: some combatant's opponent has fighters
++     * there (or infantry in space against the Argent Strike Wing Alpha II, whose AFB 9-10 also destroys infantry).
++     */
++    public static boolean afbHasTargets(Tile tile, List<Player> combatPlayers) {
++        UnitHolder space = tile == null ? null : tile.getSpaceUnitHolder();
++        if (space == null || combatPlayers == null) return false;
++        for (Player p : combatPlayers) {
++            for (Player o : combatPlayers) {
++                if (o == p || p.getAllianceMembers().contains(o.getFaction())) continue;
++                if (space.getUnitCount(UnitType.Fighter, o) > 0) return true;
++                if (p.hasUnit("argent_destroyer2") && space.getUnitCount(UnitType.Infantry, o) > 0) return true;
++            }
++        }
++        return false;
++    }
++
+     private static void sendAFBButtonsToThread(
+             GenericInteractionCreateEvent event,
+             ThreadChannel threadChannel,
+@@ -1453,6 +1492,13 @@ public class StartCombatService {
+             return;
+         }
+ 
++        // Rules (LRR 6 ANTI-FIGHTER BARRAGE): it targets only the opponent's fighters. With no fighter to hit (both
++        // directions) there is nothing to roll: no prompt, one log line (user report: AFB prompted vs no fighters).
++        if (!afbHasTargets(tile, combatPlayers)) {
++            MessageHelper.sendMessageToChannel(
++                    threadChannel, "-# ANTI-FIGHTER BARRAGE skipped: no fighters to target.");
++            return;
++        }
+         List<Button> afbButtons = new ArrayList<>();
+         afbButtons.add(Buttons.gray("combatRoll_" + tile.getPosition() + "_space_afb", "Roll ANTI-FIGHTER BARRAGE"));
+         for (Player player : combatPlayers) {
+@@ -1525,6 +1571,18 @@ public class StartCombatService {
          return spaceCannonButtons;
      }
  
@@ -35630,7 +35874,7 @@ index 8b1a9b8..e6e4c6a 100644
      private static boolean hasCendos(Player player, Tile tile) {
          int nonFighterShips = 0;
          boolean hasDestroyer = false;
-@@ -2672,6 +2706,19 @@ public class StartCombatService {
+@@ -2672,6 +2730,19 @@ public class StartCombatService {
                                  "Reroll 1 Mech on " + nameOfHolder,
                                  FactionEmojis.blacktf));
                      }
@@ -35650,7 +35894,7 @@ index 8b1a9b8..e6e4c6a 100644
                      if (p.hasUnit("ralnel_mech")
                              && isGroundCombat
                              && !ButtonHelper.isLawInPlay(game, "articles_war")
-@@ -2773,9 +2820,14 @@ public class StartCombatService {
+@@ -2773,9 +2844,14 @@ public class StartCombatService {
                          AeternaUnitsHandler.getMausoleumButton(p, otherP, tile, unitH, buttons);
                      }
                  }
@@ -35666,7 +35910,7 @@ index 8b1a9b8..e6e4c6a 100644
                          && (unitH.getUnitCount(Units.UnitType.Spacedock, p2.getColor()) > 0
                                  || unitH.getUnitCount(Units.UnitType.Pds, p2.getColor()) > 0)) {
                      String id = p1.factionButtonChecker() + "assimilate_" + unitH.getName();
-@@ -2835,7 +2887,10 @@ public class StartCombatService {
+@@ -2835,7 +2911,10 @@ public class StartCombatService {
                                  .withEmoji(Emoji.fromFormatted(p2.getFactionEmoji())));
                      }
                      if (CombatRollService.checkIfUnitsOfType(
@@ -37095,6 +37339,21 @@ index 78759d9..391f49c 100644
          return buttons;
      }
  
+diff --git a/src/main/java/ti4/service/tactical/postmovement/BombardmentButton.java b/src/main/java/ti4/service/tactical/postmovement/BombardmentButton.java
+index 4d045c4..cd22bc1 100644
+--- a/src/main/java/ti4/service/tactical/postmovement/BombardmentButton.java
++++ b/src/main/java/ti4/service/tactical/postmovement/BombardmentButton.java
+@@ -11,7 +11,9 @@ public final class BombardmentButton implements PostMovementAbilityButton {
+     public boolean enabled(PostMovementButtonContext ctx) {
+         return ctx.tile().getUnitHolders().size() > 1
+                 && ti4.helpers.ButtonHelper.getTilesOfUnitsWithBombard(ctx.player(), ctx.game())
+-                        .contains(ctx.tile());
++                        .contains(ctx.tile())
++                // Rules audit (core): no roll offered without an enemy ground force on a bombardable planet.
++                && ti4.service.combat.BombardmentService.hasTargets(ctx.player(), ctx.game(), ctx.tile());
+     }
+ 
+     public List<Button> build(PostMovementButtonContext ctx) {
 diff --git a/src/main/java/ti4/service/tactical/postmovement/ZelianAgentButton.java b/src/main/java/ti4/service/tactical/postmovement/ZelianAgentButton.java
 index c84c651..8829db7 100644
 --- a/src/main/java/ti4/service/tactical/postmovement/ZelianAgentButton.java
@@ -37384,6 +37643,81 @@ index e89c241..4f891e0 100644
  
              startButtons.add(Buttons.red(factionChecker + "confirmSecondAction", "Use Ability To Do Another Action"));
          }
+diff --git a/src/main/java/ti4/service/turn/TurnRules.java b/src/main/java/ti4/service/turn/TurnRules.java
+new file mode 100644
+index 0000000..1211212
+--- /dev/null
++++ b/src/main/java/ti4/service/turn/TurnRules.java
+@@ -0,0 +1,69 @@
++package ti4.service.turn;
++
++import java.util.ArrayList;
++import java.util.List;
++import javax.annotation.Nullable;
++import lombok.experimental.UtilityClass;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.helpers.ButtonHelper;
++import ti4.helpers.Helper;
++
++/**
++ * Core-rule checks on ending a turn and passing (rules audit, core rules):
++ * <ul>
++ *   <li>LRR 3 ACTION PHASE (passing): "a player cannot pass until they have performed the strategic action of
++ *   each of their strategy cards". The original only left Pass off the turn menu while a card was unplayed; a Pass
++ *   pressed from an older menu (or the engine) was accepted.</li>
++ *   <li>LRR 2 ACTION CARDS: "a player cannot have more than seven action cards in their hand; if a player ever has
++ *   more, they must discard down" (Executive Sanctions: three). The original posted discard buttons and played on;
++ *   now the player discards before ending the turn or passing (always possible: no card is lost that the rule would
++ *   not take).</li>
++ * </ul>
++ */
++@UtilityClass
++public class TurnRules {
++
++    /** Strategy cards the player holds and has not played this round. */
++    public static List<Integer> unplayedStrategyCards(Game game, Player player) {
++        List<Integer> out = new ArrayList<>();
++        if (game == null || player == null || player.getSCs() == null) return out;
++        for (Integer sc : player.getSCs()) if (sc != null && !game.getPlayedSCs().contains(sc)) out.add(sc);
++        return out;
++    }
++
++    /** Why the player may not pass yet (an unplayed strategy card), or null. Homebrew strategy card sets are left alone. */
++    @Nullable
++    public static String passRefusal(Game game, Player player) {
++        if (game == null || player == null || game.isHomebrewSCMode()) return null;
++        List<Integer> left = unplayedStrategyCards(game, player);
++        if (left.isEmpty()) return null;
++        List<String> names = new ArrayList<>();
++        for (int sc : left) names.add(Helper.getSCName(sc, game));
++        return "Play " + String.join(" and ", names) + " first: you cannot pass while you hold a strategy card you have"
++                + " not played.";
++    }
++
++    /**
++     * The discard prompt for an over-limit hand, posted once per hand size (ButtonHelper.checkACLimit's own prompt), so a
++     * refused End Turn / Pass always has its way out on screen: web players and the autopilot (shim cards policy
++     * answers an owed action_card.discard at once) discard, then end the turn.
++     */
++    public static void ensureDiscardPrompt(Game game, Player player) {
++        if (game == null || player == null || !ButtonHelper.isPlayerOverLimit(game, player)) return;
++        String key = "handLimitPrompted" + player.getFaction();
++        String mark = game.getRound() + ":" + player.getAcCount();
++        if (mark.equals(game.getStoredValue(key))) return;
++        game.setStoredValue(key, mark);
++        ButtonHelper.checkACLimit(game, player);
++    }
++
++    /** Why the player must discard before ending the turn or passing (over the action card hand limit), or null. */
++    @Nullable
++    public static String handLimitRefusal(Game game, Player player) {
++        if (game == null || player == null || !ButtonHelper.isPlayerOverLimit(game, player)) return null;
++        int limit = ButtonHelper.getACLimit(game, player);
++        return "Discard down to your action card hand limit of " + limit + " first (you hold " + player.getAcCount()
++                + ").";
++    }
++}
 diff --git a/src/main/java/ti4/spring/api/auth/RestDiscordClient.java b/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
 index 8501858..8990781 100644
 --- a/src/main/java/ti4/spring/api/auth/RestDiscordClient.java
