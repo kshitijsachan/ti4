@@ -18,6 +18,7 @@ import { planPayment, productionPayload } from "./engine/policy/production.js";
 import { chooseFallback, draftBoardsMissing, FALLBACK_FORCE_MS, isBlocking, staleForBot, waitsOn } from "./engine/policy/fallback.js";
 import { actionInFlight } from "./engine/policy/turn.js";
 import type { Decision, GameState as EngineState } from "./engine/types.js";
+import { WebDataCache } from "./webdata.js";
 
 /*
  * Autopilot seats: a seat flagged `autopilot` is played by the shim so one person can try the game alone.
@@ -320,12 +321,40 @@ const IDLE_GAME_MS = 10 * 60_000;
 const IDLE_SCAN_MS = 60_000;
 const BUSY_TEXT = /hasn't finished processing the last task/i;
 
+/** Autopilot.stateOf from the bot's web data. */
+function webState(data: Json): GameState {
+  const colors = new Map<string, string>();
+  const players = new Map<string, { faction: string; techs: number; owned: string[] }>();
+  for (const p of data.playerData ?? []) {
+    if (p.discordId && p.color) colors.set(String(p.discordId), String(p.color));
+    if (p.discordId && p.faction && p.faction !== "null" && p.faction !== "neutral") players.set(String(p.discordId), { faction: String(p.faction), techs: (p.techs ?? []).length, owned: (p.techs ?? []).map(String) });
+  }
+  return {
+    phase: String(data.gameState?.phase ?? "") || null,
+    active: data.gameState?.activePlayer ? String(data.gameState.activePlayer) : null,
+    colors,
+    combat: !!data.gameState?.activeCombat,
+    combatRound: Number(data.gameState?.activeCombat?.round ?? 0) || null,
+    combatColors: (data.gameState?.activeCombat?.participantColors ?? []).map(String),
+    players,
+  };
+}
+
+/** Autopilot.factionOf from the bot's web data: user id -> faction. */
+function webFactions(data: Json): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const p of data.playerData ?? []) if (p.discordId && p.faction && p.faction !== "null") map.set(String(p.discordId), String(p.faction));
+  return map;
+}
+
 export class Autopilot {
   private pilots = new Map<string, SeatPilot>();
   /** One autopilot press at a time across the table: the bot handles each game's presses in order anyway. */
   private chain: Promise<unknown> = Promise.resolve();
   private drafts = new Map<string, { at: number; data: Json | null }>();
   private webFactions = new Map<string, { at: number; map: Map<string, string> }>();
+  /** The bot's web data, one revalidated read per game shared by every seat (webdata.ts). */
+  readonly webData: WebDataCache;
   /** Typed engine API (docs/ENGINE.md); when it answers, it is authoritative and the heuristics below are skipped. */
   engine?: EngineClient;
 
@@ -334,6 +363,7 @@ export class Autopilot {
     readonly clients: Clients,
     readonly botApi: string,
   ) {
+    this.webData = new WebDataCache(botApi);
     this.sync();
   }
 
@@ -504,56 +534,22 @@ export class Autopilot {
   /** When an autopilot last pressed "Start Strategy Phase", per game: one press per status phase, by one seat. */
   readonly lastStrategyStart = new Map<string, number>();
 
-  /** A game's phase (`strategy`, `action`, `status.scoring`, `agenda.voting`, ...) and whose turn it is, cached 3s. */
+  /**
+   * A game's phase (`strategy`, `action`, `status.scoring`, `agenda.voting`, ...) and whose turn it is, read at most
+   * every 3 s (30 s once the game is finished: a rewind past its end calls forgetState). One read per game at a time
+   * for every seat, revalidated with the payload's ETag (a 304 when nothing was saved).
+   */
   async stateOf(game: string): Promise<GameState | null> {
     const hit = this.states.get(game);
-    if (hit && Date.now() - hit.at < 3000) return hit.state;
-    // One read per game at a time: every seat of a game found the cache stale at once and each fetched (and parsed)
-    // the same web data (up to 136 reads of a game every 3 s).
-    let read = this.stateReads.get(game);
-    if (!read) {
-      read = this.readState(game).finally(() => {
-        if (this.stateReads.get(game) === read) this.stateReads.delete(game);
-      });
-      this.stateReads.set(game, read);
-    }
-    return read;
-  }
-
-  private stateReads = new Map<string, Promise<GameState | null>>();
-
-  private async readState(game: string): Promise<GameState | null> {
-    let state: GameState | null = null;
-    try {
-      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(5000) });
-      if (res.ok) {
-        const data = (await res.json()) as Json;
-        const colors = new Map<string, string>();
-        const players = new Map<string, { faction: string; techs: number; owned: string[] }>();
-        for (const p of data.playerData ?? []) {
-          if (p.discordId && p.color) colors.set(String(p.discordId), String(p.color));
-          if (p.discordId && p.faction && p.faction !== "null" && p.faction !== "neutral") players.set(String(p.discordId), { faction: String(p.faction), techs: (p.techs ?? []).length, owned: (p.techs ?? []).map(String) });
-        }
-        state = {
-          phase: String(data.gameState?.phase ?? "") || null,
-          active: data.gameState?.activePlayer ? String(data.gameState.activePlayer) : null,
-          colors,
-          combat: !!data.gameState?.activeCombat,
-          combatRound: Number(data.gameState?.activeCombat?.round ?? 0) || null,
-          combatColors: (data.gameState?.activeCombat?.participantColors ?? []).map(String),
-          players,
-        };
-      }
-    } catch {
-      state = null;
-    }
+    if (hit && Date.now() - hit.at < (hit.state?.phase === "finished" ? 30000 : 3000)) return hit.state;
+    const state = await this.webData.get(game, "state", 3000, webState, 5000);
     this.states.set(game, { at: Date.now(), state });
     return state;
   }
 
   forgetState(game: string) {
     this.states.delete(game);
-    this.stateReads.delete(game); // the next stateOf reads afresh, not a read already under way
+    this.webData.forget(game); // the next stateOf reads afresh, not a read already under way
   }
 
   /**
@@ -595,16 +591,8 @@ export class Autopilot {
     if (authoritative) return authoritative;
     const hit = this.webFactions.get(game);
     if (hit && Date.now() - hit.at < 20000) return hit.map.get(userId);
-    const map = new Map<string, string>();
-    try {
-      const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(8000) });
-      if (res.ok) {
-        const data = (await res.json()) as Json;
-        for (const p of data.playerData ?? []) if (p.discordId && p.faction && p.faction !== "null") map.set(String(p.discordId), String(p.faction));
-      }
-    } catch {
-      /* bot API down: keep what we knew (below), else fall back to the draft state */
-    }
+    // Bot API down: an empty map, so we keep what we knew (below), else fall back to the draft state.
+    const map = (await this.webData.get(game, "factions", 20000, webFactions)) ?? new Map<string, string>();
     // A failed read keeps the last good one (it is still the bot's word), but tries again soon.
     if (!map.size && hit?.map.size) {
       this.webFactions.set(game, { at: Date.now() - 15000, map: hit.map });
@@ -1964,14 +1952,19 @@ class SeatPilot {
       // take them; the policy answers only when GameState.setup says the table is ready, the engine refuses otherwise.
       const open = (await engine.openDecisions(game)) ?? [];
       const table = open.filter(isTableSetupStep);
-      const state = await engine.state(game, this.userId, 2000);
-      if (state?.ended) continue; // the game is over: nothing to answer (live pbd114 kept its phase "action")
+      // Until something is ours, the table's public view decides (ended, factions, the draft): one read per game for
+      // every seat, instead of one per seat per pass (live soak: ~700 game x seat states every 2 min).
+      const pub = await engine.state(game, undefined, 2000);
+      if (pub?.ended) continue; // the game is over: nothing to answer (live pbd114 kept its phase "action")
       // And the strategy cards we played: their windows list only followers; we resolve the primary on them.
-      const holding = open.filter((d) => answersOutsideWindow(d, this.userId, state) && !own?.some((x) => x.id === d.id));
+      const holding = open.filter((d) => answersOutsideWindow(d, this.userId, pub) && !own?.some((x) => x.id === d.id));
       const mine = [...(own ?? []), ...table, ...holding];
       this.watchdogSweep(game, mine);
-      if (state?.draft?.status === "drafting") await this.draftResnapshot(game, open, state, now);
+      if (pub?.draft?.status === "drafting") await this.draftResnapshot(game, open, pub, now);
       if (!mine.length) continue;
+      // Our own view (hand, private windows) for the answers.
+      const state = (await engine.state(game, this.userId, 2000)) ?? pub;
+      if (state?.ended) continue;
       for (const d of mine) {
         if (this.engineDead.has(d.id)) continue;
         // Still listed but no longer waiting on us (another player's turn, a finished combat's roll window): no
@@ -2148,13 +2141,8 @@ class SeatPilot {
       board: async (game, fresh) => {
         const hit = self.boards.get(game);
         if (hit && !fresh && Date.now() - hit.at < 1500) return hit.board;
-        let board: Board | null = null;
-        try {
-          const res = await fetch(`${self.mgr.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(8000) });
-          if (res.ok) board = parseBoard(game, (await res.json()) as Json, self.store.state.users);
-        } catch {
-          board = null;
-        }
+        // Shared by every seat of the game (parseBoard does not depend on the seat); fresh: a read that starts now.
+        const board = await self.mgr.webData.get(game, "board", fresh ? 0 : 1500, (data) => parseBoard(game, data, self.store.state.users));
         self.boards.set(game, { at: Date.now(), board });
         return board;
       },
