@@ -42,8 +42,7 @@ export type TurnActionValue =
    * Take another action this turn (confirmSecondAction / doAnotherAction). Offered only when something allows it;
    * sources names it (Master Plan, Minister of War, Fleet Logistics, Thunder's Edge, …).
    */
-  /** unavailable: why the additional action cannot be taken now (audit-gaps-3: Master Plan not played yet / used). */
-  | { action: "another_action"; sources: string[]; unavailable?: string | null };
+  | { action: "another_action"; sources: string[] };
 export type TurnAction = DecisionBase<"turn.action", TurnActionValue>;
 
 // ---------------------------------------------------------------- tactical.activate

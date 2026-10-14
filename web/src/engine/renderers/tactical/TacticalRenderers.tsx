@@ -180,10 +180,7 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
   /* The card I played this turn has a mandatory primary part left (Imperial's secret / Mecatol point): the engine
      refuses End turn until it is done (pt9). */
   const primaryMissing = opts.map((o) => (o.value!.action === "end_turn" ? o.value!.primaryMissing : null)).find((x): x is string => !!x) ?? null;
-  /* audit-gaps-3: Master Plan's additional action is the player's who played it (greyed with the reason). */
-  const anotherBlocked = (o: TurnOpt) => (o.value!.action === "another_action" ? o.value!.unavailable ?? null : null);
   const disabled = (o: TurnOpt) =>
-    !!anotherBlocked(o) ||
     owed.length > 0 ||
     ((waits.length > 0 || overOf(o).length > 0) && ends(o)) ||
     ((midAction || !!primaryMissing) && endsTurn(o));
@@ -206,8 +203,6 @@ export function TurnActionView({ decision, state, answer }: RendererProps<TurnAc
     })
     .filter((x) => x !== null);
   const label = (o: TurnOpt) => {
-    const blocked = anotherBlocked(o);
-    if (blocked) return `${turnLabel(o, me?.commandTokens.tactic)} · ${blocked}`;
     if (midAction && endsTurn(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · finish your tactical action first`;
     if (primaryMissing && endsTurn(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${primaryMissing}`;
     if (overOf(o).length && ends(o)) return `${turnLabel(o, me?.commandTokens.tactic)} · ${overOf(o).join("; ")}`;

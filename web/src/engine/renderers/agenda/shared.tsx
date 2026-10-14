@@ -147,18 +147,11 @@ export function OptionButtons({
   const opts = optionsOf(decision).filter((o) => !o.needsInput);
   return (
     <div className={classes.actions}>
-      {opts.map((o) => {
-        /* value.unavailable: a rules gate's reason (audit-gaps-3: a Legal Text's elected player, Bribery's new winner):
-           greyed with the reason, never hidden. */
-        const why = (o.value as { unavailable?: unknown } | null | undefined)?.unavailable;
-        const reason = typeof why === "string" && why ? why : null;
-        return (
-          <Button key={o.id} size="xs" variant={o.style === "danger" ? "light" : o.style === "success" ? "filled" : "default"} disabled={o.disabled || !!reason} title={reason ?? undefined} onClick={() => answer(o.id)}>
-            {label(o) ?? o.label}
-            {reason ? ` · ${reason}` : ""}
-          </Button>
-        );
-      })}
+      {opts.map((o) => (
+        <Button key={o.id} size="xs" variant={o.style === "danger" ? "light" : o.style === "success" ? "filled" : "default"} disabled={o.disabled} onClick={() => answer(o.id)}>
+          {label(o) ?? o.label}
+        </Button>
+      ))}
     </div>
   );
 }

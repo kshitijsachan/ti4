@@ -1,184 +1,218 @@
 {
- "name": "ac-timing-legal-agenda",
- "description": "Positive control for ActionCardTiming (audit-acs): AGENDA window cards played in the agenda phase (pbd72 r3, Conscription revealed, phase agendawaiting) must be ACCEPTED: when-cards (Diplomatic Pressure, Veto), after-cards (Imperial Rider, Sanction, Hack Election, Insider Information), Distinguished Councilor, Bribery, Confounding Legal Text, Deadly Plot. Played by Empyrean (3 cards in hand, each drawn right before it is played); Imperial Rider and Confounding Legal Text are already in Winnu's hand and played by Winnu; nobody else is the active player (agenda phase). Winnu first discards Bunker and draws a Morale Boost so the bot reposts Winnu's hand tray. audit-gaps-3 (TI4_VOTE_CHECK): Bribery (after the speaker votes) and Confounding Legal Text (when another player is elected) are not legal before the votes are in on this For/Against agenda; they moved to gaps3-agenda-cards (an Elect Player agenda after every vote).",
- "base": {
-  "recording": "pbd72",
-  "index": 760,
-  "repost": false
- },
- "setup": [
-  "/ac discard action_card_id:49 faction_or_color:winnu",
-  "/ac draw_specific_ac ac_id:mb4 faction_or_color:winnu"
- ],
- "steps": [
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "dp1",
-    "faction_or_color": "empyrean"
-   }
+  "name": "ac-timing-legal-agenda",
+  "description": "Positive control for ActionCardTiming (audit-acs): AGENDA window cards played in the agenda phase (pbd72 r3, Conscription revealed, phase agendawaiting) must be ACCEPTED: when-cards (Diplomatic Pressure, Veto), after-cards (Imperial Rider, Sanction, Hack Election, Insider Information), Distinguished Councilor, Bribery, Confounding Legal Text, Deadly Plot. Played by Empyrean (3 cards in hand, each drawn right before it is played); Imperial Rider and Confounding Legal Text are already in Winnu's hand and played by Winnu; nobody else is the active player (agenda phase). Winnu first discards Bunker and draws a Morale Boost so the bot reposts Winnu's hand tray.",
+  "base": {
+    "recording": "pbd72",
+    "index": 760,
+    "repost": false
   },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "dp1"
+  "setup": [
+    "/ac discard action_card_id:49 faction_or_color:winnu",
+    "/ac draw_specific_ac ac_id:mb4 faction_or_color:winnu"
+  ],
+  "steps": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "dp1",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "dp1"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "imp_rider"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "sanction",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "sanction"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "hack",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "hack"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "insider",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "insider"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "distinguished",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "distinguished"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "bribery",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "bribery"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "confounding"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "deadly_plot",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "deadly_plot"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "veto",
+        "faction_or_color": "empyrean"
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "veto"
+        }
+      },
+      "as": "empyrean"
+    },
+    {
+      "wait": 800
     }
-   },
-   "as": "empyrean"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "imp_rider"
-    }
-   },
-   "as": "winnu"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "sanction",
-    "faction_or_color": "empyrean"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "sanction"
-    }
-   },
-   "as": "empyrean"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "hack",
-    "faction_or_color": "empyrean"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "hack"
-    }
-   },
-   "as": "empyrean"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "insider",
-    "faction_or_color": "empyrean"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "insider"
-    }
-   },
-   "as": "empyrean"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "distinguished",
-    "faction_or_color": "empyrean"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "distinguished"
-    }
-   },
-   "as": "empyrean"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "deadly_plot",
-    "faction_or_color": "empyrean"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "deadly_plot"
-    }
-   },
-   "as": "empyrean"
-  },
-  {
-   "wait": 800
-  },
-  {
-   "command": "ac draw_specific_ac",
-   "options": {
-    "ac_id": "veto",
-    "faction_or_color": "empyrean"
-   }
-  },
-  {
-   "wait": 1500
-  },
-  {
-   "answer": {
-    "kind": "action_card.play",
-    "value": {
-     "actionCard": "veto"
-    }
-   },
-   "as": "empyrean"
-  },
-  {
-   "wait": 800
+  ],
+  "expect": {
+    "invariants": true
   }
- ],
- "expect": {
-  "invariants": true
- }
 }

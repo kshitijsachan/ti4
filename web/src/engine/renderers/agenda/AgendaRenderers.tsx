@@ -109,10 +109,10 @@ function OutcomePick({ decision, state, answer }: RendererProps) {
             <Tile
               key={o.id}
               name={outcomeLabel(id, state, str(o, "name"))}
-              sub={str(o, "unavailable") ?? (str(o, "planetOwner") ? "one of their planets…" : undefined)}
+              sub={str(o, "planetOwner") ? "one of their planets…" : undefined}
               faction={factionOf(id, state)}
               num={castSoFar[id] || undefined}
-              disabled={o.disabled || !!str(o, "unavailable")}
+              disabled={o.disabled}
               onClick={() => answer(o.id)}
             />
           );
