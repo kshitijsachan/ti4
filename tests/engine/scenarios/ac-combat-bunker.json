@@ -1,70 +1,72 @@
 {
-  "name": "ac-combat-bunker",
-  "description": "pbd60 save 122: muaat plays Bunker (start of invasion) and applies its -4 bombardment temp modifier (applytempcombatmod__action_cards__bunker); also plays Shields Holding and Direct Hit (play + Sabotage window only, no automation).",
-  "base": {
-    "recording": "pbd60",
-    "index": 122
+ "name": "ac-combat-bunker",
+ "description": "pbd60 save 122: muaat plays Bunker (start of invasion) and applies its -4 bombardment temp modifier (applytempcombatmod__action_cards__bunker); also plays Shields Holding and Direct Hit (play + Sabotage window only, no automation). (audit-gaps-3: setup adds a damaged muaat dreadnought, as the other ac-combat scenarios: Shields Holding needs muaat to fight the space combat with ships, Direct Hit a damaged opponent ship.)",
+ "base": {
+  "recording": "pbd60",
+  "index": 122
+ },
+ "setup": [
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "bunker",
+    "faction_or_color": "muaat"
+   }
   },
-  "setup": [
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "bunker",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sh1",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "dh1",
-        "faction_or_color": "mentak"
-      }
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sh1",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "dh1",
+    "faction_or_color": "mentak"
+   }
+  },
+  "/add_units tile_name:308 unit_names:\"1 dreadnought\" faction_or_color:muaat",
+  "/add_sustain_damage tile_name:308 unit_names:\"1 dreadnought\" faction_or_color:muaat"
+ ],
+ "steps": [
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "bunker"
     }
-  ],
-  "steps": [
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "bunker"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "applytempcombatmod__action_cards__bunker"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "sh1"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "dh1"
-        }
-      },
-      "as": "mentak"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "/./",
+    "option": "applytempcombatmod__action_cards__bunker"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "sh1"
     }
-  ],
-  "expect": {
-    "invariants": true
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "dh1"
+    }
+   },
+   "as": "mentak"
   }
+ ],
+ "expect": {
+  "invariants": true
+ }
 }

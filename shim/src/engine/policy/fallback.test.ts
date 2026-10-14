@@ -356,6 +356,29 @@ test("pbd175: the Keleres preset once we play a flavour is stale; during the dra
   assert.equal(chooseTyped(preset([true, false, false]), drafting, ME, { history: [], open: [], all: [] })?.option?.id, "draftPresetKeleres_xxcha");
 });
 
+test("pbd1967 / pbd1195: the Keleres preset is answered once and never after the draft (it re-posts itself)", () => {
+  const preset = (current: string | null) =>
+    decision(
+      "setup.keleres_flavor",
+      ["mentak", "xxcha", "argent"].map((f) => opt(`draftPresetKeleres_${f}`, f, { flavor: f, faction: `keleres${f[0]}`, preset: true, contested: false, current: f === current, homePosition: null, speaker: null })),
+    );
+  const ctx = { history: [], open: [], all: [] };
+  const drafting = { ...unseated, setup: { stage: "draft", waitingOn: [], players: [] } } as unknown as GameState;
+  // Already preset (the re-posted prompt): nothing owed, not a stall, never re-pressed.
+  assert.equal(staleForBot(preset("mentak"), drafting, ME), true);
+  assert.equal(chooseTyped(preset("mentak"), drafting, ME, ctx)?.option ?? null, null);
+  // After the draft (player setup): the preset is over; only the setupStep5 flavour prompt counts.
+  const setup = { ...unseated, setup: { stage: "player_setup", waitingOn: [ME], players: [] } } as unknown as GameState;
+  assert.equal(staleForBot(preset(null), setup, ME), true);
+  assert.equal(chooseTyped(preset(null), setup, ME, ctx)?.option ?? null, null);
+  const flavour = decision(
+    "setup.keleres_flavor",
+    ["mentak", "xxcha"].map((f) => opt(`setupStep5_${ME}_keleres${f[0]}_null_313_no`, f, { flavor: f, faction: `keleres${f[0]}`, preset: false, contested: false, homePosition: "313", speaker: false })),
+  );
+  assert.equal(staleForBot(flavour, setup, ME), false);
+  assert.equal(chooseTyped(flavour, setup, ME, ctx)?.option?.id, `setupStep5_${ME}_keleresm_null_313_no`);
+});
+
 test("pbd181: a tactical action's prompts outside our action-phase turn are stale", () => {
   const conclude = decision("tactical.conclude", [opt("FFCC_sol_doneWithTacticalAction", "Conclude Tactical Action", { action: "conclude" })]);
   const move = decision("tactical.move", [opt("FFCC_sol_concludeMove_210", "Done moving", { op: "done" })]);
@@ -427,6 +450,44 @@ test("pbd223: our milty turn owing a slice — faction / speaker boards are stal
   const theirs = { ...drafting, draft: { ...draft, currentPlayer: OTHER } } as unknown as GameState;
   assert.deepEqual(draftBoardsMissing([factions, orders], theirs, ME), []);
   assert.equal(staleForBot(slices, theirs, ME), true);
+});
+
+test("pbd1295 / pbd1655: consecutive bot drafters — the next drafter picks at once; boards left on the previous drafter are missing", () => {
+  // OTHER (Bot Iota) just took slice A through the engine; it is now our (Bot Kappa's) first pick.
+  const draft = {
+    type: "milty",
+    status: "drafting",
+    currentPlayer: ME,
+    order: ["human", OTHER, ME, ME, OTHER, "human"],
+    players: [
+      { userId: "human", faction: "ralnel", slice: null, speakerOrder: null },
+      { userId: OTHER, faction: null, slice: "A", speakerOrder: null },
+      { userId: ME, faction: null, slice: null, speakerOrder: null },
+    ],
+    available: { slices: ["B", "C"], factions: ["mentak", "cabal"], speakerOrders: [1, 2, 3] },
+  };
+  const drafting = { ...state, phase: "miltydraft", draft } as unknown as GameState;
+  const board = (category: string, picks: string[], userId: string) =>
+    decision("draft.milty.pick", picks.map((p) => opt(`milty_${category}_${p}`, p, { category, pick: p })), {
+      id: `d-${category}`,
+      target: { userId, faction: null, color: null, resolvedBy: "draft_turn" },
+    } as Partial<Decision>);
+  const boards = (userId: string) => [board("slice", ["B", "C"], userId), board("faction", ["mentak", "cabal"], userId), board("order", ["1", "2", "3"], userId)];
+  // Retargeted to us (the save after the previous pick): every board is ours and answered right away.
+  const ours = boards(ME);
+  for (const d of ours) assert.equal(staleForBot(d, drafting, ME), false, d.id);
+  const picks = ours.map((d) => chooseTyped(d, drafting, ME, { history: [], open: ours.filter((x) => x !== d), all: ours }));
+  assert.deepEqual(picks.map((p) => p?.option?.id), ["milty_slice_B", "milty_faction_mentak", "milty_order_1"]);
+  assert.ok(picks.every((p) => p && !p.why.startsWith("fallback")), "the draft policy, not the fallback");
+  assert.deepEqual(draftBoardsMissing(ours, drafting, ME), []);
+  // Still addressed to the drafter who just picked (a rebuild raced the pick): not ours to answer, so they count as
+  // missing and the shim re-snapshots the draft instead of waiting for the legacy fallback.
+  const stale = boards(OTHER);
+  for (const d of stale) assert.equal(chooseTyped(d, drafting, ME, { history: [], open: [], all: stale }), null, d.id);
+  assert.deepEqual(draftBoardsMissing(stale, drafting, ME), ["slice", "faction", "order"]);
+  assert.deepEqual(draftBoardsMissing([...stale.slice(0, 2), ours[2]], drafting, ME), ["slice", "faction"]);
+  // Untargeted boards (captured before the draft knew its drafter) still count as offered.
+  assert.deepEqual(draftBoardsMissing(boards(null as unknown as string).map((d) => ({ ...d, target: null })), drafting, ME), []);
 });
 
 test("pbd228: starting technologies during setup — preferred pick, owned ones skipped, even without value.starting", () => {

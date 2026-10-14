@@ -28,9 +28,9 @@ export const KeleresFlavorRenderer: Renderer<"setup.keleres_flavor"> = ({ decisi
               key={o.id}
               name={factionName(v.faction)}
               icon={<FactionIcon faction={v.flavor} />}
-              sub={v.contested ? (preset ? "In the draft: the preset is cancelled if it gets picked" : "Also drafted by another player") : undefined}
-              go={!v.contested}
-              disabled={o.disabled || !!pending}
+              sub={v.current ? "Your current preset" : v.contested ? (preset ? "In the draft: the preset is cancelled if it gets picked" : "Also drafted by another player") : undefined}
+              go={!v.contested && !v.current}
+              disabled={o.disabled || !!v.current || !!pending}
               pending={pending === o.id}
               onClick={() => void press(o.id)}
             />

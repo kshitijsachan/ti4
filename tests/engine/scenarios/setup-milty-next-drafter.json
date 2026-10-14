@@ -1,0 +1,23 @@
+{
+  "name": "setup-milty-next-drafter",
+  "description": "Live pbd1295 / pbd1655: a person drafts first (legacy press), the next seat drafts through the engine, and the drafter after that must find every draft board (slices, factions, speaker order) addressed to them as a typed draft.milty.pick so their bot picks at once. Live, an engine re-capture of the new game (the on-demand rebuild of its first decisions read) raced the first engine pick: rebuild captured against the game it had loaded before reading the channels and put the boards back on the drafter who had just picked, and nothing retargeted them until the next save, so the next bot only picked ~3 min later through the legacy fallback. The engine pick here races a rebuild the same way (\"rebuild\": true); the boards must still be seat3's (bot fix: Engine.retargetWhenIdle after DecisionRebuild.rebuild). pbd47@7 draft order: seat2, seat4, seat3, seat1.",
+  "base": { "recording": "pbd47", "index": 7 },
+  "setup": [ "/milty show" ],
+  "steps": [
+    { "press": "milty_slice_B", "as": "seat2", "click": true },
+    { "answer": { "kind": "draft.milty.pick", "value": { "category": "slice", "pick": "A" } }, "as": "seat4", "rebuild": true,
+      "legacy": [ { "press": "milty_slice_A" } ] },
+    { "wait": 3000 }
+  ],
+  "expect": {
+    "invariants": true,
+    "state": [ { "path": "draft.currentPlayer", "eq": "${seat3}" } ],
+    "decision": [
+      { "kind": "draft.milty.pick", "as": "seat3", "value": { "category": "slice" }, "open": true },
+      { "kind": "draft.milty.pick", "as": "seat3", "value": { "category": "faction" }, "open": true },
+      { "kind": "draft.milty.pick", "as": "seat3", "value": { "category": "order" }, "open": true },
+      { "kind": "draft.milty.pick", "as": "seat4", "open": false },
+      { "kind": "draft.milty.pick", "as": "seat2", "open": false }
+    ]
+  }
+}

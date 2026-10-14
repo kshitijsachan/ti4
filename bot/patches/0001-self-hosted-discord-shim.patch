@@ -188,6 +188,229 @@ index 6938f8bce..dee20c89a 100644
  
          if (acID.contains("reverse_")) {
              String actionCardTitle = acID.split("_")[2];
+diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/Gaps3ActionCardButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/Gaps3ActionCardButtonHandler.java
+new file mode 100644
+index 000000000..0a4278c21
+--- /dev/null
++++ b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/Gaps3ActionCardButtonHandler.java
+@@ -0,0 +1,217 @@
++package ti4.discord.interactions.buttons.handlers.actioncards;
++
++import java.util.ArrayList;
++import java.util.List;
++import lombok.experimental.UtilityClass;
++import net.dv8tion.jda.api.components.buttons.Button;
++import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
++import ti4.discord.interactions.buttons.Buttons;
++import ti4.discord.interactions.routing.ButtonHandler;
++import ti4.game.Game;
++import ti4.game.Planet;
++import ti4.game.Player;
++import ti4.game.Tile;
++import ti4.helpers.AgendaHelper;
++import ti4.helpers.ButtonHelper;
++import ti4.helpers.ButtonHelperModifyUnits;
++import ti4.helpers.Gaps3Press;
++import ti4.helpers.Units.UnitType;
++import ti4.helpers.VoteCardRules;
++import ti4.message.MessageHelper;
++import ti4.service.combat.CombatCardRules;
++import ti4.service.unit.AddUnitService;
++import ti4.service.unit.RemoveUnitService;
++import ti4.service.unit.RemoveUnitService.RemovedUnit;
++
++/**
++ * audit-gaps-3: resolutions for action cards the original left to the honour system — Ghost Squad (its moves),
++ * Reflective Shielding (the opponent's 2 hits), Bribery (trade goods spent, votes added), Confusing / Confounding Legal
++ * Text (the new elected player). Every press also passes {@link Gaps3Press#refusal} (ScFollowGate press hook).
++ */
++@UtilityClass
++public class Gaps3ActionCardButtonHandler {
++
++    // ------------------------------------------------------------------ Ghost Squad
++
++    @ButtonHandler("resolveGhostSquad")
++    public static void resolveGhostSquad(ButtonInteractionEvent event, Game game, Player player) {
++        Gaps3Press.startGhostSquad(game, player);
++        MessageHelper.sendMessageToChannelWithButtons(
++                player.getCorrectChannel(),
++                player.getRepresentation() + ", move your ground forces between planets you control in the active"
++                        + " system (_Ghost Squad_), one unit per press.",
++                ghostSquadButtons(game, player));
++        ButtonHelper.deleteMessage(event);
++    }
++
++    public static List<Button> ghostSquadButtons(Game game, Player player) {
++        List<Button> buttons = new ArrayList<>();
++        Tile tile = game.getTileByPosition(game.getActiveSystem());
++        if (tile != null) {
++            List<Planet> mine = new ArrayList<>();
++            for (Planet p : tile.getPlanetUnitHolders()) if (player.getPlanets().contains(p.getName())) mine.add(p);
++            for (Planet from : mine) {
++                for (UnitType t : List.of(UnitType.Infantry, UnitType.Mech)) {
++                    if (from.getUnitCount(t, player.getColor()) < 1) continue;
++                    for (Planet to : mine) {
++                        if (to == from) continue;
++                        String unit = t == UnitType.Mech ? "mech" : "infantry";
++                        buttons.add(Buttons.green(
++                                player.factionButtonChecker() + "ghostSquadMove_" + from.getName() + "_" + to.getName()
++                                        + "_" + unit,
++                                "Move 1 " + unit + " " + from.getRepresentation(game) + " to " + to.getRepresentation(game)));
++                    }
++                }
++            }
++        }
++        buttons.add(Buttons.red(player.factionButtonChecker() + "ghostSquadDone", "Done Moving"));
++        return buttons;
++    }
++
++    @ButtonHandler("ghostSquadMove_")
++    public static void ghostSquadMove(ButtonInteractionEvent event, Game game, Player player, String buttonID) {
++        String why = Gaps3Press.ghostSquadRefusal(game, player, buttonID);
++        if (why != null) {
++            MessageHelper.sendEphemeralMessageToEventChannel(event, why);
++            return;
++        }
++        String[] a = buttonID.split("_");
++        Tile tile = game.getTileByPosition(game.getActiveSystem());
++        Planet from = (Planet) tile.getUnitHolders().get(a[1]);
++        Planet to = (Planet) tile.getUnitHolders().get(a[2]);
++        UnitType type = "mech".equals(a[3]) ? UnitType.Mech : UnitType.Infantry;
++        boolean damaged = from.getUnitCount(type, player.getColor())
++                        - from.getDamagedUnitCount(type, player.getColor())
++                < 1;
++        List<RemovedUnit> removed = RemoveUnitService.removeUnit(event, tile, game, player, from, type, 1, damaged);
++        AddUnitService.addUnits(event, game, removed.stream().map(r -> r.onUnitHolder(to)).toList());
++        MessageHelper.sendMessageToChannel(
++                player.getCorrectChannel(),
++                player.getRepresentationNoPing() + " moved 1 " + a[3] + " from " + from.getRepresentation(game) + " to "
++                        + to.getRepresentation(game) + " (_Ghost Squad_).");
++        MessageHelper.replaceButtonsKeepText(event, ghostSquadButtons(game, player));
++    }
++
++    @ButtonHandler("ghostSquadDone")
++    public static void ghostSquadDone(ButtonInteractionEvent event, Game game, Player player) {
++        Gaps3Press.endPending(game, "gsGhostSquadActive");
++        ButtonHelper.deleteMessage(event);
++    }
++
++    // ------------------------------------------------------------------ Reflective Shielding
++
++    @ButtonHandler("resolveReflective")
++    public static void resolveReflective(ButtonInteractionEvent event, Game game, Player player) {
++        Tile tile = game.getTileByPosition(game.getActiveSystem());
++        Player opponent = tile == null ? null : CombatCardRules.opponentWithShips(game, player, tile);
++        if (opponent == null) {
++            MessageHelper.sendEphemeralMessageToEventChannel(event, "No opponent has ships in the active system.");
++            return;
++        }
++        int h = 2;
++        String fc = opponent.factionButtonChecker();
++        List<Button> buttons = new ArrayList<>();
++        buttons.add(Buttons.green(fc + "autoAssignSpaceHits_" + tile.getPosition() + "_" + h, "Auto-assign Hits"));
++        buttons.add(Buttons.red("getDamageButtons_" + tile.getPosition() + "deleteThis_spacecombat", "Manually Assign Hits"));
++        buttons.add(Buttons.gray(fc + "cancelSpaceHits_" + tile.getPosition() + "_" + h, "Cancel a Hit"));
++        String msg = opponent.getRepresentation() + ", _Reflective Shielding_ (" + player.getRepresentationNoPing()
++                + ") produced " + h + " hits against your ships in the active system. "
++                + ButtonHelperModifyUnits.autoAssignSpaceCombatHits(opponent, game, tile, h, event, true);
++        MessageHelper.sendMessageToChannelWithButtons(opponent.getCorrectChannel(), msg, buttons);
++        ButtonHelper.deleteMessage(event);
++    }
++
++    // ------------------------------------------------------------------ Bribery
++
++    @ButtonHandler("resolveBribery")
++    public static void resolveBribery(ButtonInteractionEvent event, Game game, Player player) {
++        Gaps3Press.startPending(game, player, Gaps3Press.BRIBERY);
++        List<Button> buttons = new ArrayList<>();
++        for (int n = 1; n <= Math.min(player.getTg(), 20); n++)
++            buttons.add(Buttons.green(player.factionButtonChecker() + "briberySpend_" + n, "Spend " + n + " TG"));
++        buttons.add(Buttons.red("deleteButtons", "Spend None"));
++        String outcome = VoteCardRules.votedOutcome(game, player);
++        MessageHelper.sendMessageToChannelWithButtons(
++                player.getCorrectChannel(),
++                player.getRepresentation() + ", spend trade goods for _Bribery_: each one is 1 more vote for \""
++                        + (outcome == null ? "?" : AgendaHelper.getAgendaOutcomeName(game, outcome, true)) + "\".",
++                buttons);
++        ButtonHelper.deleteMessage(event);
++    }
++
++    @ButtonHandler("briberySpend_")
++    public static void briberySpend(ButtonInteractionEvent event, Game game, Player player, String buttonID) {
++        int n;
++        try {
++            n = Integer.parseInt(buttonID.substring(buttonID.indexOf("briberySpend_") + "briberySpend_".length()));
++        } catch (NumberFormatException e) {
++            return;
++        }
++        String why = VoteCardRules.briberyRefusal(game, player, n);
++        if (why != null) {
++            MessageHelper.sendEphemeralMessageToEventChannel(event, why);
++            return;
++        }
++        String outcome = VoteCardRules.applyBribery(game, player, n);
++        Gaps3Press.endPending(game, Gaps3Press.BRIBERY);
++        postNewWinner(game, player.getRepresentationNoPing() + " spent " + n + " trade good" + (n == 1 ? "" : "s")
++                + " on _Bribery_: " + n + " more vote" + (n == 1 ? "" : "s") + " for \""
++                + AgendaHelper.getAgendaOutcomeName(game, outcome, true) + "\".");
++        ButtonHelper.deleteMessage(event);
++    }
++
++    private static void postNewWinner(Game game, String intro) {
++        List<String> w = VoteCardRules.winners(game);
++        if (w.isEmpty()) {
++            MessageHelper.sendMessageToChannel(game.getMainGameChannel(), intro);
++            return;
++        }
++        String winner = String.join("*", w);
++        MessageHelper.sendMessageToChannelWithButtons(
++                game.getMainGameChannel(),
++                intro + " The current winner is \"" + AgendaHelper.getAgendaOutcomeName(game, winner, true) + "\".",
++                AgendaHelper.getAgendaResolutionButtons(game, winner, true, true));
++    }
++
++    // ------------------------------------------------------------------ Confusing / Confounding Legal Text
++
++    @ButtonHandler("resolveLegalTextConfounding")
++    public static void resolveConfounding(ButtonInteractionEvent event, Game game, Player player) {
++        elect(game, player, player.getRepresentationNoPing() + " is the elected player instead (_Confounding Legal Text_).");
++        ButtonHelper.deleteMessage(event);
++    }
++
++    @ButtonHandler("resolveLegalTextConfusing")
++    public static void resolveConfusing(ButtonInteractionEvent event, Game game, Player player) {
++        Gaps3Press.startPending(game, player, Gaps3Press.LEGAL_TEXT);
++        List<Button> buttons = new ArrayList<>();
++        for (Player p : game.getRealPlayers()) {
++            if (p == player) continue;
++            buttons.add(Buttons.gray(
++                    player.factionButtonChecker() + "legalTextElect_" + p.getFaction(),
++                    game.isFowMode() ? p.getColor() : p.getFactionNameOrColor()));
++        }
++        MessageHelper.sendMessageToChannelWithButtons(
++                player.getCorrectChannel(),
++                player.getRepresentation() + ", choose the player who is elected instead (_Confusing Legal Text_).",
++                buttons);
++        ButtonHelper.deleteMessage(event);
++    }
++
++    @ButtonHandler("legalTextElect_")
++    public static void legalTextElect(ButtonInteractionEvent event, Game game, Player player, String buttonID) {
++        Player target = game.getPlayerFromColorOrFaction(buttonID.substring(buttonID.indexOf("legalTextElect_") + 15));
++        if (target == null) return;
++        Gaps3Press.endPending(game, Gaps3Press.LEGAL_TEXT);
++        elect(game, target, target.getRepresentationNoPing() + " is the elected player instead (_Confusing Legal Text_ from "
++                + player.getRepresentationNoPing() + ").");
++        ButtonHelper.deleteMessage(event);
++    }
++
++    private static void elect(Game game, Player elected, String msg) {
++        VoteCardRules.recordLegalText(game, elected);
++        String outcome = game.isFowMode() ? elected.getColor() : elected.getFaction();
++        MessageHelper.sendMessageToChannelWithButtons(
++                game.getMainGameChannel(), msg, AgendaHelper.getAgendaResolutionButtons(game, outcome, true, true));
++    }
++}
 diff --git a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/ArmisticeAcd2ButtonHandler.java b/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/ArmisticeAcd2ButtonHandler.java
 index f292eb057..1ad310856 100644
 --- a/src/main/java/ti4/discord/interactions/buttons/handlers/actioncards/acd2/ArmisticeAcd2ButtonHandler.java
@@ -3379,10 +3602,10 @@ index d91d9d548..507bd4e23 100644
      private static void sendUndoConfirmationMessage(
 diff --git a/src/main/java/ti4/game/persistence/UnendedGameChannels.java b/src/main/java/ti4/game/persistence/UnendedGameChannels.java
 new file mode 100644
-index 000000000..bf2e8c037
+index 000000000..a37264e7f
 --- /dev/null
 +++ b/src/main/java/ti4/game/persistence/UnendedGameChannels.java
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,142 @@
 +package ti4.game.persistence;
 +
 +import java.util.ArrayList;
@@ -3500,7 +3723,8 @@ index 000000000..bf2e8c037
 +        if (name == null) return null;
 +        List<Category> found = guild.getCategoriesByName(name, true);
 +        if (!found.isEmpty()) return found.getFirst();
-+        return guild.createCategory(name).complete();
++        // With the game category's overrides (@everyone denied): a bare one made later games in it public.
++        return CreateGameService.createGameCategory(guild, name);
 +    }
 +
 +    private static Guild guild(Game game) {
@@ -3880,10 +4104,10 @@ index 000000000..e00c4580f
 +    }
 +}
 diff --git a/src/main/java/ti4/helpers/ActionCardHelper.java b/src/main/java/ti4/helpers/ActionCardHelper.java
-index 88c72d88a..9cb040e92 100644
+index 88c72d88a..aa3ba8bc4 100644
 --- a/src/main/java/ti4/helpers/ActionCardHelper.java
 +++ b/src/main/java/ti4/helpers/ActionCardHelper.java
-@@ -923,6 +923,13 @@ public class ActionCardHelper {
+@@ -923,6 +923,16 @@ public class ActionCardHelper {
          } else {
              String buttonLabel = "Resolve " + actionCardTitle;
              String automationID = actionCard.getAutomationID();
@@ -3894,10 +4118,33 @@ index 88c72d88a..9cb040e92 100644
 +            }
 +            // audit-gaps-2 (TI4_RULES_AC): Intercept — the opponent cannot retreat during this round of space combat.
 +            if ("intercept".equals(acID)) AcTargets.recordIntercept(game, player);
++            // audit-gaps-3: plays whose effects are judged later (Master Plan's additional action, combat cards).
++            if (acID.startsWith("master_plan")) ti4.selfhost.SecondActionGate.recordMasterPlan(game, player);
++            ti4.service.combat.CombatCardRules.recordPlay(game, player, acID);
  
              if (!actionCardIsCancelable) {
                  MessageHelper.sendMessageToChannelWithEmbedsAndButtons(
-@@ -1414,6 +1421,15 @@ public class ActionCardHelper {
+@@ -1067,12 +1077,17 @@ public class ActionCardHelper {
+             }
+ 
+             if ("confounding".equals(automationID)) {
+-                codedButtons.add(Buttons.green("autoresolve_manual", buttonLabel));
++                // audit-gaps-3 (TI4_VOTE_CHECK): resolving it makes this player the elected player.
++                codedButtons.add(VoteCardRules.on(game)
++                        ? Buttons.green(player.factionButtonChecker() + "resolveLegalTextConfounding", buttonLabel)
++                        : Buttons.green("autoresolve_manual", buttonLabel));
+                 sendResolveMsgToMainChannel(introBody, codedButtons, player, game);
+             }
+ 
+             if ("confusing".equals(automationID)) {
+-                codedButtons.add(Buttons.green("autoresolve_manual", buttonLabel));
++                codedButtons.add(VoteCardRules.on(game)
++                        ? Buttons.green(player.factionButtonChecker() + "resolveLegalTextConfusing", buttonLabel)
++                        : Buttons.green("autoresolve_manual", buttonLabel));
+                 sendResolveMsgToMainChannel(introBody + String.format(targetMsg, "player"), codedButtons, player, game);
+             }
+ 
+@@ -1414,6 +1429,19 @@ public class ActionCardHelper {
              if ("flank_speed".equals(automationID)) {
                  game.setStoredValue("flankspeedBoost", "1");
              }
@@ -3906,14 +4153,48 @@ index 88c72d88a..9cb040e92 100644
 +            if (automationID != null && automationID.startsWith("nav_suite")) {
 +                game.setStoredValue("navSuitePlayed" + player.getFaction(), "yes");
 +            }
-+            if (automationID != null && (automationID.contains("lost_star") || automationID.startsWith("silence_space")
-+                    || automationID.startsWith("nav_suite"))) {
++            // audit-gaps-3: Nav Suite, Lost Star Chart, In the Silence of Space and Solar Flare are modelled
++            // (MovementCardRules); with the range check off they stay unmodelled as before.
++            if (automationID != null) MovementCardRules.recordPlay(game, player, automationID);
++            if (automationID != null && !MovementCardRules.on(game)
++                    && (automationID.contains("lost_star") || automationID.startsWith("silence_space")
++                            || automationID.startsWith("nav_suite"))) {
 +                game.setStoredValue(MovementRules.UNMODELLED_KEY, automationID);
 +            }
  
              if ("refabrication".equals(automationID)) {
                  codedButtons.add(Buttons.green(player.factionButtonChecker() + "resolveSisterShip", buttonLabel));
-@@ -2355,6 +2371,18 @@ public class ActionCardHelper {
+@@ -2013,6 +2041,9 @@ public class ActionCardHelper {
+             }
+ 
+             if ("bribery".equals(automationID)) {
++                // audit-gaps-3 (TI4_VOTE_CHECK): the trade goods are spent and the votes added by the bot.
++                if (VoteCardRules.on(game))
++                    codedButtons.add(Buttons.green(player.factionButtonChecker() + "resolveBribery", buttonLabel));
+                 MessageHelper.sendMessageToChannelWithButtons(
+                         channel2,
+                         player.getRepresentation()
+@@ -2052,10 +2083,19 @@ public class ActionCardHelper {
+             }
+ 
+             if ("ghost_squad".equals(automationID)) {
++                // audit-gaps-3 (TI4_RULES_AC): the moves are offered (planets you control in the active system).
++                if (RulesGate.ACTION_CARDS.judges(game))
++                    codedButtons.add(Buttons.green(player.factionButtonChecker() + "resolveGhostSquad", buttonLabel));
+                 MessageHelper.sendMessageToChannelWithButtons(
+                         channel2, String.format(targetMsg, "ground forces"), codedButtons);
+             }
+ 
++            // audit-gaps-3 (TI4_RULES_AC): Reflective Shielding's 2 hits go to the opponent's hits prompt.
++            if ("reflective".equals(automationID) && RulesGate.ACTION_CARDS.judges(game)) {
++                codedButtons.add(Buttons.green(player.factionButtonChecker() + "resolveReflective", buttonLabel));
++                MessageHelper.sendMessageToChannelWithButtons(channel2, introMsg, codedButtons);
++            }
++
+             if (game.isMonumentsMode()
+                     && List.of("monuments_festival", "monuments_rebel_bombing", "monuments_renovation")
+                             .contains(automationID)) {
+@@ -2355,6 +2395,18 @@ public class ActionCardHelper {
      }
  
      public static void serveManipulateInvestmentButtons(Game game, Player player) {
@@ -3934,10 +4215,10 @@ index 88c72d88a..9cb040e92 100644
              Button button;
 diff --git a/src/main/java/ti4/helpers/ActionCardTiming.java b/src/main/java/ti4/helpers/ActionCardTiming.java
 new file mode 100644
-index 000000000..acb9d0d04
+index 000000000..2d95f86ed
 --- /dev/null
 +++ b/src/main/java/ti4/helpers/ActionCardTiming.java
-@@ -0,0 +1,323 @@
+@@ -0,0 +1,335 @@
 +package ti4.helpers;
 +
 +import java.util.HashMap;
@@ -4096,6 +4377,10 @@ index 000000000..acb9d0d04
 +                    return name + " needs 1 of your cruisers in the active system.";
 +                if ("harness".equals(card.getAlias()) && !tile.isAnomaly(game, player))
 +                    return name + " can only be played after you activate an anomaly.";
++                // audit-gaps-3: Nav Suite / Lost Star Chart / Silence of Space after the movement, Solar Flare after
++                // SPACE CANNON OFFENSE.
++                String mc = MovementCardRules.timingRefusal(game, player, card.getAlias());
++                if (mc != null) return name + " " + mc;
 +                return null;
 +            }
 +            case OWN_TURN -> {
@@ -4115,6 +4400,9 @@ index 000000000..acb9d0d04
 +                    String why = AcCosts.unaffordable(game, player, "reveal_prototype");
 +                    if (why != null) return name + ": " + why;
 +                }
++                // audit-gaps-3 (TI4_RULES_AC): combat cards judged from the combat state.
++                String cc = ti4.service.combat.CombatCardRules.playRefusal(game, player, card.getAlias());
++                if (cc != null) return name + " " + cc;
 +                return null;
 +            }
 +            case TACTICAL -> {
@@ -4124,6 +4412,8 @@ index 000000000..acb9d0d04
 +                    String why = AcTargets.directHitReason(game, player);
 +                    if (why != null) return name + " " + why;
 +                }
++                String cc = ti4.service.combat.CombatCardRules.playRefusal(game, player, card.getAlias());
++                if (cc != null) return name + " " + cc;
 +                return null;
 +            }
 +            case ACTION_PHASE -> {
@@ -4135,6 +4425,9 @@ index 000000000..acb9d0d04
 +                    String why = AcTargets.deadlyPlotReason(game, player);
 +                    if (why != null) return name + " " + why;
 +                }
++                // audit-gaps-3 (TI4_VOTE_CHECK): Bribery, Confusing / Confounding Legal Text.
++                String vc = VoteCardRules.playRefusal(game, player, card.getAlias());
++                if (vc != null) return name + " " + vc;
 +                return null;
 +            }
 +            case STRATEGY -> {
@@ -4374,10 +4667,10 @@ index 9b27bd510..588543d2f 100644
                      + " Your current command tokens are " + player.getCCRepresentation()
 diff --git a/src/main/java/ti4/helpers/AgendaRules.java b/src/main/java/ti4/helpers/AgendaRules.java
 new file mode 100644
-index 000000000..bb289f156
+index 000000000..64a509d7d
 --- /dev/null
 +++ b/src/main/java/ti4/helpers/AgendaRules.java
-@@ -0,0 +1,188 @@
+@@ -0,0 +1,212 @@
 +package ti4.helpers;
 +
 +import java.util.Set;
@@ -4447,6 +4740,30 @@ index 000000000..bb289f156
 +        if (game == null || owner == null) return;
 +        game.setStoredValue(POLITICAL_SECRET + owner.getFaction(),
 +                game.getRound() + "|" + game.getStoredValue("agendaCount"));
++    }
++
++    /** {@code player}'s own Political Secret was played on the agenda now being resolved. */
++    public static boolean politicalSecretActive(Game game, Player player) {
++        if (game == null || player == null || !on(game)) return false;
++        String v = game.getStoredValue(POLITICAL_SECRET + player.getFaction());
++        String phase = String.valueOf(game.getPhaseOfGame()).toLowerCase();
++        return v != null && !v.isBlank() && phase.contains("agenda")
++                && v.equals(game.getRound() + "|" + game.getStoredValue("agendaCount"));
++    }
++
++    /**
++     * audit-gaps-3: Political Secret — "The [color] player cannot vote, play action cards, or use faction abilities
++     * until after that agenda has been resolved." A press that starts or resolves one of that player's faction-sheet
++     * abilities (an engine faction.ability step with source "ability"; declining one stays allowed) is refused.
++     */
++    @javax.annotation.Nullable
++    public static String factionAbilityRefusal(Game game, Player player, String handlerId) {
++        if (!politicalSecretActive(game, player) || handlerId == null) return null;
++        java.util.Map<String, Object> st = ti4.selfhost.engine.kinds.FactionAbilityKind.stepOf(handlerId);
++        if (st == null || !"ability".equals(st.get("source")) || "skip".equals(st.get("action"))) return null;
++        Object f = st.get("faction");
++        if (f != null && !player.getFaction().equals(f) && !player.hasAbility(String.valueOf(st.get("id")))) return null;
++        return "Your _Political Secret_ was played: you cannot use faction abilities until this agenda is resolved.";
 +    }
 +
 +    /** Why {@code player} may not play action cards now (Political Secret / Political Censure), or null. */
@@ -6935,7 +7252,7 @@ index 12c7b896b..c2125d5e3 100644
              ButtonInteractionEvent event, Game game, Player player, int amt, boolean deleteMsg) {
          convertComms(event, game, player, amt, deleteMsg, null);
 diff --git a/src/main/java/ti4/helpers/ButtonHelperTacticalAction.java b/src/main/java/ti4/helpers/ButtonHelperTacticalAction.java
-index 9642a5de3..d0b85e184 100644
+index 9642a5de3..f90ad76f5 100644
 --- a/src/main/java/ti4/helpers/ButtonHelperTacticalAction.java
 +++ b/src/main/java/ti4/helpers/ButtonHelperTacticalAction.java
 @@ -344,6 +344,47 @@ public final class ButtonHelperTacticalAction {
@@ -7018,13 +7335,14 @@ index 9642a5de3..d0b85e184 100644
                      buttons.add(
                              Buttons.green(buildID, "Build " + amt + " units with Flaah Hyphae", FactionEmojis.Arborec));
                      buttons.add(Buttons.DONE_DELETE_BUTTONS.withLabel("Decline"));
-@@ -1367,6 +1414,9 @@ public final class ButtonHelperTacticalAction {
+@@ -1367,6 +1414,10 @@ public final class ButtonHelperTacticalAction {
          game.removeStoredValue("crucibleBoost");
          game.removeStoredValue("flankspeedBoost");
          game.removeStoredValue("baldrickGDboost");
 +        game.removeStoredValue(MovementRules.UNMODELLED_KEY);
 +        game.removeStoredValue("riftRollsMade");
 +        for (Player p : game.getRealPlayers()) game.removeStoredValue("navSuitePlayed" + p.getFaction());
++        MovementCardRules.clear(game);
          ButtonHelper.deleteMessage(event);
      }
  
@@ -7230,6 +7548,42 @@ index 000000000..176b82f27
 +                + (limit == 1 ? "" : "s") + " and you have gained " + gained + ".";
 +    }
 +}
+diff --git a/src/main/java/ti4/helpers/CheckDistanceHelper.java b/src/main/java/ti4/helpers/CheckDistanceHelper.java
+index 64748ba44..4ab174b9e 100644
+--- a/src/main/java/ti4/helpers/CheckDistanceHelper.java
++++ b/src/main/java/ti4/helpers/CheckDistanceHelper.java
+@@ -109,6 +109,7 @@ public class CheckDistanceHelper {
+                 if (!existingPosition.equalsIgnoreCase(tilePosition)) {
+                     if (tile == null
+                             || (tile.isNebula(game)
++                                    && !MovementCardRules.navSuite(game, player)
+                                     && !RealityFieldImpactorService.nullifies(game, tile)
+                                     && player != null
+                                     && !DreamAbilitiesHandler.ignoresNebula(player, game, tile)
+@@ -122,6 +123,7 @@ public class CheckDistanceHelper {
+                                     && !ButtonHelper.doesPlayerHaveFSHere("purpletf_flagship", player, tile2)
+                                     && !ButtonHelper.isLawInPlay(game, "shared_research"))
+                             || (tile.isSupernova()
++                                    && !MovementCardRules.navSuite(game, player)
+                                     && !RealityFieldImpactorService.nullifies(game, tile)
+                                     && player != null
+                                     && !DreamLeadersHandler.playerIgnoresDreamAgentAnomaly(game, player, tile)
+@@ -134,6 +136,7 @@ public class CheckDistanceHelper {
+                                     && !player.hasTech("tf-mr"))
+                             || (player != null
+                                     && FoWHelper.otherPlayersHaveShipsInSystem(player, tile, game)
++                                    && !MovementCardRules.passesShips(player)
+                                     && !BelkoseaAgentService.ignoresOtherShips(game, player, tile)
+                                     && !player.hasTech("lwd")
+                                     && !player.hasTech("absol_lwd")
+@@ -150,6 +153,7 @@ public class CheckDistanceHelper {
+                                     && FoWHelper.otherPlayersHaveMovementBlockersInSystem(player, tile, game))
+                             || (tile.isAsteroidField()
+                                     && !tile.isZelianAsteroidField()
++                                    && !MovementCardRules.navSuite(game, player)
+                                     && !RealityFieldImpactorService.nullifies(game, tile)
+                                     && player != null
+                                     && !DreamLeadersHandler.playerIgnoresDreamAgentAnomaly(game, player, tile)
 diff --git a/src/main/java/ti4/helpers/ComponentActionHelper.java b/src/main/java/ti4/helpers/ComponentActionHelper.java
 index fbcea82e4..7d3f66650 100644
 --- a/src/main/java/ti4/helpers/ComponentActionHelper.java
@@ -7671,7 +8025,7 @@ index 000000000..7d83b30b6
 +    }
 +}
 diff --git a/src/main/java/ti4/helpers/FoWHelper.java b/src/main/java/ti4/helpers/FoWHelper.java
-index c8615bc98..0dab3a094 100644
+index c8615bc98..d5b42d64b 100644
 --- a/src/main/java/ti4/helpers/FoWHelper.java
 +++ b/src/main/java/ti4/helpers/FoWHelper.java
 @@ -48,6 +48,13 @@ import ti4.service.planet.AsgardLegendaryService;
@@ -7701,7 +8055,19 @@ index c8615bc98..0dab3a094 100644
  
          Set<String> otherAdjacencies = getNonWormholeAdjacencies(game, position);
          adjacentPositions.addAll(otherAdjacencies);
-@@ -1174,6 +1183,11 @@ public final class FoWHelper {
+@@ -1129,7 +1138,10 @@ public final class FoWHelper {
+             wormholeIDs.removeIf("epsilon"::equalsIgnoreCase);
+         }
+ 
+-        if (hasQuantumEntanglement || wh_recon || absol_recon) {
++        // audit-gaps-3: Lost Star Chart — "During this tactical action, systems that contain alpha and beta wormholes
++        // are adjacent to each other."
++        boolean lostStarChart = !neighbors && MovementCardRules.lostStarChart(game);
++        if (hasQuantumEntanglement || wh_recon || absol_recon || lostStarChart) {
+             if (wormholeIDs.contains(Constants.ALPHA)) {
+                 wormholeIDs.add(Constants.BETA);
+             } else if (wormholeIDs.contains(Constants.BETA)) {
+@@ -1174,6 +1186,11 @@ public final class FoWHelper {
              wormholeIDs.remove(Constants.BETA);
          }
  
@@ -7713,7 +8079,7 @@ index c8615bc98..0dab3a094 100644
          if (wormholeIDs.isEmpty()) {
              return adjacentPositions;
          }
-@@ -1190,6 +1204,13 @@ public final class FoWHelper {
+@@ -1190,6 +1207,13 @@ public final class FoWHelper {
          for (Tile tile_ : allTiles) {
              String position_ = tile_.getPosition();
  
@@ -7727,6 +8093,153 @@ index c8615bc98..0dab3a094 100644
              if (wormholeTiles.contains(tile_.getTileID()) || ghostAgent && doesTileHaveWHs(game, position_)) {
                  adjacentPositions.add(position_);
                  continue;
+diff --git a/src/main/java/ti4/helpers/Gaps3Press.java b/src/main/java/ti4/helpers/Gaps3Press.java
+new file mode 100644
+index 000000000..4d75e91e0
+--- /dev/null
++++ b/src/main/java/ti4/helpers/Gaps3Press.java
+@@ -0,0 +1,141 @@
++package ti4.helpers;
++
++import javax.annotation.Nullable;
++import ti4.game.Game;
++import ti4.game.Planet;
++import ti4.game.Player;
++import ti4.game.Tile;
++import ti4.game.UnitHolder;
++import ti4.helpers.Units.UnitType;
++
++/**
++ * audit-gaps-3: one press hook (ScFollowGate.refuse, every path: Discord buttons and engine answers) for the effects
++ * round 3 decides from game state, with the same reasons the engine kinds use for value.unavailable / validate():
++ *
++ * <ul>
++ *   <li>Master Plan — "Use Ability To Do Another Action" / "Do Another Action" ({@link ti4.selfhost.SecondActionGate}).</li>
++ *   <li>Political Secret — the blocked player's faction abilities ({@link AgendaRules#factionAbilityRefusal}).</li>
++ *   <li>Ghost Squad — "Move any number of your ground forces from any planet you control in the active system to any
++ *       other planet you control in the active system." (ghostSquadMove_&lt;from&gt;_&lt;to&gt;_&lt;infantry|mech&gt;)</li>
++ *   <li>Bribery / Confusing / Confounding Legal Text — {@link VoteCardRules} (briberySpend_&lt;n&gt;,
++ *       legalTextElect_&lt;faction&gt;, agendaResolution_&lt;outcome&gt;).</li>
++ *   <li>Rout — the attacker's space combat roll ({@link ti4.service.combat.CombatCardRules#routRefusal}).</li>
++ * </ul>
++ */
++public final class Gaps3Press {
++    private Gaps3Press() {}
++
++    static final String GHOST_SQUAD = "gsGhostSquadActive";
++    public static final String BRIBERY = "gsBriberyPending";
++    public static final String LEGAL_TEXT = "gsLegalTextPending";
++
++    private static String strip(String h) {
++        return h == null ? "" : h.replaceFirst("^FFCC_[^_]+_", "");
++    }
++
++    /** The round-3 step ids typed as action_card.step (their value carries the refusal as unavailable). */
++    public static boolean isOwnStep(String handlerId) {
++        String h = strip(handlerId);
++        return h.startsWith("ghostSquadMove_") || h.equals("ghostSquadDone") || h.startsWith("briberySpend_")
++                || h.startsWith("legalTextElect_");
++    }
++
++    /** Why this press is refused now, or null. Never throws. */
++    @Nullable
++    public static String refusal(@Nullable Game game, @Nullable Player player, @Nullable String handlerId) {
++        if (game == null || handlerId == null) return null;
++        try {
++            String h = strip(handlerId);
++            if (h.equals("confirmSecondAction") || h.equals("doAnotherAction"))
++                return ti4.selfhost.SecondActionGate.refusal(player, game);
++            if (h.startsWith("agendaResolution_"))
++                return VoteCardRules.resolutionRefusal(game, h.substring("agendaResolution_".length()));
++            if (h.startsWith("combatRoll_")) return ti4.service.combat.CombatCardRules.routRefusal(game, player, h);
++            if (player == null) return null;
++            if (h.startsWith("ghostSquadMove_")) return ghostSquadRefusal(game, player, h);
++            if (h.startsWith("briberySpend_")) {
++                if (!pending(game, player, BRIBERY)) return "Resolve _Bribery_ first (play it after the speaker votes).";
++                try {
++                    return VoteCardRules.briberyRefusal(game, player, Integer.parseInt(h.substring("briberySpend_".length())));
++                } catch (NumberFormatException e) {
++                    return null;
++                }
++            }
++            if (h.startsWith("legalTextElect_")) {
++                if (!pending(game, player, LEGAL_TEXT)) return "Only the player resolving _Confusing Legal Text_ chooses.";
++                return game.getPlayerFromColorOrFaction(h.substring("legalTextElect_".length())) == null
++                        ? "That player is not in this game."
++                        : null;
++            }
++            return AgendaRules.factionAbilityRefusal(game, player, h);
++        } catch (RuntimeException | LinkageError e) {
++            return null;
++        }
++    }
++
++    /** After a press passed {@link #refusal}: bookkeeping (Master Plan's additional action is used). */
++    public static void accepted(@Nullable Game game, @Nullable Player player, @Nullable String handlerId) {
++        if (game == null || player == null || handlerId == null) return;
++        try {
++            String h = strip(handlerId);
++            if (h.equals("confirmSecondAction") || h.equals("doAnotherAction"))
++                ti4.selfhost.SecondActionGate.consume(player, game);
++        } catch (RuntimeException | LinkageError ignored) {
++            // never break a press
++        }
++    }
++
++    // ------------------------------------------------------------------ pending effects
++
++    private static String scope(Game game) {
++        return game.getRound() + "|" + game.getStoredValue("agendaCount") + "|" + game.getActiveSystem() + "|"
++                + (game.getActivePlayer() == null ? "" : game.getActivePlayer().getFaction());
++    }
++
++    public static void startPending(Game game, Player player, String key) {
++        game.setStoredValue(key, player.getFaction() + "|" + scope(game));
++    }
++
++    public static void endPending(Game game, String key) {
++        game.removeStoredValue(key);
++    }
++
++    public static boolean pending(Game game, Player player, String key) {
++        return (player.getFaction() + "|" + scope(game)).equals(game.getStoredValue(key));
++    }
++
++    // ------------------------------------------------------------------ Ghost Squad
++
++    public static void startGhostSquad(Game game, Player player) {
++        startPending(game, player, GHOST_SQUAD);
++    }
++
++    /** Why this Ghost Squad move is refused, or null. */
++    @Nullable
++    public static String ghostSquadRefusal(Game game, Player player, String handlerId) {
++        if (!RulesGate.ACTION_CARDS.judges(game)) return null;
++        if (!pending(game, player, GHOST_SQUAD)) return "Resolve _Ghost Squad_ first: these moves are its effect.";
++        String[] a = strip(handlerId).split("_");
++        if (a.length < 4) return "Unknown move.";
++        String pos = game.getActiveSystem();
++        Tile tile = pos == null || pos.isBlank() ? null : game.getTileByPosition(pos);
++        if (tile == null) return "There is no active system.";
++        Planet from = planetIn(tile, a[1]), to = planetIn(tile, a[2]);
++        if (from == null || to == null)
++            return "_Ghost Squad_ moves ground forces between planets in the active system.";
++        if (from == to) return "Choose another planet to move to.";
++        if (!player.getPlanets().contains(from.getName()) || !player.getPlanets().contains(to.getName()))
++            return "_Ghost Squad_ moves ground forces only between planets you control.";
++        UnitType type = "mech".equals(a[3]) ? UnitType.Mech : "infantry".equals(a[3]) ? UnitType.Infantry : null;
++        if (type == null) return "_Ghost Squad_ moves ground forces (infantry or mechs).";
++        if (from.getUnitCount(type, player.getColor()) < 1)
++            return "You have no " + a[3] + " left on " + from.getName() + ".";
++        return null;
++    }
++
++    @Nullable
++    private static Planet planetIn(Tile tile, String name) {
++        UnitHolder uh = tile.getUnitHolders().get(name);
++        return uh instanceof Planet p ? p : null;
++    }
++}
 diff --git a/src/main/java/ti4/helpers/GroundMoveCap.java b/src/main/java/ti4/helpers/GroundMoveCap.java
 new file mode 100644
 index 000000000..b49dca4aa
@@ -8086,12 +8599,186 @@ index 000000000..c940894df
 +        return buttons;
 +    }
 +}
+diff --git a/src/main/java/ti4/helpers/MovementCardRules.java b/src/main/java/ti4/helpers/MovementCardRules.java
+new file mode 100644
+index 000000000..b0b529f74
+--- /dev/null
++++ b/src/main/java/ti4/helpers/MovementCardRules.java
+@@ -0,0 +1,168 @@
++package ti4.helpers;
++
++import java.util.LinkedHashSet;
++import java.util.Set;
++import javax.annotation.Nullable;
++import ti4.game.Game;
++import ti4.game.Player;
++
++/**
++ * audit-gaps-3: the movement action cards in {@link MovementRules}' range model (switch {@link RulesSwitch#MOVE_CHECK}).
++ * Each is recorded when played (ActionCardHelper) for the active player's current tactical action and cleared at the
++ * next activation / end of turn.
++ *
++ * <ul>
++ *   <li><b>Nav Suite</b> — "During the 'Movement' step of this tactical action, ignore the effect of anomalies." Ships
++ *       move through nebulae, asteroid fields and supernovas (CheckDistanceHelper), a nebula no longer sets move to 1,
++ *       destinations and rift rolls as before (navSuitePlayed).</li>
++ *   <li><b>Lost Star Chart</b> — "During this tactical action, systems that contain alpha and beta wormholes are
++ *       adjacent to each other." (FoWHelper wormhole adjacency, as Quantum Entanglement / Wormhole Reconstruction.)</li>
++ *   <li><b>In the Silence of Space</b> — "Choose 1 system. During this tactical action, your ships in the chosen system
++ *       can move through systems that contain other players' ships." Ships that reach the active system only by passing
++ *       other players' ships must all start in one system (the chosen one).</li>
++ *   <li><b>Solar Flare</b> — "During the 'Movement' step of this tactical action, other players cannot use SPACE CANNON
++ *       against your ships." (SpaceCannonRestrictions: their SPACE CANNON OFFENSE in this tactical action.)</li>
++ * </ul>
++ * Timing ("After you activate a system"): Nav Suite, Lost Star Chart and In the Silence of Space are refused once this
++ * tactical action's movement is over (it would do nothing), Solar Flare once SPACE CANNON OFFENSE has been rolled.
++ */
++public final class MovementCardRules {
++    private MovementCardRules() {}
++
++    static final String NAV_SUITE = "mcNavSuite";
++    static final String LOST_STAR = "mcLostStarChart";
++    static final String SILENCE = "mcSilenceOfSpace";
++    static final String SOLAR_FLARE = "mcSolarFlare";
++    static final String MOVED = "mcMovementConcluded";
++
++    /** In the Silence of Space: while set, other players' ships do not block this player's distances. */
++    private static final ThreadLocal<Boolean> PASS_SHIPS = ThreadLocal.withInitial(() -> false);
++
++    public static boolean on(Game game) {
++        return game != null && RulesSwitch.enabled(game, RulesSwitch.MOVE_CHECK);
++    }
++
++    private static String key(Game game, Player player) {
++        return player.getFaction() + "|" + game.getCurrentActiveSystem();
++    }
++
++    /** One of these cards was played (ActionCardHelper, when the card is played). */
++    public static void recordPlay(Game game, Player player, String alias) {
++        if (game == null || player == null || alias == null) return;
++        String k = alias.startsWith("nav_suite") ? NAV_SUITE
++                : alias.contains("lost_star") ? LOST_STAR
++                : alias.startsWith("silence_space") ? SILENCE
++                : alias.startsWith("solar_flare") ? SOLAR_FLARE
++                : null;
++        if (k != null) game.setStoredValue(k, key(game, player) + "#" + sabotages(game));
++    }
++
++    /** Sabotages in the discard pile: one discarded after a play cancelled it (the card's effect is gone). */
++    static int sabotages(Game game) {
++        int n = 0;
++        for (String ac : game.getDiscardActionCards().keySet()) if (ac.startsWith("sabo")) n++;
++        return n;
++    }
++
++    /** The active player's movement for this tactical action was carried out (TacticalActionService.finishMovement). */
++    public static void recordMovementConcluded(Game game, Player player) {
++        if (game != null && player != null) game.setStoredValue(MOVED, key(game, player));
++    }
++
++    /** A new activation / the end of a turn: every record is gone. */
++    public static void clear(Game game) {
++        if (game == null) return;
++        for (String k : new String[] {NAV_SUITE, LOST_STAR, SILENCE, SOLAR_FLARE, MOVED}) game.removeStoredValue(k);
++    }
++
++    private static boolean active(Game game, @Nullable Player player, String k) {
++        if (game == null || player == null || player != game.getActivePlayer()) return false;
++        String cur = game.getCurrentActiveSystem();
++        if (cur == null || cur.isBlank() || "null".equalsIgnoreCase(cur)) return false;
++        String v = game.getStoredValue(k);
++        if (v == null || !v.startsWith(key(game, player))) return false;
++        int hash = v.lastIndexOf('#');
++        if (hash < 0) return v.equals(key(game, player));
++        if (!v.substring(0, hash).equals(key(game, player))) return false;
++        try {
++            return sabotages(game) <= Integer.parseInt(v.substring(hash + 1)); // a Sabotage since: cancelled
++        } catch (NumberFormatException e) {
++            return true;
++        }
++    }
++
++    /** Nav Suite in effect: {@code player}'s ships ignore anomalies for distances during this movement. */
++    public static boolean navSuite(Game game, @Nullable Player player) {
++        return on(game) && active(game, player, NAV_SUITE) && !active(game, player, MOVED);
++    }
++
++    /** Lost Star Chart in effect this tactical action: alpha and beta wormholes are adjacent. */
++    public static boolean lostStarChart(Game game) {
++        return game != null && on(game) && active(game, game.getActivePlayer(), LOST_STAR);
++    }
++
++    /** In the Silence of Space played (by the active player) for this tactical action. */
++    public static boolean silencePlayed(Game game, @Nullable Player player) {
++        return on(game) && active(game, player, SILENCE);
++    }
++
++    /** Distance computations inside {@link #passingShips} let {@code player}'s ships pass other players' ships. */
++    public static boolean passesShips(@Nullable Player player) {
++        return PASS_SHIPS.get() && player != null;
++    }
++
++    public static <T> T passingShips(java.util.function.Supplier<T> body) {
++        boolean before = PASS_SHIPS.get();
++        PASS_SHIPS.set(true);
++        try {
++            return body.get();
++        } finally {
++            PASS_SHIPS.set(before);
++        }
++    }
++
++    /** Solar Flare: {@code roller} may not use SPACE CANNON (offense) against the active player's ships now. */
++    @Nullable
++    public static String solarFlareRefusal(Game game, @Nullable Player roller) {
++        if (game == null || roller == null || !RulesGate.ACTION_CARDS.judges(game)) return null;
++        Player active = game.getActivePlayer();
++        if (active == null || roller == active || !active(game, active, SOLAR_FLARE)) return null;
++        return "_Solar Flare_: other players cannot use SPACE CANNON against " + active.getRepresentationNoPing()
++                + "'s ships during this movement";
++    }
++
++    /** Timing: why the card can no longer be played in this tactical action, or null. */
++    @Nullable
++    public static String timingRefusal(Game game, Player player, String alias) {
++        if (game == null || player == null || alias == null) return null;
++        boolean moveCard = alias.startsWith("nav_suite") || alias.contains("lost_star") || alias.startsWith("silence_space");
++        if (moveCard && key(game, player).equals(game.getStoredValue(MOVED)))
++            return "changes this tactical action's movement, which is already over.";
++        if (alias.startsWith("solar_flare") && spaceCannonRolled(game))
++            return "must be played before SPACE CANNON OFFENSE: it has already been rolled this tactical action.";
++        return null;
++    }
++
++    private static boolean spaceCannonRolled(Game game) {
++        try {
++            ti4.selfhost.engine.kinds.CombatSupport.CombatState st = ti4.selfhost.engine.kinds.CombatSupport.state(game);
++            if (st == null) return false;
++            for (ti4.selfhost.engine.kinds.CombatSupport.CombatRoll r : st.rolls())
++                if (r.rollType() != null && r.rollType().toLowerCase().contains("spacecannonoffen")) return true;
++        } catch (RuntimeException | LinkageError ignored) {
++            // no combat state: not judged
++        }
++        return false;
++    }
++
++    /**
++     * In the Silence of Space, for the range check: the origins of ships that reach the active system only by passing
++     * other players' ships. Ships from more than one such system are refused (the card names 1 system).
++     */
++    @Nullable
++    public static String silenceRefusal(Set<String> origins) {
++        if (origins.size() <= 1) return null;
++        return "_In the Silence of Space_ lets the ships of 1 chosen system pass other players' ships; ships from "
++                + String.join(" and ", new LinkedHashSet<>(origins)) + " would all need it.";
++    }
++}
 diff --git a/src/main/java/ti4/helpers/MovementRules.java b/src/main/java/ti4/helpers/MovementRules.java
 new file mode 100644
-index 000000000..79efadbcb
+index 000000000..9e8841e1c
 --- /dev/null
 +++ b/src/main/java/ti4/helpers/MovementRules.java
-@@ -0,0 +1,346 @@
+@@ -0,0 +1,367 @@
 +package ti4.helpers;
 +
 +import java.util.ArrayList;
@@ -8127,7 +8814,8 @@ index 000000000..79efadbcb
 + *   Drive on every ship, Flank Speed, Slipstream, Crimson breakthrough, Aetherstream from the player or a neighbour,
 + *   Lightning Drives, Vaylerian hero, Winnu breakthrough, Letnev breakthrough = fastest moving ship); ground forces
 + *   and fighters that cannot move on their own must be within reach of a ship with capacity that leaves their system
-+ *   or passes it. Effects the bot does not model (Lost Star Chart, Nav Suite, Silence of Space, Saar agent, Empyrean
++ *   or passes it. Nav Suite, Lost Star Chart and In the Silence of Space are modelled ({@link MovementCardRules},
++ *   audit-gaps-3). Effects the bot does not model (Saar agent, Empyrean
 + *   Aetherpassage / Void Tethers, Firmament agent, Nomad / Deepwrought / Firmament flagships, L1Z1X hero, homebrew)
 + *   turn the range check into a warning: nothing is refused that the player may legally do. Distances come from
 + *   CheckDistanceHelper / FoWHelper adjacency, which models hyperlanes, wormholes incl. tokens (Wormhole Generator,
@@ -8295,6 +8983,7 @@ index 000000000..79efadbcb
 +        }
 +        // Ships with capacity leaving each origin: their reach, for cargo picked up there or on the way.
 +        List<Object[]> carriers = new ArrayList<>(); // {origin pos, max move, owner}
++        java.util.Set<String> silenceOrigins = new java.util.LinkedHashSet<>();
 +        for (Moved mv : moves) {
 +            Player owner = game.getPlayerFromColorOrFaction(mv.key().getColor());
 +            UnitModel m = owner == null ? null : owner.getUnitFromUnitKey(mv.key());
@@ -8303,14 +8992,27 @@ index 000000000..79efadbcb
 +            if (!ship(m, mv.key()) || m.getMoveValue() <= 0) continue;
 +            int max = maxMove(game, owner, from, dest, m, fastest);
 +            int d = distance(game, owner, mv.from(), dest.getPosition());
++            if (d < 0) continue;
++            // audit-gaps-3: In the Silence of Space — the ships of 1 chosen system may pass other players' ships.
++            if (d > max && MovementCardRules.silencePlayed(game, player) && owner == player) {
++                int ds = MovementCardRules.passingShips(() -> distance(game, owner, mv.from(), dest.getPosition()));
++                if (ds >= 0 && ds <= max) {
++                    silenceOrigins.add(mv.from());
++                    d = ds;
++                }
++            }
 +            // Unknown (negative) or unreachable by the bot's own map (>= 90: an adjacency it does not see): never
 +            // refused - the original printed only a warning there.
-+            if (d < 0 || d >= 90) continue;
++            if (d >= 90) continue;
 +            if (d > max)
 +                return m.getName() + " from " + mv.from() + " is " + (d >= 90 ? "out of reach" : d + " systems away")
 +                        + "; its move value with every bonus you could apply is " + max + ".";
 +            if (m.getCapacityValue() > 0) carriers.add(new Object[] {mv.from(), max, owner});
 +        }
++        String silence = MovementCardRules.silenceRefusal(silenceOrigins);
++        if (silence != null) return silence;
++        // Cargo legs with In the Silence of Space: counted generously (its carrier may be the chosen system's).
++        boolean passShips = MovementCardRules.silencePlayed(game, player);
 +        Map<String, Boolean> cargoOk = new LinkedHashMap<>();
 +        for (Moved mv : moves) {
 +            Player owner = game.getPlayerFromColorOrFaction(mv.key().getColor());
@@ -8318,7 +9020,9 @@ index 000000000..79efadbcb
 +            if (m == null || ship(m, mv.key())) continue;
 +            UnitType t = mv.key().unitType();
 +            if (t != UnitType.Infantry && t != UnitType.Mech && t != UnitType.Fighter) continue;
-+            int d = distance(game, owner, mv.from(), dest.getPosition());
++            int d = passShips
++                    ? MovementCardRules.passingShips(() -> distance(game, owner, mv.from(), dest.getPosition()))
++                    : distance(game, owner, mv.from(), dest.getPosition());
 +            if (d < 0 || d >= 90) continue;
 +            Tile from = game.getTileByPosition(mv.from());
 +            // A fighter that may move on its own (Fighter II) and reaches.
@@ -8334,7 +9038,10 @@ index 000000000..79efadbcb
 +                        ok = true;
 +                        break;
 +                    }
-+                    int leg = distance(game, (Player) c[2], o, mv.from());
++                    Player cp = (Player) c[2];
++                    int leg = passShips
++                            ? MovementCardRules.passingShips(() -> distance(game, cp, o, mv.from()))
++                            : distance(game, cp, o, mv.from());
 +                    if (leg < 0 || leg >= 90 || leg + d <= max) { // unknown leg: not refused
 +                        ok = true;
 +                        break;
@@ -8404,7 +9111,8 @@ index 000000000..79efadbcb
 +            UnitModel m = player.getUnitFromUnitKey(mv.key());
 +            if (m != null && ship(m, mv.key())) fastest = Math.max(fastest, m.getMoveValue());
 +        }
-+        boolean unmodelled = unmodelled(game, player) != null;
++        // audit-gaps-3: paths through other players' ships (In the Silence of Space) are not inferred here.
++        boolean unmodelled = unmodelled(game, player) != null || MovementCardRules.silencePlayed(game, player);
 +        for (Moved mv : moves) {
 +            if (!player.unitBelongsToPlayer(mv.key())) continue;
 +            UnitModel m = player.getUnitFromUnitKey(mv.key());
@@ -9502,12 +10210,220 @@ index 000000000..0f0ae3d96
 +                : "You have only " + left + " " + name + " left in your reinforcements (component limit).";
 +    }
 +}
+diff --git a/src/main/java/ti4/helpers/VoteCardRules.java b/src/main/java/ti4/helpers/VoteCardRules.java
+new file mode 100644
+index 000000000..592881e7a
+--- /dev/null
++++ b/src/main/java/ti4/helpers/VoteCardRules.java
+@@ -0,0 +1,202 @@
++package ti4.helpers;
++
++import java.util.ArrayList;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import javax.annotation.Nullable;
++import ti4.game.Game;
++import ti4.game.Player;
++
++/**
++ * audit-gaps-3 (switch {@link RulesSwitch#VOTE_CHECK}, with the vote cap of {@link VoteRules}): the agenda action
++ * cards that change votes or the elected player, decided from the recorded votes (game.getCurrentAgendaVotes:
++ * outcome to "faction_N;..." entries).
++ *
++ * <ul>
++ *   <li><b>Bribery</b> — "After the speaker votes on an agenda: Spend any number of trade goods. For each trade good
++ *       spent, cast 1 additional vote for the outcome on which you voted." Playable once every vote is in (the speaker
++ *       votes last) by a player who voted for an outcome; the votes are added by spending trade goods
++ *       (briberySpend_&lt;n&gt;), no longer typed into the vote itself (the vote cap no longer counts trade goods).</li>
++ *   <li><b>Confusing Legal Text</b> — "When you are elected as the outcome of an agenda: Choose 1 player. That player is
++ *       the elected player instead." Playable on an "Elect Player" agenda whose votes are in, by a player who is
++ *       elected (a winner, ties included).</li>
++ *   <li><b>Confounding Legal Text</b> — "When another player is elected as the outcome of an agenda: You are the
++ *       elected player instead." Playable on such an agenda when another player is elected.</li>
++ * </ul>
++ * Once a Legal Text resolves, resolving the agenda for anyone but the new elected player is refused; once Bribery
++ * changes the votes, resolving with an outcome that no longer wins is refused.
++ */
++public final class VoteCardRules {
++    private VoteCardRules() {}
++
++    static final String LEGAL_TEXT = "legalTextElected";
++    static final String BRIBERY_WINNER = "briberyWinner";
++
++    public static boolean on(Game game) {
++        return game != null && RulesSwitch.enabled(game, RulesSwitch.VOTE_CHECK);
++    }
++
++    /** round|agenda: which agenda a record belongs to. */
++    private static String agendaKey(Game game) {
++        return game.getRound() + "|" + game.getStoredValue("agendaCount") + "|";
++    }
++
++    @Nullable
++    private static String current(Game game, String key) {
++        String v = game.getStoredValue(key);
++        String k = agendaKey(game);
++        return v != null && v.startsWith(k) ? v.substring(k.length()) : null;
++    }
++
++    private static boolean votesIn(Game game) {
++        String phase = String.valueOf(game.getPhaseOfGame());
++        if ("agendaEnd".equalsIgnoreCase(phase)) return true;
++        Player speaker = game.getSpeaker();
++        return speaker != null && votedOutcome(game, speaker) != null;
++    }
++
++    private static boolean electPlayer(Game game) {
++        String info = game.getCurrentAgendaInfo();
++        return info != null && info.contains("Elect Player");
++    }
++
++    /** The outcome {@code p} cast votes for on this agenda (a "faction_N" entry with N votes), or null. */
++    @Nullable
++    public static String votedOutcome(Game game, Player p) {
++        for (Map.Entry<String, String> e : game.getCurrentAgendaVotes().entrySet()) {
++            for (String token : e.getValue().split(";")) {
++                String[] f = token.split("_");
++                if (f.length >= 2 && mine(f[0], p) && f[1].matches("\\d+") && Integer.parseInt(f[1]) > 0)
++                    return e.getKey();
++            }
++        }
++        return null;
++    }
++
++    /** A vote entry's identifier: the faction (the colour in fog of war). */
++    private static boolean mine(String id, Player p) {
++        return id.equals(p.getFaction()) || id.equals(p.getColor());
++    }
++
++    /** The outcomes with the most votes now (several on a tie), as AgendaHelper.getWinner counts them. */
++    public static List<String> winners(Game game) {
++        Map<String, Integer> totals = new LinkedHashMap<>();
++        for (Map.Entry<String, String> e : game.getCurrentAgendaVotes().entrySet()) {
++            int n = 0;
++            for (String token : e.getValue().split(";")) {
++                String[] f = token.split("_");
++                if (f.length >= 2 && f[1].matches("\\d+")) n += Integer.parseInt(f[1]);
++            }
++            totals.put(e.getKey(), n);
++        }
++        int max = 0;
++        for (int n : totals.values()) max = Math.max(max, n);
++        List<String> out = new ArrayList<>();
++        if (max == 0) return out;
++        for (Map.Entry<String, Integer> e : totals.entrySet()) if (e.getValue() == max) out.add(e.getKey());
++        return out;
++    }
++
++    private static boolean isPlayer(Game game, String outcome, Player p) {
++        if (outcome == null || p == null) return false;
++        Player o = game.getPlayerFromColorOrFaction(outcome);
++        return o == p;
++    }
++
++    // ------------------------------------------------------------------ play windows (ActionCardTiming)
++
++    /** Why {@code player} cannot play this agenda card now (null = allowed, or not one of these cards). */
++    @Nullable
++    public static String playRefusal(Game game, Player player, String alias) {
++        if (game == null || player == null || alias == null || !on(game)) return null;
++        if (alias.startsWith("bribery")) {
++            if (!votesIn(game)) return "is played after the speaker votes (once every vote on this agenda is in).";
++            if (votedOutcome(game, player) == null)
++                return "adds votes to the outcome you voted for: you cast no votes on this agenda.";
++            return null;
++        }
++        boolean confusing = alias.startsWith("confusing");
++        boolean confounding = alias.startsWith("confounding");
++        if (!confusing && !confounding) return null;
++        if (!electPlayer(game)) return "can only be played on an \"Elect Player\" agenda.";
++        if (!votesIn(game)) return "is played when a player is elected (once every vote on this agenda is in).";
++        List<String> w = winners(game);
++        if (current(game, LEGAL_TEXT) != null) {
++            w = List.of(current(game, LEGAL_TEXT));
++        }
++        boolean self = false, other = false;
++        for (String o : w) {
++            if (isPlayer(game, o, player)) self = true;
++            else if (game.getPlayerFromColorOrFaction(o) != null) other = true;
++        }
++        if (confusing && !self) return "can only be played when you are elected as the outcome.";
++        if (confounding && !other) return "can only be played when another player is elected as the outcome.";
++        return null;
++    }
++
++    // ------------------------------------------------------------------ Legal Text effect
++
++    /** The Legal Text resolved: {@code elected} is the elected player instead. */
++    public static void recordLegalText(Game game, Player elected) {
++        if (game == null || elected == null) return;
++        game.setStoredValue(LEGAL_TEXT, agendaKey(game) + elected.getFaction());
++    }
++
++    // ------------------------------------------------------------------ Bribery effect
++
++    /** Why {@code player} cannot spend {@code n} trade goods on Bribery now, or null. */
++    @Nullable
++    public static String briberyRefusal(Game game, Player player, int n) {
++        if (game == null || player == null) return null;
++        if (n < 1) return "Spend at least 1 trade good.";
++        if (n > player.getTg()) return "You have " + player.getTg() + " trade goods.";
++        if (votedOutcome(game, player) == null) return "You cast no votes on this agenda: Bribery has no outcome to add to.";
++        return null;
++    }
++
++    /** Spends {@code n} trade goods and adds {@code n} votes to {@code player}'s outcome; returns that outcome. */
++    @Nullable
++    public static String applyBribery(Game game, Player player, int n) {
++        String outcome = votedOutcome(game, player);
++        if (outcome == null) return null;
++        player.setTg(player.getTg() - n);
++        List<String> out = new ArrayList<>();
++        boolean added = false;
++        for (String token : game.getCurrentAgendaVotes().get(outcome).split(";")) {
++            String[] f = token.split("_", 3);
++            if (!added && f.length >= 2 && mine(f[0], player) && f[1].matches("\\d+")) {
++                out.add(f[0] + "_" + (Integer.parseInt(f[1]) + n) + (f.length > 2 ? "_" + f[2] : ""));
++                added = true;
++            } else {
++                out.add(token);
++            }
++        }
++        game.setCurrentAgendaVote(outcome, String.join(";", out));
++        game.setStoredValue(BRIBERY_WINNER, agendaKey(game) + String.join("*", winners(game)));
++        return outcome;
++    }
++
++    // ------------------------------------------------------------------ resolution
++
++    /** Why resolving the agenda with this outcome (agendaResolution_&lt;outcome&gt;) is refused now, or null. */
++    @Nullable
++    public static String resolutionRefusal(Game game, String outcome) {
++        if (game == null || outcome == null || !on(game)) return null;
++        String elected = current(game, LEGAL_TEXT);
++        if (elected != null && electPlayer(game)) {
++            Player e = game.getPlayerFromColorOrFaction(elected);
++            if (e != null && !isPlayer(game, outcome, e))
++                return "A _Legal Text_ made " + e.getRepresentationNoPing()
++                        + " the elected player: resolve the agenda for them.";
++            return null;
++        }
++        if (current(game, BRIBERY_WINNER) != null && !outcome.contains("*")) {
++            List<String> w = winners(game);
++            if (!w.isEmpty() && !w.contains(outcome))
++                return "_Bribery_ changed the votes: the outcome now winning is "
++                        + String.join(" / ", w) + " (use its resolve button).";
++        }
++        return null;
++    }
++}
 diff --git a/src/main/java/ti4/helpers/VoteRules.java b/src/main/java/ti4/helpers/VoteRules.java
 new file mode 100644
-index 000000000..4f30d9826
+index 000000000..10d2812ba
 --- /dev/null
 +++ b/src/main/java/ti4/helpers/VoteRules.java
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,53 @@
 +package ti4.helpers;
 +
 +import javax.annotation.Nullable;
@@ -9520,7 +10436,7 @@ index 000000000..4f30d9826
 + * (Distinguished Councilor +5, Bribery: trade goods spent). Rules audit (core, switch {@link RulesSwitch#VOTE_CHECK}):
 + * the original's "Modify Votes" accepted any number; now the confirmed count may not exceed what the player had when
 + * they started voting: AgendaHelper's vote total then (ready planets + sources) + 5 per Distinguished Councilor in hand
-+ * + trade goods with Bribery in hand. Recorded when "Vote" / "Pre-Vote" is pressed; without a record nothing is
++ * (Bribery adds its votes later, through VoteCardRules). Recorded when "Vote" / "Pre-Vote" is pressed; without a record nothing is
 + * refused.
 + */
 +public final class VoteRules {
@@ -9535,7 +10451,8 @@ index 000000000..4f30d9826
 +            int cap = AgendaHelper.getTotalVoteCount(game, player);
 +            for (String ac : player.getActionCards().keySet()) {
 +                if (ac.startsWith("distinguished")) cap += 5;
-+                if (ac.startsWith("bribery")) cap += player.getTg();
++                // audit-gaps-3: Bribery's votes are cast after the speaker votes, by spending trade goods
++                // (VoteCardRules / briberySpend_<n>), not typed into the vote.
 +            }
 +            game.setStoredValue(CAP_KEY + player.getFaction(), String.valueOf(cap));
 +        } catch (Exception ignored) {
@@ -9954,10 +10871,10 @@ index 000000000..a451361c0
 +}
 diff --git a/src/main/java/ti4/selfhost/SecondActionGate.java b/src/main/java/ti4/selfhost/SecondActionGate.java
 new file mode 100644
-index 000000000..b091bf4e4
+index 000000000..b32cf2071
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/SecondActionGate.java
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,130 @@
 +package ti4.selfhost;
 +
 +import java.util.ArrayList;
@@ -9984,6 +10901,88 @@ index 000000000..b091bf4e4
 +
 +    private static final List<String> TWO_ACTION_TECHS = List.of("fl", "absol_fl", "pi_fl", "bsp_fl", "baldrick_fl");
 +
++    // ------------------------------------------------------------------ Master Plan (audit-gaps-3, TI4_RULES_AC)
++
++    /** Stored: this turn's key (ScFollowGate.turnOf) + sabotages then in the discard, when Master Plan was played. */
++    static final String MP_PLAYED = "masterPlanPlayed";
++    /** Stored: this turn's key, once Master Plan's additional action was taken. */
++    static final String MP_USED = "masterPlanUsed";
++
++    private static boolean gated(Game game) {
++        return ti4.helpers.RulesGate.ACTION_CARDS.judges(game);
++    }
++
++    /** Master Plan was played by {@code player} (ActionCardHelper, when the card is played). */
++    public static void recordMasterPlan(Game game, Player player) {
++        if (game == null || player == null) return;
++        game.setStoredValue(MP_PLAYED + player.getFaction(),
++                ti4.selfhost.engine.ScFollowGate.turnOf(game, player) + "|" + sabotagesInDiscard(game));
++    }
++
++    private static int sabotagesInDiscard(Game game) {
++        int n = 0;
++        for (String ac : game.getDiscardActionCards().keySet()) if (ac.startsWith("sabo")) n++;
++        return n;
++    }
++
++    /** "Master Plan" (played this turn, its action not taken yet), "Master Plan (in hand)", or null. */
++    @javax.annotation.Nullable
++    private static String masterPlanState(Player player, Game game) {
++        if (!gated(game)) {
++            return player.getActionCards().keySet().stream().anyMatch(ac -> ac.startsWith("master_plan"))
++                    ? "Master Plan"
++                    : null;
++        }
++        if (masterPlanReady(player, game) == null) return "Master Plan";
++        if (player.getActionCards().keySet().stream().anyMatch(ac -> ac.startsWith("master_plan")))
++            return MP_IN_HAND;
++        return null;
++    }
++
++    static final String MP_IN_HAND = "Master Plan (in hand: play it first)";
++
++    /** Null when {@code player}'s played Master Plan gives them an additional action now, else why not. */
++    @javax.annotation.Nullable
++    private static String masterPlanReady(Player player, Game game) {
++        String turn = ti4.selfhost.engine.ScFollowGate.turnOf(game, player);
++        String v = game.getStoredValue(MP_PLAYED + player.getFaction());
++        if (v == null || !v.startsWith(turn + "|")) return "you have not played _Master Plan_ this turn";
++        if (turn.equals(game.getStoredValue(MP_USED + player.getFaction())))
++            return "you already took _Master Plan_'s additional action";
++        try {
++            int then = Integer.parseInt(v.substring(v.lastIndexOf('|') + 1));
++            if (sabotagesInDiscard(game) > then) return "_Master Plan_ was cancelled by a _Sabotage_";
++        } catch (NumberFormatException ignored) {
++            // no count: not judged
++        }
++        return null;
++    }
++
++    /**
++     * Master Plan: "After you perform an action: Perform an additional action." Only the player who played it gets
++     * the additional action, once. Null when {@code player} may take another action now (any source), else why not.
++     */
++    @javax.annotation.Nullable
++    public static String refusal(Player player, Game game) {
++        if (!ti4.selfhost.SelfHosted.isEnabled() || player == null || game == null || !gated(game)) return null;
++        List<String> s = sources(player, game);
++        s.remove(MP_IN_HAND);
++        if (!s.isEmpty()) return null;
++        if (player.getActionCards().keySet().stream().anyMatch(ac -> ac.startsWith("master_plan")))
++            return "Play _Master Plan_ first: its additional action goes to the player who plays it, after their action.";
++        String why = masterPlanReady(player, game);
++        return "Nothing lets you take another action this turn" + (why == null ? "." : " (" + why + ").");
++    }
++
++    /** The additional action is being taken: a played Master Plan that was its only source is used up. */
++    public static void consume(Player player, Game game) {
++        if (player == null || game == null || !gated(game)) return;
++        List<String> s = sources(player, game);
++        s.remove(MP_IN_HAND);
++        if (s.size() == 1 && "Master Plan".equals(s.get(0)))
++            game.setStoredValue(MP_USED + player.getFaction(), ti4.selfhost.engine.ScFollowGate.turnOf(game, player));
++    }
++
 +    public static boolean offer(Player player, Game game) {
 +        if (!SelfHosted.isEnabled()) return true;
 +        if (player == null || game == null) return true;
@@ -9994,8 +10993,8 @@ index 000000000..b091bf4e4
 +    public static List<String> sources(Player player, Game game) {
 +        List<String> out = new ArrayList<>();
 +        if (player == null || game == null) return out;
-+        if (player.getActionCards().keySet().stream().anyMatch(ac -> ac.startsWith("master_plan")))
-+            out.add("Master Plan");
++        String mp = masterPlanState(player, game);
++        if (mp != null) out.add(mp);
 +        if (IsPlayerElectedService.isPlayerElected(game, player, "minister_war")) out.add("Minister of War");
 +        if (TWO_ACTION_TECHS.stream().anyMatch(player::hasTech)) out.add("Fleet Logistics");
 +        if (player.hasPlanet("thundersedge") && !player.getExhaustedPlanetsAbilities().contains("thundersedge"))
@@ -11814,10 +12813,10 @@ index 000000000..53c264b67
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/DecisionRebuild.java b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
 new file mode 100644
-index 000000000..ccde157ba
+index 000000000..8d42353b8
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/DecisionRebuild.java
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,244 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -11969,6 +12968,9 @@ index 000000000..ccde157ba
 +            EngineMetrics.count("rebuild.message");
 +            DecisionCapture.onMessage(m, null, game);
 +        }
++        // Every capture above read `game` as loaded before the channel reads: a save in between (a milty pick) is
++        // retargeted again against the latest state once its handler is done (Engine.retargetWhenIdle; pbd1655).
++        Engine.retargetWhenIdle(game.getName());
 +        if (complete) rebuilt.add(game.getName());
 +        else EngineMetrics.count("rebuild.incomplete");
 +        return DecisionRegistry.openDecisions(game.getName()).size();
@@ -12326,10 +13328,10 @@ index 000000000..af65f22fb
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/Engine.java b/src/main/java/ti4/selfhost/engine/Engine.java
 new file mode 100644
-index 000000000..a9b293e22
+index 000000000..f65406c31
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/Engine.java
-@@ -0,0 +1,297 @@
+@@ -0,0 +1,327 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -12504,6 +13506,36 @@ index 000000000..a9b293e22
 +            } catch (Exception e) {
 +                idleSettlePending.remove(gameName);
 +                BotLogger.error("engine: idle settle failed for " + gameName, e);
++            }
++        });
++    }
++
++    /** Games with a retargetWhenIdle pending. */
++    private static final java.util.Set<String> idleRetargetPending = java.util.concurrent.ConcurrentHashMap.newKeySet();
++
++    /**
++     * Re-reads the game's open decisions (obsolete, ahead, dynamic targets / windows / progress: the pass a save runs)
++     * against its latest state, under the game's write lock, so no handler is half-way through a save. For captures
++     * made against a game read some time earlier: DecisionRebuild loads the game, then reads every channel's history
++     * (seconds under load); a save in between had retargeted the decisions already, and the late captures put the
++     * older state's targets back with no later save to correct them. Live pbd1295 / pbd1655: an on-demand rebuild
++     * overlapped the first engine milty pick; the boards went back to the drafter who had just picked, the next
++     * drafter had no draft.milty.pick, and its bot picked ~3 min later through the legacy fallback.
++     */
++    static void retargetWhenIdle(String gameName) {
++        if (!ENABLED || gameName == null || !idleRetargetPending.add(gameName)) return;
++        Thread.ofVirtual().name("engine-retarget-idle").start(() -> {
++            idleRetargetPending.remove(gameName);
++            ti4.executors.ExecutionLockManager.lock(gameName, ti4.executors.ExecutionLockType.WRITE);
++            try {
++                ti4.game.persistence.ManagedGame mg = ti4.game.persistence.GameManager.getManagedGame(gameName);
++                Game g = mg == null ? null : mg.getGame();
++                if (g != null) retarget(g);
++                EngineMetrics.count("retarget.idle");
++            } catch (Exception e) {
++                BotLogger.error("engine: idle retarget failed for " + gameName, e);
++            } finally {
++                ti4.executors.ExecutionLockManager.unlock(gameName, ti4.executors.ExecutionLockType.WRITE);
 +            }
 +        });
 +    }
@@ -15055,10 +16087,10 @@ index 000000000..e6aabf751
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/ScFollowGate.java b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
 new file mode 100644
-index 000000000..f1b278397
+index 000000000..7a9973a04
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/ScFollowGate.java
-@@ -0,0 +1,431 @@
+@@ -0,0 +1,441 @@
 +package ti4.selfhost.engine;
 +
 +import java.util.ArrayList;
@@ -15461,6 +16493,16 @@ index 000000000..f1b278397
 +                EngineMetrics.count("construction.limit_refused");
 +                return true;
 +            }
++            // audit-gaps-3: action-card / agenda effects decided from game state (Master Plan, Political Secret,
++            // Ghost Squad, Confusing / Confounding Legal Text, Rout, Bribery), on every path.
++            String g3 = ti4.helpers.Gaps3Press.refusal(context.getGame(), context.getPlayer(), handler);
++            if (g3 != null) {
++                context.setShouldSave(false);
++                ti4.message.MessageHelper.sendEphemeralMessageToEventChannel(context.getEvent(), g3);
++                EngineMetrics.count("gaps3.refused");
++                return true;
++            }
++            ti4.helpers.Gaps3Press.accepted(context.getGame(), context.getPlayer(), handler);
 +            // Every path's primary press records its part (engine answers press the button through here too).
 +            try {
 +                ti4.selfhost.engine.kinds.StrategyCardResolveKind.recordPress(context.getGame(), context.getPlayer(), handler);
@@ -19661,10 +20703,10 @@ index 000000000..1f883bca0
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardResolveKind.java
 new file mode 100644
-index 000000000..396d3728b
+index 000000000..102290470
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardResolveKind.java
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,95 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -19686,7 +20728,8 @@ index 000000000..396d3728b
 +public class ActionCardResolveKind implements KindSpec {
 +
 +    static final Set<String> RESOLVE = Set.of(
-+            "allianceRiderRandomAlly", "brutalOccupation", "courageousStarter", "drawParadigmAC", "economicInitiative",
++            "allianceRiderRandomAlly", "brutalOccupation", "resolveGhostSquad", "resolveReflective", "resolveBribery",
++            "resolveLegalTextConfounding", "resolveLegalTextConfusing", "courageousStarter", "drawParadigmAC", "economicInitiative",
 +            "fighterConscription", "focusedResearch", "forwardSupplyBase", "getDivertFundingButtons",
 +            "getPlagiarizeButtons", "getRepealLawButtons", "industrialInitiative", "innovation", "miningInitiative",
 +            "moveShipToAdjacentSystemStep1", "psionicHammerStep1", "resolveABSStep1", "resolveAbduction",
@@ -19990,10 +21033,10 @@ index 000000000..483e85c90
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardStepKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardStepKind.java
 new file mode 100644
-index 000000000..ef7a75007
+index 000000000..0219e3dce
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/ActionCardStepKind.java
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,155 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -20017,6 +21060,7 @@ index 000000000..ef7a75007
 +public class ActionCardStepKind implements KindSpec {
 +
 +    static final Set<String> STEPS = Set.of(
++            "ghostSquadMove_", "ghostSquadDone", "briberySpend_", "legalTextElect_",
 +            "abductionTake_", "allianceRiderGainAlly", "allianceRiderPurgeAlly", "amendmentChooseObjective_",
 +            "amendmentRevealStage1", "amendmentRevealStage2", "ancientTradeRoutesStep2_",
 +            "arbitrationInfantry_", "arbitrationOwner_", "arbitrationPlace_", "arcExp_", "armsDealStep2_",
@@ -20123,6 +21167,19 @@ index 000000000..ef7a75007
 +        String rest = handlerId.substring(Math.min(handlerId.length(), step.length()));
 +        if (rest.startsWith("_") || rest.startsWith("@")) rest = rest.substring(1);
 +        CardSteps.typeTokens(ctx.game(), rest.replace('@', '_'), v);
++        // audit-gaps-3: the new Ghost Squad / Bribery / Legal Text steps carry why they are refused now.
++        if (ctx.game() != null && ti4.helpers.Gaps3Press.isOwnStep(handlerId)) {
++            v.put("unavailable", ti4.helpers.Gaps3Press.refusal(ctx.game(), ctx.player(), handlerId));
++            if (handlerId.startsWith("ghostSquadMove_")) {
++                String[] a = handlerId.split("_");
++                if (a.length >= 4) {
++                    v.put("from", a[1]);
++                    v.put("to", a[2]);
++                    v.put("unit", a[3]);
++                }
++            }
++            if (handlerId.startsWith("briberySpend_")) v.put("tradeGoods", handlerId.substring("briberySpend_".length()));
++        }
 +        return v;
 +    }
 +
@@ -20130,8 +21187,9 @@ index 000000000..ef7a75007
 +    @Override
 +    public String validate(
 +            ti4.game.Game game, ti4.game.Player answering, ti4.selfhost.engine.EngineModels.Decision decision, String optionId) {
-+        return ti4.helpers.AcTargets.stepRefusal(
-+                game, answering, SetupKindSupport.handlerOf(decision, optionId).replaceFirst("^FFCC_[^_]+_", ""));
++        String h = SetupKindSupport.handlerOf(decision, optionId).replaceFirst("^FFCC_[^_]+_", "");
++        String why = ti4.helpers.AcTargets.stepRefusal(game, answering, h);
++        return why != null ? why : ti4.helpers.Gaps3Press.refusal(game, answering, h);
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/ActionCardTargetKind.java b/src/main/java/ti4/selfhost/engine/kinds/ActionCardTargetKind.java
@@ -20616,10 +21674,10 @@ index 000000000..da37109e1
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/AgendaResolveKind.java b/src/main/java/ti4/selfhost/engine/kinds/AgendaResolveKind.java
 new file mode 100644
-index 000000000..14e5acb4c
+index 000000000..6b8d05749
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/AgendaResolveKind.java
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,91 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -20663,6 +21721,8 @@ index 000000000..14e5acb4c
 +            v.put("action", "resolve");
 +            v.put("outcome", outcome);
 +            v.put("name", AgendaSupport.outcomeName(ctx.game(), outcome));
++            // audit-gaps-3 (TI4_VOTE_CHECK): a Legal Text's elected player / Bribery's new winner.
++            v.put("unavailable", ti4.helpers.VoteCardRules.resolutionRefusal(ctx.game(), outcome));
 +        } else if (h.startsWith("tiedPlanets_agendaResolution_")) {
 +            String who = h.substring("tiedPlanets_agendaResolution_".length());
 +            Player p = ctx.game().getPlayerFromColorOrFaction(who);
@@ -20677,6 +21737,18 @@ index 000000000..14e5acb4c
 +            return null;
 +        }
 +        return v;
++    }
++
++    @Override
++    public boolean dynamicValues() {
++        return true;
++    }
++
++    @Override
++    public String validate(ti4.game.Game game, Player answering, ti4.selfhost.engine.EngineModels.Decision decision, String optionId) {
++        String h = SetupKindSupport.handlerOf(decision, optionId);
++        if (h == null || !h.startsWith("agendaResolution_")) return null;
++        return ti4.helpers.VoteCardRules.resolutionRefusal(game, h.substring("agendaResolution_".length()));
 +    }
 +
 +    @Override
@@ -21751,10 +22823,10 @@ index 000000000..fedaa2716
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CardSteps.java b/src/main/java/ti4/selfhost/engine/kinds/CardSteps.java
 new file mode 100644
-index 000000000..90f7d738e
+index 000000000..3ac1b4dc9
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CardSteps.java
-@@ -0,0 +1,394 @@
+@@ -0,0 +1,404 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayList;
@@ -21783,6 +22855,12 @@ index 000000000..90f7d738e
 +
 +    static final Map<String, List<String>> RESOLVE_AUTOMATION = Map.ofEntries(
 +            Map.entry("allianceRiderRandomAlly", List.of("alliance_rider")),
++            // audit-gaps-3: resolutions added for cards the original left to the honour system.
++            Map.entry("resolveGhostSquad", List.of("ghost_squad")),
++            Map.entry("resolveReflective", List.of("reflective")),
++            Map.entry("resolveBribery", List.of("bribery")),
++            Map.entry("resolveLegalTextConfounding", List.of("confounding")),
++            Map.entry("resolveLegalTextConfusing", List.of("confusing")),
 +            Map.entry("brutalOccupation", List.of("brutal_occupation")),
 +            Map.entry("courageousStarter", List.of("courageous")),
 +            Map.entry("drawParadigmAC", List.of("tf-elevate")),
@@ -22017,6 +23095,10 @@ index 000000000..90f7d738e
 +    /** Steps of cards without an automationID (Thunder's Edge) or outside playAC: step -> card alias prefix. */
 +    static final Map<String, String> STEP_CARDS = Map.ofEntries(
 +            Map.entry("courageousFire", "courageous"),
++            Map.entry("ghostSquadMove", "ghost_squad"),
++            Map.entry("ghostSquadDone", "ghost_squad"),
++            Map.entry("briberySpend", "bribery"),
++            Map.entry("legalTextElect", "confusing"),
 +            Map.entry("endScuttle", "scuttle"),
 +            Map.entry("scuttleIn", "scuttle"),
 +            Map.entry("scuttleOn", "scuttle"),
@@ -23402,10 +24484,10 @@ index 000000000..2cbacd73d
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
 new file mode 100644
-index 000000000..91e97fa26
+index 000000000..5576962b6
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatHitsKind.java
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,209 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -23503,6 +24585,8 @@ index 000000000..91e97fa26
 +        }
 +        // The next round's roll on a hits prompt waits for the hits (pbd203: rolled while the opponent still owed).
 +        String h = optionId == null ? null : ti4.discord.interactions.routing.ComponentIdEnvelope.decode(optionId).handlerId();
++        String rout = ti4.service.combat.CombatCardRules.routRefusal(game, answering, h);
++        if (rout != null) return rout;
 +        String why = CombatSupport.rollBlocked(game, h, answering);
 +        return why == null ? null : "Not yet: " + why + ".";
 +    }
@@ -24037,10 +25121,10 @@ index 000000000..bb2fb1453
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
 new file mode 100644
-index 000000000..a27ef3256
+index 000000000..e3352a7fd
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatRoundKind.java
-@@ -0,0 +1,206 @@
+@@ -0,0 +1,209 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -24207,6 +25291,9 @@ index 000000000..a27ef3256
 +            if (r != null) return "You cannot retreat now: " + r + ".";
 +        }
 +        String h = optionId == null ? null : ti4.discord.interactions.routing.ComponentIdEnvelope.decode(optionId).handlerId();
++        // audit-gaps-3 (TI4_RULES_AC): Rout — the attacker announces a retreat (if able) before rolling.
++        String rout = ti4.service.combat.CombatCardRules.routRefusal(game, answering, h);
++        if (rout != null) return rout;
 +        String why = CombatSupport.rollBlocked(game, h, answering);
 +        if (why != null) return "Not yet: " + why + ".";
 +        // Rules audit (factions): L4 Disruptors / the Argent flagship forbid these SPACE CANNON rolls.
@@ -24249,10 +25336,10 @@ index 000000000..a27ef3256
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
 new file mode 100644
-index 000000000..b42169daf
+index 000000000..8a1e2973f
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/CombatSupport.java
-@@ -0,0 +1,1120 @@
+@@ -0,0 +1,1132 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.ArrayDeque;
@@ -24664,7 +25751,15 @@ index 000000000..b42169daf
 +    // ------------------------------------------------------------------ Shields Holding (hits cancelled by a card)
 +
 +    /** Shields Holding (and its DS variant): "Cancel up to 2 hits" — the original only announces it; see shields(). */
-+    private static final java.util.Set<String> SHIELDS_HOLDING = java.util.Set.of("sh1", "sh2", "sh3", "sh4", "shields_holding_ds");
++    private static final java.util.Set<String> SHIELDS_HOLDING = java.util.Set.of(
++            "sh1", "sh2", "sh3", "sh4", "shields_holding_ds",
++            // audit-gaps-3: Maneuvering Jets — "Cancel 1 hit" (its play window: SPACE CANNON hits owed).
++            "mjets1", "mjets2", "mjets3", "mjets4", "maneuvering_jets_ds");
++
++    /** Hits one card cancels: Shields Holding up to 2, Maneuvering Jets 1. */
++    private static int cancels(String ac) {
++        return ac.startsWith("mjets") || ac.startsWith("maneuvering_jets") ? 1 : 2;
++    }
 +
 +    /**
 +     * A hits prompt as first captured: the hits it asked for, the Shields Holding cards then in the player's hand and
@@ -24703,15 +25798,19 @@ index 000000000..b42169daf
 +    static int shieldsCancelled(Game game, @Nullable Player p, @Nullable String messageId) {
 +        Shields sh = messageId == null ? null : SHIELDS.get(messageId);
 +        if (p == null || sh == null || sh.inHand().isEmpty() || !sh.faction().equals(p.getFaction())) return 0;
-+        int played = 0;
++        List<Integer> played = new ArrayList<>();
 +        for (String ac : sh.inHand()) {
 +            if (p.getActionCards().containsKey(ac) || !game.getDiscardActionCards().containsKey(ac)) continue;
 +            if (sabotageWindowOpen(game, ac)) continue;
-+            played++;
++            played.add(cancels(ac));
 +        }
 +        java.util.Set<String> sabotages = sabotagesDiscarded(game);
 +        sabotages.removeAll(sh.sabotagesDiscarded());
-+        return 2 * Math.max(0, played - sabotages.size());
++        // A Sabotage discarded meanwhile cancelled one of them (counted as the smallest: never more owed than due).
++        java.util.Collections.sort(played);
++        int total = 0;
++        for (int i = Math.min(sabotages.size(), played.size()); i < played.size(); i++) total += played.get(i);
++        return total;
 +    }
 +
 +    private static boolean sabotageWindowOpen(Game game, String actionCard) {
@@ -26842,10 +27941,10 @@ index 000000000..afd69bf60
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/FactionAbilityKind.java b/src/main/java/ti4/selfhost/engine/kinds/FactionAbilityKind.java
 new file mode 100644
-index 000000000..79fcf7075
+index 000000000..b700017ec
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/FactionAbilityKind.java
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,81 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.List;
@@ -26888,7 +27987,37 @@ index 000000000..79fcf7075
 +    @Nullable
 +    public Map<String, Object> value(String handlerId, CaptureContext ctx) {
 +        FactionSteps.Step s = FactionSteps.Registry.find(handlerId, ctx);
-+        return s == null || !KIND.equals(s.kind()) ? null : s.value();
++        if (s == null || !KIND.equals(s.kind())) return null;
++        Map<String, Object> v = s.value();
++        // audit-gaps-3 (Political Secret): the web greys the ability with the reason.
++        if (ctx != null && ctx.game() != null && ctx.player() != null) {
++            String why = ti4.helpers.AgendaRules.factionAbilityRefusal(ctx.game(), ctx.player(), handlerId);
++            if (why != null) v.put("unavailable", why);
++        }
++        return v;
++    }
++
++    /**
++     * audit-gaps-3: the faction-sheet ability behind a press, as {source, id, faction, action}, or null when the
++     * handler is not a faction.ability step (leaders, technologies and units are other sources).
++     */
++    @Nullable
++    public static Map<String, Object> stepOf(@Nullable String handlerId) {
++        try {
++            FactionSteps.Step s = FactionSteps.Registry.find(handlerId == null ? null : handlerId.replaceFirst("^FFCC_[^_]+_", ""), null);
++            return s == null || !KIND.equals(s.kind()) ? null : s.value();
++        } catch (RuntimeException e) {
++            return null;
++        }
++    }
++
++    /** Political Secret: "The [color] player cannot ... use faction abilities until after that agenda has been resolved." */
++    @Override
++    @Nullable
++    public String validate(ti4.game.Game game, ti4.game.Player answering, ti4.selfhost.engine.EngineModels.Decision decision, String optionId) {
++        if (game == null || answering == null || optionId == null) return null;
++        String h = ti4.discord.interactions.routing.ComponentIdEnvelope.decode(optionId.split("#")[0]).handlerId();
++        return ti4.helpers.AgendaRules.factionAbilityRefusal(game, answering, h);
 +    }
 +
 +    @Override
@@ -29129,10 +30258,10 @@ index 000000000..cefb30e1d
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java b/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java
 new file mode 100644
-index 000000000..cb3ff898d
+index 000000000..9afd82629
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/KeleresFlavorKind.java
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,175 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.Map;
@@ -29156,7 +30285,13 @@ index 000000000..cb3ff898d
 + * </ul>
 + *
 + * value: {flavor: "mentak"|"xxcha"|"argent", faction: "keleresm"|…, preset, contested (that faction is drafted or
-+ * still on the draft board), homePosition, speaker}. Target: the cards-info thread's owner; validate also checks
++ * still on the draft board), current (preset only: this flavour is the one already preset), homePosition, speaker}.
++ *
++ * <p>The preset handler re-posts the preset buttons after every press ("you can change your decision later"), so a
++ * preset prompt is never "answered": regress pbd1967 / pbd1195 (the e2e human) and bot drafts (pbd196: 95 presses)
++ * re-pressed it every few seconds. A press of the flavour already preset is refused (nothing would change), and the
++ * preset is obsolete once the draft is over (FinishDraftService read it already; the after-draft prompt is
++ * setupStep5). Target: the cards-info thread's owner; validate also checks
 + * the user the setupStep5 id names (the handler sets up that user, whoever presses).
 + */
 +public class KeleresFlavorKind implements KindSpec {
@@ -29200,6 +30335,7 @@ index 000000000..cb3ff898d
 +                "faction", "keleres" + flavor.charAt(0),
 +                "preset", true,
 +                "contested", contested(ctx.game(), flavor),
++                "current", isCurrentPreset(ctx.game(), flavor),
 +                "homePosition", null,
 +                "speaker", null);
 +    }
@@ -29213,7 +30349,31 @@ index 000000000..cb3ff898d
 +    public String validate(Game game, Player answering, Decision decision, String optionId) {
 +        Matcher s = SETUP.matcher(SetupKindSupport.handlerOf(decision, optionId));
 +        if (s.matches() && !s.group(1).equals(answering.getUserID())) return "That choice is for another player.";
++        Matcher p = PRESET.matcher(SetupKindSupport.handlerOf(decision, optionId));
++        if (p.matches() && game != null) {
++            String name = org.apache.commons.lang3.StringUtils.capitalize(p.group(1));
++            if (draftOver(game)) return "The draft is over: choose your Keleres flavour in the setup prompt.";
++            MiltyDraftManager m = game.getMiltyDraftManager();
++            if (m != null && m.isFactionTaken(p.group(1))) return name + " was drafted by another player.";
++            if (isCurrentPreset(game, p.group(1))) return name + " is already your preset.";
++        }
 +        return null;
++    }
++
++    /** Options move with the stored preset (current) and the draft board (contested). */
++    @Override
++    public boolean dynamicValues() {
++        return true;
++    }
++
++    private static boolean isCurrentPreset(Game game, String flavor) {
++        return game != null && flavor.equals(game.getStoredValue("keleresFlavorPreset"));
++    }
++
++    /** The draft is finished (the preset was read by FinishDraftService) or setup is past it. */
++    private static boolean draftOver(Game game) {
++        MiltyDraftManager m = game.getMiltyDraftManager();
++        return m == null || ti4.selfhost.engine.SetupStateBuilder.draftFinished(game, m);
 +    }
 +
 +    private static String flavorOf(String letter) {
@@ -29254,19 +30414,27 @@ index 000000000..cb3ff898d
 +        return resolved;
 +    }
 +
-+    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
 +    @Override
 +    public boolean obsolete(CaptureContext ctx) {
-+        if (ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game())) return true;
++        return obsoleteReason(ctx) != null;
++    }
++
++    /** Past setup this prompt is a leftover nobody needs (live: hundreds open across games, flooding the web queue). */
++    @Override
++    public String obsoleteReason(CaptureContext ctx) {
++        if (ti4.selfhost.engine.SetupStateBuilder.pastSetup(ctx.game())) return "That step of the game is over.";
++        java.util.List<String> ids = SetupKindSupport.handlerIds(ctx);
++        if (ids == null || ctx.game() == null || ids.stream().noneMatch(h -> h != null && PRESET.matcher(h).matches())) return null;
++        // The draft-time preset after the draft: FinishDraftService already read it, a press only re-posts the preset
++        // buttons (regress pbd1967 / pbd1195: the e2e human pressed it every ~5 s instead of the setupStep5 prompt).
++        if (draftOver(ctx.game())) return "The draft is over: choose your Keleres flavour in the setup prompt.";
 +        // The draft-time preset once a Keleres seat plays its flavour: nothing left to pre-select (live pbd175: the
 +        // preset stayed open after the draft and the seat's watchdog reported it as a stall).
-+        java.util.List<String> ids = SetupKindSupport.handlerIds(ctx);
-+        if (ids == null || ctx.game() == null || ids.stream().noneMatch(h -> h != null && PRESET.matcher(h).matches())) return false;
 +        for (Player p : ctx.game().getRealPlayers()) {
 +            String f = p.getFaction();
-+            if (f != null && f.startsWith("keleres") && !"keleres".equals(f)) return true;
++            if (f != null && f.startsWith("keleres") && !"keleres".equals(f)) return "That step of the game is over.";
 +        }
-+        return false;
++        return null;
 +    }
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java b/src/main/java/ti4/selfhost/engine/kinds/KeleresTechOptionsKind.java
@@ -37314,10 +38482,10 @@ index 000000000..300def7c9
 +}
 diff --git a/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
 new file mode 100644
-index 000000000..6d243d4ba
+index 000000000..e1a75e1e6
 --- /dev/null
 +++ b/src/main/java/ti4/selfhost/engine/kinds/TurnActionKind.java
-@@ -0,0 +1,233 @@
+@@ -0,0 +1,239 @@
 +package ti4.selfhost.engine.kinds;
 +
 +import java.util.LinkedHashMap;
@@ -37409,6 +38577,7 @@ index 000000000..6d243d4ba
 +            case "confirmSecondAction", "doAnotherAction" -> {
 +                v.put("action", "another_action");
 +                v.put("sources", ti4.selfhost.SecondActionGate.sources(p, ctx.game()));
++                v.put("unavailable", ti4.selfhost.SecondActionGate.refusal(p, ctx.game()));
 +            }
 +            default -> {
 +                v.put("action", "strategic");
@@ -37505,6 +38674,11 @@ index 000000000..6d243d4ba
 +        for (Option o : decision.options()) {
 +            if (!o.id().equals(optionId) || o.value() == null) continue;
 +            Object action = o.value().get("action");
++            // audit-gaps-3 (TI4_RULES_AC): Master Plan's additional action is the player's who played it, once.
++            if ("another_action".equals(action)) {
++                String why = ti4.selfhost.SecondActionGate.refusal(answering, game);
++                if (why != null) return why;
++            }
 +            if ("end_turn".equals(action) || "pass".equals(action)) {
 +                // Rules: every player answers the strategy card played this turn before the next turn begins.
 +                String wait = ti4.selfhost.engine.ScFollowGate.waitingMessage(game, answering);
@@ -39016,12 +40190,315 @@ index a2dc7ab41..d4f0461f7 100644
      public static void autoAssignAllBombardmentToAPlanet(Player player, Game game, Tile tile) {
          game.removeStoredValue("assignedBombardment" + player.getFaction());
          if (tile == null) {
+diff --git a/src/main/java/ti4/service/combat/CombatCardRules.java b/src/main/java/ti4/service/combat/CombatCardRules.java
+new file mode 100644
+index 000000000..3b0a5bf12
+--- /dev/null
++++ b/src/main/java/ti4/service/combat/CombatCardRules.java
+@@ -0,0 +1,297 @@
++package ti4.service.combat;
++
++import java.util.List;
++import javax.annotation.Nullable;
++import ti4.game.Game;
++import ti4.game.Player;
++import ti4.game.Tile;
++import ti4.game.UnitHolder;
++import ti4.helpers.ButtonHelperModifyUnits;
++import ti4.helpers.FoWHelper;
++import ti4.helpers.RulesGate;
++import ti4.helpers.Units.UnitKey;
++import ti4.model.UnitModel;
++import ti4.selfhost.engine.kinds.CombatSupport;
++
++/**
++ * audit-gaps-3 (gate TI4_RULES_AC / rulesGateActionCards): the combat action cards judged from the combat state
++ * (CombatSupport.state: open hits prompts, this activation's roll ledger, the combat round trackers), as the
++ * deliberate improvement over the original's honour system.
++ *
++ * <ul>
++ *   <li><b>Shields Holding</b> — "Before you assign hits to your ships during a space combat: Cancel up to 2 hits."
++ *       Played while you have space combat hits to assign (the 2 hits come off that prompt: CombatSupport).</li>
++ *   <li><b>Maneuvering Jets</b> — "Before you assign hits produced by another player's SPACE CANNON roll: Cancel 1 hit."
++ *       Played while you have hits from another player's SPACE CANNON roll to assign.</li>
++ *   <li><b>Waylay</b> — "Before you roll dice for ANTI-FIGHTER BARRAGE: Hits from this roll are produced against all
++ *       ships (not just fighters)." Played by a player with ANTI-FIGHTER BARRAGE in the space combat who has not
++ *       rolled it this combat; that roll's hits may then be assigned to any ship (CombatHitRules).</li>
++ *   <li><b>Reflective Shielding</b> — "When one of your ships uses SUSTAIN DAMAGE during combat: Produce 2 hits against
++ *       your opponent's ships in the active system." Played while one of your ships in the space combat is damaged;
++ *       resolving it posts the opponent's 2-hit prompt.</li>
++ *   <li><b>Scramble Frequency</b> — "After another player makes a BOMBARDMENT, SPACE CANNON, or ANTI-FIGHTER BARRAGE
++ *       roll: That player rerolls all of their dice." Played when the latest roll of this tactical action is such a
++ *       roll by another player.</li>
++ *   <li><b>Rout</b> — "At the start of the 'Announce Retreats' step of space combat, if you are the defender: Your
++ *       opponent must announce a retreat, if able." Played by the defender at the start of a space combat round; that
++ *       round the attacker's combat roll is refused until they announce a retreat, while they have somewhere to go.</li>
++ * </ul>
++ * Without a combat state (no engine) nothing is refused.
++ */
++public final class CombatCardRules {
++    private CombatCardRules() {}
++
++    static final String WAYLAY = "ccWaylay";
++    static final String ROUT = "ccRout";
++
++    static boolean on(Game game) {
++        return game != null && RulesGate.ACTION_CARDS.judges(game);
++    }
++
++    private static String activation(Game game) {
++        Player a = game.getActivePlayer();
++        return game.getRound() + "|" + (a == null ? "" : a.getFaction()) + "|" + game.getActiveSystem();
++    }
++
++    @Nullable
++    private static Tile activeTile(Game game) {
++        String pos = game.getActiveSystem();
++        return pos == null || pos.isBlank() || "null".equalsIgnoreCase(pos) ? null : game.getTileByPosition(pos);
++    }
++
++    /** Records the plays judged later (ActionCardHelper, when the card is played). */
++    public static void recordPlay(Game game, Player player, String acId) {
++        if (game == null || player == null || acId == null) return;
++        if (acId.startsWith("waylay"))
++            game.setStoredValue(WAYLAY, activation(game) + "|" + player.getFaction() + "#" + sabotages(game));
++        if (acId.startsWith("rout")) {
++            Tile tile = activeTile(game);
++            Player attacker = game.getActivePlayer();
++            if (tile == null || attacker == null) return;
++            int round = RetreatRules.rounds(game, attacker, tile.getPosition()) + 1;
++            game.setStoredValue(ROUT, activation(game) + "|" + attacker.getFaction() + "|" + round + "#" + sabotages(game));
++        }
++    }
++
++    private static int sabotages(Game game) {
++        int n = 0;
++        for (String ac : game.getDiscardActionCards().keySet()) if (ac.startsWith("sabo")) n++;
++        return n;
++    }
++
++    /** The record without its "#sabotages" suffix, or null when a Sabotage was discarded since (the card cancelled). */
++    @Nullable
++    private static String live(Game game, @Nullable String v) {
++        if (v == null || v.isBlank()) return null;
++        int hash = v.lastIndexOf('#');
++        if (hash < 0) return v;
++        try {
++            if (sabotages(game) > Integer.parseInt(v.substring(hash + 1))) return null;
++        } catch (NumberFormatException ignored) {
++            // no count
++        }
++        return v.substring(0, hash);
++    }
++
++    /** Waylay was played by {@code roller} for this activation: their AFB hits land on any ship. */
++    public static boolean waylay(Game game, @Nullable Player roller) {
++        if (game == null || roller == null || !on(game)) return false;
++        return (activation(game) + "|" + roller.getFaction()).equals(live(game, game.getStoredValue(WAYLAY)));
++    }
++
++    /** Waylay played by an opponent of {@code victim} in this activation (the victim's AFB hits go to any ship). */
++    public static boolean waylayAgainst(Game game, @Nullable Player victim) {
++        if (game == null || victim == null || !on(game)) return false;
++        String v = live(game, game.getStoredValue(WAYLAY));
++        String prefix = activation(game) + "|";
++        if (v == null || !v.startsWith(prefix)) return false;
++        Player p = game.getPlayerFromColorOrFaction(v.substring(prefix.length()));
++        return p != null && p != victim;
++    }
++
++    // ------------------------------------------------------------------ play windows (ActionCardTiming)
++
++    private static boolean isShields(String a) {
++        return a.matches("sh\\d") || a.startsWith("shields_holding");
++    }
++
++    private static boolean isJets(String a) {
++        return a.matches("mjets\\d") || a.startsWith("maneuvering_jets");
++    }
++
++    /** Why {@code player} cannot play this combat card now (sentence after the card name), or null. */
++    @Nullable
++    public static String playRefusal(Game game, Player player, String alias) {
++        if (!on(game) || player == null || alias == null) return null;
++        boolean known = isShields(alias) || isJets(alias) || alias.startsWith("waylay") || alias.startsWith("reflective")
++                || alias.startsWith("scramble") || alias.startsWith("rout");
++        if (!known) return null;
++        CombatSupport.CombatState st;
++        try {
++            st = CombatSupport.state(game);
++        } catch (RuntimeException | LinkageError e) {
++            return null;
++        }
++        Tile tile = activeTile(game);
++        if (tile == null) return null;
++        if (isShields(alias)) {
++            // "Before you assign hits to your ships during a space combat": you fight a space combat here (your ships
++            // and an opponent's). Open hits prompts are not required: they may not be posted (or captured) yet (gate40:
++            // pbd60@122 refused with muaat's 5-hit prompt up).
++            if (st != null && owes(st, player, "space")) return null;
++            if (!FoWHelper.playerHasActualShipsInSystem(player, tile) || opponentWithShips(game, player, tile) == null)
++                return "is played before you assign hits to your ships during a space combat: you are in none here.";
++            return null;
++        }
++        if (isJets(alias)) {
++            // Another player's SPACE CANNON roll of this tactical action (its hits owed, or the roll in the ledger).
++            if (st != null && (owesSpaceCannon(st, player) || cannonRollAgainst(st, player))) return null;
++            return "is played before you assign hits from another player's SPACE CANNON roll: there is none this"
++                    + " tactical action.";
++        }
++        if (alias.startsWith("waylay")) {
++            if (!hasAfb(player, tile)) return "needs your units with ANTI-FIGHTER BARRAGE in the active system.";
++            if (opponentWithShips(game, player, tile) == null)
++                return "is played before an ANTI-FIGHTER BARRAGE roll: there is no space combat for you here.";
++            // Any side's combat round rolled here (gate40: the first opponent found was not the one fighting).
++            boolean roundRolled = false;
++            for (Player p : game.getRealPlayersNNeutral())
++                roundRolled |= RetreatRules.rounds(game, p, tile.getPosition()) > 0;
++            if (roundRolled || rolled(st, player, "afb"))
++                return "is played before you roll ANTI-FIGHTER BARRAGE, which comes before the first combat round:"
++                        + " that is over here.";
++            return null;
++        }
++        if (alias.startsWith("reflective")) {
++            if (opponentWithShips(game, player, tile) == null)
++                return "is played during a combat: there is no space combat for you here.";
++            if (!hasDamagedShip(player, tile))
++                return "is played when one of your ships uses SUSTAIN DAMAGE: none of your ships here is damaged.";
++            return null;
++        }
++        if (alias.startsWith("scramble")) {
++            CombatSupport.CombatRoll last = st == null || st.rolls().isEmpty() ? null : st.rolls().getLast();
++            if (last == null
++                    || player.getFaction().equals(last.faction())
++                    || !List.of("afb", "bombardment", "spacecannonoffence", "spacecannondefence").contains(last.rollType()))
++                return "is played right after another player's BOMBARDMENT, SPACE CANNON or ANTI-FIGHTER BARRAGE roll.";
++            return null;
++        }
++        if (alias.startsWith("rout")) {
++            Player attacker = game.getActivePlayer();
++            if (attacker == null || attacker == player) return "is played by the defender (you are the attacker).";
++            if (opponentWithShips(game, player, tile) != attacker || !FoWHelper.playerHasShipsInSystem(player, tile))
++                return "is played by the defender of a space combat: there is none for you here.";
++            String pos = tile.getPosition();
++            if (RetreatRules.rounds(game, player, pos) != RetreatRules.rounds(game, attacker, pos)
++                    || (st != null && !st.owed().isEmpty()))
++                return "is played at the start of a combat round's Announce Retreats step, before anyone rolls.";
++            return null;
++        }
++        return null;
++    }
++
++    private static boolean owes(CombatSupport.CombatState st, Player p, String source) {
++        for (CombatSupport.HitsOwed o : st.owed())
++            if (p.getFaction().equals(o.faction()) && source.equalsIgnoreCase(o.source()) && o.hits() > 0) return true;
++        return false;
++    }
++
++    private static boolean owesSpaceCannon(CombatSupport.CombatState st, Player p) {
++        for (CombatSupport.HitsOwed o : st.owed()) {
++            if (!p.getFaction().equals(o.faction()) || o.hits() <= 0) continue;
++            String s = String.valueOf(o.source()).toLowerCase();
++            if (s.contains("cannon") || s.equals("pds")) return true;
++            if (s.equals("ground")) {
++                // SPACE CANNON DEFENSE hits land on the invader's ground forces: the latest roll against them.
++                for (int i = st.rolls().size() - 1; i >= 0; i--) {
++                    CombatSupport.CombatRoll r = st.rolls().get(i);
++                    if (p.getFaction().equals(r.faction())) continue;
++                    if ("spacecannondefence".equals(r.rollType())) return true;
++                    break;
++                }
++            }
++        }
++        return false;
++    }
++
++    /** A SPACE CANNON roll by another player in this tactical action's ledger. */
++    private static boolean cannonRollAgainst(CombatSupport.CombatState st, Player p) {
++        for (CombatSupport.CombatRoll r : st.rolls()) {
++            if (p.getFaction().equals(r.faction())) continue;
++            if ("spacecannonoffence".equals(r.rollType()) || "spacecannondefence".equals(r.rollType())) return true;
++        }
++        return false;
++    }
++
++    private static boolean rolled(@Nullable CombatSupport.CombatState st, Player p, String type) {
++        if (st == null) return false;
++        for (CombatSupport.CombatRoll r : st.rolls())
++            if (p.getFaction().equals(r.faction()) && type.equals(r.rollType())) return true;
++        return false;
++    }
++
++    private static boolean hasAfb(Player p, Tile tile) {
++        UnitHolder space = tile.getSpaceUnitHolder();
++        for (UnitKey k : space.getUnitKeys()) {
++            if (!p.unitBelongsToPlayer(k) || space.getUnitCount(k) <= 0) continue;
++            UnitModel m = p.getUnitFromUnitKey(k);
++            if (m != null && m.getAfbDieCount(p) > 0) return true;
++        }
++        return false;
++    }
++
++    private static boolean hasDamagedShip(Player p, Tile tile) {
++        UnitHolder space = tile.getSpaceUnitHolder();
++        for (UnitKey k : space.getUnitKeys()) {
++            if (!p.unitBelongsToPlayer(k) || space.getDamagedUnitCount(k) <= 0) continue;
++            UnitModel m = p.getUnitFromUnitKey(k);
++            if (m != null && m.getIsShip()) return true;
++        }
++        return false;
++    }
++
++    /** An opponent with ships in the space area, or null. */
++    @Nullable
++    public static Player opponentWithShips(Game game, Player p, Tile tile) {
++        for (Player o : game.getRealPlayersNNeutral()) {
++            if (o == p || p.isPlayerMemberOfAlliance(o)) continue;
++            if (FoWHelper.playerHasActualShipsInSystem(o, tile)) return o;
++        }
++        return null;
++    }
++
++    // ------------------------------------------------------------------ Rout
++
++    /**
++     * Rout: the attacker rolls this round's space combat dice only after announcing a retreat, when they are able to
++     * (an announcement is allowed and a retreat destination exists). Null when the press is not such a roll or allowed.
++     */
++    @Nullable
++    public static String routRefusal(Game game, @Nullable Player player, @Nullable String handlerId) {
++        if (!on(game) || player == null || handlerId == null) return null;
++        String h = handlerId.replaceFirst("^FFCC_[^_]+_", "");
++        if (!h.startsWith("combatRoll_") || !h.matches("combatRoll_[^_]+_space")) return null;
++        String v = live(game, game.getStoredValue(ROUT));
++        Tile tile = activeTile(game);
++        if (v == null || tile == null || !v.startsWith(activation(game) + "|")) return null;
++        String[] f = v.substring(activation(game).length() + 1).split("\\|");
++        if (f.length < 2 || !f[0].equals(player.getFaction())) return null;
++        int round;
++        try {
++            round = Integer.parseInt(f[1]);
++        } catch (NumberFormatException e) {
++            return null;
++        }
++        String pos = tile.getPosition();
++        if (RetreatRules.rounds(game, player, pos) + 1 != round) return null;
++        if (RetreatRules.announced(game, player, pos) == round) return null;
++        if (RetreatRules.announceRefusal(game, player) != null) return null;
++        try {
++            if (ButtonHelperModifyUnits.getRetreatSystemButtons(player, game, pos, false, false).isEmpty()) return null;
++        } catch (RuntimeException e) {
++            return null;
++        }
++        return "_Rout_: you must announce a retreat this round (you have somewhere to retreat to) before rolling.";
++    }
++}
 diff --git a/src/main/java/ti4/service/combat/CombatHitRules.java b/src/main/java/ti4/service/combat/CombatHitRules.java
 new file mode 100644
-index 000000000..07f72d9f3
+index 000000000..5c1d53f25
 --- /dev/null
 +++ b/src/main/java/ti4/service/combat/CombatHitRules.java
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,97 @@
 +package ti4.service.combat;
 +
 +import javax.annotation.Nullable;
@@ -39078,7 +40555,9 @@ index 000000000..07f72d9f3
 +        if (model == null) return null;
 +        boolean onPlanet = holder instanceof Planet;
 +        return switch (kind) {
-+            case AFB -> !onPlanet && key.unitType() == UnitType.Fighter
++            case AFB -> !onPlanet && (key.unitType() == UnitType.Fighter
++                            // audit-gaps-3: Waylay — "Hits from this roll are produced against all ships".
++                            || (model.getIsShip() && CombatCardRules.waylayAgainst(player.getGame(), player)))
 +                    ? null
 +                    : "anti-fighter barrage hits land on fighters only";
 +            case GROUND -> {
@@ -39497,10 +40976,10 @@ index 000000000..cf1598c1f
 +}
 diff --git a/src/main/java/ti4/service/combat/SpaceCannonRestrictions.java b/src/main/java/ti4/service/combat/SpaceCannonRestrictions.java
 new file mode 100644
-index 000000000..1a98a07da
+index 000000000..88be4f2e7
 --- /dev/null
 +++ b/src/main/java/ti4/service/combat/SpaceCannonRestrictions.java
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,96 @@
 +package ti4.service.combat;
 +
 +import java.util.ArrayList;
@@ -39549,6 +41028,9 @@ index 000000000..1a98a07da
 +            return null;
 +        }
 +        if (type == CombatRollType.SpaceCannonOffence) {
++            // audit-gaps-3 (TI4_RULES_AC): Solar Flare.
++            String flare = ti4.helpers.MovementCardRules.solarFlareRefusal(game, roller);
++            if (flare != null) return flare;
 +            List<Player> targets = new ArrayList<>();
 +            for (Player p : game.getRealPlayersNNeutral()) {
 +                if (p == roller || roller.getAllianceMembers().contains(p.getFaction())) continue;
@@ -39595,7 +41077,7 @@ index 000000000..1a98a07da
 +    }
 +}
 diff --git a/src/main/java/ti4/service/combat/StartCombatService.java b/src/main/java/ti4/service/combat/StartCombatService.java
-index 8b1a9b870..fa82ff861 100644
+index 8b1a9b870..97eff7b8b 100644
 --- a/src/main/java/ti4/service/combat/StartCombatService.java
 +++ b/src/main/java/ti4/service/combat/StartCombatService.java
 @@ -754,6 +754,13 @@ public class StartCombatService {
@@ -39643,7 +41125,7 @@ index 8b1a9b870..fa82ff861 100644
          if (tile.isScar(game)) {
              MessageHelper.sendMessageToChannel(
                      threadChannel, "## Reminder that you cannot use any unit abilities in an Entropic Scar.");
-@@ -1440,6 +1469,23 @@ public class StartCombatService {
+@@ -1440,6 +1469,27 @@ public class StartCombatService {
          }
      }
  
@@ -39659,6 +41141,10 @@ index 8b1a9b870..fa82ff861 100644
 +                if (o == p || p.getAllianceMembers().contains(o.getFaction())) continue;
 +                if (space.getUnitCount(UnitType.Fighter, o) > 0) return true;
 +                if (p.hasUnit("argent_destroyer2") && space.getUnitCount(UnitType.Infantry, o) > 0) return true;
++                // audit-gaps-3: Waylay ("hits from this roll are produced against all ships") is played before the
++                // roll, so a player holding it keeps the barrage step against ships.
++                if (p.getActionCards().containsKey("waylay") && ti4.helpers.FoWHelper.playerHasActualShipsInSystem(o, tile))
++                    return true;
 +            }
 +        }
 +        return false;
@@ -39667,7 +41153,7 @@ index 8b1a9b870..fa82ff861 100644
      private static void sendAFBButtonsToThread(
              GenericInteractionCreateEvent event,
              ThreadChannel threadChannel,
-@@ -1453,6 +1499,13 @@ public class StartCombatService {
+@@ -1453,6 +1503,13 @@ public class StartCombatService {
              return;
          }
  
@@ -39681,7 +41167,7 @@ index 8b1a9b870..fa82ff861 100644
          List<Button> afbButtons = new ArrayList<>();
          afbButtons.add(Buttons.gray("combatRoll_" + tile.getPosition() + "_space_afb", "Roll ANTI-FIGHTER BARRAGE"));
          for (Player player : combatPlayers) {
-@@ -1525,6 +1578,18 @@ public class StartCombatService {
+@@ -1525,6 +1582,18 @@ public class StartCombatService {
          return spaceCannonButtons;
      }
  
@@ -39700,7 +41186,7 @@ index 8b1a9b870..fa82ff861 100644
      private static boolean hasCendos(Player player, Tile tile) {
          int nonFighterShips = 0;
          boolean hasDestroyer = false;
-@@ -2672,6 +2737,23 @@ public class StartCombatService {
+@@ -2672,6 +2741,23 @@ public class StartCombatService {
                                  "Reroll 1 Mech on " + nameOfHolder,
                                  FactionEmojis.blacktf));
                      }
@@ -39724,7 +41210,7 @@ index 8b1a9b870..fa82ff861 100644
                      if (p.hasUnit("ralnel_mech")
                              && isGroundCombat
                              && !ButtonHelper.isLawInPlay(game, "articles_war")
-@@ -2773,9 +2855,14 @@ public class StartCombatService {
+@@ -2773,9 +2859,14 @@ public class StartCombatService {
                          AeternaUnitsHandler.getMausoleumButton(p, otherP, tile, unitH, buttons);
                      }
                  }
@@ -39740,7 +41226,7 @@ index 8b1a9b870..fa82ff861 100644
                          && (unitH.getUnitCount(Units.UnitType.Spacedock, p2.getColor()) > 0
                                  || unitH.getUnitCount(Units.UnitType.Pds, p2.getColor()) > 0)) {
                      String id = p1.factionButtonChecker() + "assimilate_" + unitH.getName();
-@@ -2835,7 +2922,10 @@ public class StartCombatService {
+@@ -2835,7 +2926,10 @@ public class StartCombatService {
                                  .withEmoji(Emoji.fromFormatted(p2.getFactionEmoji())));
                      }
                      if (CombatRollService.checkIfUnitsOfType(
@@ -40118,7 +41604,7 @@ index 64abce240..954a2fed5 100644
          ReactionService.addReaction(event, game, player, "IS PERFORMING A **SACRIFICE**.");
  
 diff --git a/src/main/java/ti4/service/game/CreateGameService.java b/src/main/java/ti4/service/game/CreateGameService.java
-index 5b8e62aa5..a4f228a9b 100644
+index 5b8e62aa5..6287b9fab 100644
 --- a/src/main/java/ti4/service/game/CreateGameService.java
 +++ b/src/main/java/ti4/service/game/CreateGameService.java
 @@ -59,8 +59,9 @@ import ti4.settings.users.UserSettingsManager;
@@ -40133,7 +41619,25 @@ index 5b8e62aa5..a4f228a9b 100644
  
      public static Game createNewGame(String gameName, Member gameOwner) {
          Game newGame = new Game();
-@@ -348,6 +349,7 @@ public class CreateGameService {
+@@ -173,6 +174,8 @@ public class CreateGameService {
+         TextChannel chatChannel = guild.createTextChannel(newChatChannelName, categoryChannel)
+                 .syncPermissionOverrides()
+                 .addRolePermissionOverride(gameRoleID, permission, 0)
++                // Hidden from @everyone even when the category lacks the deny (never a public game).
++                .addRolePermissionOverride(guild.getPublicRole().getIdLong(), 0, Permission.VIEW_CHANNEL.getRawValue())
+                 .complete();
+         newGame.setTableTalkChannelID(chatChannel.getId());
+ 
+@@ -180,6 +183,8 @@ public class CreateGameService {
+         TextChannel actionsChannel = guild.createTextChannel(newActionsChannelName, categoryChannel)
+                 .syncPermissionOverrides()
+                 .addRolePermissionOverride(gameRoleID, permission, 0)
++                // Hidden from @everyone even when the category lacks the deny (never a public game).
++                .addRolePermissionOverride(guild.getPublicRole().getIdLong(), 0, Permission.VIEW_CHANNEL.getRawValue())
+                 .complete();
+         newGame.setMainChannelID(actionsChannel.getId());
+         List<Member> nonGameBothelpers = new ArrayList<>();
+@@ -348,6 +353,7 @@ public class CreateGameService {
          //         tfOptions);
  
          setupButtons.add(Buttons.green("frankenSetup", "Start Franken Setup"));
@@ -40141,7 +41645,7 @@ index 5b8e62aa5..a4f228a9b 100644
          MessageHelper.sendMessageToChannelWithButtons(
                  actionsChannel, "These buttons can help you setup alternate game modes.", setupButtons);
  
-@@ -592,7 +594,7 @@ public class CreateGameService {
+@@ -592,7 +598,7 @@ public class CreateGameService {
          int roleCount = guild.getRoles().size();
          if (roleCount >= MAX_ROLE_COUNT) {
              BotLogger.warning("`CreateGameService.serverHasRoomForNewRole` Cannot create a new role. Server **"
@@ -40150,7 +41654,7 @@ index 5b8e62aa5..a4f228a9b 100644
              return false;
          }
          return true;
-@@ -630,7 +632,7 @@ public class CreateGameService {
+@@ -630,7 +636,7 @@ public class CreateGameService {
              BotLogger.warning(
                      "`CreateGameService.serverHasRoomForNewFullCategory` Cannot create a new category. Server **"
                              + guild.getName() + "** currently has " + channelCount
@@ -40159,7 +41663,35 @@ index 5b8e62aa5..a4f228a9b 100644
                              + channelCountRequiredForNewCategory
                              + " new channels (including 1 for the category itself)");
              return false;
-@@ -746,6 +748,8 @@ public class CreateGameService {
+@@ -719,6 +725,16 @@ public class CreateGameService {
+             return categories.getFirst();
+         }
+ 
++        return createGameCategory(guild, categoryName);
++    }
++
++    /**
++     * A "PBD #a-b" category: hidden from @everyone, visible to Bothelper and Spectator. Every path that creates a game
++     * category goes through here: game channels copy their category's overrides (syncPermissionOverrides), so a bare
++     * category makes every game later created in it visible to everyone (self-host pbd2159: the category was
++     * re-created bare by a rewind that un-ended pbd2158, and 190 seats then saw and played in pbd2159).
++     */
++    public static Category createGameCategory(Guild guild, String categoryName) {
+         EnumSet<Permission> allow = EnumSet.of(Permission.VIEW_CHANNEL);
+         EnumSet<Permission> deny = EnumSet.of(Permission.VIEW_CHANNEL);
+         Role bothelperRole = DiscordRoleUtility.getRole("Bothelper", guild);
+@@ -731,8 +747,8 @@ public class CreateGameService {
+         if (spectatorRole != null)
+             createCategoryAction =
+                     createCategoryAction.addRolePermissionOverride(spectatorRole.getIdLong(), allow, null);
+-        if (everyoneRole != null)
+-            createCategoryAction = createCategoryAction.addRolePermissionOverride(everyoneRole.getIdLong(), null, deny);
++        createCategoryAction = createCategoryAction.addRolePermissionOverride(
++                everyoneRole != null ? everyoneRole.getIdLong() : guild.getPublicRole().getIdLong(), null, deny);
+         return createCategoryAction.complete();
+     }
+ 
+@@ -746,6 +762,8 @@ public class CreateGameService {
      }
  
      public static boolean isLockedFromCreatingGames(GenericInteractionCreateEvent event) {
@@ -40240,10 +41772,10 @@ index 828abca13..a7282f92f 100644
              // PoK
 diff --git a/src/main/java/ti4/service/leader/LeaderGaps.java b/src/main/java/ti4/service/leader/LeaderGaps.java
 new file mode 100644
-index 000000000..eab30761c
+index 000000000..cdffd7478
 --- /dev/null
 +++ b/src/main/java/ti4/service/leader/LeaderGaps.java
-@@ -0,0 +1,371 @@
+@@ -0,0 +1,378 @@
 +package ti4.service.leader;
 +
 +import java.util.List;
@@ -40482,6 +42014,11 @@ index 000000000..eab30761c
 +        // cabalagent, nomadagentartuno, bastionagent.
 +    }
 +
++    private static boolean combatUnderway(Game game) {
++        String f = game.getStoredValue("factionsInCombat");
++        return f != null && !f.isBlank();
++    }
++
 +    private static String activeSystem(Game game) {
 +        String pos = game.getCurrentActiveSystem();
 +        return pos == null || pos.isBlank() || "null".equalsIgnoreCase(pos) ? null : pos;
@@ -40503,8 +42040,10 @@ index 000000000..eab30761c
 +            case OWN_ACTION -> action && game.getActivePlayer() == owner ? null
 +                    : name + " is an ACTION: it is used on your own turn in the action phase.";
 +            case ACTION_PHASE -> action ? null : name + " is used during the action phase.";
-+            case ACTIVE_SYSTEM -> action && activeSystem(game) != null ? null
-+                    : name + " is used during a tactical action (after a system is activated).";
++            // A combat under way counts too: combats can be opened off-activation (combat-ux; gate40
++            // combat-ux-off-activation: Evelyn DeLouis refused there).
++            case ACTIVE_SYSTEM -> (action && activeSystem(game) != null) || combatUnderway(game) ? null
++                    : name + " is used during a tactical action (after a system is activated) or a combat.";
 +            case NOT_STRATEGY -> !"strategy".equals(phase) ? null : name + " cannot be used during the strategy phase.";
 +        };
 +    }
@@ -42048,7 +43587,7 @@ index 845795b07..10fe8c4cf 100644
          UnitModel model = player.getUnitFromUnitKey(unit);
          if (model == null) {
 diff --git a/src/main/java/ti4/service/tactical/TacticalActionService.java b/src/main/java/ti4/service/tactical/TacticalActionService.java
-index 78759d966..5968abf71 100644
+index 78759d966..8d90943c0 100644
 --- a/src/main/java/ti4/service/tactical/TacticalActionService.java
 +++ b/src/main/java/ti4/service/tactical/TacticalActionService.java
 @@ -29,6 +29,7 @@ import ti4.game.UnitHolder;
@@ -42073,7 +43612,7 @@ index 78759d966..5968abf71 100644
          BelkoseaAgentService.clear(game, player);
          // Pre-check: The Void
          if (FOWPlusService.isVoid(game, tile.getPosition())) {
-@@ -225,13 +233,40 @@ public class TacticalActionService {
+@@ -225,13 +233,41 @@ public class TacticalActionService {
              return;
          }
  
@@ -42091,6 +43630,7 @@ index 78759d966..5968abf71 100644
 +
          // Core logic block: movement, token placement, after-move effects, and state flags
          FinishMovementContext ctx = executeCoreFinishMovement(event, game, player, tile);
++        ti4.helpers.MovementCardRules.recordMovementConcluded(game, player);
 +        if (!riftRolls.isEmpty()) {
 +            // LRR 41: each ship moving out of or through a gravity rift rolls; 1-3 destroys it (no choice).
 +            StringBuilder sb = new StringBuilder(player.getRepresentationNoPing())
@@ -42114,7 +43654,7 @@ index 78759d966..5968abf71 100644
          MessageHelper.sendMessageToChannelWithButtons(event.getMessageChannel(), message, systemButtons);
  
          // Post-core triggers
-@@ -313,11 +348,13 @@ public class TacticalActionService {
+@@ -313,11 +349,13 @@ public class TacticalActionService {
          return new FinishMovementContext(updatedTile, unitsWereMoved, hasGfsInRange, playersWithPds2);
      }
  
@@ -42129,7 +43669,7 @@ index 78759d966..5968abf71 100644
      }
  
      private List<Button> buildFinishMovementButtons(
-@@ -384,6 +421,9 @@ public class TacticalActionService {
+@@ -384,6 +422,9 @@ public class TacticalActionService {
              buttons.add(Buttons.blue("shroudOfLithStart", "Use Shroud of Lith", FactionEmojis.kollecc));
          }
          buttons.add(Buttons.red(player.factionButtonChecker() + "doneWithTacticalAction", "Conclude Tactical Action"));
@@ -42665,7 +44205,7 @@ index 538542751..c65968d1e 100644
          } catch (IOException e) {
              BotLogger.error("Could not restore the test bed snapshot of " + gameName, e);
 diff --git a/src/main/java/ti4/service/turn/EndTurnService.java b/src/main/java/ti4/service/turn/EndTurnService.java
-index d1c68fc52..cf4da6b1d 100644
+index d1c68fc52..05ca2417e 100644
 --- a/src/main/java/ti4/service/turn/EndTurnService.java
 +++ b/src/main/java/ti4/service/turn/EndTurnService.java
 @@ -47,6 +47,7 @@ import ti4.service.fow.FowCommunicationThreadService;
@@ -42676,12 +44216,13 @@ index d1c68fc52..cf4da6b1d 100644
  import ti4.service.leader.PlayHeroService;
  import ti4.service.option.FOWOptionService.FOWOption;
  import ti4.service.planet.AsgardLegendaryService;
-@@ -128,6 +129,9 @@ public class EndTurnService {
+@@ -128,6 +129,10 @@ public class EndTurnService {
              TyrisAbilityHandler.cleanupPhantomEnergy(game, player);
          }
          game.removeStoredValue("fortuneSeekers");
 +        LeaderLimitService.clearTurn(game, player);
 +        ti4.helpers.GroundMoveCap.clear(game, player);
++        ti4.helpers.MovementCardRules.clear(game);
 +        ti4.service.leader.LeaderGaps.clearMentakHero(game);
          game.setStoredValue("lawsDisabled", "no");
          game.removeStoredValue("endTurnWhenSCFinished");

@@ -1,0 +1,116 @@
+{
+ "name": "gaps3-move-cards",
+ "description": "audit-gaps-3 (switch TI4_MOVE_CHECK): Lost Star Chart (\"During this tactical action, systems that contain alpha and beta wormholes are adjacent to each other\") is modelled in the range check instead of turning it into a warning (the live bot only warned after it). Base as core-move-range (pbd104@59): letnev activates 205 and plays Lost Star Chart; the carrier at 314 (move 1, no wormhole path) is still refused; the cruiser at 203 moves. (gate40: the earlier destination 209 is beyond the distance helper's reach from 314, which core-rules 9616db0 never refuses.)",
+ "base": {
+  "recording": "pbd104",
+  "index": 59
+ },
+ "setup": [
+  {
+   "command": "add_units",
+   "options": {
+    "tile_name": "314",
+    "unit_names": "carrier",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "command": "add_units",
+   "options": {
+    "tile_name": "203",
+    "unit_names": "cruiser",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "command": "player turn_start",
+   "options": {
+    "faction_or_color": "letnev"
+   }
+  }
+ ],
+ "trigger": {
+  "press": "FFCC_letnev_ringTile_205",
+  "as": "letnev"
+ },
+ "steps": [
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "lost_star",
+    "faction_or_color": "letnev"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "lost_star"
+    }
+   },
+   "as": "letnev"
+  },
+  {
+   "wait": 1500,
+   "expect": {
+    "save": [
+     {
+      "key": "stored.mcLostStarChart",
+      "match": "^letnev\\{pip\\}205#\\d+$"
+     }
+    ]
+   }
+  },
+  {
+   "answer": {
+    "kind": "tactical.move",
+    "action": "move",
+    "body": {
+     "units": [
+      {
+       "from": "314",
+       "holder": "space",
+       "unit": "cv",
+       "count": 1
+      }
+     ]
+    }
+   },
+   "as": "letnev",
+   "refused": true,
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  },
+  {
+   "answer": {
+    "kind": "tactical.move",
+    "action": "move",
+    "body": {
+     "units": [
+      {
+       "from": "203",
+       "holder": "space",
+       "unit": "ca",
+       "count": 1
+      }
+     ]
+    }
+   },
+   "as": "letnev",
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

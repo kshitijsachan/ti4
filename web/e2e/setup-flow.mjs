@@ -193,6 +193,16 @@ while (Date.now() < end2 && !done) {
     continue;
   }
   seen.push(title);
+  // A prompt that comes back after every answer is a loop, not a decision (regress pbd1967 / pbd1195: the draft-time
+  // Keleres preset re-posted itself after each press, answered every ~5 s for minutes): fail fast and say so.
+  const LOOP = 8;
+  if (seen.length >= LOOP && seen.slice(-LOOP).every((t) => t === title)) {
+    await shot("loop");
+    console.log(JSON.stringify({ game, picks, phase, done: false, decisions: seen.slice(-LOOP), problems: problems.slice(0, 10) }));
+    console.error(`REGRESSION FAILED: prompt loop: "${title}" answered ${LOOP} times in a row`);
+    await browser.close();
+    process.exit(1);
+  }
   await shot(`7-decision-${seen.length}`);
   const options = dialog.locator('[role=option]:not([aria-disabled=true])');
   if (await options.count()) {

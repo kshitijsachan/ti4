@@ -13,6 +13,7 @@
  * may deliberately hold the answer (combat rolls ahead of the opponent, a strategy card primary waiting for its
  * sub-prompt, the tactical planner, payment / production).
  */
+import { presetOver } from "./setup.js";
 import { followWaits, turnStale, unplayedCards } from "./turn.js";
 import type { TurnActionValue } from "../kinds/tactical.js";
 import { awaits, optionsFor, type Decision, type DecisionKind, type GameState, type Option } from "../types.js";
@@ -354,7 +355,9 @@ export function staleForBot(d: Decision, state: GameState | null, me: string): b
   // The draft-time Keleres preset once we play a flavour (pbd175: still open in setup, reported as a stall).
   if (d.kind === "setup.keleres_flavor" && d.options.some((o) => (o.value as { preset?: boolean } | null)?.preset)) {
     const f: string = state.players.find((p) => p.userId === me)?.faction ?? "";
-    return f.startsWith("keleres") && f !== "keleres";
+    // Already preset (its handler re-posts the buttons after each press), or the draft is over (regress pbd1967).
+    if (d.options.some((o) => (o.value as { current?: boolean } | null)?.current)) return true;
+    return (f.startsWith("keleres") && f !== "keleres") || presetOver(state);
   }
   // Hits taken before a fight (bombardment before ground combat, anti-fighter barrage before space combat) are past
   // once that fight has rolled a round in the system (pbd60: a bombardment opener re-pressed every minute after a
@@ -404,8 +407,11 @@ export function draftBoardStale(d: Decision, state: GameState, me: string): bool
 }
 
 /**
- * The draft categories we still owe on our milty turn that no open draft.milty.pick decision offers (empty when it
- * is not our pick, or every owed category has a board).
+ * The draft categories we still owe on our milty turn that no open draft.milty.pick decision addressed to us offers
+ * (empty when it is not our pick, or every owed category has a board of ours). A board still addressed to the
+ * previous drafter is missing for us: the engine refuses our answer on it ("not target") and engineStep never sees it
+ * (live pbd1295 / pbd1655: a rebuild racing the first engine pick put the boards back on the drafter who had just
+ * picked; the next drafter's bot waited ~3 min for the legacy fallback). A re-snapshot re-reads their target.
  */
 export function draftBoardsMissing(open: Decision[], state: GameState | null, me: string): string[] {
   const draft = state?.draft;
@@ -416,7 +422,7 @@ export function draftBoardsMissing(open: Decision[], state: GameState | null, me
   const owed = ["slice", "faction", "order"].filter((c) => held[c] == null);
   const offered = new Set(
     open
-      .filter((d) => d.kind === "draft.milty.pick")
+      .filter((d) => d.kind === "draft.milty.pick" && (!d.target?.userId || d.target.userId === me))
       .flatMap((d) => d.options.filter((o) => !o.disabled).map((o) => (o.value as { category?: string } | null)?.category)),
   );
   return owed.filter((c) => !offered.has(c));

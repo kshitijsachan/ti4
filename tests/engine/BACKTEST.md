@@ -96,7 +96,7 @@ File `tests/engine/scenarios/<name>.json` (or `.mjs` exporting the object):
   message carrying it; if none is on screen the fork is reloaded with that button re-posted) · `answer` {kind (exact
   or `"/regex/"`), and `option` (regex on option id/label) or `value` (partial match on the typed value) or
   `payload` / `values` / `inputs` / `action`+`body` (engine only — give a `legacy: [...]` list of presses for the
-  legacy fork)} · `command` · `wait`. `as`: `seat1..8`, a faction, a colour or a user id (default seat1). Strings may
+  legacy fork)}; `"rebuild": true` on an engine option answer races a `POST …/rebuild` against it (re-capture vs save) · `command` · `wait`. `as`: `seat1..8`, a faction, a colour or a user id (default seat1). Strings may
   use `${seat1}`, `${faction:xxcha}`, `${color:red}`, `${fork}`.
 * **expect** (checked on every fork at the end): `invariants` (lib/invariants.ts, run after every step anyway),
   `state` paths into engine `GameState` (`a.b[key=value][0]`) with `eq/ne/gte/lte/includes/excludes/match/exists`,

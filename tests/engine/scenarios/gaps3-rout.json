@@ -1,0 +1,71 @@
+{
+ "name": "gaps3-rout",
+ "description": "audit-gaps-3 (gate TI4_RULES_AC): Rout \u2014 \"At the start of the 'Announce Retreats' step of space combat, if you are the defender: Your opponent must announce a retreat, if able.\" Base pbd60@122 without the reposted hits prompt (space combat at 308, mentak attacking); setup adds 2 muaat dreadnoughts, which (as /add_units does) starts the space combat afresh: the start of round 1. The defender muaat plays Rout; mentak (home 307 adjacent, so able to retreat) rolling round 1 is refused until it announces a retreat, then rolls. (gate42: the old setup line setting muaat's round tracker made no save, and the add restarts the combat anyway.)",
+ "base": {
+  "recording": "pbd60",
+  "index": 122,
+  "repost": false
+ },
+ "setup": [
+  "/add_units tile_name:308 unit_names:\"2 dreadnought\" faction_or_color:muaat"
+ ],
+ "steps": [
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "rout",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "rout"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "wait": 1500,
+   "expect": {
+    "save": [
+     {
+      "key": "stored.ccRout",
+      "match": "\\{pip\\}mentak\\{pip\\}1#\\d+$"
+     }
+    ]
+   }
+  },
+  {
+   "press": "combatRoll_308_space",
+   "as": "mentak",
+   "refused": true,
+   "legacy": [
+    {
+     "wait": 500
+    }
+   ]
+  },
+  {
+   "press": "announceARetreat",
+   "as": "mentak"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "press": "combatRoll_308_space",
+   "as": "mentak"
+  },
+  {
+   "wait": 2000
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

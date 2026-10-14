@@ -7,6 +7,9 @@ import { log } from "./log.js";
 import { Retention } from "./retention.js";
 import { newRole } from "./store.js";
 
+/** Discord's VIEW_CHANNEL permission bit. */
+const VIEW_CHANNEL = 1024n;
+
 /** Anything that wants to hear about state changes (the browser client server). */
 export type Listener = {
   messageCreate(msg: StoredMessage): void;
@@ -331,6 +334,32 @@ export class Hub {
   /** The category ended games' channels go to (EndGameService moves them into "The in-limbo PBD Archive"). */
   static readonly ARCHIVE_CATEGORY = "The in-limbo PBD Archive";
 
+  /**
+   * A game's category ("PBD #a-b") or text channel (pbd123-..., fow12-... under such a category) is never visible to
+   * @everyone: the bot's channels copy their category's overrides, and a category created without the deny (the
+   * bot's rewind un-end, live 20:09:01 "PBD #2150-2159") made the next game in it (pbd2159, a "Play solo" game) visible
+   * to every human and all 190 autopilot seats, who then played in it. Adds the deny when missing (warns: the creator
+   * has a bug). Returns whether it did.
+   */
+  denyEveryoneOnGameChannel(ch: Json): boolean {
+    const channels = this.store.state.channels;
+    const everyone = this.store.state.guild_id;
+    const isGameCategory = ch.type === 4 && /^PBD #\d+-\d+/.test(String(ch.name ?? ""));
+    const parent = ch.parent_id ? channels[ch.parent_id] : undefined;
+    const isGameChannel =
+      ch.type === 0 && /^[a-z]+\d+-/i.test(String(ch.name ?? "")) && parent?.type === 4 && /^PBD #\d+-\d+/.test(String(parent.name ?? ""));
+    if (!isGameCategory && !isGameChannel) return false;
+    const ows: Json[] = (ch.permission_overwrites ??= []);
+    const own = ows.find((o) => o.id === everyone);
+    if (own && (BigInt(own.deny ?? 0) & VIEW_CHANNEL) === VIEW_CHANNEL) return false;
+    if (own) {
+      own.deny = String(BigInt(own.deny ?? 0) | VIEW_CHANNEL);
+      own.allow = String(BigInt(own.allow ?? 0) & ~VIEW_CHANNEL);
+    } else ows.push({ id: everyone, type: 0, allow: "0", deny: String(VIEW_CHANNEL) });
+    log.warn(`game channel ${ch.name} (${ch.id}) was created visible to @everyone: denied`);
+    return true;
+  }
+
   /** The archive category, created when missing (so game end moves channels there instead of leaving them). */
   ensureArchiveCategory(): Json {
     const found = Object.values(this.store.state.channels).find((c) => c.type === 4 && c.name === Hub.ARCHIVE_CATEGORY);
@@ -519,6 +548,7 @@ export class Hub {
     const lo = Number.isFinite(num) ? num - (num % 10) : 0;
     const name = Number.isFinite(num) ? `PBD #${lo}-${lo + 9}` : "PBD Games";
     const cat = this.store.createChannel({ type: 4, name, position: 1000 });
+    this.denyEveryoneOnGameChannel(cat);
     this.channelCreate(cat);
     return cat;
   }
