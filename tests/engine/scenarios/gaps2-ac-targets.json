@@ -1,0 +1,29 @@
+{
+  "name": "gaps2-ac-targets",
+  "description": "Action-card targets decided from state (audit-gaps-2, gate TI4_RULES_AC / rulesGateActionCards; were honour system). pbd60@122 (Mentak's tactical action at 308, Muaat holds Andeara there). Parley ('After another player commits units to land on a planet you control: Return the committed units to the space area') on Muaat's home planet (not in the active system): refused. Salvage ('After you win a space combat: Your opponent gives you all of their commodities') targeting Ghost (not in that combat): refused. Reparations ('After another player gains control of a planet you control: Exhaust 1 planet that player controls') targeting Crimson (not the active player): refused. Direct Hit ('After another player's ship uses SUSTAIN DAMAGE ...: Destroy that ship') with no damaged Muaat ship at 308: refused. Intercept ('After your opponent declares a retreat during a space combat: Your opponent cannot retreat during this round'): Mentak plays it; Muaat's retreat from 308 is refused.",
+  "base": { "recording": "pbd60", "index": 122 },
+  "setup": [
+    "/add_units tile_name:308 unit_names:\"1 destroyer\" faction_or_color:muaat",
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "parley", "faction_or_color": "muaat" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "salvage", "faction_or_color": "muaat" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "reparations", "faction_or_color": "muaat" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "dh1", "faction_or_color": "mentak" } },
+    { "command": "ac draw_specific_ac", "options": { "ac_id": "intercept", "faction_or_color": "mentak" } }
+  ],
+  "steps": [
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "parley" } }, "as": "muaat" },
+    { "answer": { "kind": "action_card.resolve", "option": "resolveParleyStep1" }, "as": "muaat" },
+    { "answer": { "kind": "action_card.target", "option": "resolveParleyStep2_muaat$" }, "as": "muaat", "refused": true },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "salvage" } }, "as": "muaat" },
+    { "answer": { "kind": "action_card.resolve", "option": "resolveSalvageStep1" }, "as": "muaat" },
+    { "answer": { "kind": "action_card.target", "option": "salvageStep2_ghost" }, "as": "muaat", "refused": true },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "reparations" } }, "as": "muaat" },
+    { "answer": { "kind": "action_card.resolve", "option": "resolveReparationsStep1" }, "as": "muaat" },
+    { "answer": { "kind": "action_card.target", "option": "reparationsStep2_crimson" }, "as": "muaat", "refused": true },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "dh1" } }, "as": "mentak", "refused": true },
+    { "answer": { "kind": "action_card.play", "value": { "actionCard": "intercept" } }, "as": "mentak" },
+    { "wait": 1500 },
+    { "press": "FFCC_muaat_retreatUnitsFrom_308_307", "as": "muaat", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}
