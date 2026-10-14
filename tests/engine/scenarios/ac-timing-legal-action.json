@@ -1,6 +1,6 @@
 {
  "name": "ac-timing-legal-action",
- "description": "Positive control for ActionCardTiming (audit-acs): every action-phase window class played at a LEGAL moment must be ACCEPTED. pbd60 save 122: action phase, mentak active, 308 activated (mentak ships; muaat holds Andeara with ground forces, setup adds a muaat destroyer and a muaat command token at 308; ghost has passed). Reaction on another player's turn: muaat Sabotages mentak's Morale Boost. OWN_ACTIVATION (Flank Speed, Lost Star Chart, Silence of Space, Nav Suite, Solar Flare, Rally), OWN_TURN (Master Plan), ACTION_PHASE (War Machine, Infiltrate; Reparations, Crisis by muaat), TACTICAL (Direct Hit, Scramble), IN_ACTIVE_SYSTEM by the active player (Intercept, Waylay, Disable, Fighter Prototype, Maneuvering Jets, Reflective Shielding, Reveal Prototype) and by the non-active defender (Morale Boost, Shields Holding, Rout), OTHER_ACTIVATION (Forward Supply Base, Decoy Operation, Rescue, Ghost Squad, Counterstroke), OTHER_TURN (Coup, Extreme Duress: mentak still holds unplayed SCs 4 and 7), PASSED (Puppets on a String by ghost). Already covered elsewhere at this base: Upgrade, Emergency Repairs, Parley, Salvage, Bunker, Crash Landing, Skilled Retreat, Fire Team, Experimental Battlestation, Courageous, Blitz, Lucky Shot, Scuttle (ac-combat-suite); ACTION cards (ac-action-board/econ, ac-timing-windows). Each card is drawn right before it is played (hand limit). audit-gaps-2 (TI4_RULES_AC): Direct Hit needs another player's damaged ship in the active system (a SUSTAIN DAMAGE was used) and Experimental Battlestation a space dock of yours in or adjacent to it \u2014 the setup adds a damaged muaat dreadnought. audit-gaps-3 (TI4_RULES_AC): Maneuvering Jets, Waylay, Reflective Shielding (by mentak), Scramble Frequency and Rout are no longer legal in this state (no SPACE CANNON hits owed, round 1 already rolled, no damaged mentak ship, no BOMBARDMENT / SPACE CANNON / AFB roll, rounds not level) and moved to gaps3-combat-cards (refused here, legal there).",
+ "description": "Positive control for ActionCardTiming (audit-acs): every action-phase window class played at a LEGAL moment must be ACCEPTED. pbd60 save 122: action phase, mentak active, 308 activated (mentak ships; muaat holds Andeara with ground forces, setup adds a muaat destroyer and a muaat command token at 308; ghost has passed). Reaction on another player's turn: muaat Sabotages mentak's Morale Boost. OWN_ACTIVATION (Flank Speed, Lost Star Chart, Silence of Space, Nav Suite, Solar Flare, Rally), OWN_TURN (Master Plan), ACTION_PHASE (War Machine, Infiltrate; Reparations, Crisis by muaat), TACTICAL (Direct Hit, Scramble), IN_ACTIVE_SYSTEM by the active player (Intercept, Waylay, Disable, Fighter Prototype, Maneuvering Jets, Reflective Shielding, Reveal Prototype) and by the non-active defender (Morale Boost, Shields Holding, Rout), OTHER_ACTIVATION (Forward Supply Base, Decoy Operation, Rescue, Ghost Squad, Counterstroke), OTHER_TURN (Coup, Extreme Duress: mentak still holds unplayed SCs 4 and 7), PASSED (Puppets on a String by ghost). Already covered elsewhere at this base: Upgrade, Emergency Repairs, Parley, Salvage, Bunker, Crash Landing, Skilled Retreat, Fire Team, Experimental Battlestation, Courageous, Blitz, Lucky Shot, Scuttle (ac-combat-suite); ACTION cards (ac-action-board/econ, ac-timing-windows). Each card is drawn right before it is played (hand limit). audit-gaps-2 (TI4_RULES_AC): Direct Hit needs another player's damaged ship in the active system (a SUSTAIN DAMAGE was used) and Experimental Battlestation a space dock of yours in or adjacent to it \u2014 the setup adds a damaged muaat dreadnought. audit-gaps-3 (TI4_RULES_AC): Maneuvering Jets, Waylay, Reflective Shielding (by mentak), Scramble Frequency and Rout are no longer legal in this state (no SPACE CANNON hits owed, round 1 already rolled, no damaged mentak ship, no BOMBARDMENT / SPACE CANNON / AFB roll, rounds not level) and moved to gaps3-combat-cards (refused here, legal there). (Standalone wait steps removed: the harness settles every step, and a step that saves nothing waits the full 15 s settle timeout; ~65 of them made this run ~20 min.)",
  "base": {
   "recording": "pbd60",
   "index": 122
@@ -21,17 +21,11 @@
    }
   },
   {
-   "wait": 1500
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "sabo1",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -50,17 +44,11 @@
    "as": "muaat"
   },
   {
-   "wait": 1500
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "fs1",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -72,17 +60,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "lost_star",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -94,17 +76,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "silence_space",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -116,17 +92,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "nav_suite",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -138,17 +108,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "solar_flare",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -160,17 +124,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "rally",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -182,17 +140,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "master_plan",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -204,17 +156,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "war_machine1",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -226,17 +172,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "infiltrate",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -248,17 +188,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "dh2",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -270,17 +204,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "intercept",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -292,17 +220,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "disable",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -314,17 +236,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "f_prototype",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -336,17 +252,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "reveal_prototype",
     "faction_or_color": "mentak"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -358,17 +268,11 @@
    "as": "mentak"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "mb3",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -380,17 +284,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "sh2",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -402,17 +300,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "fsb",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -424,17 +316,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "decoy",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -446,17 +332,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "rescue",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -468,17 +348,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "ghost_squad",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -490,17 +364,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "counterstroke",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -512,17 +380,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "reparations",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -534,17 +396,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "crisis",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -556,17 +412,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "coup",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -578,17 +428,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "extremeduress",
     "faction_or_color": "muaat"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -600,17 +444,11 @@
    "as": "muaat"
   },
   {
-   "wait": 800
-  },
-  {
    "command": "ac draw_specific_ac",
    "options": {
     "ac_id": "puppetsonastring",
     "faction_or_color": "ghost"
    }
-  },
-  {
-   "wait": 1500
   },
   {
    "answer": {
@@ -620,9 +458,6 @@
     }
    },
    "as": "ghost"
-  },
-  {
-   "wait": 800
   }
  ],
  "expect": {
