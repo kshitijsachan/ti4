@@ -1,17 +1,49 @@
 {
-  "name": "gaps2-revolution-against",
-  "description": "Anti-Intellectual Revolution 'Against' (audit-gaps-2, off switch TI4_RULES_AGENDAS / rulesGateAgendas). Card text: 'At the start of the next strategy phase, each player chooses and exhausts 1 planet for each technology that they own.' pbd72@833 with agendaRevolution=true in the base save; the strategy phase starts and posts the counted exhaust prompt (revolutionExhaust_). Winnu owns 4 technologies (amd, gd, st, nm) and 6 planets: Done before exhausting is refused; 4 planets are exhausted; a 5th is refused; Done is accepted (original: spend_ buttons, any number, Done at any time).",
-  "base": { "save": "tests/engine/scenarios/saves/gaps2-pbd72-833-revolution.txt", "repost": false },
-  "steps": [
-    { "command": "/game start_phase specific_phase:strategy" },
-    { "wait": 3000 },
-    { "press": "revolutionExhaustDone", "as": "winnu", "refused": true },
-    { "press": "revolutionExhaust_winnu", "as": "winnu" },
-    { "press": "revolutionExhaust_perimeter", "as": "winnu" },
-    { "press": "revolutionExhaust_lodor", "as": "winnu" },
-    { "press": "revolutionExhaust_tempesta", "as": "winnu" },
-    { "press": "revolutionExhaust_abyz", "as": "winnu", "refused": true },
-    { "press": "revolutionExhaustDone", "as": "winnu" }
-  ],
-  "expect": { "invariants": true }
+ "name": "gaps2-revolution-against",
+ "description": "Anti-Intellectual Revolution 'Against' (audit-gaps-2, off switch TI4_RULES_AGENDAS / rulesGateAgendas). Card text: 'At the start of the next strategy phase, each player chooses and exhausts 1 planet for each technology that they own.' pbd72@833 with agendaRevolution=true in the base save; the strategy phase starts and posts the counted exhaust prompt (revolutionExhaust_). Winnu owns 4 technologies (amd, gd, st, nm) and 6 planets: Done before exhausting is refused; 4 planets are exhausted; a 5th is refused; Done is accepted (original: spend_ buttons, any number, Done at any time). Fix (gate35): the base save readied Winnu's Fria and Perimeter (with 4 of 6 ready and 4 technologies the bot rightly exhausts all of them without a prompt), and Done carries its owner (FFCC_winnu_), since every player's prompt had the same Done id.",
+ "base": {
+  "save": "tests/engine/scenarios/saves/gaps2-pbd72-833-revolution.txt",
+  "repost": false
+ },
+ "steps": [
+  {
+   "command": "/game start_phase specific_phase:strategy"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "press": "FFCC_winnu_revolutionExhaustDone",
+   "as": "winnu",
+   "refused": true
+  },
+  {
+   "press": "revolutionExhaust_winnu",
+   "as": "winnu"
+  },
+  {
+   "press": "revolutionExhaust_perimeter",
+   "as": "winnu"
+  },
+  {
+   "press": "revolutionExhaust_lodor",
+   "as": "winnu"
+  },
+  {
+   "press": "revolutionExhaust_tempesta",
+   "as": "winnu"
+  },
+  {
+   "press": "revolutionExhaust_abyz",
+   "as": "winnu",
+   "refused": true
+  },
+  {
+   "press": "FFCC_winnu_revolutionExhaustDone",
+   "as": "winnu"
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
 }
