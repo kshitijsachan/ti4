@@ -27,7 +27,7 @@ import type {
 const STALL_MS = 45000;
 /** Quiet time after landing before concluding, so explores and other follow-ups are answered first. */
 const SETTLE_MS = 4000;
-const SETTLE_MAX_MS = 40000;
+const SETTLE_MAX_MS = 30000; // well under STALL_MS: settling must never be what stalls the plan (soak pbd1859)
 
 export const TACTICAL_KINDS = new Set(["tactical.activate", "tactical.move", "tactical.land", "tactical.conclude", "tactical.rift"]);
 
@@ -158,6 +158,13 @@ export class EngineTactical {
       return false;
     }
     if (Date.now() - plan.progressAt > STALL_MS) {
+      // A step of our action is still open: finish it (move nothing, conclude) rather than leave it to the watchdog
+      // (soak pbd1859: tactical.conclude sat 146 s after the plan was dropped). A recovery that stalls too is dropped.
+      if (tactical.length && plan.goal.kind !== "recover") {
+        this.seat.log(`engine plan stalled (no tactical step for ${STALL_MS / 1000}s); finishing the action instead`);
+        this.recover(plan.game);
+        return false;
+      }
       this.seat.log(`engine plan stalled (no tactical step for ${STALL_MS / 1000}s); leaving it to the other policies`);
       this.plan = null;
       return false;
