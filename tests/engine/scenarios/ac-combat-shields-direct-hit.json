@@ -1,139 +1,141 @@
 {
-  "name": "ac-combat-shields-direct-hit",
-  "description": "Live pbd161 regression: space combat at 308 (pbd60 save 122). Muaat plays Shields Holding and every other seat holds a Sabotage, so all three must pass in the engine window (action_card.sabotage pass). Then mentak plays Direct Hit and muaat, ghost and crimson pass. The original code has no Direct Hit target step (playAC posts only a reminder text), so the scenario ends at the window. Each pass must land on Direct Hit's own window: Shields Holding's finished window keeps its buttons and is re-captured with a newer seq after Direct Hit is played, so the harness now prefers windows the seat has not answered (the 10:19 failure 'You already responded to this window' was that, not fork drift; it reproduced on a fresh fork).",
-  "base": {
-    "recording": "pbd60",
-    "index": 122
+ "name": "ac-combat-shields-direct-hit",
+ "description": "Live pbd161 regression: space combat at 308 (pbd60 save 122). Muaat plays Shields Holding and every other seat holds a Sabotage, so all three must pass in the engine window (action_card.sabotage pass). Then mentak plays Direct Hit and muaat, ghost and crimson pass. The original code has no Direct Hit target step (playAC posts only a reminder text), so the scenario ends at the window. Each pass must land on Direct Hit's own window: Shields Holding's finished window keeps its buttons and is re-captured with a newer seq after Direct Hit is played, so the harness now prefers windows the seat has not answered (the 10:19 failure 'You already responded to this window' was that, not fork drift; it reproduced on a fresh fork). audit-gaps-2 (TI4_RULES_AC): Direct Hit needs another player's damaged ship in the active system (a SUSTAIN DAMAGE was used) and Experimental Battlestation a space dock of yours in or adjacent to it \u2014 the setup adds a damaged muaat dreadnought.",
+ "base": {
+  "recording": "pbd60",
+  "index": 122
+ },
+ "setup": [
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sh1",
+    "faction_or_color": "muaat"
+   }
   },
-  "setup": [
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sh1",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "dh1",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sabo1",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sabo2",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sabo3",
-        "faction_or_color": "ghost"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sabo4",
-        "faction_or_color": "crimson"
-      }
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "dh1",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sabo1",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sabo2",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sabo3",
+    "faction_or_color": "ghost"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sabo4",
+    "faction_or_color": "crimson"
+   }
+  },
+  "/add_units tile_name:308 unit_names:\"1 dreadnought\" faction_or_color:muaat",
+  "/add_sustain_damage tile_name:308 unit_names:\"1 dreadnought\" faction_or_color:muaat"
+ ],
+ "steps": [
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "sh1"
     }
-  ],
-  "steps": [
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "sh1"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.sabotage",
-        "option": "^no_sabotage$"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.sabotage",
-        "option": "^no_sabotage$"
-      },
-      "as": "ghost"
-    },
-    {
-      "answer": {
-        "kind": "action_card.sabotage",
-        "option": "^no_sabotage$"
-      },
-      "as": "crimson"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "dh1"
-        }
-      },
-      "as": "mentak",
-      "expect": {
-        "decision": [
-          {
-            "kind": "action_card.sabotage",
-            "scope": "table",
-            "value": {
-              "actionCard": "dh1"
-            },
-            "open": true
-          }
-        ]
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.sabotage",
-        "option": "^no_sabotage$"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.sabotage",
-        "option": "^no_sabotage$"
-      },
-      "as": "ghost"
-    },
-    {
-      "answer": {
-        "kind": "action_card.sabotage",
-        "option": "^no_sabotage$"
-      },
-      "as": "crimson"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.sabotage",
+    "option": "^no_sabotage$"
+   },
+   "as": "mentak"
+  },
+  {
+   "answer": {
+    "kind": "action_card.sabotage",
+    "option": "^no_sabotage$"
+   },
+   "as": "ghost"
+  },
+  {
+   "answer": {
+    "kind": "action_card.sabotage",
+    "option": "^no_sabotage$"
+   },
+   "as": "crimson"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "dh1"
     }
-  ],
-  "expect": {
-    "invariants": true,
-    "state": [
-      {
-        "path": "players[faction=muaat].actionCards",
-        "excludes": "sh1"
+   },
+   "as": "mentak",
+   "expect": {
+    "decision": [
+     {
+      "kind": "action_card.sabotage",
+      "scope": "table",
+      "value": {
+       "actionCard": "dh1"
       },
-      {
-        "path": "players[faction=mentak].actionCards",
-        "excludes": "dh1"
-      }
+      "open": true
+     }
     ]
+   }
+  },
+  {
+   "answer": {
+    "kind": "action_card.sabotage",
+    "option": "^no_sabotage$"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.sabotage",
+    "option": "^no_sabotage$"
+   },
+   "as": "ghost"
+  },
+  {
+   "answer": {
+    "kind": "action_card.sabotage",
+    "option": "^no_sabotage$"
+   },
+   "as": "crimson"
   }
+ ],
+ "expect": {
+  "invariants": true,
+  "state": [
+   {
+    "path": "players[faction=muaat].actionCards",
+    "excludes": "sh1"
+   },
+   {
+    "path": "players[faction=mentak].actionCards",
+    "excludes": "dh1"
+   }
+  ]
+ }
 }

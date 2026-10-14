@@ -1,364 +1,367 @@
 {
-  "name": "ac-combat-suite",
-  "description": "All ac-combat scenarios chained on one base (pbd60 save 122, space combat at 308 mentak vs muaat) so one live run covers them: ac-combat-sabotage-cancel, ac-combat-repairs-upgrade, ac-combat-parley-salvage, ac-combat-crash-landing, ac-combat-bunker, ac-combat-dice-cards, ac-combat-skilled-retreat. Cards are drawn right before each card is played (ActionCardHelper.resolveActionCard refuses a play while the hand is over the limit). Dice cards (EBS, Courageous, Blitz) may show dice diffs. Lucky Shot and Scuttle are Action: cards (component actions), which cannot be played during this tactical action (one action per turn, enforced since 01:50): they live in ac-combat-lucky-scuttle, on turns of their own; the Blitz bombardment roll (dice) lives only in ac-combat-dice-cards.",
-  "diffIgnore": [
-    "stored.muaatlatestAssignHits"
-  ],
-  "base": {
-    "recording": "pbd60",
-    "index": 122
+ "name": "ac-combat-suite",
+ "description": "All ac-combat scenarios chained on one base (pbd60 save 122, space combat at 308 mentak vs muaat) so one live run covers them: ac-combat-sabotage-cancel, ac-combat-repairs-upgrade, ac-combat-parley-salvage, ac-combat-crash-landing, ac-combat-bunker, ac-combat-dice-cards, ac-combat-skilled-retreat. Cards are drawn right before each card is played (ActionCardHelper.resolveActionCard refuses a play while the hand is over the limit). Dice cards (EBS, Courageous, Blitz) may show dice diffs. Lucky Shot and Scuttle are Action: cards (component actions), which cannot be played during this tactical action (one action per turn, enforced since 01:50): they live in ac-combat-lucky-scuttle, on turns of their own; the Blitz bombardment roll (dice) lives only in ac-combat-dice-cards. audit-gaps-2 (TI4_RULES_AC): Direct Hit needs another player's damaged ship in the active system (a SUSTAIN DAMAGE was used) and Experimental Battlestation a space dock of yours in or adjacent to it \u2014 the setup adds a damaged muaat dreadnought and a muaat space dock on Andeara.",
+ "diffIgnore": [
+  "stored.muaatlatestAssignHits"
+ ],
+ "base": {
+  "recording": "pbd60",
+  "index": 122
+ },
+ "setup": [
+  "/add_units tile_name:308 unit_names:\"1 cruiser\" faction_or_color:mentak",
+  "/add_units tile_name:308 unit_names:\"2 infantry andeara\" faction_or_color:mentak coexist:true",
+  "/player stats commodities:3 faction_or_color:mentak",
+  "/add_units tile_name:308 unit_names:\"2 infantry\" faction_or_color:muaat",
+  "/add_units tile_name:308 unit_names:\"1 dreadnought\" faction_or_color:muaat",
+  "/add_sustain_damage tile_name:308 unit_names:\"1 dreadnought\" faction_or_color:muaat",
+  "/add_units tile_name:308 unit_names:\"1 spacedock andeara\" faction_or_color:muaat"
+ ],
+ "steps": [
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "mb2",
+    "faction_or_color": "mentak"
+   }
   },
-  "setup": [
-    "/add_units tile_name:308 unit_names:\"1 cruiser\" faction_or_color:mentak",
-    "/add_units tile_name:308 unit_names:\"2 infantry andeara\" faction_or_color:mentak coexist:true",
-    "/player stats commodities:3 faction_or_color:mentak",
-    "/add_units tile_name:308 unit_names:\"2 infantry\" faction_or_color:muaat"
-  ],
-  "steps": [
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "mb2",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sabo1",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "mb2"
-        }
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.sabotage",
-        "option": "^sabotage_ac_"
-      },
-      "as": "muaat"
-    },
-    {
-      "wait": 1500
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "upgrade",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "emergency",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "upgrade"
-        }
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.target",
-        "option": "resolveUpgrade_308"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "emergency"
-        }
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.target",
-        "option": "resolveEmergencyRepairs_308"
-      },
-      "as": "mentak"
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "parley",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "salvage",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "parley"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.resolve",
-        "option": "resolveParleyStep1"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.target",
-        "option": "resolveParleyStep2_andeara"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "salvage"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.resolve",
-        "option": "resolveSalvageStep1"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.target",
-        "option": "salvageStep2_mentak"
-      },
-      "as": "muaat"
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "crashlanding",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "crashlanding"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "crashLandingStart"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "crashLandOn_andeara_infantry"
-      },
-      "as": "muaat"
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "bunker",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "sh1",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "dh1",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "bunker"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "applytempcombatmod__action_cards__bunker"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "sh1"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "dh1"
-        }
-      },
-      "as": "mentak"
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "fire_team",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "experimental",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "courageous",
-        "faction_or_color": "mentak"
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "fire_team"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.resolve",
-        "option": "resolveFireTeam"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "experimental"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.target",
-        "option": "resolveEBSStep1_308"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "courageous"
-        }
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "action_card.resolve",
-        "option": "courageousStarter"
-      },
-      "as": "mentak"
-    },
-    {
-      "answer": {
-        "kind": "/./",
-        "option": "courageousFire_destroyer"
-      },
-      "as": "mentak"
-    },
-    {
-      "command": "ac draw_specific_ac",
-      "options": {
-        "ac_id": "s_retreat1",
-        "faction_or_color": "muaat"
-      }
-    },
-    {
-      "answer": {
-        "kind": "action_card.play",
-        "value": {
-          "actionCard": "s_retreat1"
-        }
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "/combat/",
-        "option": "retreat_308_skilled"
-      },
-      "as": "muaat"
-    },
-    {
-      "answer": {
-        "kind": "/combat/",
-        "option": "retreatUnitsFrom_308_.*skilled"
-      },
-      "as": "muaat"
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sabo1",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "mb2"
     }
-  ],
-  "expect": {
-    "invariants": true,
-    "state": [
-      {
-        "path": "players[faction=muaat].actionCards",
-        "excludes": "sabo1"
-      }
-    ],
-    "save": [
-      {
-        "key": "player[mentak].commodities",
-        "eq": "0"
-      }
-    ]
+   },
+   "as": "mentak"
+  },
+  {
+   "answer": {
+    "kind": "action_card.sabotage",
+    "option": "^sabotage_ac_"
+   },
+   "as": "muaat"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "upgrade",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "emergency",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "upgrade"
+    }
+   },
+   "as": "mentak"
+  },
+  {
+   "answer": {
+    "kind": "action_card.target",
+    "option": "resolveUpgrade_308"
+   },
+   "as": "mentak"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "emergency"
+    }
+   },
+   "as": "mentak"
+  },
+  {
+   "answer": {
+    "kind": "action_card.target",
+    "option": "resolveEmergencyRepairs_308"
+   },
+   "as": "mentak"
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "parley",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "salvage",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "parley"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.resolve",
+    "option": "resolveParleyStep1"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.target",
+    "option": "resolveParleyStep2_andeara"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "salvage"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.resolve",
+    "option": "resolveSalvageStep1"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.target",
+    "option": "salvageStep2_mentak"
+   },
+   "as": "muaat"
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "crashlanding",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "crashlanding"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "/./",
+    "option": "crashLandingStart"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "/./",
+    "option": "crashLandOn_andeara_infantry"
+   },
+   "as": "muaat"
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "bunker",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "sh1",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "dh1",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "bunker"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "/./",
+    "option": "applytempcombatmod__action_cards__bunker"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "sh1"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "dh1"
+    }
+   },
+   "as": "mentak"
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "fire_team",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "experimental",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "courageous",
+    "faction_or_color": "mentak"
+   }
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "fire_team"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.resolve",
+    "option": "resolveFireTeam"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "experimental"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.target",
+    "option": "resolveEBSStep1_308"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "courageous"
+    }
+   },
+   "as": "mentak"
+  },
+  {
+   "answer": {
+    "kind": "action_card.resolve",
+    "option": "courageousStarter"
+   },
+   "as": "mentak"
+  },
+  {
+   "answer": {
+    "kind": "/./",
+    "option": "courageousFire_destroyer"
+   },
+   "as": "mentak"
+  },
+  {
+   "command": "ac draw_specific_ac",
+   "options": {
+    "ac_id": "s_retreat1",
+    "faction_or_color": "muaat"
+   }
+  },
+  {
+   "answer": {
+    "kind": "action_card.play",
+    "value": {
+     "actionCard": "s_retreat1"
+    }
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "/combat/",
+    "option": "retreat_308_skilled"
+   },
+   "as": "muaat"
+  },
+  {
+   "answer": {
+    "kind": "/combat/",
+    "option": "retreatUnitsFrom_308_.*skilled"
+   },
+   "as": "muaat"
   }
+ ],
+ "expect": {
+  "invariants": true,
+  "state": [
+   {
+    "path": "players[faction=muaat].actionCards",
+    "excludes": "sabo1"
+   }
+  ],
+  "save": [
+   {
+    "key": "player[mentak].commodities",
+    "eq": "0"
+   }
+  ]
+ }
 }

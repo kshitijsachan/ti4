@@ -1,0 +1,18 @@
+{
+  "name": "gaps2-heroes-hacan-mentak",
+  "description": "Harrugh Gefhara (Hacan hero) and Ipswitch (Mentak hero) automated (audit-gaps-2, gate TI4_RULES_LEADERS). Hacan: 'When 1 or more of your units use PRODUCTION: You may reduce the cost of each of your units to 0 during this use of PRODUCTION. If you do, purge this card.' — the production bill becomes 0 (stored producedUnitCostFor<faction>, read by the payment). Mentak: 'At the start of a space combat ... purge; for each other player's ship that is destroyed during this combat, place 1 ship of that type from your reinforcements in the active system.' — recorded on purge (mentakHeroCombat), DestroyUnitService places the ships. The original only purged both. pbd113@352.",
+  "base": { "recording": "pbd113", "index": 352, "repost": false },
+  "setup": [
+    "/leaders unlock leader:hacanhero faction_or_color:hacan",
+    "/leaders unlock leader:mentakhero faction_or_color:mentak"
+  ],
+  "steps": [
+    { "press": "FFCC_hacan_purgeHacanHero", "as": "hacan" },
+    { "press": "FFCC_mentak_purgeMentakHero_000", "as": "mentak" },
+    { "wait": 1500 }
+  ],
+  "expect": { "invariants": true, "save": [
+    { "key": "stored.producedUnitCostForhacan", "eq": "0" },
+    { "key": "stored.mentakHeroCombat", "match": "mentak" }
+  ] }
+}

@@ -81,6 +81,8 @@ export type StatusScoreSecret = DecisionBaseOf<
     threshold?: number;
     /** null: the engine cannot judge it. */
     met?: boolean | null;
+    /** Why scoring it is refused now (condition unmet; TI4_SO_CHECK gate), else null. */
+    unavailable?: string | null;
   }
 >;
 

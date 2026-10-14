@@ -1,16 +1,34 @@
 {
   "name": "faction-l1z1x",
-  "description": "L1Z1X: Assimilate (assimilate_<planet>), Inheritance Systems (exhaustTech_is), agent I48S on a faction target (exhaustAgent_l1z1xagent_<faction>) and on a planet of the active system (exhaustAgent_l1z1xagent_<tile>_<planet>)",
-  "base": { "recording": "pbd104", "index": 44, "repost": false },
+  "description": "L1Z1X: Assimilate (assimilate_<planet>), Inheritance Systems (exhaustTech_is), agent I48S on a faction target (exhaustAgent_l1z1xagent_<faction>) and on a planet of the active system (exhaustAgent_l1z1xagent_<tile>_<planet>) audit-gaps-2: the agent is used outside its card window (no active system), so the base save carries agentTimingGate=off (TI4_AGENT_TIMING per-game switch); gaps2-agent-timing covers the window.",
+  "base": {
+    "save": "tests/engine/scenarios/saves/gaps2-pbd104-44-agenttiming-off.txt",
+    "next": "tests/engine/scenarios/saves/gaps2-pbd104-44-agenttiming-off.next.txt",
+    "repost": false
+  },
   "setup": [
     "/tech add tech:is faction_or_color:l1z1x",
     "/player stats trade_goods:4 faction_or_color:l1z1x"
   ],
-  "trigger": { "press": "FFCC_l1z1x_assimilate_archonren", "as": "l1z1x" },
+  "trigger": {
+    "press": "FFCC_l1z1x_assimilate_archonren",
+    "as": "l1z1x"
+  },
   "steps": [
-    { "press": "exhaustTech_is", "as": "l1z1x" },
-    { "press": "getAgentSelection_l1z1xagent", "as": "l1z1x" },
-    { "press": "exhaustAgent_l1z1xagent_l1z1x", "as": "l1z1x" }
+    {
+      "press": "exhaustTech_is",
+      "as": "l1z1x"
+    },
+    {
+      "press": "getAgentSelection_l1z1xagent",
+      "as": "l1z1x"
+    },
+    {
+      "press": "exhaustAgent_l1z1xagent_l1z1x",
+      "as": "l1z1x"
+    }
   ],
-  "expect": { "invariants": true }
+  "expect": {
+    "invariants": true
+  }
 }

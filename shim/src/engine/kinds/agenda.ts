@@ -179,7 +179,25 @@ export type AgendaRiderPlacement = DecisionBase<
   | { rider: string; planetOwner: FactionId; userId: UserId | null }
 >;
 
+/**
+ * audit-gaps-2 (TI4_RULES_AGENDAS): a law's counted planet prompt — Checks and Balances "Against" (ready only 3),
+ * Anti-Intellectual Revolution "Against" (exhaust 1 per technology) / "For" (destroy 1 non-fighter ship).
+ * unavailable: why the option is refused now (count used up, Done too early).
+ */
+export type AgendaLawEffect = DecisionBase<
+  "agenda.law_effect",
+  {
+    effect: "checks_and_balances" | "revolution_against" | "revolution_for";
+    action: "ready" | "exhaust" | "destroy" | "done";
+    planet?: string;
+    tile?: string | null;
+    unit?: string | null;
+    unavailable: string | null;
+  }
+>;
+
 export type AgendaDecision =
+  | AgendaLawEffect
   | AgendaVote
   | AgendaVoteStep
   | AgendaTieBreak

@@ -1,12 +1,37 @@
 {
   "name": "cc-gain-cap-empyrean",
-  "description": "CcGainCap: Acamar (Empyrean agent) grants exactly 1 command token. The shared gain panel used to allow any number: the first increase is accepted, the second is refused (bot CcGainCap / command_tokens.adjust validate).",
-  "base": { "recording": "pbd88", "index": 269, "repost": false },
-  "setup": [ "/leaders ready leader:empyreanagent faction_or_color:empyrean" ],
-  "steps": [
-    { "press": "exhaustAgent_empyreanagent", "as": "empyrean" },
-    { "answer": { "kind": "command_tokens.adjust", "option": "increase_tactic_cc$" }, "as": "empyrean" },
-    { "answer": { "kind": "command_tokens.adjust", "option": "increase_fleet_cc$" }, "as": "empyrean", "refused": true, "legacy": [] }
+  "description": "CcGainCap: Acamar (Empyrean agent) grants exactly 1 command token. The shared gain panel used to allow any number: the first increase is accepted, the second is refused (bot CcGainCap / command_tokens.adjust validate). audit-gaps-2: the agent is used outside its card window (no active system), so the base save carries agentTimingGate=off (TI4_AGENT_TIMING per-game switch); gaps2-agent-timing covers the window.",
+  "base": {
+    "save": "tests/engine/scenarios/saves/gaps2-pbd88-269-agenttiming-off.txt",
+    "next": "tests/engine/scenarios/saves/gaps2-pbd88-269-agenttiming-off.next.txt",
+    "repost": false
+  },
+  "setup": [
+    "/leaders ready leader:empyreanagent faction_or_color:empyrean"
   ],
-  "expect": { "invariants": true }
+  "steps": [
+    {
+      "press": "exhaustAgent_empyreanagent",
+      "as": "empyrean"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_tactic_cc$"
+      },
+      "as": "empyrean"
+    },
+    {
+      "answer": {
+        "kind": "command_tokens.adjust",
+        "option": "increase_fleet_cc$"
+      },
+      "as": "empyrean",
+      "refused": true,
+      "legacy": []
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
 }

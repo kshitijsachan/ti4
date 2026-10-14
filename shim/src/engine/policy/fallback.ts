@@ -31,6 +31,7 @@ export const FALLBACK_FORCE_MS = 60_000;
 export const KIND_CLASS: Record<DecisionKind, "optional" | "planner" | "blocking"> = {
   legacy: "optional",
   "input.form": "blocking",
+  "agenda.law_effect": "blocking",
   // G1 setup / draft
   "draft.milty.pick": "planner",
   "draft.milty.queue": "optional",
@@ -232,6 +233,11 @@ export function fallbackCandidates(d: Decision, state: GameState | null, me: str
     // Claims the engine says we cannot make (an objective we do not meet, a secret not met).
     if (Array.isArray(o.value?.eligible) && !(o.value.eligible as unknown[]).includes(me)) return false;
     if (o.value?.met === false) return false;
+    // Any option the engine marks unusable right now (value.unavailable: a rules gate's reason).
+    if (typeof o.value?.unavailable === "string" && o.value.unavailable) return false;
+    // ... or unusable for this seat (value.unavailableFor[faction], e.g. Construction's structure count).
+    const self = state?.players.find((p) => p.userId === me);
+    if (self?.faction && o.value?.unavailableFor && typeof o.value.unavailableFor[self.faction] === "string") return false;
     // A structure past the unit supply (3 space docks / 6 PDS: pbd171's 4th space dock).
     if (d.kind.startsWith("strategy_card.") && (o.value?.unit === "spacedock" || o.value?.unit === "pds") && overSupply(o.value.unit, state, me)) return false;
     const handler = (o.handler || o.id).replace(/^FFCC_[^_]+_/, "");
