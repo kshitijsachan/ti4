@@ -56,8 +56,12 @@ export type SetupPlayerStep = DecisionBase<
 /** Keleres asks for its starting technologies; refused until nobody else is still choosing (see setup.waitingOn). */
 export type SetupKeleresTech = DecisionBase<"setup.keleres_tech", { waitingOn: UserId[] }>;
 
-/** "Get a technology" by type; the technologies follow as tech.gain. techType null = type not chosen yet. */
-export type TechChooseType = DecisionBase<"tech.choose_type", { techType: string | null; free: boolean }>;
+/**
+ * "Get a technology" by type; the technologies follow as tech.gain. techType null = type not chosen yet. `starting`: a
+ * "choose your starting technology" prompt in round 1 (Deepwrought): its "Done" is refused while starting
+ * technologies are owed.
+ */
+export type TechChooseType = DecisionBase<"tech.choose_type", { techType: string | null; free: boolean; starting?: boolean }>;
 
 /** Table step: deal 2 secret objectives to everyone (refused until setup.stage === "deal_secrets"). */
 export type SetupDealSecrets = DecisionBase<"setup.deal_secrets", Record<string, never>>;

@@ -86,21 +86,28 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 /** Open technology choice: pick a type, then the technology (tech.gain follows). */
-export const TechChooseTypeRenderer: Renderer<"tech.choose_type"> = ({ decision, answer }) => {
+export const TechChooseTypeRenderer: Renderer<"tech.choose_type"> = ({ decision, state, answer }) => {
   const { pending, error, press } = useAnswer(answer);
+  /* A starting-technology prompt (Deepwrought's two "Get a technology"): its "Done" would throw away a starting
+     technology the setup waits on (pbd1410 stalled so). Greyed with why while I still owe one; the engine refuses it too. */
+  const me = state?.players.find((p) => p.self)?.userId;
+  const owing = state?.setup?.players.find((p) => p.userId === me)?.startingTechsNeeded ?? 0;
+  const keepsStarting = owing > 0 && decision.options.some((o) => o.value?.starting);
   return (
     <div className={classes.stack}>
       <p className={classes.title}>Get a technology</p>
       <div className={classes.row}>
         {decision.options.map((o) => {
           const type = o.value?.techType ?? null;
+          const blocked = keepsStarting && !o.value && o.handler === "deleteButtons";
           return (
             <Choice
               key={o.id}
               name={o.value ? (type ? TYPE_LABEL[type] ?? type : "Choose a technology") : o.label}
               icon={type ? <TechDot type={type} /> : undefined}
-              sub={o.value?.free ? "Free" : undefined}
-              disabled={o.disabled || !!pending}
+              sub={blocked ? "Choose your starting technology first" : o.value?.free ? "Free" : undefined}
+              title={blocked ? "The setup waits on your starting technology" : undefined}
+              disabled={o.disabled || blocked || !!pending}
               pending={pending === o.id}
               onClick={() => void press(o.id)}
             />

@@ -348,7 +348,12 @@ export function orderDecisions(
     /* A step of something I am in the middle of (paying for research, placing a structure, producing): it keeps the
        panel; a follow prompt that opens meanwhile waits right behind it (pt9 015 / 017: a new follow pushed aside the
        Pay and PDS placement panels I had open). */
-    if (inProgressStep(d)) return 0.7;
+    if (inProgressStep(d)) {
+      /* …and among those, the one my last answer just opened leads: Deepwrought's two identical "Get a technology"
+         starting prompts — pressing the first opened its type picker, but the older second prompt kept the panel, so
+         the press looked lost and a second press was needed (user report; pbd1410's e2e then pressed "Done" on it). */
+      return nextStep(d) ? 0.6 : 0.7;
+    }
     /* A strategy card I still owe a follow / decline on: the next turn cannot begin until I answer (rules), so it
        heads the queue, before my own turn menu. */
     if (owesFollow(d, selfId, myFaction)) return 0.8;
@@ -432,7 +437,7 @@ function myTurnOf(state: GameState | null | undefined): boolean {
  * while I am the one still owing starting technologies.
  */
 export function requiredSetupChoice(d: Decision, state: GameState | null | undefined, selfId: string | undefined): boolean {
-  if (d.kind !== "tech.gain" || !selfId || !state?.setup) return false;
+  if ((d.kind !== "tech.gain" && d.kind !== "tech.choose_type") || !selfId || !state?.setup) return false;
   if (!d.options.some((o) => (o.value as { starting?: boolean } | null)?.starting)) return false;
   const owing = state.setup.players.find((p) => p.userId === selfId)?.startingTechsNeeded ?? 0;
   if (owing <= 0) return false;

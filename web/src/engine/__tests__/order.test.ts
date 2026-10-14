@@ -196,6 +196,29 @@ void test("my starting technology is a required setup step even while the engine
   assert.deepEqual(kinds(orderDecisions([tech], null, undefined, done)), []);
 });
 
+void test("Deepwrought: the type picker my 'Get a technology' press opened leads, not the identical second prompt (user report, pbd1410)", () => {
+  const setup = { stage: "player_setup", waitingOn: [ME], players: [{ userId: ME, faction: "deepwrought", startingTechsNeeded: 2, secretObjectivesToDiscard: 0, keleresFlavorPending: false }] };
+  const s = state({ phase: "setup" as GameState["phase"], round: 1, activePlayer: null, setup: setup as unknown as GameState["setup"] });
+  const get = (): Decision =>
+    dec("tech.choose_type", {
+      options: [
+        { id: "acquireAFreeTech", label: "Get a Technology", style: "success", emoji: null, disabled: false, needsInput: false, handler: "acquireAFreeTech", value: { techType: null, free: true, starting: true } },
+        { id: "deleteButtons", label: "Done", style: "danger", emoji: null, disabled: false, needsInput: false, handler: "deleteButtons", value: null },
+      ],
+    } as Partial<Decision>);
+  const first = get();
+  const second = get();
+  const before = orderDecisions([first, second], null, undefined, s);
+  assert.deepEqual(before.queue.map((d) => d.id), [first.id, second.id], "both starting prompts are mine, oldest first");
+  /* I pressed the first one at stream position second.seq: it closed and opened the type picker. */
+  const answeredAt = second.seq;
+  const types = dec("tech.choose_type", {
+    options: ["propulsion", "biotic", "cybernetic", "warfare", "unitupgrade"].map((t) => optV(`getAllTechOfType_${t}_noPay`, { techType: t, free: true })),
+  } as Partial<Decision>);
+  const after = orderDecisions([second, types], answeredAt, undefined, s, "tech.choose_type", { answeredId: first.id });
+  assert.deepEqual(after.queue.map((d) => d.id), [types.id, second.id], "the picker leads; the second prompt is '1 more after this'");
+});
+
 const optV = (id: string, value: unknown) => ({ id, label: id, style: "primary", emoji: null, disabled: false, needsInput: false, handler: id, value });
 
 void test("Imperial's score list with nothing left to score never takes the head from my turn (pt9: and is not on offer)", () => {
