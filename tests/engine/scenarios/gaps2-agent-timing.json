@@ -1,0 +1,11 @@
+{
+  "name": "gaps2-agent-timing",
+  "description": "Agent timing windows (audit-gaps-2, off switch TI4_AGENT_TIMING / agentTimingGate), like ActionCardTiming for action cards. The cards-info 'Use X Agent' buttons were usable at any time (leaders N-Z audit G1). Card windows: Emissary Taivra 'After a player activates a system that contains a non-delta wormhole'; Kan Kip Rel 'ACTION:'; Acamar 'After a player moves ships into a system that does not contain any planets'. pbd105@152 (Naalu's turn, Construction played, no system activated): Creuss's, Ral Nel's and Empyrean's agents are refused with the window's reason (original: exhausted and resolved).",
+  "base": { "recording": "pbd105", "index": 152, "repost": false },
+  "steps": [
+    { "press": "FFCC_ghost_exhaustAgent_ghostagent", "as": "ghost", "refused": true },
+    { "press": "FFCC_ralnel_exhaustAgent_ralnelagent", "as": "ralnel", "refused": true },
+    { "press": "FFCC_empyrean_exhaustAgent_empyreanagent", "as": "empyrean", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}

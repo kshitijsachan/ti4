@@ -19,6 +19,10 @@ const TAKE: Record<string, (v: FactionStepFields, tg: number) => boolean> = {
   gain1tgFromMuaatCommander: () => true,
   utilizeSolCommander: () => true,
   saarMechRes: (_v, tg) => tg >= 1,
+  // Magen Defense Grid ΩΩ / Black Trench Bulwark: "When any player activates a system that contains 1 or more of your
+  // structures, place 1 infantry ... with each of those structures" — mandatory and free; answered at once so the
+  // active player's tactical action never waits on it (soak pbd1859: answered 60 s late, the planner stalled).
+  useMagenDefense: () => true,
 };
 
 export function chooseFaction(d: Decision, state: GameState | null, me: string): FactionChoice | null | undefined {

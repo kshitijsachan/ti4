@@ -1,0 +1,21 @@
+{
+  "name": "gaps2-transit-diodes",
+  "description": "Transit Diodes (audit-gaps-2, gate TI4_RULES_TECH / rulesGateTech). Card text: 'You may exhaust this card at the start of your turn during the action phase; remove up to 4 of your ground forces from the game board and place them on 1 or more planets you control.' pbd72@815 (Winnu active): Winnu gains Transit Diodes and 5 infantry on Lodor, exhausts it, chooses Winnu as destination and moves 4 infantry; the 5th is refused (original: the shared ground-force prompt moved any number).",
+  "base": { "recording": "pbd72", "index": 815, "repost": false },
+  "setup": [
+    "/tech add tech:td faction_or_color:winnu",
+    "/add_units tile_name:207 unit_names:\"5 infantry lodor\" faction_or_color:winnu"
+  ],
+  "steps": [
+    { "press": "FFCC_winnu_exhaustTech_td", "as": "winnu" },
+    { "wait": 1500 },
+    { "press": "FFCC_winnu_transitDiodes_winnu", "as": "winnu" },
+    { "wait": 1500 },
+    { "press": "FFCC_winnu_mercerMove_winnu_207_lodor_infantry", "as": "winnu" },
+    { "press": "FFCC_winnu_mercerMove_winnu_207_lodor_infantry", "as": "winnu" },
+    { "press": "FFCC_winnu_mercerMove_winnu_207_lodor_infantry", "as": "winnu" },
+    { "press": "FFCC_winnu_mercerMove_winnu_207_lodor_infantry", "as": "winnu" },
+    { "press": "FFCC_winnu_mercerMove_winnu_207_lodor_infantry", "as": "winnu", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}

@@ -1,6 +1,6 @@
 {
   "name": "tech-secondary-aida",
-  "description": "Technology secondary (pbd101 r1): Ral Nel (owns AI Development Algorithm, given AMD + Plasma Scoring) follows, researches Carrier II, exhausts AI Development from the payment prompt, then pays Mez + Rep through payment.spend.",
+  "description": "Technology secondary (pbd101 r1): Ral Nel (owns AI Development Algorithm, given AMD + Plasma Scoring) follows, researches Carrier II, exhausts AI Development from the payment prompt, then pays Mez + Rep through payment.spend. audit-gaps-2 (TI4_TECH_PREREQ on): Carrier II needs AIDA's skip, so the research exhausts AIDA itself (the payment prompt no longer offers 'Exhaust AI Development Algorithm'); with the gate off the old press flow applies.",
   "base": {
     "recording": "pbd101",
     "index": 46
@@ -22,10 +22,6 @@
         "kind": "tech.gain",
         "option": "getTech_cv2"
       },
-      "as": "ralnel"
-    },
-    {
-      "press": "exhaustTech_aida",
       "as": "ralnel"
     },
     {

@@ -1,0 +1,17 @@
+{
+  "name": "gaps2-integrated-economy",
+  "description": "Integrated Economy (audit-gaps-2, gate TI4_RULES_TECH / rulesGateTech). Card text: 'After you gain control of a planet, you may produce any number of units on that planet that have a combined cost equal to or less than that planet's resource value.' pbd72@815: Winnu (Integrated Economy, 10 trade goods) uses it on Lodor (3 resources): a cruiser (2) and a destroyer (1) are produced; a fighter (0.5 more, 3.5 in all) is refused (original: the cap was only stated in the message).",
+  "base": { "recording": "pbd72", "index": 815, "repost": false },
+  "setup": [
+    "/tech add tech:ie faction_or_color:winnu",
+    "/player stats trade_goods:10 faction_or_color:winnu"
+  ],
+  "steps": [
+    { "press": "FFCC_winnu_integratedBuild_lodor", "as": "winnu" },
+    { "wait": 1500 },
+    { "press": "FFCC_winnu_place_cruiser_207", "as": "winnu" },
+    { "press": "FFCC_winnu_place_destroyer_207", "as": "winnu" },
+    { "press": "FFCC_winnu_place_fighter_207", "as": "winnu", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}

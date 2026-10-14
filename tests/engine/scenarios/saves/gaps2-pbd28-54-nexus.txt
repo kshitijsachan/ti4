@@ -1,0 +1,1363 @@
+155851521649973657
+MapClicker
+pbd28
+-mapinfo-
+-gameinfo-
+latest_command mapclicker pressed button: Ring #2 (FFCC_deepwrought_ring_2)
+phase_of_game action
+latest_outcome_voted_for 
+secret_objectives lsc,mlp,ans,dtd,dfat,hrm,csl,gamf,eh,mew,faa,syc,dtgs,uf,bam,sar,dyp,mtm,fsn,mrm,fc,ose,baf,eap,fwm,dhw,fwp,dts,sai,te,pe,ctr,dp,btv,btgk,otf
+action_cards ghost_squad,f_deployment,probe,confounding,intercept,abs,mb2,crisis,master_plan,politic_rider,trade_rider,war_effort,parley,rout,impersonation,repeal,dp1,s_retreat3,scuttle,mjets4,s_retreat1,sabo2,diplo_rider,tech_rider,uprising,ghost_ship,silence_space,jamming,reveal_prototype,sabo4,dh4,sh2,brilliance,distinguished,war_machine4,divert_funding,industrial_initiative,harness,fsb,counterstroke,dp3,reparations,coup,decoy,f_conscription,unstable,sh1,hack,seize,sabo1,dp2,fs2,solar_flare,reflective,strategize4,sh3,war_machine3,mining_initiative,mercenarycontract,war_rider,sabo3,mjets2,bribery,war_machine1,disable,blackmarketdealing,piratecontract3,sh4,courageous,disgrace,dh1,f_researched,unexpected,crashlanding,sanction,fire_team,fs3,waylay,lieinwait,plagiarize,dh3,mjets1,nav_suite,arch_expedition,cripple,imp_rider,upgrade,s_retreat4,tactical,extremeduress,mb1,meltdown,deadly_plot,blitz,reverse_engineer,exchangeprogram,lucky,investments,experimental,lost_star,const_rider,emergency,scramble,strategize2,strategize1,overrule,puppetsonastring,summit,f_prototype,insub,dp4,piratecontract1,dh2,confusing,fs4,piratecontract2,veto,fs1,piratefleet,lead_rider,spy,refit,bunker,salvage,rescue,mb3,piratecontract4,mjets3,stability,assassin,rally,war_machine2,mb4,economic_initiative,insider,s_retreat2,messiah,strategize3,plague,infiltrate
+action_cards_discarded 
+action_cards_status 
+action_cards_played 
+explore crf9,urf2,exp3,ls,fb1,crf3,hrf1,hrf2,crf7,vfs2,aw1,hrf6,aw3,mo2,frln2,vfs1,warfare,urf1,irf5,dw,lc2,ed1,hrf5,frln3,fb2,gw,mirage,crf2,mo3,aw4,irf3,irf2,toe,ed2,cm2,mo1,majent,biotic,lf1,cm3,kel2,pw,irf1,ds,cybernetic,dmz,irf4,ent,aw2,fb3,ms1,dv2,exp1,hrf3,crf8,crf4,hrf4,rw,lf3,gamma,ms2,exp2,crf6,vfs3,lf2,cm1,frln1,minent,ion,fb4,dv1,lf4,mw,propulsion,urf3,crf5,kel1,crf1,lc1,hrf7
+relics obsidian,thalnos,dynamiscore,quantumcore,heartofixth,metalivoidshielding,dominusorb,titanprototype,lightrailordnance,circletofthevoid,prophetstears,metalivoidarmaments,bookoflatvinia,shard,thesilverflame,emelpar,codex,stellarconverter,nanoforge,mawofworlds,neuraloop,thetriad,emphidia
+discarded_explores 
+speaker 1558232785313988608
+tyrant 
+active_player 1558515216499736576
+active_system 
+auto_ping 12
+players_who_hit_persistent_no_after 
+players_who_hit_persistent_no_when 
+current_agenda_info 
+current_acdrawstatus_info 
+last_active_player_change 1791650496165
+sc_played 1,true;
+agenda_vote_info 
+check_reacts_info gaps2Base,nexus:echoes_of_yggdrasil_tiles,false:Round1SCPickForyssaril,8{usc}3:currentActionSummarymahact,{sp}played{sp}<{cln}sc{usc}1{usc}1{cln}1558154800447750144>⁠<{cln}sc{usc}1{usc}2{cln}1558154804457504768>⁠<{cln}sc{usc}1{usc}3{cln}1558154808886689792>⁠<{cln}sc{usc}1{usc}4{cln}1558154811201945600>⁠<{cln}sc{usc}1{usc}5{cln}1558154789613862912>⁠<{cln}sc{usc}1{usc}6{cln}1558154793808166912>:currentActionSummarynaaz,{sp}Established{sp}control{sp}of{sp}Naazir{sp}(2/1).{sp}Established{sp}control{sp}of{sp}Rokha{sp}(1/2).{sp}Established{sp}control{sp}of{sp}Naazir{sp}(2/1).{sp}Established{sp}control{sp}of{sp}Rokha{sp}(1/2).:Round1SCPickFornaaz,5{usc}7:currentActionSummaryyssaril,{sp}Established{sp}control{sp}of{sp}Retillion{sp}(2/3).{sp}Established{sp}control{sp}of{sp}Shalloq{sp}(1/2).{sp}Established{sp}control{sp}of{sp}Retillion{sp}(2/3).{sp}Established{sp}control{sp}of{sp}Shalloq{sp}(1/2).:savedChannelType,channel:Round1SCPickFormahact,1{usc}6:lawsDisabled,no:followedSC1_1,{usc}mahact:offeredOverrulePurge,yes:revealedFlop1,Yes:pingedSC1_1,yes:factionsThatAreNotDiscardingSOs,deepwrought*yssaril*mahact*naaz*:startTimeOfRound1Strategy,1791650297197:Round1SCPickFordeepwrought,2{usc}4:
+thalnos_units 
+game_stats {"actionCardPlays":[]}
+displaced_units_activation_new {}
+agendas grant_reallocation,sanctions,conventions,wormhole_research,articles_war,minister_antiquities,secret,plowshares,execution,arms_reduction,constitution,disarmament,redistribution,committee,artifact,incentive,conscription,abolishment,minister_peace,unconventional,prophecy,arbiter,miscount,classified,minister_industry,checks,minister_policy,cladenstine,minister_commerce,censure,wormhole_recon,regulations,covert,defense_act,minister_war,warrant,economic_equality,rearmament,revolution,rep_govt,seed_empire,shared_research,crisis,standardization,mutiny,minister_exploration,minister_sciences,travel_ban,schematics
+discarded_agendas 
+sent_agenda 
+law nexus,999;
+events_in_effect 
+events 
+discarded_events 
+law_info 
+sc_trade_goods 1,0;2,0;3,0;4,0;5,0;6,0;7,0;8,0;
+revealedPublicObjectives Custodian/Imperial,0;raise_fleet,1;corner,2;
+customPublicVP Custodian/Imperial,1;
+publicObjectives1 trade_routes,engineer_marvel,develop,expand_borders,intimidate,lost_outposts,outer_rim,push_boundaries,monument,infrastructure,make_history,lead,sway_council,deep_space,research_outposts
+publicObjectives2 golden_age,vast_territories,protect_border,control_borderlands,conquer,become_legend,revolutionize,galvanize,unify_colonies,ancient_monuments,vast_reserves,subdue,brain_trust,supremacy,manipulate_law
+so_to_po 
+purged_pn 
+publicObjectives1peakable diversify,amass_wealth,build_defenses
+saved_buttons deepwrought;FFCC_deepwrought_ringTile_000;000 (Mecatol Rex);SUCCESS;<:MecatolL_112:1558154658835464192>,deepwrought;FFCC_deepwrought_ringTile_313;313 (Ikatena - Deepwrought);SUCCESS;<:spacedock:1558154773700673536>,deepwrought;FFCC_deepwrought_ring_1;Ring #1;SUCCESS,deepwrought;FFCC_deepwrought_ring_2;Ring #2;SUCCESS,deepwrought;FFCC_deepwrought_ring_3;Ring #3;SUCCESS,deepwrought;FFCC_deepwrought_ring_corners;Corners;SUCCESS
+pinged_systems 
+publicObjectives2peakable command_armada,massive_cities,master_science,centralize_trade,distant_lands
+publicObjectives1Peeked 
+publicObjectives2Peeked 
+sc_count_for_map 2
+player_count_for_map 4
+vp_count 10
+max_so_count 3
+scoredPublicObjectives 
+customAdjacentTiles 
+customHyperlaneData 
+reverse_speaker_order false
+adjacencyOverrides 
+creation_date 2026.10.10
+creation_date_time 1791649397958
+started_date 0
+last_modified_date 1791650680580
+ended_date 0
+round 1
+button_press_count 51
+event_sequence_counter 16
+pending_sub_events_json 
+pending_movement_state 
+game_custom_name Microchip-Instability-Orthogonal
+table_talk_channel 1558515279292661760
+main_game_channel 1558515279548514304
+saved_channel 1558515279548514304
+saved_message Doing a tactical action. Please choose the ring of the map that the system you wish to activate is located in. Reminder that a normal 6 player map is 3 rings, with ring 1 being adjacent to Mecatol Rex. The Wormhole Nexus is in the corner.
+bot_map_channel 1558515283373719552
+game_launch_thread_id null
+is_tigl_game false
+community_mode false
+alliance_mode false
+fow_mode false
+replacement_made false
+fow_options 
+naalu_agent false
+warfare_action false
+l1_hero false
+nomad_coin false
+fast_sc_follow false
+queue_so true
+show_bubbles true
+transaction_method true
+homebrew_mode false
+show_gears true
+show_banners true
+show_hex_borders off
+purged_fragment 0
+temporary_ping_disable false
+dominus_orb false
+component_action true
+just_played_component_ac false
+activation_count 0
+base_game_mode false
+thunders_edge_mode true
+twilights_fall_mode false
+light_fog_mode false
+cpti_explore_mode false
+red_tape_mode false
+omega_phase_mode false
+strat_pings true
+absol_mode false
+votc_mode false
+miltymod_mode false
+promises_promises false
+flagshipping false
+show_map_setup false
+text_size medium
+discordant_stars_mode false
+blue_reverie_mode false
+uncharted_space_stuff false
+verbosity verbose
+beta_test_mode false
+age_of_exploration_mode false
+facilities_mode false
+minor_factions_mode false
+hidden_agenda_mode false
+total_war_mode false
+dangerous_wilds_mode false
+stellar_atomics_mode false
+age_of_fighters_mode false
+zealous_orthodoxy_mode false
+advent_of_the_warsun_mode false
+cultural_exchange_program_mode false
+conventions_of_war_abandoned_mode false
+rapid_mobilization_mode false
+monuments_to_the_ages_mode false
+monuments_mode false
+weird_wormholes_mode false
+cosmic_convergence_mode false
+muaat_mania_mode false
+no_fracture false
+call_of_the_void_mode false
+wild_wild_galaxy_mode false
+feast_or_famine_mode false
+cosmic_phenomenae_mode false
+mercenaries_for_hire_mode false
+civilized_society_mode false
+no_swap_mode false
+veiled_heart_mode false
+lore_mode false
+limited_whispers_mode false
+whispers_disabled false
+age_of_commerce_mode false
+ordinian_c1_mode false
+liberation_c4_mode false
+erwans_gambit_mode false
+show_full_component_text false
+hack_election_status false
+cc_n_plastic_limit true
+bot_faction_reacts false
+bot_color_reacts false
+bot_strat_reacts false
+has_had_a_status_phase false
+bot_shushing false
+homebrew_sc_mode false
+inject_rules_links false
+spin_mode OFF
+show_unit_tags false
+show_owned_pns_in_player_area false
+ac_deck_id action_cards_te
+so_deck_id secret_objectives_pok
+stage_1_public_deck_id public_stage_1_objectives_pok
+stage_2_public_deck_id public_stage_2_objectives_pok
+map_template 4pHyperlanes
+tech_deck_id techs_pok_c4
+relic_deck_id relics_pok_te
+agenda_deck_id agendas_pok
+event_deck_id 
+exploration_deck_id explores_pok
+ability_deck_id techs_tf
+genome_deck_id tf_genome
+paradigm_deck_id tf_paradigm
+unitupgrade_deck_id tf_units
+twilight_kart false
+tk_destroyer_cup false
+tk_nova_cup false
+tf_br false
+twilight_ds false
+bag_draft 
+game_tags 
+milty_draft_manager 116,64,27,50,102;78,28,60,99,40;39,63,37,113,71;24,110,79,49,25;19,97,80,114,33|deepwrought,yssaril,naaz,mahact,xxcha|1558232785313988608,1558221276219310080,1558221276194144256,1558515216499736576|mahact,A,1;naaz,B,2;yssaril,D,4;deepwrought,C,3|4pHyperlanes
+milty_draft_settings {"draftMode":{"id":"DraftType","chosenKey":"milty"},"gameSettings":{"alliance":{"id":"Alliance","val":false},"decks":{"actionCards":{"id":"ACs","chosenKey":"action_cards_te"},"agendas":{"id":"Agendas","chosenKey":"agendas_pok"},"explores":{"id":"Explores","chosenKey":"explores_pok"},"menuId":"decks","relics":{"id":"Relics","chosenKey":"relics_pok_te"},"secrets":{"id":"SecretDeck","chosenKey":"secret_objectives_pok"},"stage1":{"id":"Stg1Deck","chosenKey":"public_stage_1_objectives_pok"},"stage2":{"id":"Stg2Deck","chosenKey":"public_stage_2_objectives_pok"},"stratCards":{"id":"StratCards","chosenKey":"te"},"techs":{"id":"Techs","chosenKey":"techs_pok_c4"}},"mapTemplate":{"id":"Template","chosenKey":"4pHyperlanes"},"menuId":"game","nucleusTemplatePredicate":{},"pointTotal":{"id":"Points","val":10},"secrets":{"id":"Secrets","val":3},"stage1s":{"id":"Stage1s","val":5},"stage2s":{"id":"Stage2s","val":5},"tigl":{"id":"TIGL","val":false},"tiglFractured":{"id":"TIGL Fractured","val":false}},"menuId":"main","messageId":"1558515291363868672","playerSettings":{"banFactions":{"id":"BanFactions","keys":[]},"dsBrFactionsOnly":{"id":"DsBrFactionsOnly","val":false},"factionSourceSettings":{"base":{"id":"FactionBase","valLow":0,"valHigh":17},"blueReverie":{"id":"FactionBR","valLow":0,"valHigh":9},"constraintMap":{"base":[0,17],"pok":[0,8],"thunders_edge":[0,5]},"deepreaches":{"id":"FactionDeepReaches","valLow":0,"valHigh":7},"ds":{"id":"FactionDS","valLow":0,"valHigh":34},"ignisAurora":{"id":"FactionIgnis","valLow":0,"valHigh":2},"lostLegacies":{"id":"FactionLostLegacies","valLow":0,"valHigh":18},"menuId":"factionSources","pok":{"id":"FactionPoK","valLow":0,"valHigh":8},"thundersEdge":{"id":"FactionTE","valLow":0,"valHigh":5},"whispers":{"id":"FactionWhispers","valLow":0,"valHigh":8}},"gamePlayers":{"id":"Players","keys":["1558515216499736576","1558221276219310080","1558232785313988608","1558221276194144256"]},"menuId":"players","presetDraftOrder":{"id":"StaticOrder","val":false},"priFactions":{"id":"PriFactions","keys":[]}},"randomGalacticEvents":{"id":"RandomEvents","val":0},"randomSetup":false,"sliceSettings":{"extraWorms":{"id":"ExtraWH","val":true},"menuId":"slice","minimumInf":{"id":"MinInf","val":3},"minimumRes":{"id":"MinRes","val":2},"numFactions":{"id":"#Factions","val":5},"numLegends":{"id":"Legends","valLow":1,"valHigh":2},"numSlices":{"id":"#Slices","val":5},"presetSlices":null,"totalValue":{"id":"TotVal","valLow":9,"valHigh":13}},"sourceSettings":{"absol":{"id":"Absol","val":false},"actionCardDeck2":{"id":"ActionCardDeck2","val":false},"base":{"id":"BaseGame","val":true},"betaTestMode":{"id":"Beta","val":false},"blueReverie":{"id":"BlueReverie","val":false},"codexes":{"id":"Codexes","val":true},"deepreaches":{"id":"DeepReaches","val":false},"discoStars":{"id":"DiscoStars","val":false},"echoesOfYggdrasil":{"id":"EchoesOfYggdrasil","val":false},"eronous":{"id":"Eronous","val":false},"ignis":{"id":"Ignis","val":false},"lostLegacies":{"id":"LostLegacies","val":false},"menuId":"source","monuments":{"id":"Monuments","val":false},"pok":{"id":"PoK","val":true},"teDemo":{"id":"ThundersEdge","val":true},"unchartedSpace":{"id":"UnchartSpace","val":false},"whispers":{"id":"WhispersVoid","val":false}},"trueRandomGalaxy":{"id":"TrueRandomGalaxy","val":false}}
+strategy_card_set te
+border_anomalies []
+game_has_ended false
+image_gen_count 0
+run_data_migrations 
+priority_track_mode NONE
+debt_pool 
+-endgameinfo-
+-playerinfo-
+-player-
+1558232785313988608
+Bot Gamma
+faction mahact
+faction_emoji null
+faction_display_name null
+color gold
+decal_set null
+stats_anchor_location 304
+stats_tracked_user_id 1558232785313988608
+stats_tracked_user_name botgamma
+hs_tile_position null
+alliance_members 
+roleForCommunity null
+playerPrivateChannel null
+fog_filter default
+passed false
+ready_to_pass_bag false
+auto_pass_whens_n_afters true
+search_warrant false
+dummy false
+npc false
+eliminated false
+notepad 
+has_found_cfrag false
+has_found_hfrag false
+has_found_ifrag false
+has_found_ufrag false
+ats_count 0
+pillage_count 0
+sarween_count 0
+ghost_commander_count 0
+magen_infantry_count 0
+path_token_count 0
+honor_count 0
+dishonor_count 0
+steelbalance_count 0
+starbalance_count 0
+harvest_count 0
+action_cards 
+events 
+promissory_notes gold_cf,63;gold_ps,6;gold_ta,89;gold_sftt,23;scepter,16;
+promissory_notes_owned gold_ta,gold_sftt,scepter,gold_cf,gold_ps
+promissory_notes_play_area 
+units_owned mahact_infantry,carrier,mahact_flagship,mahact_mech,spacedock,fighter,dreadnought,destroyer,cruiser,pds
+lizho_trap_cards 
+lizho_trap_planets 
+plot_cards 
+plot_factions 
+fragments 
+relics 
+exhausted_relics 
+mahact_cc 
+franken_bag_to_pass 
+franken_personal_bag 
+franken_items_to_draft 
+faction_tech cl2,gr
+tech pi,bs
+spent_things 
+bombard_units 
+transaction_items 
+teammate_ids 1558232785313988608
+tech_exhausted 
+tech_purged 
+planets ixth
+planets_exhausted 
+planets_ability_exhausted 
+tactical_cc 3
+fleet_cc 3
+strategy_cc 2
+abilities hubris,edict,imperia
+exhausted_abilities 
+trade_goods 0
+expected_hits_times_10 0
+total_expenses 0
+bonus_scored_secrets 0
+turn_count 1
+actual_hits 0
+stasis_infantry 0
+stasis_fighters 0
+auto_sabo_pass_median 1
+capture 
+unit_cap 
+secret_objectives ttfd,270;
+produced_units 
+secret_objectives_scored 
+number_of_turns 5
+total_turn_time 21316
+strategy_card 1,6
+followed_sc 1
+player_stored_values 
+breakthroughs mahactbt
+breakthrough_unl_map mahactbt,false
+breakthrough_exh_map mahactbt,false
+breakthrough_actv_map mahactbt,false
+breakthrough_tgs_map mahactbt,0
+leaders mahactagent,agent,0,false,false,false;mahactcommander,commander,0,false,true,false;mahacthero,hero,0,false,true,false;
+fow_systems 
+cards_info_thread_channel_id 1558515284246134784
+draft_bag_info_thread_channel_id null
+PLAYER_NEW_TEMP_MODS 
+PLAYER_TEMP_MODS 
+commodities_total 0
+commodities_base 3
+commodities 0
+-endplayer-
+-player-
+1558221276219310080
+Bot Beta
+faction naaz
+faction_emoji null
+faction_display_name null
+color red
+decal_set null
+stats_anchor_location 307
+stats_tracked_user_id 1558221276219310080
+stats_tracked_user_name botbeta
+hs_tile_position null
+alliance_members 
+roleForCommunity null
+playerPrivateChannel null
+fog_filter default
+passed false
+ready_to_pass_bag false
+auto_pass_whens_n_afters true
+search_warrant false
+dummy false
+npc false
+eliminated false
+notepad 
+has_found_cfrag false
+has_found_hfrag false
+has_found_ifrag false
+has_found_ufrag false
+ats_count 0
+pillage_count 0
+sarween_count 0
+ghost_commander_count 0
+magen_infantry_count 0
+path_token_count 0
+honor_count 0
+dishonor_count 0
+steelbalance_count 0
+starbalance_count 0
+harvest_count 0
+action_cards 
+events 
+promissory_notes red_cf,41;red_an,44;red_ps,71;red_ta,20;red_sftt,35;bmf,28;
+promissory_notes_owned red_sftt,red_cf,red_ps,bmf,red_an,red_ta
+promissory_notes_play_area 
+units_owned carrier,naaz_flagship,naaz_mech,naaz_mech_space,spacedock,fighter,dreadnought,destroyer,infantry,cruiser,pds
+lizho_trap_cards 
+lizho_trap_planets 
+plot_cards 
+plot_factions 
+fragments 
+relics 
+exhausted_relics 
+mahact_cc 
+franken_bag_to_pass 
+franken_personal_bag 
+franken_items_to_draft 
+faction_tech pfa,sc
+tech pa,aida
+spent_things 
+bombard_units 
+transaction_items 
+teammate_ids 1558221276219310080
+tech_exhausted 
+tech_purged 
+planets naazir,rokha
+planets_exhausted 
+planets_ability_exhausted 
+tactical_cc 3
+fleet_cc 3
+strategy_cc 2
+abilities distant_suns,fabrication
+exhausted_abilities 
+trade_goods 0
+expected_hits_times_10 0
+total_expenses 0
+bonus_scored_secrets 0
+turn_count 0
+actual_hits 0
+stasis_infantry 0
+stasis_fighters 0
+auto_sabo_pass_median 1
+capture 
+unit_cap 
+secret_objectives sb,834;
+produced_units 
+secret_objectives_scored 
+number_of_turns 5
+total_turn_time 11886
+strategy_card 5,7
+followed_sc 1
+player_stored_values 
+breakthroughs naazbt
+breakthrough_unl_map naazbt,false
+breakthrough_exh_map naazbt,false
+breakthrough_actv_map naazbt,false
+breakthrough_tgs_map naazbt,0
+leaders naazagent,agent,0,false,false,false;naazcommander,commander,0,false,true,false;naazhero,hero,0,false,true,false;
+fow_systems 
+cards_info_thread_channel_id 1558515283826704384
+draft_bag_info_thread_channel_id null
+PLAYER_NEW_TEMP_MODS 
+PLAYER_TEMP_MODS 
+commodities_total 0
+commodities_base 3
+commodities 0
+-endplayer-
+-player-
+1558515216499736576
+MapClicker
+faction deepwrought
+faction_emoji null
+faction_display_name null
+color navy
+decal_set null
+stats_anchor_location 313
+stats_tracked_user_id 1558515216499736576
+stats_tracked_user_name mapclicker
+hs_tile_position null
+alliance_members 
+roleForCommunity null
+playerPrivateChannel null
+fog_filter default
+passed false
+ready_to_pass_bag false
+auto_pass_whens_n_afters false
+search_warrant false
+dummy false
+npc false
+eliminated false
+notepad 
+has_found_cfrag false
+has_found_hfrag false
+has_found_ifrag false
+has_found_ufrag false
+ats_count 0
+pillage_count 0
+sarween_count 0
+ghost_commander_count 0
+magen_infantry_count 0
+path_token_count 0
+honor_count 0
+dishonor_count 0
+steelbalance_count 0
+starbalance_count 0
+harvest_count 0
+action_cards 
+events 
+promissory_notes navy_ps,12;navy_ta,53;navy_sftt,45;navy_an,8;navy_cf,10;shareknowledge,57;
+promissory_notes_owned shareknowledge,navy_ps,navy_cf,navy_ta,navy_an,navy_sftt
+promissory_notes_play_area 
+units_owned carrier,spacedock,fighter,dreadnought,destroyer,infantry,deepwrought_mech,cruiser,pds,deepwrought_flagship
+lizho_trap_cards 
+lizho_trap_planets 
+plot_cards 
+plot_factions 
+fragments 
+relics 
+exhausted_relics 
+mahact_cc 
+franken_bag_to_pass 
+franken_personal_bag 
+franken_items_to_draft 
+faction_tech hydrothermal,radical
+tech amd,gd,st
+spent_things 
+bombard_units 
+transaction_items 
+teammate_ids 1558515216499736576
+tech_exhausted 
+tech_purged 
+planets ikatena
+planets_exhausted 
+planets_ability_exhausted 
+tactical_cc 3
+fleet_cc 3
+strategy_cc 2
+abilities oceanbound,researchteam
+exhausted_abilities 
+trade_goods 0
+expected_hits_times_10 0
+total_expenses 0
+bonus_scored_secrets 0
+turn_count 1
+actual_hits 0
+stasis_infantry 0
+stasis_fighters 0
+auto_sabo_pass_median 0
+capture 
+unit_cap 
+secret_objectives pem,958;
+produced_units 
+secret_objectives_scored 
+number_of_turns 5
+total_turn_time 156679
+strategy_card 2,4
+followed_sc 1
+player_stored_values 
+breakthroughs deepwroughtbt
+breakthrough_unl_map deepwroughtbt,false
+breakthrough_exh_map deepwroughtbt,false
+breakthrough_actv_map deepwroughtbt,false
+breakthrough_tgs_map deepwroughtbt,0
+leaders deepwroughtagent,agent,0,false,false,false;deepwroughtcommander,commander,0,false,true,false;deepwroughthero,hero,0,false,true,false;
+fow_systems 
+cards_info_thread_channel_id 1558515283742818304
+draft_bag_info_thread_channel_id null
+PLAYER_NEW_TEMP_MODS 
+PLAYER_TEMP_MODS 
+commodities_total 0
+commodities_base 3
+commodities 0
+-endplayer-
+-player-
+1558221276194144256
+Bot Alpha
+faction yssaril
+faction_emoji null
+faction_display_name null
+color forest
+decal_set null
+stats_anchor_location 316
+stats_tracked_user_id 1558221276194144256
+stats_tracked_user_name botalpha
+hs_tile_position null
+alliance_members 
+roleForCommunity null
+playerPrivateChannel null
+fog_filter default
+passed false
+ready_to_pass_bag false
+auto_pass_whens_n_afters true
+search_warrant false
+dummy false
+npc false
+eliminated false
+notepad 
+has_found_cfrag false
+has_found_hfrag false
+has_found_ifrag false
+has_found_ufrag false
+ats_count 0
+pillage_count 0
+sarween_count 0
+ghost_commander_count 0
+magen_infantry_count 0
+path_token_count 0
+honor_count 0
+dishonor_count 0
+steelbalance_count 0
+starbalance_count 0
+harvest_count 0
+action_cards 
+events 
+promissory_notes forest_ps,71;forest_ta,28;forest_sftt,20;forest_cf,96;forest_an,34;spynet,10;
+promissory_notes_owned spynet,forest_sftt,forest_ps,forest_cf,forest_ta,forest_an
+promissory_notes_play_area 
+units_owned carrier,yssaril_mech,spacedock,fighter,yssaril_flagship,dreadnought,destroyer,infantry,cruiser,pds
+lizho_trap_cards 
+lizho_trap_planets 
+plot_cards 
+plot_factions 
+fragments 
+relics 
+exhausted_relics 
+mahact_cc 
+franken_bag_to_pass 
+franken_personal_bag 
+franken_items_to_draft 
+faction_tech tp,mi
+tech nm
+spent_things 
+bombard_units 
+transaction_items 
+teammate_ids 1558221276194144256
+tech_exhausted 
+tech_purged 
+planets retillion,shalloq
+planets_exhausted 
+planets_ability_exhausted 
+tactical_cc 3
+fleet_cc 3
+strategy_cc 2
+abilities stall_tactics,scheming,crafty
+exhausted_abilities 
+trade_goods 0
+expected_hits_times_10 0
+total_expenses 0
+bonus_scored_secrets 0
+turn_count 0
+actual_hits 0
+stasis_infantry 0
+stasis_fighters 0
+auto_sabo_pass_median 1
+capture 
+unit_cap 
+secret_objectives mp,545;
+produced_units 
+secret_objectives_scored 
+number_of_turns 5
+total_turn_time 39474
+strategy_card 3,8
+followed_sc 1
+player_stored_values 
+breakthroughs yssarilbt
+breakthrough_unl_map yssarilbt,false
+breakthrough_exh_map yssarilbt,false
+breakthrough_actv_map yssarilbt,false
+breakthrough_tgs_map yssarilbt,0
+leaders yssarilagent,agent,0,false,false,false;yssarilcommander,commander,0,false,true,false;yssarilhero,hero,0,false,true,false;
+fow_systems 
+cards_info_thread_channel_id 1558515283809927168
+draft_bag_info_thread_channel_id null
+PLAYER_NEW_TEMP_MODS 
+PLAYER_TEMP_MODS 
+commodities_total 0
+commodities_base 3
+commodities 0
+-endplayer-
+-player-
+572698679618568193
+Dicecord
+faction neutral
+faction_emoji null
+faction_display_name null
+color aberration
+decal_set null
+stats_anchor_location null
+stats_tracked_user_id 572698679618568193
+stats_tracked_user_name Dicecord
+hs_tile_position null
+alliance_members 
+roleForCommunity null
+playerPrivateChannel null
+fog_filter default
+passed true
+ready_to_pass_bag false
+auto_pass_whens_n_afters false
+search_warrant false
+dummy true
+npc false
+eliminated false
+notepad 
+has_found_cfrag false
+has_found_hfrag false
+has_found_ifrag false
+has_found_ufrag false
+ats_count 0
+pillage_count 0
+sarween_count 0
+ghost_commander_count 0
+magen_infantry_count 0
+path_token_count 0
+honor_count 0
+dishonor_count 0
+steelbalance_count 0
+starbalance_count 0
+harvest_count 0
+action_cards 
+events 
+promissory_notes 
+promissory_notes_owned 
+promissory_notes_play_area 
+units_owned spacedock,flagship,warsun,dreadnought,cruiser2,carrier2,infantry,fighter2,destroyer2,mech,pds
+lizho_trap_cards 
+lizho_trap_planets 
+plot_cards 
+plot_factions 
+fragments 
+relics 
+exhausted_relics 
+mahact_cc 
+franken_bag_to_pass 
+franken_personal_bag 
+franken_items_to_draft 
+faction_tech 
+tech ff2,dd2,cv2,cr2,ws
+spent_things 
+bombard_units 
+transaction_items 
+teammate_ids 572698679618568193
+tech_exhausted 
+tech_purged 
+planets 
+planets_exhausted 
+planets_ability_exhausted 
+tactical_cc 3
+fleet_cc 3
+strategy_cc 2
+abilities 
+exhausted_abilities 
+trade_goods 0
+expected_hits_times_10 0
+total_expenses 0
+bonus_scored_secrets 0
+turn_count 0
+actual_hits 0
+stasis_infantry 0
+stasis_fighters 0
+auto_sabo_pass_median 0
+capture 
+unit_cap 
+secret_objectives 
+produced_units 
+secret_objectives_scored 
+number_of_turns 0
+total_turn_time 0
+strategy_card 
+followed_sc 
+player_stored_values 
+breakthroughs 
+breakthrough_unl_map 
+breakthrough_exh_map 
+breakthrough_actv_map 
+breakthrough_tgs_map 
+leaders none
+fow_systems 
+cards_info_thread_channel_id null
+draft_bag_info_thread_channel_id null
+PLAYER_NEW_TEMP_MODS 
+PLAYER_TEMP_MODS 
+commodities_total 0
+commodities_base 0
+commodities 0
+-endplayer-
+-endplayerinfo-
+-endmapinfo-
+-tile-
+113 210
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+token_frontier.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+110 211
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+elnath
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+horizon
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+luthieniv
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+85a 310
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+88a180 212
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+84a 311
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+37 312
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+meer
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+arinam
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+95 313
+-unitholder-
+-units-
+space
+nvy—ff 4,0,0,0
+nvy—cv 1,0,0,0
+nvy—dn 1,0,0,0
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+ikatena
+nvy—gf 3,0,0,0
+nvy—sd 1,0,0,0
+-endunits-
+-planettokens-
+control_nvy.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+39 314
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+token_frontier.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+79 315
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+token_frontier.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+15 316
+-unitholder-
+-units-
+space
+frs—cv 2,0,0,0
+frs—ca 1,0,0,0
+frs—ff 2,0,0,0
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+shalloq
+frs—gf 2,0,0,0
+frs—pd 1,0,0,0
+-endunits-
+-planettokens-
+control_frs.png
+-planetendtokens-
+-units-
+retillion
+frs—gf 3,0,0,0
+frs—sd 1,0,0,0
+-endunits-
+-planettokens-
+control_frs.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+24 317
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+meharxull
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+83a180 318
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+112 000
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+mrte
+-endunits-
+-planettokens-
+token_custodian.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+86a180 101
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+102 102
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+andeara
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+49 201
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+token_frontier.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+40 103
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+token_frontier.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+87a180 202
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+85a180 301
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+86a 104
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+64 203
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+atlas
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+84a180 302
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+71 105
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+bakal
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+alioprima
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+50 204
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+token_frontier.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+27 303
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+starpoint
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+newalbion
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+25 106
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+quann
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+28 205
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+tequran
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+torkan
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+52 304
+-unitholder-
+-units-
+space
+gld—dn 1,0,0,0
+gld—cv 1,0,0,0
+gld—ca 1,0,0,0
+gld—ff 2,0,0,0
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+ixth
+gld—gf 3,0,0,0
+gld—sd 1,0,0,0
+-endunits-
+-planettokens-
+control_gld.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+88a 206
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+116 305
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+lemox
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+82a tl
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+lockedmallice
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+99 207
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+emelpar
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+60 306
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+perimeter
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+87a 208
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+57 307
+-unitholder-
+-units-
+space
+red—cv 2,0,0,0
+red—dd 1,0,0,0
+red—ff 2,0,0,0
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+naazir
+red—gf 3,0,0,0
+red—sd 1,0,0,0
+-endunits-
+-planettokens-
+control_red.png
+-planetendtokens-
+-units-
+rokha
+red—mf 1,0,0,0
+-endunits-
+-planettokens-
+control_red.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+63 209
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-units-
+vorhal
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+78 308
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+token_frontier.png
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-
+-tile-
+83a 309
+-unitholder-
+-units-
+space
+-endunits-
+-planettokens-
+-planetendtokens-
+-endunitholder-
+-tokens-
+-endtokens-
+-endtile-

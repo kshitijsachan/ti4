@@ -1,0 +1,16 @@
+{
+  "name": "gaps2-nexus-sovereignty",
+  "description": "Nexus Sovereignty 'For' (audit-gaps-2, off switch TI4_RULES_AGENDAS / rulesGateAgendas). Card text: 'Alpha and beta wormholes in the wormhole nexus have no effect during movement.' pbd28@54 with the law in play (law nexus in the base save); the Wormhole Nexus (82b) is placed off-board at tl with a Deepwrought cruiser, an alpha-wormhole system (39) off-board at br. Deepwrought activates br and moves the cruiser from tl: with the law it can only arrive through the Nexus' alpha wormhole, so the move is refused (original: distance computed through the alpha wormhole, moved).",
+  "base": { "save": "tests/engine/scenarios/saves/gaps2-pbd28-54-nexus.txt", "next": "tests/engine/scenarios/saves/gaps2-pbd28-54-nexus.next.txt" },
+  "setup": [
+    "/map add_tile tile_name:82b position:tl",
+    "/map add_tile tile_name:39 position:br",
+    "/add_units tile_name:tl unit_names:\"1 cruiser\" faction_or_color:deepwrought"
+  ],
+  "steps": [
+    { "press": "ringTile_br", "as": "deepwrought" },
+    { "wait": 2000 },
+    { "answer": { "kind": "tactical.move", "action": "move", "body": { "units": [ { "from": "tl", "holder": "space", "unit": "ca", "count": 1 } ] } }, "as": "deepwrought", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}

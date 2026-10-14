@@ -1,0 +1,44 @@
+{
+  "name": "gaps2-ac-costs",
+  "description": "Action-card costs (audit-gaps-2, gate TI4_RULES_AC). Impersonation: 'Spend 3 influence to draw 1 secret objective.' The original drew the secret objective first and its 'Done Exhausting Planets' closed the payment whatever was spent. pbd72@815 (Winnu's turn): Winnu plays Impersonation; the payment prompt's Done with nothing spent is refused (the secret objective is drawn only once 3 influence are paid).",
+  "base": {
+    "recording": "pbd72",
+    "index": 815,
+    "repost": false
+  },
+  "setup": [
+    {
+      "command": "ac draw_specific_ac",
+      "options": {
+        "ac_id": "impersonation",
+        "faction_or_color": "winnu"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "answer": {
+        "kind": "action_card.play",
+        "value": {
+          "actionCard": "impersonation"
+        }
+      },
+      "as": "winnu"
+    },
+    {
+      "press": "FFCC_winnu_resolveImpersonation",
+      "as": "winnu"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "press": "FFCC_winnu_deleteButtons_acCost~pay",
+      "as": "winnu",
+      "refused": true
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

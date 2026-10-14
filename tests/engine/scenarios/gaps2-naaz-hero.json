@@ -1,0 +1,16 @@
+{
+  "name": "gaps2-naaz-hero",
+  "description": "Hesh and Prit (Naaz-Rokha hero; audit-gaps-2, gate TI4_RULES_LEADERS). Card text: 'Gain 1 relic and perform the secondary ability of up to 2 readied or unchosen strategy cards.' The original posted every secondary at once ('two is the limit' in text only). pbd113@352: the hero is played; Naaz picks Diplomacy and Politics; a third card (Trade) is refused.",
+  "base": { "recording": "pbd113", "index": 352, "repost": false },
+  "setup": [
+    "/leaders unlock leader:naazhero faction_or_color:naaz",
+    "/leaders hero_play leader:naazhero faction_or_color:naaz"
+  ],
+  "steps": [
+    { "wait": 1500 },
+    { "press": "FFCC_naaz_naazHeroPick_2", "as": "naaz" },
+    { "press": "FFCC_naaz_naazHeroPick_3", "as": "naaz" },
+    { "press": "FFCC_naaz_naazHeroPick_5", "as": "naaz", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}

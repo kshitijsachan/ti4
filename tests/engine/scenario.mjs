@@ -200,6 +200,11 @@ function baseSave(base) {
 
 /* ------------------------------------------------------------------ one fork running the scenario */
 
+/** Whether a step sends anything to the bot (a command, press, answer, rewind, engine call...), i.e. may cause a save. */
+function acts(st) {
+  return !!(st.command || st.press || st.answer || st.answerOn || st.gameAction || st.engine || st.deleteDecision || st.rewind != null);
+}
+
 class Runner {
   constructor(fork, via, label) {
     this.fork = fork;
@@ -239,7 +244,12 @@ class Runner {
     const since = latestUndo(this.fork.game);
     if (flag("--buttons")) this.seenSeq = Math.max(0, ...(await openDecisions(this.fork.game).catch(() => [])).map((d) => d.seq ?? 0));
     // legacy presses act as the step's seat unless they name their own
-    const r = await this.perform(this.via === "press" && st.legacy ? st.legacy.map((l) => ({ as: st.as, ...l })) : [st]);
+    const list = this.via === "press" && st.legacy ? st.legacy.map((l) => ({ as: st.as, ...l })) : [st];
+    const r = await this.perform(list);
+    // A step that sends nothing to the bot (wait, mark, waitDecision, expect-only, a legacy list of waits) cannot
+    // cause a save: waiting out settle()'s 15 s timeout for one only slowed runs (ac-timing-legal-action: ~65 waits,
+    // ~16 of its 20 min). Saves still landing from an earlier step during it are settled as before.
+    if (!list.some(acts) && latestUndo(this.fork.game) === since) return { ...r, saves: 0 };
     const s = await this.settle(since);
     return { ...r, saves: s.saves };
   }

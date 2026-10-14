@@ -1,61 +1,75 @@
 {
-  "name": "audit-factions-harrow",
-  "description": "Rules audit (factions): L1Z1X Harrow — during ground combat on tarmann (210), the active L1Z1X player's ground-combat prompt offers 'Harrow: BOMBARDMENT' (the engine answer finds that option; the original offered no bombardment after the invasion started). (TE: start_combat posts the coexist/engage choice first; L1Z1X engages.)",
-  "base": {
-    "recording": "pbd104",
-    "index": 44,
-    "repost": false
+ "name": "audit-factions-harrow",
+ "description": "Rules audit (factions): L1Z1X Harrow \u2014 during ground combat on tarmann (210), the active L1Z1X player's ground-combat prompt offers 'Harrow: BOMBARDMENT' (the engine answer finds that option; the original offered no bombardment after the invasion started). (TE: start_combat posts the coexist/engage choice first; L1Z1X engages.) audit-gaps-2: Harrow is used at the END of a round (TI4_RULES_FACTIONS), so both sides roll round 1 first. (gate35: no hits-assignment step \u2014 L1Z1X's round-1 roll may hit nothing, leaving no hits prompt; both sides roll the round either way.)",
+ "base": {
+  "recording": "pbd104",
+  "index": 44,
+  "repost": false
+ },
+ "setup": [
+  "/player turn_start faction_or_color:l1z1x",
+  "/add_units tile_name:210 unit_names:\"2 gf tarmann\" faction_or_color:xxcha",
+  "/add_units tile_name:210 unit_names:\"dn, 2 gf tarmann\" faction_or_color:l1z1x",
+  "/combat start_combat tile_name:210"
+ ],
+ "steps": [
+  {
+   "wait": 3000
   },
-  "setup": [
-    "/player turn_start faction_or_color:l1z1x",
-    "/add_units tile_name:210 unit_names:\"2 gf tarmann\" faction_or_color:xxcha",
-    "/add_units tile_name:210 unit_names:\"dn, 2 gf tarmann\" faction_or_color:l1z1x",
-    "/combat start_combat tile_name:210"
-  ],
-  "steps": [
+  {
+   "answer": {
+    "kind": "combat.engage",
+    "option": "startCombatOn_tarmann"
+   },
+   "as": "l1z1x",
+   "legacy": [
     {
-      "wait": 3000
-    },
-    {
-      "answer": {
-        "kind": "combat.engage",
-        "option": "startCombatOn_tarmann"
-      },
-      "as": "l1z1x",
-      "legacy": [
-        {
-          "press": "startCombatOn_tarmann",
-          "as": "l1z1x"
-        }
-      ]
-    },
-    {
-      "wait": 3000
-    },
-    {
-      "answer": {
-        "kind": "combat.round",
-        "option": "Harrow"
-      },
-      "as": "l1z1x",
-      "legacy": [
-        {
-          "press": "FFCC_l1z1x_bombardConfirm_combatRoll_210_space_bombardment",
-          "as": "l1z1x"
-        }
-      ]
-    },
-    {
-      "wait": 1500
+     "press": "startCombatOn_tarmann",
+     "as": "l1z1x"
     }
-  ],
-  "expect": {
-    "invariants": true,
-    "save": [
-      {
-        "key": "stored.assignedBombardmentl1z1x",
-        "match": "tarmann"
-      }
-    ]
+   ]
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "press": "FFCC_l1z1x_combatRoll_210_tarmann",
+   "as": "l1z1x"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "press": "FFCC_xxcha_combatRoll_210_tarmann",
+   "as": "xxcha"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "answer": {
+    "kind": "combat.round",
+    "option": "Harrow"
+   },
+   "as": "l1z1x",
+   "legacy": [
+    {
+     "press": "FFCC_l1z1x_bombardConfirm_combatRoll_210_space_bombardment",
+     "as": "l1z1x"
+    }
+   ]
+  },
+  {
+   "wait": 1500
   }
+ ],
+ "expect": {
+  "invariants": true,
+  "save": [
+   {
+    "key": "stored.assignedBombardmentl1z1x",
+    "match": "tarmann"
+   }
+  ]
+ }
 }

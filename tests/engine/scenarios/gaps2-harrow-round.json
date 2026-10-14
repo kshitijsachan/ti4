@@ -1,0 +1,64 @@
+{
+ "name": "gaps2-harrow-round",
+ "description": "L1Z1X Harrow (audit-gaps-2, gate TI4_RULES_FACTIONS / rulesGateFactions). Card text: 'At the end of each round of ground combat, your ships in the active system may use their BOMBARDMENT abilities against your opponent's units on the planet.' Factions round 2 offered it on the ground-combat round prompt with the timing and once-per-round left to the player. pbd104@44 (ground combat on Tarmann, 210): Harrow before the round is rolled is refused; after both sides roll round 1 it is accepted; a second Harrow in the same round is refused. (The 1% case where L1Z1X rolls no hit leaves no hit prompt for Xxcha and the scenario must be rerun.) (gate35: no hits-assignment step \u2014 L1Z1X's round-1 roll may hit nothing, leaving no hits prompt; both sides roll the round either way.)",
+ "base": {
+  "recording": "pbd104",
+  "index": 44,
+  "repost": false
+ },
+ "setup": [
+  "/player turn_start faction_or_color:l1z1x",
+  "/add_units tile_name:210 unit_names:\"4 gf tarmann\" faction_or_color:xxcha",
+  "/add_units tile_name:210 unit_names:\"dn, 4 gf tarmann\" faction_or_color:l1z1x",
+  "/combat start_combat tile_name:210"
+ ],
+ "steps": [
+  {
+   "wait": 3000
+  },
+  {
+   "answer": {
+    "kind": "combat.engage",
+    "option": "startCombatOn_tarmann"
+   },
+   "as": "l1z1x"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "press": "FFCC_l1z1x_harrowBombard_210_tarmann",
+   "as": "l1z1x",
+   "refused": true
+  },
+  {
+   "press": "FFCC_l1z1x_combatRoll_210_tarmann",
+   "as": "l1z1x"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "press": "FFCC_xxcha_combatRoll_210_tarmann",
+   "as": "xxcha"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "press": "FFCC_l1z1x_harrowBombard_210_tarmann",
+   "as": "l1z1x"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "press": "FFCC_l1z1x_harrowBombard_210_tarmann",
+   "as": "l1z1x",
+   "refused": true
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

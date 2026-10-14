@@ -1,0 +1,58 @@
+{
+  "name": "gaps2-tech-prereq",
+  "description": "Tech prerequisites (audit-gaps-2, off switch TI4_TECH_PREREQ / techPrereqGate). Rules (LRR 90 Technology): a player must satisfy a technology's prerequisites to research it; AI Development Algorithm: 'When you research a unit upgrade technology, you may exhaust this card to ignore any 1 prerequisite.' Ral Nel (pbd101 r1, owns only AI Development Algorithm, red) follows Technology, opens 'Get Other Technology' (which lists every technology) and picks War Sun (YRRR): refused (original: researched). Then PDS II (RY: AIDA's own red + AIDA's skip for Y) is accepted and AIDA is exhausted by the research (original: AIDA counted but stayed ready).",
+  "base": {
+    "recording": "pbd101",
+    "index": 46
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "acquireATechWithSC_first"
+      },
+      "as": "ralnel"
+    },
+    {
+      "press": "acquireATechWithSC_second",
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "tech.choose_type",
+        "option": "getAllTechOfType_unitupgrade"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "getTech_ws(__|$)"
+      },
+      "as": "ralnel",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "tech.gain",
+        "option": "getTech_pds2(__|$)"
+      },
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    }
+  ],
+  "expect": {
+    "invariants": true,
+    "save": [
+      {
+        "key": "player[ralnel].tech_exhausted",
+        "match": "aida"
+      }
+    ]
+  },
+  "setup": [
+    "/player stats trade_goods:6 faction_or_color:ralnel"
+  ]
+}

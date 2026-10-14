@@ -1,0 +1,66 @@
+{
+ "name": "gaps2-x89-magen",
+ "description": "X-89 Bacterial Weapon (base and \u03a9) and Magen Defense Grid (base) \u2014 audit-gaps-2 (gate TI4_RULES_TECH / rulesGateTech). Texts: X-89 (base) 'ACTION: Exhaust this card and choose 1 planet in a system that contains 1 or more of your ships that have BOMBARDMENT; destroy all infantry on that planet.' X-89 \u03a9 'After 1 or more of your units use BOMBARDMENT against a planet, if at least 1 of your opponent's infantry was destroyed, you may destroy all of your opponent's infantry on that planet.' Magen Defense Grid (base) 'You may exhaust this card at the start of a round of ground combat on a planet that contains 1 or more of your units that have PLANETARY SHIELD; your opponent cannot make combat rolls this combat round.' pbd72@815: Winnu (both X-89s, Magen base, a PDS on Lodor) \u2014 X-89 \u03a9 without a BOMBARDMENT is refused; X-89 (base) on Abyz (no BOMBARDMENT ship there) is refused; Magen: Muaat lands 2 infantry on Lodor (ground combat), Winnu exhausts Magen, Muaat's round-1 roll is refused. Original: none of these were automated. (gate: a real ground combat on Lodor is started first, winnu's infantry vs muaat's, so the roll Magen blocks is a real prompt; without it the harness had to synthesize the roll's carrier, which the engine missed under load.)",
+ "base": {
+  "recording": "pbd72",
+  "index": 815,
+  "repost": false
+ },
+ "setup": [
+  "/tech add tech:x89_base faction_or_color:winnu",
+  "/tech add tech:x89 faction_or_color:winnu",
+  "/tech add tech:md_base faction_or_color:winnu",
+  "/add_units tile_name:207 unit_names:\"1 pds lodor\" faction_or_color:winnu",
+  "/add_units tile_name:207 unit_names:\"2 infantry lodor\" faction_or_color:muaat",
+  "/add_units tile_name:207 unit_names:\"2 infantry lodor\" faction_or_color:winnu"
+ ],
+ "steps": [
+  {
+   "press": "FFCC_winnu_x89Omega_lodor",
+   "as": "winnu",
+   "refused": true
+  },
+  {
+   "press": "FFCC_winnu_x89Base_abyz",
+   "as": "winnu",
+   "refused": true
+  },
+  {
+   "command": "/combat start_combat tile_name:207"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "answer": {
+    "kind": "combat.engage",
+    "option": "startCombatOn_lodor"
+   },
+   "as": "winnu",
+   "legacy": [
+    {
+     "press": "startCombatOn_lodor",
+     "as": "winnu"
+    }
+   ]
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "press": "FFCC_winnu_magenBase_207_lodor",
+   "as": "winnu"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "press": "FFCC_muaat_combatRoll_207_lodor",
+   "as": "muaat",
+   "refused": true
+  }
+ ],
+ "expect": {
+  "invariants": true
+ }
+}

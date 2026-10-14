@@ -1,0 +1,10 @@
+{
+  "name": "gaps2-xxcha-agent",
+  "description": "Ggrocuto Rinn (Xxcha agent; audit-gaps-2, gate TI4_RULES_LEADERS). Card text: 'ACTION: Exhaust this card to ready any planet; if that planet is in a system that is adjacent to a planet you control, you may remove 1 infantry from that planet.' The original offered the removal when the Xxcha player had SHIPS in an adjacent system. pbd19@307: removing an infantry from Ral Nel's home planet Mez (not adjacent to any Xxcha planet) is refused.",
+  "base": { "recording": "pbd19", "index": 307, "repost": false },
+  "setup": [ "/add_units tile_name:mez unit_names:\"1 infantry mez\" faction_or_color:ralnel" ],
+  "steps": [
+    { "press": "FFCC_xxcha_xxchaAgentRemoveInfantry_ralnel_mez", "as": "xxcha", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}

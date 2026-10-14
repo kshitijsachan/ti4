@@ -1,0 +1,15 @@
+{
+  "name": "gaps2-checks-balances-against",
+  "description": "Checks and Balances 'Against' (audit-gaps-2, off switch TI4_RULES_AGENDAS / rulesGateAgendas). Card text: 'Each player readies only 3 of their planets at the end of this agenda phase.' pbd72@833 with the stored value agendaChecksNBalancesAgainst=true (the law's pending effect) in the base save; Muaat's 8 planets exhausted; the strategy phase starts and posts the counted ready prompt (checksReady_). Muaat readies Muaat, Lazul Rex and Cresius; a 4th planet (Accoen) is refused (original: refresh_ buttons readied any number).",
+  "base": { "save": "tests/engine/scenarios/saves/gaps2-pbd72-833-checks.txt", "repost": false },
+  "setup": [ { "command": "planet exhaust_all", "options": { "faction_or_color": "muaat" } } ],
+  "steps": [
+    { "command": "/game start_phase specific_phase:strategy" },
+    { "wait": 3000 },
+    { "press": "checksReady_muaat", "as": "muaat" },
+    { "press": "checksReady_lazulrex", "as": "muaat" },
+    { "press": "checksReady_cresius", "as": "muaat" },
+    { "press": "checksReady_accoen", "as": "muaat", "refused": true }
+  ],
+  "expect": { "invariants": true }
+}
