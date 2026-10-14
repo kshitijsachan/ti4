@@ -75,10 +75,14 @@ export function TradeOfferRenderer({ decision, state, answer }: TradeRendererPro
       ) : (
         <span className={classes.meta}>Replaced or withdrawn: only the newest offer can be accepted.</span>
       )}
-      {outsideRule && <span className={classes.warn}>You are not neighbours; outside the agenda phase this trade breaks the rules.</span>}
+      {outsideRule && (
+        <span className={classes.warn}>
+          Not allowed now: in the action phase only the active player transacts, with each neighbour once per turn.
+        </span>
+      )}
       <div className={classes.actions}>
         {accept && live && (
-          <Button size="xs" color="green" onClick={() => answer(accept.id)}>
+          <Button size="xs" color="green" onClick={() => answer(accept.id)} disabled={outsideRule} title={outsideRule ? "The game refuses this transaction now (transaction rules)." : undefined}>
             Accept
           </Button>
         )}

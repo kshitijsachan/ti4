@@ -1,0 +1,86 @@
+{
+  "name": "core-move-range",
+  "description": "Rules audit (core, switch TI4_MOVE_CHECK, on by default): LRR 58 MOVEMENT - a ship moves at most its move value (+ the bonuses it has) systems. The original staged any move and printed '(distance exceeds move value ...)'. Now Done moving / the direct move is refused when a ship's distance exceeds its move value plus every move bonus the player could apply (MovementRules.rangeRefusal; effects not modelled only warn). Base: pbd104@59; letnev (no Gravity Drive) gets a carrier (move 1) at 314, far from 205, and activates 205: moving the carrier there is refused; the cruiser at 203 (move 2, 2 away) still moves.",
+  "base": {
+    "recording": "pbd104",
+    "index": 59
+  },
+  "setup": [
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "314",
+        "unit_names": "carrier",
+        "faction_or_color": "letnev"
+      }
+    },
+    {
+      "command": "add_units",
+      "options": {
+        "tile_name": "203",
+        "unit_names": "cruiser",
+        "faction_or_color": "letnev"
+      }
+    },
+    {
+      "command": "player turn_start",
+      "options": {
+        "faction_or_color": "letnev"
+      }
+    }
+  ],
+  "trigger": {
+    "press": "FFCC_letnev_ringTile_205",
+    "as": "letnev"
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "314",
+              "holder": "space",
+              "unit": "cv",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "as": "letnev",
+      "refused": true,
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    },
+    {
+      "answer": {
+        "kind": "tactical.move",
+        "action": "move",
+        "body": {
+          "units": [
+            {
+              "from": "203",
+              "holder": "space",
+              "unit": "ca",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "as": "letnev",
+      "legacy": [
+        {
+          "wait": 500
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}

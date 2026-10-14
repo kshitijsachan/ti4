@@ -230,3 +230,18 @@ export function outOfReach(
 export function maxBoost(bonuses: MoveBonus[]) {
   return boost(bonuses) + Math.max(0, ...fewShips(bonuses).map((b) => b.amount));
 }
+
+/**
+ * Rules (asteroid field LRR 12, supernova LRR 86): nothing moves into an asteroid field without Antimass Deflectors, or
+ * into a supernova without Magmus Reactor (Circlet of the Void lifts both). The game refuses "Done moving" into one
+ * (MovementRules.destinationRefusal); the move bar says why and keeps Move greyed. Null when the system can be entered.
+ */
+export function destinationBlocked(systemId: string | undefined, techs: string[], relics: string[] = []): string | null {
+  const info = systemId ? getTileById(systemId) : undefined;
+  if (!info || relics.includes("circletofthevoid")) return null;
+  if (info.isAsteroidField && !techs.some((t) => t === "amd" || t === "absol_amd" || t === "wavelength"))
+    return "Ships cannot move into an asteroid field without Antimass Deflectors.";
+  if (info.isSupernova && !techs.some((t) => t === "mr" || t === "tf-mr"))
+    return "Ships cannot move into a supernova (only with Magmus Reactor).";
+  return null;
+}
