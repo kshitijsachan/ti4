@@ -1,0 +1,80 @@
+{
+  "name": "gaps2-construction-te",
+  "description": "Thunder's Edge Construction (pbd105, strategy_card_set te). Rules text: primary 'Either place 1 structure on a planet you control, or use the PRODUCTION ability of 1 of your space docks. Place 1 structure on a planet you control.'; secondary 'Spend 1 token from your strategy pool to place 1 structure on a planet you control.' So a second space dock (another planet) is LEGAL with this card (unlike Prophecy of Kings, gaps2-construction-two-docks). Naalu places docks on Qucenn and Maaluuk (both accepted), a third structure is refused; Ral Nel (follower) places 1 PDS, a second structure is refused.",
+  "base": {
+    "recording": "pbd105",
+    "index": 152
+  },
+  "steps": [
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_spacedock$"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.construction_place",
+        "option": "place_spacedock_qucenn"
+      },
+      "as": "naalu"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_spacedock$"
+      },
+      "as": "naalu"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.construction_place",
+        "option": "place_spacedock_maaluuk"
+      },
+      "as": "naalu"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_pds$"
+      },
+      "as": "naalu",
+      "refused": true
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_pds$"
+      },
+      "as": "ralnel"
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.construction_place",
+        "option": "place_pds_mez"
+      },
+      "as": "ralnel"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "answer": {
+        "kind": "strategy_card.resolve",
+        "option": "^construction_spacedock$"
+      },
+      "as": "ralnel",
+      "refused": true
+    }
+  ],
+  "expect": {
+    "invariants": true
+  }
+}
