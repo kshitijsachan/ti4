@@ -2,7 +2,7 @@ import type { Hub } from "./hub.js";
 import type { Clients } from "./clients.js";
 import type { Json, StoredMessage } from "./store.js";
 import { log } from "./log.js";
-import { activity, Slicer } from "./lag.js";
+import { activity, nextTurn, Slicer } from "./lag.js";
 import { Brain } from "./botplay/brain.js";
 import { parseBoard, type Board } from "./botplay/board.js";
 import { controlsOf, type Control, type Prompt } from "./botplay/prompts.js";
@@ -48,6 +48,23 @@ type GameState = {
   /** Per seated player (user id): faction and the technologies it owns. */
   players: Map<string, { faction: string; techs: number; owned: string[] }>;
 };
+
+/** A seat's visible channels as decide() / liveGames() walk them (SeatPilot.channelIndex). */
+type ChannelIndex = {
+  list: Json[];
+  gen: number;
+  at: number;
+  byGame: Map<string, Json[]>;
+  /** channel id -> game, for the channels in byGame. */
+  gameOf: Map<string, string>;
+  actions: { ch: Json; game: string }[];
+};
+
+/** What decide() derives from one game's messages for a seat (SeatPilot.gameCache). */
+type GameDerived = { newest: number; nudgesRead: boolean };
+
+/** See Autopilot.textFacts. */
+type TextFacts = { content: string; gen: number; nudge: boolean; named?: Set<string>; pinged?: string[] };
 
 type Ctx = {
   /** Names this seat and nobody else, carries its faction's buttons, is only visible to it, or is in its own thread. */
@@ -409,7 +426,7 @@ export class Autopilot {
     // Nobody acts in the game until its prompts are restored (old turn menus, re-posts of other steps would start a
     // second action: live pbd273), at most REWIND_SETTLE_MS (bots without the "restored" event).
     this.settling.set(game, Date.now() + REWIND_SETTLE_MS);
-    this.states.delete(game);
+    this.forgetState(game);
     this.drafts.delete(game);
     this.webFactions.delete(game);
     this.lastReveal.delete(game);
@@ -438,6 +455,49 @@ export class Autopilot {
     for (const [game, hit] of this.drafts) if (hit.data?.status !== "finished") this.drafts.delete(game);
   }
 
+  /** Seated players and the text the bot names them by ("Name <:"), as of a Store.globalGeneration. */
+  private people: { gen: number; list: { id: string; needle: string }[] } = { gen: -1, list: [] };
+  private facts = new WeakMap<StoredMessage, TextFacts>();
+
+  /**
+   * What a message's text says about the seated players, worked out once per text (and seat list) for every seat:
+   * which seated players it names ("<faction emoji>Name <color emoji>", see consider) and whom it pings ("<@id>").
+   * consider() asked every seat in the store for every recent prompt on every pass (~186 seats x every prompt x every
+   * autopilot seat each second): the single largest share of the autopilots' CPU.
+   */
+  textFacts(m: StoredMessage): TextFacts {
+    const content = String(m.content ?? "");
+    const store = this.hub.store;
+    const gen = store.globalGeneration;
+    const hit = this.facts.get(m);
+    if (hit && hit.content === content && hit.gen === gen) return hit;
+    const facts: TextFacts = { content, gen, nudge: NUDGE.test(content) };
+    this.facts.set(m, facts);
+    return facts;
+  }
+
+  /** The seated players a message's text names (textFacts). */
+  namedIn(facts: TextFacts): Set<string> {
+    if (facts.named) return facts.named;
+    if (this.people.gen !== facts.gen) {
+      const s = this.hub.store.state;
+      const list: { id: string; needle: string }[] = [];
+      for (const seat of Object.values(s.seats)) {
+        const n = seat.user_id ? s.users[seat.user_id]?.global_name : undefined;
+        if (n) list.push({ id: seat.user_id, needle: `${n} <:` });
+      }
+      this.people = { gen: facts.gen, list };
+    }
+    const named = new Set<string>();
+    for (const p of this.people.list) if (facts.content.includes(p.needle)) named.add(p.id);
+    return (facts.named = named);
+  }
+
+  /** The user ids a message's text pings ("<@id>"; textFacts). */
+  pingedIn(facts: TextFacts): string[] {
+    return (facts.pinged ??= [...facts.content.matchAll(/<@!?(\d+)>/g)].map(([, id]) => id));
+  }
+
   private states = new Map<string, { at: number; state: GameState | null }>();
   /** When an autopilot last revealed a public objective, per game: the bot may post the reveal buttons twice. */
   readonly lastReveal = new Map<string, number>();
@@ -448,6 +508,21 @@ export class Autopilot {
   async stateOf(game: string): Promise<GameState | null> {
     const hit = this.states.get(game);
     if (hit && Date.now() - hit.at < 3000) return hit.state;
+    // One read per game at a time: every seat of a game found the cache stale at once and each fetched (and parsed)
+    // the same web data (up to 136 reads of a game every 3 s).
+    let read = this.stateReads.get(game);
+    if (!read) {
+      read = this.readState(game).finally(() => {
+        if (this.stateReads.get(game) === read) this.stateReads.delete(game);
+      });
+      this.stateReads.set(game, read);
+    }
+    return read;
+  }
+
+  private stateReads = new Map<string, Promise<GameState | null>>();
+
+  private async readState(game: string): Promise<GameState | null> {
     let state: GameState | null = null;
     try {
       const res = await fetch(`${this.botApi}/api/public/game/${encodeURIComponent(game)}/web-data`, { signal: AbortSignal.timeout(5000) });
@@ -478,6 +553,7 @@ export class Autopilot {
 
   forgetState(game: string) {
     this.states.delete(game);
+    this.stateReads.delete(game); // the next stateOf reads afresh, not a read already under way
   }
 
   /**
@@ -663,6 +739,7 @@ class SeatPilot {
       scope,
     );
     this.inversePresses = this.inversePresses.filter((p) => !scope.channelIds.has(p.channel));
+    this.gameCache.delete(scope.game); // its nudges went above: read them again
     this.brain.rewound(scope);
     if (n) log.info(`autopilot ${this.name}: ${scope.game} rolled back: forgot ${n} remembered presses / answers / caps`);
     this.schedule();
@@ -749,9 +826,16 @@ class SeatPilot {
     this.busy = true;
     this.rotation++;
     const done = activity(`autopilot ${this.name}: think`);
+    let slicer: Slicer | undefined;
     try {
+      // Time-sliced like decide(): the seats' think timers expire together (one timers phase ran ~40 seats' liveGames,
+      // planner ticks and, after a view invalidation, a canView rebuild over every channel each, back to back: live
+      // "event loop blocked 1-2 s" twice a minute). Each seat starts in a turn of its own and yields every ~20 ms.
+      await nextTurn();
+      slicer = new Slicer(`autopilot ${this.name}: think`);
       this.stage = "live games";
       for (const game of await this.liveGames()) {
+        await slicer.tick();
         this.stage = `planner / trade desk in ${game}`;
         // A planner error must never keep the rule table from answering (it would stall the game).
         const acted = async (name: string, fn: () => Promise<boolean>) => {
@@ -768,14 +852,18 @@ class SeatPilot {
           return;
         }
       }
+      await slicer.tick();
       this.stage = "engine step";
       if (await this.engineStep()) {
         this.busy = false;
         this.schedule();
         return;
       }
+      await slicer.tick();
       this.stage = "stalled prompt";
       const stalled = await this.stalledPrompt();
+      await slicer.tick();
+      slicer.done(); // decide() slices (and accounts) itself
       this.stage = "decide";
       const choice = stalled ?? (await this.decide());
       if (!choice) {
@@ -792,6 +880,7 @@ class SeatPilot {
     } catch (e) {
       log.error(`autopilot ${this.name}: ${(e as Error).stack}`);
     } finally {
+      slicer?.done();
       this.busy = false;
       done();
     }
@@ -928,6 +1017,52 @@ class SeatPilot {
   /** Per game, when decide() last looked through it although it was idle (see IDLE_GAME_MS). */
   private idleScans = new Map<string, number>();
 
+  private chanIndex: ChannelIndex | null = null;
+  /** Per game: what decide() derived from its channels' messages, valid while none of them changed (syncGameCache). */
+  private gameCache = new Map<string, GameDerived>();
+  /** The store change (and channel index) gameCache is current as of. */
+  private gameCacheMark: { seq: number; gen: number; index: ChannelIndex } | null = null;
+
+  /** Drops the cached derived state of every game with a channel changed since the last pass (all of them if unsure). */
+  private syncGameCache(index: ChannelIndex) {
+    const store = this.store;
+    const mark = this.gameCacheMark;
+    const changed = mark && mark.index === index ? store.changedSince(mark.seq, mark.gen) : null;
+    if (!changed) this.gameCache.clear();
+    else
+      for (const id of changed) {
+        const game = index.gameOf.get(id);
+        if (game) this.gameCache.delete(game);
+      }
+    this.gameCacheMark = { seq: store.changeSequence, gen: store.globalGeneration, index };
+  }
+
+  /**
+   * This seat's visible channels as decide() and liveGames() walk them, in visibleChannels order: its game channels
+   * (types 0 / 11 / 12) by game, and its games' actions channels. Rebuilt when the seat's visible list or any channel
+   * changes (Store.channelGeneration), and at least every 10 s like Autopilot.gameChannels: grouping all ~9000 visible
+   * channels by game (and testing every name) on every pass was most of an idle seat's think().
+   */
+  private channelIndex(): ChannelIndex {
+    const list = this.store.visibleChannels(this.userId);
+    const gen = this.store.channelGeneration;
+    const g = this.chanIndex;
+    if (g && g.list === list && g.gen === gen && Date.now() - g.at < 10_000) return g;
+    const s = this.store.state;
+    const byGame = new Map<string, Json[]>();
+    const chanGame = new Map<string, string>();
+    const actions: { ch: Json; game: string }[] = [];
+    for (const ch of list) {
+      if (ch.type === 0 && /^[a-z]+\d+-actions$/i.test(String(ch.name ?? ""))) actions.push({ ch, game: /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1] });
+      if (![0, 11, 12].includes(ch.type)) continue;
+      const game = gameOf(ch, s.channels);
+      if (!game) continue;
+      (byGame.get(game) ?? byGame.set(game, []).get(game)!).push(ch);
+      chanGame.set(String(ch.id), game);
+    }
+    return (this.chanIndex = { list, gen, at: Date.now(), byGame, gameOf: chanGame, actions });
+  }
+
   private async decide(): Promise<Choice | null> {
     const s = this.store.state;
     const me = this.userId;
@@ -936,31 +1071,44 @@ class SeatPilot {
     // This seat's game channels, by game. A game with no new or edited message for IDLE_GAME_MS is looked through at
     // most every IDLE_SCAN_MS: a pass over every game a seat ever sat in (most of them ended or abandoned) took up to
     // 1 s of uninterrupted CPU per seat (Bot Alpha, live 15:15 with 218 games), with 86 seats each passing every ~1 s.
-    const games = new Map<string, { chans: Json[]; newest: number }>();
-    for (const ch of this.store.visibleChannels(me)) {
-      if (![0, 11, 12].includes(ch.type)) continue;
-      const game = gameOf(ch, s.channels);
-      if (!game) continue;
-      const g = games.get(game) ?? games.set(game, { chans: [], newest: 0 }).get(game)!;
-      g.chans.push(ch);
-      const last = this.store.messages(ch.id).at(-1);
-      if (last) g.newest = Math.max(g.newest, Date.parse(last.edited_timestamp ?? last.timestamp) || 0, Date.parse(last.timestamp) || 0);
+    // Per game, what decide() derives from its messages alone (newest activity; nudges read) is kept until one of its
+    // channels changes (Store.changedSince): an unchanged game costs a map lookup, not a walk over its channels.
+    const index = this.channelIndex();
+    this.syncGameCache(index);
+    const games = new Map<string, { chans: Json[]; newest: number; derived: GameDerived }>();
+    for (const [game, chans] of index.byGame) {
+      let derived = this.gameCache.get(game);
+      if (!derived) {
+        let newest = 0;
+        for (const ch of chans) {
+          const last = this.store.messages(ch.id).at(-1);
+          if (last) newest = Math.max(newest, lastTouched(last));
+        }
+        this.gameCache.set(game, (derived = { newest, nudgesRead: false }));
+      }
+      games.set(game, { chans, newest: derived.newest, derived });
     }
     if (this.idleScans.size > 2 * games.size + 100) for (const k of this.idleScans.keys()) if (!games.has(k)) this.idleScans.delete(k);
     // Yields to the event loop every ~20 ms: consider() rarely really awaits, so the pass would otherwise hold up
     // every HTTP request (bot REST, /healthz) until it ends.
     const slicer = new Slicer(`autopilot ${this.name}: decide`);
-    for (const [game, { chans, newest }] of games) {
+    for (const [game, { chans, newest, derived }] of games) {
       if (now - newest > IDLE_GAME_MS) {
         if (now - (this.idleScans.get(game) ?? 0) < IDLE_SCAN_MS) continue;
         this.idleScans.set(game, now);
       }
+      // The bot's nudges only ever raise `nudges` (rewound() forgets them, and the game's derived state with them):
+      // reading the same messages again changes nothing.
+      const readNudges = !derived.nudgesRead;
+      derived.nudgesRead = true;
       for (const ch of chans) {
         const list = this.store.messages(ch.id);
-        for (const m of list.slice(-WINDOW)) {
-          if (NUDGE.test(String(m.content ?? "")) && (!m._ephemeral_for || m._ephemeral_for === me) && (ch.type === 12 || String(m.content).includes(`<@${me}>`))) {
-            const at = Date.parse(m.timestamp);
-            if (at > (this.nudges.get(ch.id) ?? 0)) this.nudges.set(ch.id, at);
+        if (readNudges) {
+          for (const m of list.slice(-WINDOW)) {
+            if (this.mgr.textFacts(m).nudge && (!m._ephemeral_for || m._ephemeral_for === me) && (ch.type === 12 || String(m.content).includes(`<@${me}>`))) {
+              const at = Date.parse(m.timestamp);
+              if (at > (this.nudges.get(ch.id) ?? 0)) this.nudges.set(ch.id, at);
+            }
           }
         }
         for (const m of list.slice(-WINDOW)) {
@@ -971,7 +1119,8 @@ class SeatPilot {
       }
     }
     const busy = slicer.done();
-    if (busy > 500) log.warn(`autopilot ${this.name}: decide took ${Math.round(busy)}ms of CPU over ${games.size} games`);
+    // (Slices are wall time from a resume to the next yield: they include awaits on the bot that did not yield a turn.)
+    if (busy > 500) log.warn(`autopilot ${this.name}: decide took ${Math.round(busy)}ms (sliced, incl. awaits) over ${games.size} games`);
     if (!choices.length) return null;
     choices.sort((a, b) => b.score - a.score || (BigInt(b.msg.id) > BigInt(a.msg.id) ? 1 : -1));
     const best = choices[0];
@@ -1030,13 +1179,12 @@ class SeatPilot {
     const content = String(m.content ?? "");
     const mentionsMe = content.includes(`<@${me}>`) || (m.mentions ?? []).some((u: Json) => u.id === me);
     // The bot names players as "<faction emoji>Name <color emoji>**Color**", often without a mention.
-    const named = (id: string) => {
-      const n = s.users[id]?.global_name;
-      return !!n && content.includes(`${n} <:`);
-    };
-    const namesOther = !mentionsMe && !named(me) && Object.values(s.seats).some((seat) => seat.user_id !== me && named(seat.user_id));
+    // (Which seated players the text names, and whom it pings, are worked out once per message text: textFacts.)
+    const facts = this.mgr.textFacts(m);
+    const named = mentionsMe ? undefined : this.mgr.namedIn(facts);
+    const namesOther = !!named && !named.has(me) && [...named].some((id) => id !== me);
     // Another seated player pinged in the text ("<@id>"): the shim's messages do not always carry `mentions`.
-    const pingsOther = [...content.matchAll(/<@!?(\d+)>/g)].some(([, id]) => id !== me && s.users[id] && !s.users[id].bot);
+    const pingsOther = this.mgr.pingedIn(facts).some((id) => id !== me && s.users[id] && !s.users[id].bot);
     const mentionsOther = namesOther || (!mentionsMe && (pingsOther || (m.mentions ?? []).some((u: Json) => u.id !== me && !s.users[u.id]?.bot)));
     const ffcc = (c: Control) => family(/^FFCC_([^_]+)_/.exec(c.custom_id)?.[1]);
     // Our faction's lock on the prompt makes it ours, unless the text is for another player (it names or pings only
@@ -1954,11 +2102,9 @@ class SeatPilot {
   /** Games with activity in the last hour that have not ended. */
   private async liveGames(): Promise<string[]> {
     const out: string[] = [];
-    for (const ch of this.store.visibleChannels(this.userId)) {
-      if (ch.type !== 0 || !/^[a-z]+\d+-actions$/i.test(String(ch.name ?? ""))) continue;
+    for (const { ch, game } of this.channelIndex().actions) {
       const last = this.store.messages(ch.id).at(-1);
-      if (!last || Date.now() - Date.parse(last.timestamp) > 3600000) continue;
-      const game = /^([a-z]+\d+)-actions$/i.exec(String(ch.name))![1];
+      if (!last || Date.now() - postedAt(last) > 3600000) continue;
       if (await this.mgr.ended(game)) continue;
       if (this.mgr.isSettling(game)) continue;
       out.push(game);
@@ -1986,7 +2132,9 @@ class SeatPilot {
           out.push({ ch, m, controls });
         }
       }
-      return out.sort((a, b) => (BigInt(a.m.id) < BigInt(b.m.id) ? -1 : 1));
+      // Oldest first (one BigInt per message, not two per comparison: this runs per game on every planner tick).
+      const keyed = out.map((p) => ({ p, k: BigInt(p.m.id) }));
+      return keyed.sort((a, b) => (a.k < b.k ? -1 : 1)).map((x) => x.p);
     };
     return {
       userId: this.userId,
@@ -2113,12 +2261,42 @@ function myThreadOwner(ch: Json, s: Json, me: string): boolean {
   return !!name && String(ch.name ?? "").endsWith(`-${name}`);
 }
 
+const signatures = new WeakMap<Control[], string>();
+
 /** The custom ids of a message's enabled controls, as Clients records them in `_presses`. */
 function signature(controls: Control[]) {
-  return controls
-    .map((c) => c.custom_id)
-    .sort()
-    .join("|");
+  // Memoized per array: controlsOf hands out one array per components revision (botplay/prompts.ts).
+  let sig = signatures.get(controls);
+  if (sig === undefined) {
+    sig = controls
+      .map((c) => c.custom_id)
+      .sort()
+      .join("|");
+    signatures.set(controls, sig);
+  }
+  return sig;
+}
+
+const stamps = new WeakMap<StoredMessage, { ts: string; ets: string | null | undefined; posted: number; touched: number }>();
+
+/** A message's timestamps parsed (once per value: every seat reads every channel's last message on every pass). */
+function stampsOf(m: StoredMessage) {
+  const hit = stamps.get(m);
+  if (hit && hit.ts === m.timestamp && hit.ets === m.edited_timestamp) return hit;
+  const posted = Date.parse(m.timestamp);
+  const st = { ts: m.timestamp, ets: m.edited_timestamp, posted, touched: Math.max(Date.parse(m.edited_timestamp ?? m.timestamp) || 0, posted || 0) };
+  stamps.set(m, st);
+  return st;
+}
+
+/** When a message was posted or last edited (ms; 0 if unparsable), as decide() ranks games by activity. */
+function lastTouched(m: StoredMessage): number {
+  return stampsOf(m).touched;
+}
+
+/** Date.parse(m.timestamp). */
+function postedAt(m: StoredMessage): number {
+  return stampsOf(m).posted;
 }
 
 function sleep(ms: number) {

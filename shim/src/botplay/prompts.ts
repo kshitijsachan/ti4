@@ -6,7 +6,22 @@ export type Control = { custom_id: string; label: string; kind: "button" | "sele
 /** A bot message with controls in one of the game's channels, as one autopilot seat sees it. */
 export type Prompt = { ch: Json; m: StoredMessage; controls: Control[] };
 
+/**
+ * controlsOf per components array: every autopilot seat walks every recent prompt's components on each pass (decide,
+ * the planner's prompt lists, the stall checks), ~25% of the shim's autopilot CPU. A stored message's components are
+ * replaced, never edited in place (Hub.editMessage / normalizeComponents), so the array identity is the revision.
+ * Callers treat the result as read-only (they filter / map into new arrays).
+ */
+const controlsMemo = new WeakMap<Json[], Control[]>();
+
 export function controlsOf(components: Json[] | undefined): Control[] {
+  if (!Array.isArray(components)) return walkControls(components);
+  let hit = controlsMemo.get(components);
+  if (!hit) controlsMemo.set(components, (hit = walkControls(components)));
+  return hit;
+}
+
+function walkControls(components: Json[] | undefined): Control[] {
   const out: Control[] = [];
   const walk = (list: Json[] | undefined) => {
     for (const c of list ?? []) {

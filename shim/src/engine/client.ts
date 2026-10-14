@@ -60,6 +60,22 @@ export class EngineClient {
     const key = `${game}|${viewer ?? ""}`;
     const hit = this.stateCache.get(key);
     if (hit && Date.now() - hit.at < maxAgeMs) return hit.state;
+    // A read under way is fresher than any cached answer: callers that miss the cache together share it (every
+    // autopilot seat of a game asked at once, each fetching and parsing the same state).
+    if (maxAgeMs <= 0) return this.readState(game, viewer, key); // "always fetch"
+    let read = this.stateReads.get(key);
+    if (!read) {
+      read = this.readState(game, viewer, key).finally(() => {
+        if (this.stateReads.get(key) === read) this.stateReads.delete(key);
+      });
+      this.stateReads.set(key, read);
+    }
+    return read;
+  }
+
+  private stateReads = new Map<string, Promise<GameState | null>>();
+
+  private async readState(game: string, viewer: string | undefined, key: string): Promise<GameState | null> {
     try {
       const q = viewer ? `?viewer=${encodeURIComponent(viewer)}` : "";
       const res = await fetch(this.url(`/${encodeURIComponent(game)}/state${q}`), { headers: this.headers(), signal: AbortSignal.timeout(8000) });
@@ -195,6 +211,7 @@ export class EngineClient {
       });
       if (!res.ok || !res.headers.get("content-type")?.includes("json")) return null;
       this.stateCache.clear();
+      this.stateReads.clear();
       return (await res.json()) as Record<string, unknown>;
     } catch {
       return null;
@@ -236,6 +253,7 @@ export class EngineClient {
     this.snapCache.clear();
     this.primed.clear();
     this.stateCache.clear();
+    this.stateReads.clear();
     for (const l of this.resetListeners) {
       try {
         l();
@@ -346,7 +364,11 @@ export class EngineClient {
     this.decisions.set(e.game, map);
     applyTo(map, e);
     this.snapCache.delete(e.game);
-    if (e.type === "state.changed" || e.type === "game.rewound") for (const k of this.stateCache.keys()) if (k.startsWith(`${e.game}|`)) this.stateCache.delete(k);
+    if (e.type === "state.changed" || e.type === "game.rewound") {
+      for (const k of this.stateCache.keys()) if (k.startsWith(`${e.game}|`)) this.stateCache.delete(k);
+      // Reads under way may predate the change: callers from now on read afresh.
+      for (const k of this.stateReads.keys()) if (k.startsWith(`${e.game}|`)) this.stateReads.delete(k);
+    }
     for (const l of this.listeners) {
       try {
         l(e);
