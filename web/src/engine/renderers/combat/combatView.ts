@@ -235,7 +235,7 @@ export function combatView(state: GameState | null, decisions: Decision[], me: s
   const myFaction = state?.players.find((p) => p.userId === me)?.faction ?? null;
   const fronts = frontsOf(combat, me, names);
   const relevant = decisions.filter((d) => aboutTile(d, tile));
-  const owed = combat.owed ?? [];
+  const owed = combat.owed ?? owedFromDecisions(relevant, state, tile);
   const step = stepOf(relevant, fronts, owed, me, names);
   const current =
     fronts.find((f) => f.holder === step.holder) ?? fronts.find((f) => f.on) ?? [...fronts].sort((a, b) => b.round - a.round)[0] ?? null;
@@ -275,6 +275,20 @@ export function combatView(state: GameState | null, decisions: Decision[], me: s
     }
   }
   return { tile, tileId: combat.tileId, fronts, current, step, owed, rolls, abilities, controls, log: logOf(fronts, me, names) };
+}
+
+/** Older engines (no GameState.combat.owed): the open hits prompts with hits left. */
+function owedFromDecisions(decisions: Decision[], state: GameState | null, tile: string): HitsOwed[] {
+  const out: HitsOwed[] = [];
+  for (const d of decisions) {
+    if (d.kind !== "combat.hits" || !d.target?.userId) continue;
+    const faction = state?.players.find((p) => p.userId === d.target?.userId)?.faction;
+    const auto = optionsOf(d).find((o) => !o.disabled && (o.value as { action?: string } | null)?.action === "auto");
+    const v = auto?.value as { hits?: number; holder?: string; source?: string; tile?: string } | undefined;
+    if (!faction || !v || !v.hits || v.tile !== tile) continue;
+    out.push({ faction, userId: d.target.userId, tile, holder: (v.holder ?? "space") as HitsOwed["holder"], source: (v.source ?? "space") as HitsOwed["source"], hits: v.hits, assigned: 0, decisionId: d.id });
+  }
+  return out;
 }
 
 function stepOf(decisions: Decision[], fronts: FrontView[], owed: HitsOwed[], me: string | null, names: Names): StepView {
